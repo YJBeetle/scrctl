@@ -39,6 +39,8 @@ public:
                                            bool verbose = false);
 
     [[nodiscard]] Rsd &rsd() { return *rsd_; }
+    /// 隧道协商出来的两个地址与 RSD 端口。起流时要把自己的地址报给设备。
+    [[nodiscard]] const transport::TunnelParams &tunnel_params() const { return tunnel_->params(); }
     [[nodiscard]] const Rsd &rsd() const { return *rsd_; }
     [[nodiscard]] const std::string &udid() const { return udid_; }
     /// USB 还是 Wi-Fi 之类，来自 usbmux 的连接类型。

@@ -147,6 +147,12 @@ bool ServiceConnection::invoke(std::string_view feature_identifier,
         err += "：" + detail;
     }
     err += "（code " + std::to_string(code) + "）";
+    if (detail.empty()) {
+        // 没有人话就把整个 error 交出去。设备的错误字典里常常还藏着
+        // NSLocalizedRecoverySuggestion / 域 / 期望参数名，只报一个数字等于
+        // 让下一个人从头猜。
+        err += "；error 原文: " + xpc::describe(*error).substr(0, 600);
+    }
     return false;
 }
 

@@ -77,6 +77,8 @@ add_library(scrctl_core STATIC
         src/http2/Framing.cpp
         src/util/Deflate.cpp
         src/media/MediaOffer.cpp
+        src/media/StreamSession.cpp
+        src/rt/RtpHevc.cpp
         src/transport/Usbmux.cpp
         src/transport/TlsChannel.cpp
         src/transport/Lockdown.cpp
@@ -111,6 +113,9 @@ target_link_libraries(feature_probe PRIVATE scrctl_core)
 add_executable(screenshot_probe tools/screenshot_probe.cpp)
 target_link_libraries(screenshot_probe PRIVATE scrctl_core)
 
+add_executable(stream_probe tools/stream_probe.cpp)
+target_link_libraries(stream_probe PRIVATE scrctl_core)
+
 # ---------------------------------------------------------------- tests -----
 if(SCRCTL_BUILD_TESTS)
     enable_testing()
@@ -121,6 +126,10 @@ if(SCRCTL_BUILD_TESTS)
     add_executable(plist_test tests/plist_test.cpp)
     target_link_libraries(plist_test PRIVATE scrctl_core)
     add_test(NAME plist COMMAND plist_test)
+
+    add_executable(rtp_test tests/rtp_test.cpp)
+    target_link_libraries(rtp_test PRIVATE scrctl_core)
+    add_test(NAME rtp COMMAND rtp_test)
 
     add_executable(net_test tests/net_test.cpp)
     target_link_libraries(net_test PRIVATE scrctl_core)
