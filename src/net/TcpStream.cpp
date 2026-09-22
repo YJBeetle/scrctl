@@ -1,17 +1,12 @@
-#include "TcpStream.h"
+#include "net/TcpStream.h"
 
 #include <algorithm>
-#include <arpa/inet.h>
 #include <chrono>
 #include <cstring>
 #include <random>
 
 namespace scrctl::net {
 namespace {
-
-constexpr size_t kIpv6HeaderLen = 40;
-constexpr uint8_t kNextHeaderTcp = 6;
-constexpr uint8_t kHopLimit = 64;
 
 // TCP 标志位
 constexpr uint8_t kFin = 0x01;
@@ -41,56 +36,6 @@ uint32_t get32(const uint8_t *p) {
 bool seq_lt(uint32_t a, uint32_t b) { return int32_t(a - b) < 0; }
 bool seq_ge(uint32_t a, uint32_t b) { return !seq_lt(a, b); }
 
-uint32_t fold_sum(uint32_t sum, const uint8_t *p, size_t n) {
-    for (size_t i = 0; i + 1 < n; i += 2) {
-        sum += get16(p + i);
-    }
-    if (n & 1) {
-        sum += static_cast<uint32_t>(p[n - 1]) << 8;
-    }
-    return sum;
-}
-
-uint16_t finish_sum(uint32_t sum) {
-    while (sum >> 16) {
-        sum = (sum & 0xFFFF) + (sum >> 16);
-    }
-    return static_cast<uint16_t>(~sum & 0xFFFF);
-}
-
-/// IPv6 下 TCP 校验和必须用伪头，算错的表现是对方静默丢弃、连接永远握不上。
-uint16_t tcp_checksum(const uint8_t src[16], const uint8_t dst[16],
-                      const std::vector<uint8_t> &seg) {
-    uint32_t sum = 0;
-    sum = fold_sum(sum, src, 16);
-    sum = fold_sum(sum, dst, 16);
-    const uint32_t len = static_cast<uint32_t>(seg.size());
-    const uint8_t pseudo[12] = {
-        static_cast<uint8_t>(len >> 24), static_cast<uint8_t>(len >> 16),
-        static_cast<uint8_t>(len >> 8),  static_cast<uint8_t>(len),
-        0, 0, 0, kNextHeaderTcp,
-    };
-    // 上层的 4 字节长度 + 3 字节零 + next header，与段一起连续求和才等价于
-    // 标准伪头；这里把 pseudo 当作 12 字节参与同一轮累加。
-    sum = fold_sum(sum, pseudo, sizeof(pseudo));
-    sum = fold_sum(sum, seg.data(), seg.size());
-    return finish_sum(sum);
-}
-
-std::vector<uint8_t> build_ipv6(const std::vector<uint8_t> &src, const std::vector<uint8_t> &dst,
-                                const std::vector<uint8_t> &payload) {
-    std::vector<uint8_t> out(kIpv6HeaderLen + payload.size());
-    // version(6) | traffic class(0) | flow label(0)
-    put32(out.data(), 6u << 28);
-    put16(out.data() + 4, static_cast<uint16_t>(payload.size()));
-    out[6] = kNextHeaderTcp;
-    out[7] = kHopLimit;
-    std::memcpy(out.data() + 8, src.data(), 16);
-    std::memcpy(out.data() + 24, dst.data(), 16);
-    std::memcpy(out.data() + kIpv6HeaderLen, payload.data(), payload.size());
-    return out;
-}
-
 uint16_t random_port() {
     static std::mt19937 rng{std::random_device{}()};
     return static_cast<uint16_t>(49152 + rng() % 16383);
@@ -108,22 +53,17 @@ int64_t now_ms() {
 
 }  // namespace
 
-TcpStream::TcpStream(scrctl::transport::PacketTunnel &tunnel, std::string local_ip,
-                     std::string peer_ip)
-    : tunnel_(tunnel), local_ip_(std::move(local_ip)), peer_ip_(std::move(peer_ip)) {
-    local_addr_.resize(16);
-    peer_addr_.resize(16);
-    if (inet_pton(AF_INET6, local_ip_.c_str(), local_addr_.data()) != 1) {
-        local_addr_.clear();
-    }
-    if (inet_pton(AF_INET6, peer_ip_.c_str(), peer_addr_.data()) != 1) {
-        peer_addr_.clear();
+TcpStream::TcpStream(Stack &stack) : stack_(stack) {}
+
+TcpStream::~TcpStream() {
+    if (sport_ != 0) {
+        stack_.detach_tcp(sport_);
     }
 }
 
 bool TcpStream::send_segment(uint8_t flags, const std::vector<uint8_t> &payload,
                              std::string &err) {
-    if (local_addr_.empty() || peer_addr_.empty()) {
+    if (!stack_.addresses_ok()) {
         return err = "隧道地址不是合法 IPv6", false;
     }
     // 20 字节基本头 + 4 字节 MSS 选项（仅 SYN 带）。
@@ -147,54 +87,51 @@ bool TcpStream::send_segment(uint8_t flags, const std::vector<uint8_t> &payload,
     }
     std::memcpy(seg.data() + hdr_len, payload.data(), payload.size());
 
-    put16(seg.data() + 16, tcp_checksum(local_addr_.data(), peer_addr_.data(), seg));
-
-    const auto packet = build_ipv6(local_addr_, peer_addr_, seg);
-    // 每个 IPv6 包单独一次写：CoreDeviceProxy 的转发路径对读边界敏感。
-    return tunnel_.send_ipv6(packet.data(), packet.size(), err);
+    put16(seg.data() + 16, l4_checksum(stack_.local_addr().data(), stack_.peer_addr().data(),
+                                       seg.data(), seg.size(), 6));
+    return stack_.send(stack_.wrap(seg, 6), err);
 }
 
-bool TcpStream::parse_and_queue(const std::vector<uint8_t> &packet, std::string &err) {
-    if (packet.size() < kIpv6HeaderLen) {
+void TcpStream::on_segment(const uint8_t *l4, std::size_t len) {
+    std::string err;
+    if (!handle_segment(l4, len, err)) {
+        pending_err_ = err;
+    }
+}
+
+bool TcpStream::handle_segment(const uint8_t *l4, std::size_t len, std::string &err) {
+    if (len < 20) {
         return true;  // 太短，忽略
     }
-    if ((packet[0] >> 4) != 6) {
-        return true;
-    }
-    if (packet[6] != kNextHeaderTcp) {
-        return true;  // 非 TCP（如 ICMPv6），本实现不处理
-    }
-    const size_t l4 = kIpv6HeaderLen;
-    if (packet.size() < l4 + 20) {
-        return true;
-    }
-    const uint16_t their_sport = get16(packet.data() + l4 + 0);
-    const uint16_t their_dport = get16(packet.data() + l4 + 2);
+    const uint16_t their_sport = get16(l4 + 0);
+    const uint16_t their_dport = get16(l4 + 2);
     if (their_dport != sport_ || their_sport != dport_) {
         return true;  // 不属于本连接
     }
-    const uint32_t seq = get32(packet.data() + l4 + 4);
-    const uint32_t ack = get32(packet.data() + l4 + 8);
-    const uint8_t data_off = static_cast<uint8_t>(packet[l4 + 12] >> 4);
-    const uint8_t flags = packet[l4 + 13];
+    const uint32_t seq = get32(l4 + 4);
+    const uint32_t ack = get32(l4 + 8);
+    const uint8_t data_off = static_cast<uint8_t>(l4[12] >> 4);
+    const uint8_t flags = l4[13];
     const size_t tcp_hdr = static_cast<size_t>(data_off) * 4;
-    if (tcp_hdr < 20 || packet.size() < l4 + tcp_hdr) {
+    if (tcp_hdr < 20 || tcp_hdr > len) {
         return true;
     }
 
-    if (flags & kRst) {
-        established_ = false;
+    if ((flags & kRst) != 0) {
         peer_closed_ = true;
-        return false;
+        return true;
     }
 
-    // SYN-ACK：SYN 自身消耗一个序号，所以 rcv_nxt 是对方 seq+1；
-    // 对方的 ack 就是我们可以开始发送的序号。必须在下面的数据处理之前
-    // 返回，否则会把握手的序号推进当成载荷。
+    // ACK 位没置的段一律不认（RFC 793），SYN 单独处理在下面的分支里。
+    if ((flags & kAck) == 0 && (flags & kSyn) == 0) {
+        return true;
+    }
+
     if ((flags & kSyn) != 0 && (flags & kAck) != 0) {
         if (established_) {
             return true;  // 重复的 SYN-ACK，忽略
         }
+        // SYN 自己占一个序号，漏掉这一步会让后续字节整体偏一位。
         rcv_nxt_ = seq + 1;
         snd_nxt_ = ack;
         established_ = true;
@@ -202,19 +139,17 @@ bool TcpStream::parse_and_queue(const std::vector<uint8_t> &packet, std::string 
         return send_segment(kAck, empty, err);
     }
 
-    const size_t payload_len = packet.size() - l4 - tcp_hdr;
+    const size_t payload_len = len - tcp_hdr;
     if (payload_len > 0) {
         // 只接受期望序号的数据；乱序暂不支持。
         if (seq == rcv_nxt_) {
-            rx_.insert(rx_.end(), packet.begin() + static_cast<long>(l4 + tcp_hdr),
-                       packet.end());
+            rx_.insert(rx_.end(), l4 + tcp_hdr, l4 + len);
             rcv_nxt_ += static_cast<uint32_t>(payload_len);
             std::vector<uint8_t> empty;
             if (!send_segment(kAck | kPsh, empty, err)) {
                 return false;
             }
         } else {
-            // 重复/乱序：回一个 ACK 提示对方。
             std::vector<uint8_t> empty;
             send_segment(kAck, empty, err);
         }
@@ -230,21 +165,20 @@ bool TcpStream::parse_and_queue(const std::vector<uint8_t> &packet, std::string 
 }
 
 bool TcpStream::pump_one(int timeout_ms, std::string &err) {
-    std::string wait_err;
-    if (!tunnel_.wait_readable(timeout_ms, wait_err)) {
-        err = wait_err;
+    if (!pending_err_.empty()) {
+        err = pending_err_;
+        pending_err_.clear();
         return false;
     }
-    std::vector<uint8_t> packet;
-    if (!tunnel_.recv_ipv6(packet, err)) {
-        return false;
-    }
-    return parse_and_queue(packet, err);
+    // 复用层可能把这一轮收到的包发给别的端点（多条连接与 UDP 共用一条隧道），
+    // 那种情况下"成功"但这条连接没进展——调用方按自己的截止时间内重试即可。
+    return stack_.pump(timeout_ms, err);
 }
 
 bool TcpStream::connect(uint16_t peer_port, std::string &err) {
     dport_ = peer_port;
     sport_ = random_port();
+    stack_.attach_tcp(sport_, this);
     snd_nxt_ = random_seq();
     rcv_nxt_ = 0;
 

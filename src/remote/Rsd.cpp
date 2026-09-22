@@ -84,15 +84,11 @@ xpc::Value core_device_request(std::string_view feature_identifier,
 
 // ------------------------------------------------------------- 服务连接 ------
 
-std::unique_ptr<ServiceConnection> ServiceConnection::open(transport::PacketTunnel &tunnel,
-                                                           std::string_view local_ip,
-                                                           std::string_view peer_ip,
+std::unique_ptr<ServiceConnection> ServiceConnection::open(net::Stack &stack,
                                                            const ServiceInfo &service,
-                                                           const PeerIdentity &identity,
                                                            std::string &err, bool verbose) {
     auto conn = std::unique_ptr<ServiceConnection>(new ServiceConnection());
-    conn->tcp_ = std::make_unique<net::TcpStream>(tunnel, std::string(local_ip),
-                                                  std::string(peer_ip));
+    conn->tcp_ = std::make_unique<net::TcpStream>(stack);
     if (!conn->tcp_->connect(service.port, err)) {
         err = "连 " + service.name + " 端口 " + std::to_string(service.port) + " 失败: " + err;
         return nullptr;
@@ -106,9 +102,8 @@ std::unique_ptr<ServiceConnection> ServiceConnection::open(transport::PacketTunn
         err = service.name + " 的 HTTP/2 握手失败: " + err;
         return nullptr;
     }
-    // 服务连接上不能再喊身份：那是 RSD 控制通道独有的步骤，设备会把这句
-    // Handshake 当成一次普通请求处理，后面全乱。
-    (void)identity;
+    // 服务连接上不再喊一次设备身份：那是 RSD 控制通道独有的步骤，设备这边
+    // 没有这个预期，发过去会被当成一次普通请求，后面全乱。
     conn->channel_ = std::make_unique<Channel>(std::move(*channel));
     return conn;
 }
@@ -157,15 +152,15 @@ bool ServiceConnection::invoke(std::string_view feature_identifier,
 
 // ------------------------------------------------------------------ RSD ------
 
-std::optional<Rsd> Rsd::open(transport::PacketTunnel &tunnel, const PeerIdentity &identity,
-                             std::string &err, bool verbose) {
+std::optional<Rsd> Rsd::open(net::Stack &stack, transport::PacketTunnel &tunnel,
+                             const PeerIdentity &identity, std::string &err, bool verbose) {
     const auto &p = tunnel.params();
     std::optional<Rsd> rsd;
-    rsd.emplace(tunnel, identity, p.client_address, p.server_address);
+    rsd.emplace(stack, identity);
 
     // Channel 借引用用 TcpStream，所以两者的所有权都在 Rsd 上，且声明顺序
     // 决定析构顺序：control_ 必须先于 tcp_ 析构。
-    rsd->tcp_ = std::make_unique<net::TcpStream>(tunnel, p.client_address, p.server_address);
+    rsd->tcp_ = std::make_unique<net::TcpStream>(stack);
     if (!rsd->tcp_->connect(p.rsd_port, err)) {
         err = "连 RSD 端口 " + std::to_string(p.rsd_port) + " 失败: " + err;
         return std::nullopt;
@@ -246,7 +241,7 @@ std::unique_ptr<ServiceConnection> Rsd::connect_service(std::string_view name, s
         err = "设备目录里没有服务 " + std::string(name);
         return nullptr;
     }
-    return ServiceConnection::open(*tunnel_, client_ip_, server_ip_, *info, identity_, err, verbose);
+    return ServiceConnection::open(*stack_, *info, err, verbose);
 }
 
 const xpc::Value *Rsd::properties() const {

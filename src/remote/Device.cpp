@@ -123,7 +123,14 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
     identity.uuid = *uuid;
 
     stage(verbose, "隧道内连 RSD 并读目录");
-    dev->rsd_ = Rsd::open(*dev->tunnel_, identity, err, verbose);
+    dev->stack_ =
+        std::make_unique<net::Stack>(*dev->tunnel_, dev->tunnel_->params().client_address,
+                                     dev->tunnel_->params().server_address);
+    if (!dev->stack_->addresses_ok()) {
+        err = "隧道给的地址不是合法 IPv6";
+        return std::nullopt;
+    }
+    dev->rsd_ = Rsd::open(*dev->stack_, *dev->tunnel_, identity, err, verbose);
     if (!dev->rsd_) {
         return std::nullopt;
     }

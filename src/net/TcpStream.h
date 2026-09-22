@@ -5,7 +5,7 @@
 #include <string_view>
 #include <vector>
 
-#include "transport/Tunnel.h"
+#include "net/Stack.h"
 
 namespace scrctl::net {
 
@@ -17,9 +17,11 @@ namespace scrctl::net {
 /// 校验和或序号有任何错就只会挂起，成功则返回 85 个服务的表，是硬证据。
 ///
 /// 不支持：分段重组、窗口缩放、选择性确认、并发连接、服务端监听。
-class TcpStream {
+class TcpStream : public TcpEndpoint {
 public:
-    TcpStream(scrctl::transport::PacketTunnel &tunnel, std::string local_ip, std::string peer_ip);
+    /// 地址来自隧道握手协商出的那一对，由 Stack 持有；这里只管一条连接。
+    explicit TcpStream(Stack &stack);
+    ~TcpStream() override;
 
     /// 完成三次握手。peer_port 是隧道内端口（如 RSD 端口）。
     bool connect(uint16_t peer_port, std::string &err);
@@ -46,15 +48,12 @@ private:
     };
 
     bool send_segment(uint8_t flags, const std::vector<uint8_t> &payload, std::string &err);
-    /// 收并处理一个包；返回 false 表示超时或连接终止。
+    /// 驱动复用层收一个包；返回 false 表示超时或隧道终止。
     bool pump_one(int timeout_ms, std::string &err);
-    bool parse_and_queue(const std::vector<uint8_t> &packet, std::string &err);
+    void on_segment(const uint8_t *l4, std::size_t len) override;
+    bool handle_segment(const uint8_t *l4, std::size_t len, std::string &err);
 
-    scrctl::transport::PacketTunnel &tunnel_;
-    std::string local_ip_;
-    std::string peer_ip_;
-    std::vector<uint8_t> local_addr_;  // 16 字节
-    std::vector<uint8_t> peer_addr_;   // 16 字节
+    Stack &stack_;
 
     uint16_t sport_ = 0;
     uint16_t dport_ = 0;
@@ -66,6 +65,9 @@ private:
 
     std::vector<uint8_t> rx_;
     size_t rx_pos_ = 0;
+    /// 处理段时可能要从 on_segment（无返回值）里往外传错误：复用层只负责分发，
+    /// 真正的失败要由正在等这条连接的人看到。
+    std::string pending_err_;
 };
 
 }  // namespace scrctl::net

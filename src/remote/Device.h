@@ -5,6 +5,7 @@
 #include <string_view>
 #include <vector>
 
+#include "net/Stack.h"
 #include "remote/Rsd.h"
 #include "transport/Lockdown.h"
 #include "transport/Tunnel.h"
@@ -65,6 +66,7 @@ private:
     /// 一起被移动，那个指针就会指向旧地址——表现是连不通或读到垃圾，且不保证
     /// 每次都不出问题。unique_ptr 让对象的地址与 Device 的位置脱钩，移动才安全。
     std::unique_ptr<transport::PacketTunnel> tunnel_;
+    std::unique_ptr<net::Stack> stack_;
     std::optional<Rsd> rsd_;
 };
 

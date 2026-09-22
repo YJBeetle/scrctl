@@ -81,7 +81,9 @@ add_library(scrctl_core STATIC
         src/transport/TlsChannel.cpp
         src/transport/Lockdown.cpp
         src/transport/Tunnel.cpp
+        src/net/Stack.cpp
         src/net/TcpStream.cpp
+        src/net/UdpSocket.cpp
         src/remote/RemoteXpc.cpp
         src/remote/Rsd.cpp
         src/remote/Device.cpp
@@ -119,6 +121,10 @@ if(SCRCTL_BUILD_TESTS)
     add_executable(plist_test tests/plist_test.cpp)
     target_link_libraries(plist_test PRIVATE scrctl_core)
     add_test(NAME plist COMMAND plist_test)
+
+    add_executable(net_test tests/net_test.cpp)
+    target_link_libraries(net_test PRIVATE scrctl_core)
+    add_test(NAME net COMMAND net_test)
 
     add_executable(media_test tests/media_test.cpp)
     target_link_libraries(media_test PRIVATE scrctl_core)
