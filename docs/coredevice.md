@@ -83,6 +83,9 @@ DDI `version.plist` 显示构建来源含 `XCTest`、`CoreDevice`、`Mercury`、
 3. **`ffplay -f hevc` 的 `-framerate` 默认 25**，而真实流是 60fps。不设会导致播放器按 40ms/帧消费、按 60 帧/秒接收，队列无界堆积（表现为"延迟 30 秒"且 CPU 仅 0.7%）。
 4. **offer 字符串影响巨大**。参考实现的调研记录显示：协商带 `VRAE:0`（禁止编码器自适应分辨率）时，在固定 6 Mbps 上限下编码器靠**丢输入帧**控码率，实测丢 207–219 帧、仅 ~42fps 且有多帧马赛克拖影；去掉该 token 后丢帧为 0、53–55fps。**注意苹果自己 Xcode 抓包里的 offer 恰恰是带 `VRAE:0` 的那个慢版本。**
 5. **teardown 顺序敏感**：停止流必须用**全新的 RemoteXPC 连接**发 stop，复用发起 start 的那条连接会让设备守护进程在释放 session 前崩溃。
+6. **XPC 消息必须套在 HTTP/2 DATA 帧里写。** 少一个 9 字节帧头，设备就把 wrapper magic `0x29B00B92` 当帧头解析（长度读成 9572528、类型读成未定义的 `0x29`），回一个 GOAWAY `"too large frame size"` —— 错误信息指不到「自己帧头没写」这种错因上。
+7. **主通道终止帧的标志位是 `0x200`，不是 `IS_REPLY(0x20000)`。** 线上 flags = `0x0201`。写成 `0x20000` 的症状是设备把回信通道 `RST_STREAM / FRAME_SIZE_ERROR` 拆掉，`peer_info` 永远不来。
+8. **「有字典载荷」不等于回信。** 设备对我们每个握手帧各回一个空字典 `{}` 或空载荷帧当 ACK，只筛「是字典」就会把第一个 `{}` 当 `peer_info` 交上去，调用方看到一个没有 `Services` 的对象却以为握手成功了。必须要求**非空**字典。
 
 ## 7. 与 iPhone Mirroring / DeviceHub 的关系
 
@@ -109,3 +112,67 @@ scrctl 的存在理由是它的**形态**而非能力：原生窗口 + scrcpy �
 ```
 
 设备标识不硬编码，按 `--udid` > `SCRCTL_UDID` > 唯一 USB 设备自动发现 的顺序解析。
+
+## 10. 隧道内 RemoteXPC 的线上细节（实测，iPhone 14,4 / iOS 27.0 / USB）
+
+RSD 控制通道 = 隧道内 TCP 上的 HTTP/2，而 XPC 消息装在 DATA 帧里。
+
+**帧序列**（设备侧 RemoteServiceDiscovery 会校验顺序，主通道 HEADERS 必须先于
+终止帧、回信通道 HEADERS 必须先于它的 INIT_HANDSHAKE 帧）：
+
+```text
+PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n          前置签名，24 字节裸串，不是帧
+SETTINGS      {MAX_CONCURRENT_STREAMS=100, INITIAL_WINDOW_SIZE=16MiB}
+WINDOW_UPDATE stream=0  +16MiB-65535
+HEADERS       stream=1  flags=END_HEADERS  len=0     ← 空 header block
+DATA          stream=1  flags=0x001        空字典 {}  44 字节
+HEADERS       stream=3  flags=END_HEADERS  len=0
+DATA          stream=1  flags=0x0201       空载荷      24 字节   ← 终止帧
+DATA          stream=3  flags=0x400001     空载荷      24 字节   ← INIT_HANDSHAKE
+（读对端 SETTINGS 后）SETTINGS ACK
+DATA          stream=1  flags=0x0101       Handshake 请求，见下
+```
+
+**HPACK 完全不需要**：HEADERS 是空的，路由信息全在流号里（1 主通道 / 3 回信通道），
+载荷走 DATA。这是这条链路上最值得的一次减法。
+
+**Handshake 请求载荷**（不带这一手，设备回 `"Invalid or missing remote device
+connection version flags"` 并取消连接）：
+
+```text
+MessageType                = "Handshake"
+MessagingProtocolVersion   = UINT64 7
+UUID                       = UUID(16 字节，必须稳定，见下)
+Properties.RemoteXPCVersionFlags = UINT64 0x0100000000000006
+Properties.SensitivePropertiesVisible = true   ← 不给则带 entitlement 的服务被摘掉
+Services                   = {} (空字典)
+```
+
+**peer_info 的形态**：一次性回来，实测 25 KB、拆成 16374 + 8470 两个 DATA 帧，
+所以 XPC 消息层必须能跨帧重拼。顶层键 `MessageType / MessagingProtocolVersion /
+Services / Properties / UUID`；`Properties` 是设备指纹（型号、OS 版本、序列号、
+MAC…），`Services` 是 85 项目录，每项形如
+
+```text
+com.apple.coredevice.displayservice: {
+    Properties: {EncryptSocketData: false, Features: [...], UsesRemoteXPC: true},
+    Port: "63xxx",            ← 注意是**字符串**不是整数
+    Entitlement: "...", ServiceVersion: 1 }
+```
+
+`Port` 是隧道内端口，直接对我们自己那个 IPv6/TCP 栈 `connect` 即可，不需要再经
+lockdown `StartService`。`UsesRemoteXPC` 决定连上之后是再走一遍 HTTP/2+XPC
+握手还是直接当裸服务（lockdown shim 那批是 false）。
+
+**回信判定规则**：设备对上面每个握手帧各回一个空字典或空载荷帧当 ACK，所以
+「解出了一个字典」不等于拿到回信，必须要求**非空**字典，否则第一个 `{}` 会被
+当成 peer_info 交上去。
+
+**peer UUID 必须稳定**：设备每条隧道只保留一个 RSD 连接，新连接一来就换掉旧的；
+iOS 27.2 起它还会记住被换掉那个 peer 的 UUID，来客 UUID 与记忆不符就把整台设备
+重新 attach —— 已公布的服务监听全部关闭、端口拒绝连接。scrctl 取配对记录里的
+`HostID` 当这个 UUID（现成的、跨进程跨重启稳定的主机标识，不新增状态文件）。
+
+**权限模型实测复核**：RSD 目录里每个服务都带 `Entitlement` 字段，但设备**不对
+第三方对端强制校验**它——非 root、无苹果开发者授权签名的进程照样能连上
+`displayservice` / `hid.*` 并起流。真正的门是 §4 那四道，不是这个字段。
