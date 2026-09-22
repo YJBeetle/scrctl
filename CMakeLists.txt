@@ -65,6 +65,7 @@ endif()
 # ------------------------------------------------------------- core lib -----
 add_library(scrctl_core STATIC
         src/plist/Plist.cpp
+        src/transport/Usbmux.cpp
         src/bitstream/AnnexB.cpp
         src/decode/VideoToolboxDecoder.cpp)
 target_include_directories(scrctl_core PUBLIC src)
@@ -75,6 +76,10 @@ target_compile_options(scrctl_core PRIVATE -Wall -Wextra)
 add_executable(scrctl src/app/main.cpp)
 target_link_libraries(scrctl PRIVATE scrctl_core Scrctl::SDL2)
 target_compile_options(scrctl PRIVATE -Wall -Wextra)
+
+# 需要真机在线的手工探针，不进 ctest。
+add_executable(usbmux_probe tools/usbmux_probe.cpp)
+target_link_libraries(usbmux_probe PRIVATE scrctl_core)
 
 # ---------------------------------------------------------------- tests -----
 if(SCRCTL_BUILD_TESTS)
