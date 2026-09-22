@@ -72,6 +72,7 @@ find_package(OpenSSL REQUIRED)
 add_library(scrctl_core STATIC
         src/json/Json.cpp
         src/plist/Plist.cpp
+        src/plist/Bplist.cpp
         src/xpc/XpcValue.cpp
         src/http2/Framing.cpp
         src/transport/Usbmux.cpp
@@ -116,6 +117,10 @@ if(SCRCTL_BUILD_TESTS)
     add_executable(plist_test tests/plist_test.cpp)
     target_link_libraries(plist_test PRIVATE scrctl_core)
     add_test(NAME plist COMMAND plist_test)
+
+    add_executable(bplist_test tests/bplist_test.cpp)
+    target_link_libraries(bplist_test PRIVATE scrctl_core)
+    add_test(NAME bplist COMMAND bplist_test)
 
     add_executable(json_test tests/json_test.cpp)
     target_link_libraries(json_test PRIVATE scrctl_core)
