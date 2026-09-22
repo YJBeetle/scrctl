@@ -72,6 +72,7 @@ find_package(OpenSSL REQUIRED)
 add_library(scrctl_core STATIC
         src/json/Json.cpp
         src/plist/Plist.cpp
+        src/xpc/XpcValue.cpp
         src/transport/Usbmux.cpp
         src/transport/TlsChannel.cpp
         src/transport/Lockdown.cpp
@@ -112,6 +113,10 @@ if(SCRCTL_BUILD_TESTS)
     add_executable(json_test tests/json_test.cpp)
     target_link_libraries(json_test PRIVATE scrctl_core)
     add_test(NAME json COMMAND json_test)
+
+    add_executable(xpc_test tests/xpc_test.cpp)
+    target_link_libraries(xpc_test PRIVATE scrctl_core)
+    add_test(NAME xpc COMMAND xpc_test)
 
     add_executable(decode_test tests/decode_test.cpp)
     target_link_libraries(decode_test PRIVATE scrctl_core)
