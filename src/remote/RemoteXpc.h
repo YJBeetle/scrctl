@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <map>
 #include <optional>
@@ -84,9 +85,19 @@ private:
     /// 收一批字节并处理其中的完整帧；返回 false 表示超时、GOAWAY 或连接已终止。
     bool pump(int timeout_ms, std::string &err);
     bool handle_frame(const http2::Frame &f, std::string &err);
-    /// 从各流的缓冲里取一条完整回信。取不到时返回 false 且 err 为空
-    /// （表示"还得继续等"），err 非空才表示真的坏了。
-    bool take_message(xpc::Value &out, std::string &err);
+    /// 收一条文件传输：先在设备推来的那条流上表态接受，再读满 size 字节。
+    bool receive_file(uint32_t stream_id, uint64_t size,
+                      std::chrono::steady_clock::time_point deadline, std::vector<uint8_t> &out,
+                      std::string &err);
+    /// 递归收集字典/数组里所有 FileTransfer 占位，顺序即流号顺序。
+    static void collect_files(const xpc::Value &v, std::vector<xpc::Value *> &out);
+    /// 把回信字典里所有 FileTransfer 占位换成真字节。
+    bool materialize_files(xpc::Value &reply, std::chrono::steady_clock::time_point deadline,
+                           std::string &err);
+    /// 从各流的缓冲里取一条完整回信，并把随信推来的文件字节填进去。
+    /// 取不到时返回 false 且 err 为空（表示"还得继续等"），err 非空才表示真的坏了。
+    bool take_message(xpc::Value &out, std::chrono::steady_clock::time_point deadline,
+                      std::string &err);
     void replenish_inbound_window(uint32_t stream_id);
     /// 写一帧并在 verbose 下打出原始字节。协议对不上时，唯一有用的证据就是
     /// 「我们究竟往线上写了什么」，靠推断排错在这里的性价比极低。
@@ -97,6 +108,9 @@ private:
     /// 按流号分开缓冲：一条消息可能被拆成多个 DATA 帧，不同流的消息混在一个缓冲里
     /// 拼，顺序一错就整条解不出来。
     std::map<uint32_t, std::vector<uint8_t>> pending_;
+    /// 偶数号流（设备侧发起）上跑的不是 XPC 消息而是文件裸字节，不能混进
+    /// pending_ 里当消息解——那样每个字节都会被拿去当帧头/magic 校验一次。
+    std::map<uint32_t, std::vector<uint8_t>> raw_;
     std::optional<xpc::Value> peer_info_;
     uint64_t next_message_id_ = 0;
 

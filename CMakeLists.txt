@@ -103,6 +103,9 @@ target_link_libraries(lockdown_probe PRIVATE scrctl_core)
 add_executable(feature_probe tools/feature_probe.cpp)
 target_link_libraries(feature_probe PRIVATE scrctl_core)
 
+add_executable(screenshot_probe tools/screenshot_probe.cpp)
+target_link_libraries(screenshot_probe PRIVATE scrctl_core)
+
 # ---------------------------------------------------------------- tests -----
 if(SCRCTL_BUILD_TESTS)
     enable_testing()

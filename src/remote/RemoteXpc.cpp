@@ -347,7 +347,8 @@ bool Channel::handle_frame(const http2::Frame &f, std::string &err) {
             if (!http2::data_payload(f, body, err)) {
                 return false;
             }
-            auto &buf = pending_[f.stream_id];
+            // 偶数号流是设备发起的，上面跑的是文件裸字节，不是 XPC 消息。
+            auto &buf = (f.stream_id % 2 == 0) ? raw_[f.stream_id] : pending_[f.stream_id];
             buf.insert(buf.end(), body.begin(), body.end());
             consumed_per_stream_[f.stream_id] += body.size();
             consumed_connection_ += body.size();
@@ -438,7 +439,89 @@ bool Channel::send_request(const xpc::Value &body, bool want_reply, std::string 
     return true;
 }
 
-bool Channel::take_message(xpc::Value &out, std::string &err) {
+void Channel::collect_files(const xpc::Value &v, std::vector<xpc::Value *> &out) {
+    for (auto &entry : const_cast<xpc::Value &>(v).dict) {
+        if (entry.value.type == xpc::Type::FileTransfer) {
+            out.push_back(&entry.value);
+        } else if (entry.value.is_dict() || entry.value.is_array()) {
+            collect_files(entry.value, out);
+        }
+    }
+    for (auto &item : const_cast<xpc::Value &>(v).array) {
+        if (item.type == xpc::Type::FileTransfer) {
+            out.push_back(&item);
+        } else if (item.is_dict() || item.is_array()) {
+            collect_files(item, out);
+        }
+    }
+}
+
+bool Channel::receive_file(uint32_t stream_id, uint64_t size,
+                           std::chrono::steady_clock::time_point deadline,
+                           std::vector<uint8_t> &out, std::string &err) {
+    // 设备在等我们表态才开推，所以先发接受帧：HEADERS 开流 + 一条只带
+    // FILE_TX_STREAM_RESPONSE 标志的空载荷帧。
+    std::vector<uint8_t> frames = http2::headers_frame(stream_id);
+    auto accept = xpc::encode_message(xpc::kFlagAlwaysSet | xpc::kFlagFileTxResponse, 0, nullptr);
+    auto ack_frame = http2::data_frame(stream_id, accept);
+    frames.insert(frames.end(), ack_frame.begin(), ack_frame.end());
+    if (!send_bytes(frames, err)) {
+        err = "接受文件流失败: " + err;
+        return false;
+    }
+    out.clear();
+    out.reserve(static_cast<std::size_t>(std::min<uint64_t>(size, 64u << 20)));
+    while (raw_[stream_id].size() < size) {
+        const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              deadline - std::chrono::steady_clock::now())
+                              .count();
+        if (left <= 0) {
+            err = "收文件超时：流 " + std::to_string(stream_id) + " 上已到 " +
+                  std::to_string(raw_[stream_id].size()) + "/" + std::to_string(size) + " 字节";
+            return false;
+        }
+        if (!pump(static_cast<int>(left), err)) {
+            if (raw_[stream_id].size() >= size) {
+                break;
+            }
+            err = "收文件时断开: " + err;
+            return false;
+        }
+    }
+    out.assign(raw_[stream_id].begin(), raw_[stream_id].begin() + static_cast<std::ptrdiff_t>(size));
+    raw_[stream_id].erase(raw_[stream_id].begin(),
+                          raw_[stream_id].begin() + static_cast<std::ptrdiff_t>(size));
+    return true;
+}
+
+bool Channel::materialize_files(xpc::Value &reply,
+                                std::chrono::steady_clock::time_point deadline,
+                                std::string &err) {
+    std::vector<xpc::Value *> files;
+    collect_files(reply, files);
+    if (files.empty()) {
+        return true;
+    }
+    // 第 i 个文件对应设备发起的第 i 条偶数流：2, 4, 6...。这个对应关系是"按
+    // 位置推定"的，所以把实际读到的流号也打出来，对不上时不至于摸黑。
+    for (std::size_t i = 0; i < files.size(); ++i) {
+      const auto stream_id = static_cast<uint32_t>((i + 1) * 2);
+        if (files[i]->file_size == 0) {
+            continue;
+        }
+        if (verbose_) {
+            std::fprintf(stderr, "    ~ 取文件 %llu 字节，走流 %u\n",
+                         static_cast<unsigned long long>(files[i]->file_size), stream_id);
+        }
+        if (!receive_file(stream_id, files[i]->file_size, deadline, files[i]->data, err)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool Channel::take_message(xpc::Value &out,
+                           std::chrono::steady_clock::time_point deadline, std::string &err) {
     for (auto &[stream, buf] : pending_) {
         for (;;) {
             xpc::Message m;
@@ -463,7 +546,7 @@ bool Channel::take_message(xpc::Value &out, std::string &err) {
                                  xpc::describe(m.body).substr(0, 300).c_str());
                 }
                 out = std::move(m.body);
-                return true;
+                return materialize_files(out, deadline, err);
             }
         }
     }
@@ -473,7 +556,7 @@ bool Channel::take_message(xpc::Value &out, std::string &err) {
 bool Channel::receive(xpc::Value &out, int timeout_ms, std::string &err) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
     for (;;) {
-        if (take_message(out, err)) {
+        if (take_message(out, deadline, err)) {
             return true;
         }
         if (!err.empty()) {
@@ -492,7 +575,7 @@ bool Channel::receive(xpc::Value &out, int timeout_ms, std::string &err) {
             // pump 失败常常只是这一次 socket 读超时，而上一轮处理帧时攒下的完整
             // 消息还在缓冲里。不回头再看一眼，就会把已经收到的回信报成"没回信"——
             // 真机上正是这个次序：回信到齐、读超时、于是报超时。
-            if (take_message(out, err)) {
+            if (take_message(out, deadline, err)) {
                 return true;
             }
             err = "等设备回信时断开: " + err;
