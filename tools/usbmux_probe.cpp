@@ -75,6 +75,29 @@ int main() {
             std::printf("  取回 %zu 字节，魔数=%s%s\n", rec.size(), magic.substr(0, 8).c_str(),
                         magic.starts_with("bplist") ? "  (bplist -> 后续需要二进制 plist 解析)"
                                                     : "");
+            // 只列键名/类型/长度。值里有私钥和证书，一个都不打。
+            auto parsed = scrctl::plist::parse(std::string_view(
+                reinterpret_cast<const char *>(rec.data()), rec.size()));
+            if (!parsed) {
+                std::fprintf(stderr, "  记录无法按 XML plist 解析\n");
+            } else {
+                std::printf("  字段（仅键名与长度）:\n");
+                for (const auto &k : parsed->keys) {
+                    const auto *v = parsed->find(k);
+                    const char *type = "?";
+                    size_t len = 0;
+                    switch (v->kind) {
+                        case scrctl::plist::Kind::String: type = "string"; len = v->string.size(); break;
+                        case scrctl::plist::Kind::Data:   type = "data";   len = v->data.size();   break;
+                        case scrctl::plist::Kind::Int:    type = "integer"; break;
+                        case scrctl::plist::Kind::Bool:   type = "bool"; break;
+                        case scrctl::plist::Kind::Array:  type = "array"; len = v->array.size(); break;
+                        case scrctl::plist::Kind::Dict:   type = "dict";  len = v->keys.size();  break;
+                        default: break;
+                    }
+                    std::printf("    %-22s %-8s %zu\n", k.c_str(), type, len);
+                }
+            }
         }
     }
 
