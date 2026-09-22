@@ -32,6 +32,9 @@ enum class Type : uint32_t {
     Uuid = 0x0000A000,
     Array = 0x0000E000,
     Dict = 0x0000F000,
+    /// 大载荷不进消息本体：字典里放一个 FileTransfer 说明大小，真正的字节由设备
+    /// 在另一条 HTTP/2 流上推。截图这类返回值全靠它。
+    FileTransfer = 0x0001A000,
 };
 
 struct Value;
@@ -57,6 +60,15 @@ struct Value {
     std::vector<uint8_t> data;  ///< Data；Uuid 时长度为 16。
     Array array;
     Dict dict;
+
+    /// 仅 FileTransfer：设备声明的字节数（线上字典里的 "s"）、它的 msg id，
+    /// 以及随后从那条推送流上读回来的实际字节。
+    ///
+    /// data 由通道层填充，不属于线上编码的一部分——所以解出来的 FileTransfer
+    /// 在被"取货"之前 data 是空的，直接 encode 会丢内容，这是有意的：文件字节
+    /// 从来不在消息里。
+    uint64_t file_size = 0;
+    uint64_t transfer_id = 0;
 
     [[nodiscard]] bool is_dict() const { return type == Type::Dict; }
     [[nodiscard]] bool is_array() const { return type == Type::Array; }
@@ -93,6 +105,7 @@ Value make_string(std::string v);
 Value make_data(std::vector<uint8_t> v);
 /// 只接受 16 字节；长度不符时解出来的对象编码会失败，而不是悄悄写出畸形数据。
 Value make_uuid(std::span<const uint8_t> v);
+Value make_file_transfer(uint64_t size, uint64_t transfer_id = 0);
 Value make_array();
 Value make_dict();
 

@@ -220,6 +220,25 @@ void test_containers() {
     dict_set(mixed, "weird keys", make_string("包含空格的键"));
     dict_set(mixed, "", make_string("空键"));
     roundtrip(mixed, "怪键字典");
+
+    // 大载荷不进消息本体：字典里放一个 FileTransfer 说大小，字节走另一条流。
+    // 线上是 u64 传输号 + 内层字典 {"s": 大小}，长度字段只算内层那个字典。
+    expect_bytes(make_file_transfer(1049449, 3),
+                 "00a00100" "0300000000000000"  // 类型 + 传输号
+                 "00f00000" "14000000"          // 内层字典：4(count)+4(键)+12(值)
+                 "01000000"
+                 "73000000"
+                 "00400000" "6903100000000000",  // 1049449 = 0x100369
+                 "FileTransfer 的线上形态");
+    roundtrip(make_file_transfer(4096, 0), "FileTransfer 往返");
+    roundtrip([&] {
+        auto d = make_dict();
+        dict_set(d, "image", make_file_transfer(1049449, 7));
+        dict_set(d, "imageFormat", make_string("png"));
+        return d;
+    }(), "带 FileTransfer 的返回字典");
+    check(describe(make_file_transfer(1049449, 7)) == "<file 1049449 bytes, id=7>",
+          "FileTransfer 的可读形态: " + describe(make_file_transfer(1049449, 7)));
 }
 
 void test_message_envelope() {

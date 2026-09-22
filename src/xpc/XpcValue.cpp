@@ -119,6 +119,13 @@ bool encode_into(std::vector<uint8_t> &out, const Value &v, int depth) {
             }
             out.insert(out.end(), v.data.begin(), v.data.end());
             return true;
+        case Type::FileTransfer: {
+            // 线上形态：u64 传输号 + 一个内层字典，字典里的 "s" 是字节数。
+            put_u64(out, v.transfer_id);
+            auto meta = make_dict();
+            dict_set(meta, "s", make_uint64(v.file_size));
+            return encode_into(out, meta, depth + 1);
+        }
         case Type::Array:
         case Type::Dict: {
             // 长度前缀记的是「count 字段 + 全部条目」，所以先把内容编到临时缓冲
@@ -342,6 +349,22 @@ bool decode_into(Reader &r, Value &out, int depth) {
             out = std::move(v);
             return true;
         }
+        case static_cast<uint32_t>(Type::FileTransfer): {
+            uint64_t msg_id = 0;
+            if (!r.u64(msg_id)) {
+                return false;
+            }
+            Value meta;
+            if (!decode_into(r, meta, depth + 1)) {
+                return false;
+            }
+            Value v;
+            v.type = Type::FileTransfer;
+            v.transfer_id = msg_id;
+            v.file_size = static_cast<uint64_t>(meta.at("s").as_int_or(0));
+            out = std::move(v);
+            return true;
+        }
         case static_cast<uint32_t>(Type::Array):
         case static_cast<uint32_t>(Type::Dict): {
             uint32_t total = 0;
@@ -492,6 +515,14 @@ Value make_uuid(std::span<const uint8_t> v) {
     Value x;
     x.type = Type::Uuid;
     x.data.assign(v.begin(), v.end());
+    return x;
+}
+
+Value make_file_transfer(uint64_t size, uint64_t transfer_id) {
+    Value x;
+    x.type = Type::FileTransfer;
+    x.file_size = size;
+    x.transfer_id = transfer_id;
     return x;
 }
 
@@ -664,6 +695,9 @@ std::string describe(const Value &v) {
         }
         case Type::Data:
             return "<" + u64_to_string(v.data.size()) + " bytes>";
+        case Type::FileTransfer:
+            return "<file " + u64_to_string(v.file_size) + " bytes, id=" +
+                   u64_to_string(v.transfer_id) + (v.data.empty() ? "" : ", 已到") + ">";
         case Type::Uuid: {
             static constexpr char kHex[] = "0123456789abcdef";
             std::string s;
