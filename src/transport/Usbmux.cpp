@@ -1,6 +1,7 @@
 #include "Usbmux.h"
 
 #include <arpa/inet.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -128,6 +129,28 @@ bool Socket::read_exact(void *data, size_t len, std::string &err) {
         got += static_cast<size_t>(n);
     }
     return true;
+}
+
+bool Socket::wait_readable(int ms, std::string &err) {
+    if (fd_ < 0) {
+        err = "socket 已关闭";
+        return false;
+    }
+    pollfd pfd{fd_, POLLIN, 0};
+    for (;;) {
+        const int n = ::poll(&pfd, 1, ms);
+        if (n > 0) {
+            return true;
+        }
+        if (n == 0) {
+            err = "等待超时";
+            return false;
+        }
+        if (errno != EINTR) {
+            err = std::string("poll 失败: ") + std::strerror(errno);
+            return false;
+        }
+    }
 }
 
 bool Socket::read_len_prefixed_be(std::vector<uint8_t> &out, std::string &err) {

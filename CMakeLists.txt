@@ -76,6 +76,7 @@ add_library(scrctl_core STATIC
         src/transport/TlsChannel.cpp
         src/transport/Lockdown.cpp
         src/transport/Tunnel.cpp
+        src/net/TcpStream.cpp
         src/bitstream/AnnexB.cpp
         src/decode/VideoToolboxDecoder.cpp)
 target_include_directories(scrctl_core PUBLIC src)
@@ -93,6 +94,9 @@ target_link_libraries(usbmux_probe PRIVATE scrctl_core)
 
 add_executable(lockdown_probe tools/lockdown_probe.cpp)
 target_link_libraries(lockdown_probe PRIVATE scrctl_core)
+
+add_executable(rsd_probe tools/rsd_probe.cpp)
+target_link_libraries(rsd_probe PRIVATE scrctl_core)
 
 # ---------------------------------------------------------------- tests -----
 if(SCRCTL_BUILD_TESTS)

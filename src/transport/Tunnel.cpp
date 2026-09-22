@@ -139,6 +139,15 @@ std::optional<PacketTunnel> PacketTunnel::establish(uint32_t device_id, uint16_t
     return t;
 }
 
+bool PacketTunnel::wait_readable(int ms, std::string &err) {
+    // TLS 记录可能已被 SSL_read 拆进内部缓冲，此时 fd 上无可读事件，
+    // 必须先问 SSL_pending，否则会白等超时。
+    if (tls_.handle() != nullptr && SSL_pending(tls_.handle()) > 0) {
+        return true;
+    }
+    return sock_.wait_readable(ms, err);
+}
+
 bool PacketTunnel::send_ipv6(const uint8_t *packet, size_t len, std::string &err) {
     if (!sock_.valid()) {
         err = "隧道未连接";

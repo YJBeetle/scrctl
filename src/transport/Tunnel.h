@@ -52,6 +52,9 @@ public:
     /// 收一个完整 IPv6 包。
     bool recv_ipv6(std::vector<uint8_t> &out, std::string &err);
 
+    /// 是否有数据可读（TLS 下要先看 SSL 内部缓冲，否则会把已解密的字节等丢）。
+    bool wait_readable(int ms, std::string &err);
+
 private:
     bool write_all(const void *data, size_t len, std::string &err);
     bool read_all(void *data, size_t len, std::string &err);
