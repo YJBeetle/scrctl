@@ -63,3 +63,7 @@ M1 阶段用采集工具拿到了实证：噪点（相邻像素差）从第 1 �
 - **SDL2**：`find_package` 优先（系统/brew），失败则 FetchContent 固定 tag
 - **M1 不引入 FFmpeg**：macOS 用 VideoToolbox 原生硬解，零外部依赖；libav 作为后续平台的兜底后端
 - **lwIP / quiche**：M2 / M5 才引入
+- **plist：自己实现限定子集，不引 libplist。** 两个独立理由：
+  1. **许可证**：libplist 是 LGPL-2.1，而本项目是 Apache-2.0。FetchContent 会静态链接，从而对组合作品施加 LGPL 义务。自己按规范实现一份就完全干净。
+  2. usbmux / lockdown 实际只需要 `dict / string / integer / true / false / data / array` 这几种类型，文法很小，没必要为此背一个跨三平台都要构建的依赖。
+- **隧道**：实测 `CoreDeviceProxy` 的"TCP 隧道"是**数据包隧道**（40 字节 IPv6 头 + 头内 u16 长度 + body，写进 `tun`），所以可移植路径必须自带 IPv6+TCP 栈 → 用 lwIP 挂自定义 netif。macOS 上"复用 remoted 已建隧道"虽然能免掉 lwIP，但 RSD 端口要靠 shell 出 `/usr/bin/nettop` 猜（macOS 27 起内核对非 root 只返回本进程 socket，NetworkStatistics 又要求 Apple 签名带 `com.apple.private.network.statistics`）——脆弱且绑 macOS 版本，**决定不做**，直接走可移植路径。
