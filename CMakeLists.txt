@@ -73,6 +73,7 @@ add_library(scrctl_core STATIC
         src/json/Json.cpp
         src/plist/Plist.cpp
         src/xpc/XpcValue.cpp
+        src/http2/Framing.cpp
         src/transport/Usbmux.cpp
         src/transport/TlsChannel.cpp
         src/transport/Lockdown.cpp
@@ -117,6 +118,10 @@ if(SCRCTL_BUILD_TESTS)
     add_executable(xpc_test tests/xpc_test.cpp)
     target_link_libraries(xpc_test PRIVATE scrctl_core)
     add_test(NAME xpc COMMAND xpc_test)
+
+    add_executable(http2_test tests/http2_test.cpp)
+    target_link_libraries(http2_test PRIVATE scrctl_core)
+    add_test(NAME http2 COMMAND http2_test)
 
     add_executable(decode_test tests/decode_test.cpp)
     target_link_libraries(decode_test PRIVATE scrctl_core)
