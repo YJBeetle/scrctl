@@ -275,6 +275,26 @@ std::optional<Socket> Usbmux::connect(uint32_t device_id, uint16_t port, std::st
     return tunnel;
 }
 
+bool Usbmux::read_pair_record(std::string_view udid, std::vector<uint8_t> &out,
+                              std::string &err) {
+    plist::Value req = base_request("ReadPairRecord");
+    req.set("PairRecordID", plist::Value::Str(std::string(udid)));
+
+    plist::Value reply;
+    if (!round_trip(req, reply, err)) {
+        return false;
+    }
+    const auto *data = reply.find("PairRecordData");
+    if (data == nullptr || data->data.empty()) {
+        const auto *e = reply.find("MessageType");
+        err = "ReadPairRecord 没有返回 PairRecordData（回复 " +
+              std::string(e ? e->as_string_or("?") : "?") + "）；设备可能尚未信任本机";
+        return false;
+    }
+    out = data->data;
+    return true;
+}
+
 std::optional<Socket> connect_lockdown(uint32_t device_id, std::string &err) {
     auto mux = Usbmux::open(err);
     if (!mux) {

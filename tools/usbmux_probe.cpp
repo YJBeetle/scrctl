@@ -63,6 +63,21 @@ int main() {
         return 1;
     }
 
+    // 配对记录含私钥与证书：只报长度和魔数，内容一个字节都不打。
+    std::printf("\nReadPairRecord:\n");
+    {
+        std::vector<uint8_t> rec;
+        err.clear();
+        if (!mux->read_pair_record(devices[0].udid, rec, err)) {
+            std::fprintf(stderr, "  失败: %s\n", err.c_str());
+        } else {
+            std::string magic(rec.size() >= 8 ? reinterpret_cast<const char *>(rec.data()) : "");
+            std::printf("  取回 %zu 字节，魔数=%s%s\n", rec.size(), magic.substr(0, 8).c_str(),
+                        magic.starts_with("bplist") ? "  (bplist -> 后续需要二进制 plist 解析)"
+                                                    : "");
+        }
+    }
+
     const auto usb = devices[0];
     std::printf("\nConnect 到 lockdown(62078) ...\n");
     auto mux2 = scrctl::transport::Usbmux::open(err);
@@ -77,23 +92,54 @@ int main() {
     }
     std::printf("  OK，socket 已转发到 lockdown\n");
 
-    for (const char *req_name : {"QueryType", "ReadBUID"}) {
+    {
         scrctl::plist::Value req = scrctl::plist::Value::Dict();
         req.set("Label", scrctl::plist::Value::Str("scrctl-probe"));
-        req.set("Request", scrctl::plist::Value::Str(req_name));
+        req.set("Request", scrctl::plist::Value::Str("QueryType"));
         scrctl::plist::Value reply;
         err.clear();
         if (!lockdown_query(*sock, req, reply, err)) {
-            std::fprintf(stderr, "  %s 失败: %s\n", req_name, err.c_str());
-            continue;
+            std::fprintf(stderr, "  QueryType 失败: %s\n", err.c_str());
+        } else {
+            std::string line = "  QueryType -> ";
+            for (const auto &k : reply.keys) {
+                const auto *v = reply.find(k);
+                line += k + "=" + (v && v->is_string() ? v->as_string_or("")
+                                                       : std::string("(非字符串)")) + " ";
+            }
+            std::printf("%s\n", line.c_str());
         }
-        std::string line = std::string("  ") + req_name + " -> ";
-        for (const auto &k : reply.keys) {
-            const auto *v = reply.find(k);
-            line += k + "=" + (v && v->is_string() ? v->as_string_or("")
-                                                   : std::string("(非字符串)")) + " ";
+    }
+
+    // 关键问题：起 CoreDeviceProxy 到底需不需要先建立配对 session。
+    // 不需要的话，M2 就能省掉整套 TLS 配对流程。
+    std::printf("\n不经 session 直接 StartService(CoreDeviceProxy):\n");
+    {
+        scrctl::plist::Value req = scrctl::plist::Value::Dict();
+        req.set("Label", scrctl::plist::Value::Str("scrctl-probe"));
+        req.set("Request", scrctl::plist::Value::Str("StartService"));
+        req.set("Service",
+                scrctl::plist::Value::Str("com.apple.internal.devicecompute.CoreDeviceProxy"));
+        scrctl::plist::Value reply;
+        err.clear();
+        if (!lockdown_query(*sock, req, reply, err)) {
+            std::fprintf(stderr, "  失败: %s\n", err.c_str());
+        } else {
+            std::printf("  回复键: ");
+            for (const auto &k : reply.keys) {
+                std::printf("%s ", k.c_str());
+            }
+            std::printf("\n");
+            if (const auto *e = reply.find("Error")) {
+                std::printf("  Error=%s\n", e->as_string_or("?").c_str());
+            }
+            if (const auto *svc = reply.find("Service")) {
+                std::printf("  Service=%s\n", svc->as_string_or("?").c_str());
+            }
+            if (const auto *p = reply.find("Port")) {
+                std::printf("  Port=%lld\n", static_cast<long long>(p->as_int_or(0)));
+            }
         }
-        std::printf("%s\n", line.c_str());
     }
 
     std::printf("\nM2.1 通路验证完成\n");

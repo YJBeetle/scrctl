@@ -76,6 +76,12 @@ public:
     /// 就是到该端口的透明通道（lockdown 即接在这上面）。
     std::optional<Socket> connect(uint32_t device_id, uint16_t port, std::string &err);
 
+    /// 读配对记录（bplist 字节）。
+    ///
+    /// 必须走 usbmuxd 而不是直接读文件：macOS 上 /var/db/lockdown 是 root-only，
+    /// 而 usbmuxd 有权限代读。返回的 blob 里含私钥与证书，**绝不可写进日志**。
+    bool read_pair_record(std::string_view udid, std::vector<uint8_t> &out, std::string &err);
+
     [[nodiscard]] static std::string socket_path();
 
 private:
