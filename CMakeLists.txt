@@ -64,6 +64,7 @@ endif()
 
 # ------------------------------------------------------------- core lib -----
 add_library(scrctl_core STATIC
+        src/plist/Plist.cpp
         src/bitstream/AnnexB.cpp
         src/decode/VideoToolboxDecoder.cpp)
 target_include_directories(scrctl_core PUBLIC src)
@@ -81,6 +82,10 @@ if(SCRCTL_BUILD_TESTS)
 
     add_executable(annexb_test tests/annexb_test.cpp)
     target_link_libraries(annexb_test PRIVATE scrctl_core)
+
+    add_executable(plist_test tests/plist_test.cpp)
+    target_link_libraries(plist_test PRIVATE scrctl_core)
+    add_test(NAME plist COMMAND plist_test)
 
     add_executable(decode_test tests/decode_test.cpp)
     target_link_libraries(decode_test PRIVATE scrctl_core)
