@@ -13,6 +13,7 @@ tools/probe/*.mp4
 
 # C++ / CMake 构建
 build/
+build-*/
 cmake-build-*/
 out/
 .cache/
