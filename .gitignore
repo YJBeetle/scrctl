@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.probe-venv/
+
+# 探针运行产物（含真机画面，不入库）
+tools/probe/*.png
+tools/probe/*.hevc
+tools/probe/*.h265
+tools/probe/*.mp4
+*.log
+
+# C++ / CMake 构建
+build/
+cmake-build-*/
+out/
+.cache/
+compile_commands.json
+CMakeUserPresets.json
+
+# 编辑器 / 系统
+.DS_Store
+.idea/
+.vscode/
