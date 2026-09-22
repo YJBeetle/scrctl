@@ -62,14 +62,21 @@ if(APPLE)
             "-framework CoreFoundation")
 endif()
 
+# ------------------------------------------------------------- OpenSSL ------
+# lockdown 的 StartSession 之后必须双向 TLS（客户端证书来自配对记录），
+# 而 /var/db/lockdown 是 root-only，所以配对材料只能经 usbmuxd 取。
+# OpenSSL 是 Apache-2.0，与本项目许可兼容。
+find_package(OpenSSL REQUIRED)
+
 # ------------------------------------------------------------- core lib -----
 add_library(scrctl_core STATIC
         src/plist/Plist.cpp
         src/transport/Usbmux.cpp
+        src/transport/Lockdown.cpp
         src/bitstream/AnnexB.cpp
         src/decode/VideoToolboxDecoder.cpp)
 target_include_directories(scrctl_core PUBLIC src)
-target_link_libraries(scrctl_core PUBLIC ScrctlAppleFrameworks)
+target_link_libraries(scrctl_core PUBLIC ScrctlAppleFrameworks OpenSSL::SSL OpenSSL::Crypto)
 target_compile_options(scrctl_core PRIVATE -Wall -Wextra)
 
 # ----------------------------------------------------------------- app ------
@@ -80,6 +87,9 @@ target_compile_options(scrctl PRIVATE -Wall -Wextra)
 # 需要真机在线的手工探针，不进 ctest。
 add_executable(usbmux_probe tools/usbmux_probe.cpp)
 target_link_libraries(usbmux_probe PRIVATE scrctl_core)
+
+add_executable(lockdown_probe tools/lockdown_probe.cpp)
+target_link_libraries(lockdown_probe PRIVATE scrctl_core)
 
 # ---------------------------------------------------------------- tests -----
 if(SCRCTL_BUILD_TESTS)
