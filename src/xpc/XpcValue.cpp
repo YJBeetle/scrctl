@@ -412,6 +412,12 @@ const Value *Value::find(std::string_view key) const {
     return nullptr;
 }
 
+const Value &Value::at(std::string_view key) const {
+    static const Value k_missing;  // Type::Null，所有取值器都会回落到默认值
+    const auto *v = find(key);
+    return v != nullptr ? *v : k_missing;
+}
+
 std::string Value::as_string_or(std::string_view fallback) const {
     return type == Type::String ? string : std::string(fallback);
 }

@@ -102,6 +102,13 @@ void test_golden_decode() {
     check(props->find("SensitivePropertiesVisible")->boolean, "嵌套字典里的 bool");
     check(m.body.find("Services")->is_dict() && m.body.find("Services")->dict.empty(), "空字典");
 
+    // 外部数据里少个键是常态，at() 必须能安全地往下链式取值。
+    check(m.body.at("不存在").type == Type::Null, "at() 缺失键回落到 Null");
+    check(m.body.at("不存在").at("还不存在").as_string_or("兜底") == "兜底", "at() 可以链式穿下去");
+    check(m.body.at("不存在").as_int_or(-1) == -1 && m.body.at("不存在").as_bool_or(true),
+          "Null 值上取标量走默认值");
+    check(m.body.at("MessagingProtocolVersion").uint64 == 7, "at() 命中真实键");
+
     const auto again = encode_message(m.flags, m.message_id, &m.body);
     check(hex(again) == kHandshakeGolden, "解出来再编回去，与基准逐字节相同");
 }

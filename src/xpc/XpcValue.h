@@ -62,8 +62,14 @@ struct Value {
     [[nodiscard]] bool is_array() const { return type == Type::Array; }
     [[nodiscard]] bool is_string() const { return type == Type::String; }
 
-    /// 找不到键返回 nullptr；重复键时取第一个。
+    /// 找不到键返回 nullptr；重复键时取第一个。适合「先判存在再取」的场合。
     [[nodiscard]] const Value *find(std::string_view key) const;
+    /// 找不到键返回一个共享的 Null 值引用，因此可以放心链式取值。
+    ///
+    /// 目录这类外部数据里，某个条目少一个键是常态而不是异常；每处都写判空迟早会
+    /// 漏一个（真漏过：解析 RSD 目录时对没有 Entitlement 的条目解引用了空指针，
+    /// 表现为随机段错误）。要判存在性请用 find。
+    [[nodiscard]] const Value &at(std::string_view key) const;
     [[nodiscard]] std::string as_string_or(std::string_view fallback = {}) const;
     [[nodiscard]] int64_t as_int_or(int64_t fallback = 0) const;
     [[nodiscard]] bool as_bool_or(bool fallback = false) const;
