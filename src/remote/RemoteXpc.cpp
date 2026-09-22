@@ -113,7 +113,7 @@ bool Channel::send_bytes(std::span<const uint8_t> data, std::string &err) {
     return write_all(socket_, data, err);
 }
 
-bool Channel::start(const PeerIdentity &identity, std::string &err) {
+bool Channel::start(std::string &err) {
     // 1. 客户端前置签名（不是帧，24 字节裸串）。
     if (!write_all(socket_, std::string_view(http2::kClientPreface, http2::kClientPrefaceSize),
                    err)) {
@@ -184,10 +184,13 @@ bool Channel::start(const PeerIdentity &identity, std::string &err) {
         }
     }
 
-    // 10. 申报身份，然后读设备自报的 peer_info。
+    return true;
+}
+
+bool Channel::announce_device(const PeerIdentity &identity, std::string &err) {
     auto hs = build_handshake(identity);
     if (!send_request(hs, false, err)) {
-        err = "发 RemoteXPC 握手失败: " + err;
+        err = "发 RemoteXPC 身份申报失败: " + err;
         return false;
     }
     xpc::Value info;
@@ -195,25 +198,22 @@ bool Channel::start(const PeerIdentity &identity, std::string &err) {
         err = "读 peer_info 失败: " + err;
         return false;
     }
-    peer_info_ = info;
+    peer_info_ = std::move(info);
     return true;
 }
 
-std::optional<Channel> Channel::open(net::TcpStream &socket, const PeerIdentity &identity,
-                                     std::string &err, bool verbose) {
+std::optional<Channel> Channel::open(net::TcpStream &socket, std::string &err, bool verbose) {
     std::optional<Channel> ch;
     ch.emplace(socket);
     ch->verbose_ = verbose;
-    if (!ch->start(identity, err)) {
-        if (verbose) {
-            std::fprintf(stderr, "  RemoteXPC 握手失败: %s\n", err.c_str());
-        }
+    if (!ch->start(err)) {
         return std::nullopt;
     }
     return ch;
 }
 
 bool Channel::pump(int timeout_ms, std::string &err) {
+    bool processed = false;
     for (;;) {
         http2::Frame f;
         std::size_t used = 0;
@@ -227,6 +227,7 @@ bool Channel::pump(int timeout_ms, std::string &err) {
             if (!handle_frame(f, err)) {
                 return false;
             }
+            processed = true;
             continue;
         }
         if (st == http2::Status::Malformed) {
@@ -234,6 +235,12 @@ bool Channel::pump(int timeout_ms, std::string &err) {
             return false;
         }
         break;  // 缓冲里只剩半帧，去收字节
+    }
+    // 处理过帧就先交回控制权，让调用方看看有没有攒出完整消息，再去阻塞读。
+    // 不这样返回的话，「回信随最后一批字节到齐」这个最常见的时序会被读超时
+    // 吃掉：明明收到了，却报成没收到。
+    if (processed) {
+        return true;
     }
 
     std::vector<uint8_t> got;
@@ -431,36 +438,46 @@ bool Channel::send_request(const xpc::Value &body, bool want_reply, std::string 
     return true;
 }
 
+bool Channel::take_message(xpc::Value &out, std::string &err) {
+    for (auto &[stream, buf] : pending_) {
+        for (;;) {
+            xpc::Message m;
+            std::size_t used = 0;
+            std::string derr;
+            const auto st = xpc::decode_message(buf, m, used, derr);
+            if (st == xpc::Status::Malformed) {
+                err = "流 " + std::to_string(stream) + " 上的消息畸形: " + derr;
+                return false;
+            }
+            if (st == xpc::Status::NeedMore) {
+                break;
+            }
+            buf.erase(buf.begin(), buf.begin() + static_cast<std::ptrdiff_t>(used));
+            // 只有「非空字典」才算回信。设备对我们每个握手帧各回一个空字典或
+            // 空载荷帧当 ACK，把 `{}` 交上去的话调用方只看到一个没有 Services
+            // 的对象，而真正的回信还在后面排队。
+            if (m.has_body && m.body.is_dict() && !m.body.dict.empty()) {
+                if (verbose_) {
+                    std::fprintf(stderr, "    => 流%u id=%llu %s\n", stream,
+                                 static_cast<unsigned long long>(m.message_id),
+                                 xpc::describe(m.body).substr(0, 300).c_str());
+                }
+                out = std::move(m.body);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool Channel::receive(xpc::Value &out, int timeout_ms, std::string &err) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
     for (;;) {
-        for (auto &[stream, buf] : pending_) {
-            for (;;) {
-                xpc::Message m;
-                std::size_t used = 0;
-                std::string derr;
-                const auto st = xpc::decode_message(buf, m, used, derr);
-                if (st == xpc::Status::Malformed) {
-                    err = "流 " + std::to_string(stream) + " 上的消息畸形: " + derr;
-                    return false;
-                }
-                if (st == xpc::Status::NeedMore) {
-                    break;
-                }
-                buf.erase(buf.begin(), buf.begin() + static_cast<std::ptrdiff_t>(used));
-                // 只有「非空字典」才算回信。设备对我们那三个握手帧各回一个空字典
-                // /空载荷帧当 ACK，把它们当 peer_info 交出去，调用方就看到一个
-                // 没有 Services 的空对象——真正的回信还在后面排队。
-                if (m.has_body && m.body.is_dict() && !m.body.dict.empty()) {
-                    if (verbose_) {
-                        std::fprintf(stderr, "    => id=%llu %s\n",
-                                     static_cast<unsigned long long>(m.message_id),
-                                     xpc::describe(m.body).substr(0, 300).c_str());
-                    }
-                    out = std::move(m.body);
-                    return true;
-                }
-            }
+        if (take_message(out, err)) {
+            return true;
+        }
+        if (!err.empty()) {
+            return false;  // 畸形消息：字节流已经错位，再等只会更错
         }
         const auto left = remaining_ms(deadline);
         if (left == 0) {
@@ -472,6 +489,13 @@ bool Channel::receive(xpc::Value &out, int timeout_ms, std::string &err) {
             return false;
         }
         if (!pump(static_cast<int>(left), err)) {
+            // pump 失败常常只是这一次 socket 读超时，而上一轮处理帧时攒下的完整
+            // 消息还在缓冲里。不回头再看一眼，就会把已经收到的回信报成"没回信"——
+            // 真机上正是这个次序：回信到齐、读超时、于是报超时。
+            if (take_message(out, err)) {
+                return true;
+            }
+            err = "等设备回信时断开: " + err;
             return false;
         }
     }

@@ -40,14 +40,18 @@ struct PeerIdentity {
 /// 反复构造。
 class Channel {
 public:
-    /// 在已建立的连接上跑完 HTTP/2 与 RemoteXPC 握手，并读回 peer_info。
+    /// 在已建立的连接上跑完 HTTP/2 层握手（建流 + 等对端 SETTINGS 并 ACK）。
     ///
     /// 帧顺序是有约束的，不是随便排：设备侧 RemoteServiceDiscovery 会校验顺序，
     /// 主通道 (stream 1) 的 HEADERS 必须先于终止帧、回信通道 (stream 3) 的
     /// HEADERS 必须先于它的 INIT_HANDSHAKE 帧，否则直接被 xpc_connection_cancel()
     /// 拆掉。顺序照 Apple 自家工具抓包的结果来。
-    static std::optional<Channel> open(net::TcpStream &socket, const PeerIdentity &identity,
-                                       std::string &err, bool verbose = false);
+    static std::optional<Channel> open(net::TcpStream &socket, std::string &err,
+                                       bool verbose = false);
+
+    /// 申报身份并读回 peer_info。**只有 RSD 控制通道需要这一步**，服务连接上
+    /// 设备不期望它，发了会被当成一次普通请求处理。
+    bool announce_device(const PeerIdentity &identity, std::string &err);
 
     /// 发一个请求。`want_reply` 置起 WANTING_REPLY 标志。
     bool send_request(const xpc::Value &body, bool want_reply, std::string &err);
@@ -75,11 +79,14 @@ public:
     explicit Channel(net::TcpStream &socket) : socket_(socket) {}
 
 private:
-    bool start(const PeerIdentity &identity, std::string &err);
+    bool start(std::string &err);
     bool send_data(uint32_t stream_id, std::span<const uint8_t> payload, std::string &err);
     /// 收一批字节并处理其中的完整帧；返回 false 表示超时、GOAWAY 或连接已终止。
     bool pump(int timeout_ms, std::string &err);
     bool handle_frame(const http2::Frame &f, std::string &err);
+    /// 从各流的缓冲里取一条完整回信。取不到时返回 false 且 err 为空
+    /// （表示"还得继续等"），err 非空才表示真的坏了。
+    bool take_message(xpc::Value &out, std::string &err);
     void replenish_inbound_window(uint32_t stream_id);
     /// 写一帧并在 verbose 下打出原始字节。协议对不上时，唯一有用的证据就是
     /// 「我们究竟往线上写了什么」，靠推断排错在这里的性价比极低。
