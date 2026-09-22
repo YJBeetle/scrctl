@@ -70,9 +70,12 @@ find_package(OpenSSL REQUIRED)
 
 # ------------------------------------------------------------- core lib -----
 add_library(scrctl_core STATIC
+        src/json/Json.cpp
         src/plist/Plist.cpp
         src/transport/Usbmux.cpp
+        src/transport/TlsChannel.cpp
         src/transport/Lockdown.cpp
+        src/transport/Tunnel.cpp
         src/bitstream/AnnexB.cpp
         src/decode/VideoToolboxDecoder.cpp)
 target_include_directories(scrctl_core PUBLIC src)
@@ -101,6 +104,10 @@ if(SCRCTL_BUILD_TESTS)
     add_executable(plist_test tests/plist_test.cpp)
     target_link_libraries(plist_test PRIVATE scrctl_core)
     add_test(NAME plist COMMAND plist_test)
+
+    add_executable(json_test tests/json_test.cpp)
+    target_link_libraries(json_test PRIVATE scrctl_core)
+    add_test(NAME json COMMAND json_test)
 
     add_executable(decode_test tests/decode_test.cpp)
     target_link_libraries(decode_test PRIVATE scrctl_core)

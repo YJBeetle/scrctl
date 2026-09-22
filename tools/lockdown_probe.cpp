@@ -7,6 +7,7 @@
 
 #include "plist/Plist.h"
 #include "transport/Lockdown.h"
+#include "transport/Tunnel.h"
 #include "transport/Usbmux.h"
 
 namespace {
@@ -80,12 +81,57 @@ int main() {
 
     std::printf("\n起 CoreDeviceProxy（这是 M2.3 隧道的入口）:\n");
     err.clear();
-    auto port = ld->start_service("com.apple.internal.devicecompute.CoreDeviceProxy", err);
-    if (!port) {
+    uint16_t port = 0;
+    bool service_tls = false;
+    {
+        scrctl::plist::Value req = scrctl::plist::Value::Dict();
+        req.set("Request", scrctl::plist::Value::Str("StartService"));
+        req.set("Service",
+                scrctl::plist::Value::Str("com.apple.internal.devicecompute.CoreDeviceProxy"));
+        scrctl::plist::Value reply;
+        if (!ld->request(req, reply, err)) {
+            std::fprintf(stderr, "  失败: %s\n", err.c_str());
+            return 1;
+        }
+        std::printf("  回复字段:\n");
+        for (const auto &k : reply.keys) {
+            const auto *v = reply.find(k);
+            std::string shown;
+            if (v != nullptr) {
+                switch (v->kind) {
+                    case scrctl::plist::Kind::String: shown = "\"" + v->as_string_or("") + "\""; break;
+                    case scrctl::plist::Kind::Int:    shown = std::to_string(v->as_int_or(0)); break;
+                    case scrctl::plist::Kind::Bool:   shown = v->boolean ? "true" : "false"; break;
+                    default: shown = "(其他)"; break;
+                }
+            }
+            std::printf("    %-24s = %s\n", k.c_str(), shown.c_str());
+        }
+        // 直接用这份回复的 Port，不再调第二次 StartService——端口是一次性的。
+        const auto *pv = reply.find("Port");
+        port = static_cast<uint16_t>(pv != nullptr ? pv->as_int_or(0) : 0);
+        const auto *sv = reply.find("EnableServiceSSL");
+        service_tls = sv != nullptr && sv->as_bool_or(false);
+    }
+    if (port == 0) {
+        std::fprintf(stderr, "  没拿到 Port\n");
+        return 1;
+    }
+    std::printf("  OK  端口 = %u\n", port);
+
+    std::printf("\n隧道握手（M2.3）:\n");
+    err.clear();
+    auto tunnel = scrctl::transport::PacketTunnel::establish(d.device_id, port, ld->identity(),
+                                                             service_tls, err);
+    if (!tunnel) {
         std::fprintf(stderr, "  失败: %s\n", err.c_str());
         return 1;
     }
-    std::printf("  OK  端口 = %u\n", *port);
-    std::printf("\nM2.2 通路验证完成：下一步可 Connect 到该端口开始数据包隧道\n");
+    const auto &p = tunnel->params();
+    std::printf("  本机隧道地址 = %s\n", p.client_address.c_str());
+    std::printf("  设备隧道地址 = %s\n", p.server_address.c_str());
+    std::printf("  隧道内 RSD 端口 = %u\n", p.rsd_port);
+    std::printf("  MTU = %u\n", p.mtu);
+    std::printf("\nM2.3 握手验证完成：下一步挂 IPv6+TCP 栈连 RSD\n");
     return 0;
 }

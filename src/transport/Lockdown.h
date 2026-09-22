@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "plist/Plist.h"
+#include "transport/TlsChannel.h"
 #include "transport/Usbmux.h"
 
 namespace scrctl::transport {
@@ -35,26 +36,27 @@ public:
 
     /// 起服务并返回可 Connect 的端口。
     ///
-    /// 部分服务（如 debugserver）要求后续连接也套 TLS；返回值不区分这点，
-    /// 调用方拿到端口后自行 Connect + 可选 wrap_tls。
-    std::optional<uint16_t> start_service(std::string_view name, std::string &err);
+    /// 部分服务（如 CoreDeviceProxy）实测带 EnableServiceSSL=true，意味着
+    /// 后续那条连接也要用同一套证书套 TLS——所以这里一并把它标出来。
+    struct ServiceEndpoint {
+        uint16_t port = 0;
+        bool requires_tls = false;
+    };
+    std::optional<ServiceEndpoint> start_service(std::string_view name, std::string &err);
 
-    /// 用配对记录里的同一套证书，把一条新 socket 升级为 TLS。
-    bool wrap_tls(Socket &sock, std::string &err);
+    /// 配对记录里的 TLS 材料。开启 EnableServiceSSL 的服务连接要用同一套。
+    [[nodiscard]] const PemIdentity &identity() const { return identity_; }
 
-    [[nodiscard]] bool secure() const { return ssl_ != nullptr; }
+    [[nodiscard]] bool secure() const { return tls_.valid(); }
     [[nodiscard]] const std::string &session_id() const { return session_id_; }
 
 private:
-    struct Tls;
     Socket sock_;
-    std::unique_ptr<Tls> ssl_;
+    TlsChannel tls_;
+    PemIdentity identity_;
     std::string host_id_;
     std::string system_buid_;
     std::string session_id_;
-    std::vector<uint8_t> host_cert_pem_;
-    std::vector<uint8_t> host_key_pem_;
-    std::vector<uint8_t> root_cert_pem_;
 };
 
 }  // namespace scrctl::transport
