@@ -79,6 +79,7 @@ add_library(scrctl_core STATIC
         src/transport/Lockdown.cpp
         src/transport/Tunnel.cpp
         src/net/TcpStream.cpp
+        src/remote/RemoteXpc.cpp
         src/bitstream/AnnexB.cpp
         src/decode/VideoToolboxDecoder.cpp)
 target_include_directories(scrctl_core PUBLIC src)

@@ -110,6 +110,10 @@ inline constexpr uint32_t kProtocolVersion = 5;
 inline constexpr uint32_t kFlagAlwaysSet = 0x00000001;
 inline constexpr uint32_t kFlagPing = 0x00000002;
 inline constexpr uint32_t kFlagDataPresent = 0x00000100;
+/// 主通道终止帧上带的一位。Apple 没给它名字，抓包里那一帧的 flags 就是
+/// 0x0201 = ALWAYS_SET | 这一位。（先前我把它错当成 kFlagIsReply，差了两个
+/// 数量级，设备随即把回信通道 RST 掉并报 FRAME_SIZE_ERROR。）
+inline constexpr uint32_t kFlagTermChannel = 0x00000200;
 inline constexpr uint32_t kFlagWantingReply = 0x00010000;
 inline constexpr uint32_t kFlagIsReply = 0x00020000;
 inline constexpr uint32_t kFlagFileTxRequest = 0x00100000;

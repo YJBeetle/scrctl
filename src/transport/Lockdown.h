@@ -47,6 +47,13 @@ public:
     /// 配对记录里的 TLS 材料。开启 EnableServiceSSL 的服务连接要用同一套。
     [[nodiscard]] const PemIdentity &identity() const { return identity_; }
 
+    /// 本机在这台设备上的配对身份（一个 36 字符的 UUID 文本）。
+    ///
+    /// 它是现成的、跨进程跨重启都稳定的主机标识，正好拿来当 RemoteXPC 握手里的
+    /// peer UUID——那个 UUID 一旦变了，设备会把整台机器重新 attach 一遍并关掉
+    /// 已公布的服务端口，所以「每次运行都随机生成」是不能接受的写法。
+    [[nodiscard]] const std::string &host_id() const { return host_id_; }
+
     [[nodiscard]] bool secure() const { return tls_.valid(); }
     [[nodiscard]] const std::string &session_id() const { return session_id_; }
 
