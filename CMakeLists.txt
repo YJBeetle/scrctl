@@ -75,6 +75,8 @@ add_library(scrctl_core STATIC
         src/plist/Bplist.cpp
         src/xpc/XpcValue.cpp
         src/http2/Framing.cpp
+        src/util/Deflate.cpp
+        src/media/MediaOffer.cpp
         src/transport/Usbmux.cpp
         src/transport/TlsChannel.cpp
         src/transport/Lockdown.cpp
@@ -117,6 +119,10 @@ if(SCRCTL_BUILD_TESTS)
     add_executable(plist_test tests/plist_test.cpp)
     target_link_libraries(plist_test PRIVATE scrctl_core)
     add_test(NAME plist COMMAND plist_test)
+
+    add_executable(media_test tests/media_test.cpp)
+    target_link_libraries(media_test PRIVATE scrctl_core)
+    add_test(NAME media COMMAND media_test)
 
     add_executable(bplist_test tests/bplist_test.cpp)
     target_link_libraries(bplist_test PRIVATE scrctl_core)
