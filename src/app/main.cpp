@@ -48,6 +48,7 @@ struct Options {
     bool crop_set = false;
     int crop_w = 0, crop_h = 0, crop_x = 0, crop_y = 0;
     double scale = 1.0;   ///< 窗口相对裁剪尺寸的缩放
+    bool scale_given = false;  ///< 显式给过 --scale 就别再自动缩进屏幕
     int exit_after = 0;   ///< 渲染多少帧后退出（0=不限）
     int verify_at = 0;    ///< 渲染到第 N 帧时回读窗口内容
     std::string verify_path;
@@ -110,6 +111,7 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.title = next("--title");
         } else if (a == "--scale") {
             o.scale = std::atof(next("--scale"));
+            o.scale_given = true;
         } else if (a == "--stats") {
             o.stats = true;
         } else if (a == "--exit-after") {
@@ -173,14 +175,23 @@ Crop resolve_crop(const Options &o, const scrctl::Frame &f) {
 
 class Presenter {
 public:
-    bool open(int frame_w, int frame_h, const Crop &crop, double scale, const std::string &title,
-              bool want_readback) {
-        win_w_ = static_cast<int>(crop.w * scale);
-        win_h_ = static_cast<int>(crop.h * scale);
+    bool open(int frame_w, int frame_h, const Crop &crop, double scale, bool scale_given,
+              const std::string &title, bool want_readback) {
         src_ = crop;
+        SDL_Rect desk{};
+        if (SDL_GetDisplayBounds(0, &desk) != 0 || desk.w <= 0) {
+            desk.w = win_w_fallback;
+            desk.h = win_h_fallback;
+        }
+        // 留一条标题栏的余量，别让窗口刚好顶满屏幕。
+        scrctl::app::fit_window(crop.w, crop.h, desk.w, desk.h - 60, scale, scale_given, win_w_, win_h_);
+        if (!scale_given && win_w_ < crop.w) {
+            std::printf("屏幕只有 %dx%d 点，窗口缩到 %dx%d（--scale 可覆盖）\n", desk.w, desk.h,
+                        win_w_, win_h_);
+        }
 
         window_ = SDL_CreateWindow(title.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                                   win_w_, win_h_, SDL_WINDOW_ALLOW_HIGHDPI);
+                                   win_w_, win_h_, SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
         if (window_ == nullptr) {
             std::fprintf(stderr, "建窗口失败: %s\n", SDL_GetError());
             return false;
@@ -201,6 +212,12 @@ public:
         if (SDL_GetRendererInfo(renderer_, &info) == 0) {
             std::printf("渲染驱动: %s\n", info.name);
         }
+        // 不设 logical size 的话，渲染器坐标就是**像素**尺寸，而 ALLOW_HIGHDPI 下
+        // 像素是窗口的两倍——按窗口点数画过去，内容就只占左上四分之一。设了它，
+        // SDL 自己处理 Retina 缩放与窗口拉伸后的等比留边。
+        SDL_RenderSetLogicalSize(renderer_, crop.w, crop.h);
+        int out_w = 0, out_h = 0;
+        SDL_GetRendererOutputSize(renderer_, &out_w, &out_h);
         // 纹理必须是**源帧尺寸**——整帧上传进按裁剪尺寸建的纹理会因尺寸不符
         // 而失败。裁剪与缩放统一交给 RenderCopy 的 src/dst 矩形表达。
         // BGRA 内存布局对应 little-endian 的 ARGB8888。
@@ -211,8 +228,9 @@ public:
             return false;
         }
         SDL_SetTextureScaleMode(texture_, SDL_ScaleModeBest);
-        std::printf("窗口 %dx%d（源帧 %dx%d，裁剪 %dx%d+%d+%d，缩放 %.2f）\n", win_w_, win_h_,
-                    frame_w, frame_h, crop.w, crop.h, crop.x, crop.y, scale);
+        std::printf("窗口 %dx%d 点 / 绘制面 %dx%d 像素 / 逻辑 %dx%d（源帧 %dx%d，裁剪 %dx%d+%d+%d）\n",
+                    win_w_, win_h_, out_w, out_h, crop.w, crop.h, frame_w, frame_h, crop.w, crop.h,
+                    crop.x, crop.y);
         return true;
     }
 
@@ -224,7 +242,9 @@ public:
             std::fprintf(stderr, "上传纹理失败: %s\n", SDL_GetError());
         }
         const SDL_Rect src{src_.x, src_.y, src_.w, src_.h};
-        const SDL_Rect dst{0, 0, win_w_, win_h_};
+        // 设了 logical size 之后渲染器坐标就是逻辑坐标，画满整个逻辑区域即可；
+        // Retina 缩放和窗口拉伸后的等比留边由 SDL 负责。
+        const SDL_Rect dst{0, 0, src_.w, src_.h};
         SDL_RenderCopy(renderer_, texture_, &src, &dst);
         // 必须在 Present 之前读：Present 之后后缓冲已交换，SDL_RenderReadPixels
         // 会读到失效内容并段错误。
@@ -236,8 +256,18 @@ public:
 
     /// 把真正呈现到窗口上的内容读回存盘。日志只能证明帧率，证明不了画面；
     /// 而裁剪/缩放/纹理尺寸这类错误恰恰只有回读才看得见。
+    ///
+    /// 尺寸必须问渲染器要**输出像素**，不能用窗口的逻辑点数：之前这里用的就是
+    /// win_w_/win_h_，于是"内容只画满了左上四分之一"这种错自己完全看不出来——
+    /// 读回来的恰好是自己画进去的那块，永远自洽。
     bool readback(const std::string &path) {
-        SDL_Surface *s = SDL_CreateRGBSurfaceWithFormat(0, win_w_, win_h_, 32,
+        int out_w = 0, out_h = 0;
+        if (SDL_GetRendererOutputSize(renderer_, &out_w, &out_h) != 0 || out_w <= 0 ||
+            out_h <= 0) {
+            std::fprintf(stderr, "问绘制面尺寸失败: %s\n", SDL_GetError());
+            return false;
+        }
+        SDL_Surface *s = SDL_CreateRGBSurfaceWithFormat(0, out_w, out_h, 32,
                                                         SDL_PIXELFORMAT_ARGB8888);
         if (s == nullptr) {
             std::fprintf(stderr, "回读建面失败: %s\n", SDL_GetError());
@@ -249,7 +279,7 @@ public:
             return false;
         }
         // 显式给矩形：SDL2 的 software 驱动在 rect=NULL 时会段错误（实测）。
-        const SDL_Rect full{0, 0, win_w_, win_h_};
+        const SDL_Rect full{0, 0, out_w, out_h};
         const int rc = SDL_RenderReadPixels(renderer_, &full, SDL_PIXELFORMAT_ARGB8888, s->pixels,
                                             s->pitch);
         SDL_UnlockSurface(s);
@@ -264,7 +294,7 @@ public:
             std::fprintf(stderr, "存图失败: %s\n", SDL_GetError());
             return false;
         }
-        std::printf("已回读窗口内容 -> %s (%dx%d)\n", path.c_str(), win_w_, win_h_);
+        std::printf("已回读窗口内容 -> %s (%dx%d 像素)\n", path.c_str(), out_w, out_h);
         return true;
     }
 
@@ -339,9 +369,19 @@ public:
     }
 
 private:
-    /// 窗口像素 -> 整块屏幕的 0..1 归一化坐标。
+    /// 窗口坐标 -> 整块屏幕的 0..1 归一化坐标。
+    ///
+    /// 必须经 SDL_RenderWindowToLogical：设了 logical size 之后，窗口和画面之间
+    /// 可能有等比留边，自己按窗口尺寸除就会把点击算偏，而且窗口一拉偏得更明显。
     void to_display(int wx, int wy, double &fx, double &fy) const {
-        display_fraction(wx, wy, win_w_, win_h_, src_, fx, fy);
+        float lx = 0, ly = 0;
+        if (renderer_ != nullptr) {
+            SDL_RenderWindowToLogical(renderer_, wx, wy, &lx, &ly);
+        } else {
+            lx = static_cast<float>(wx);
+            ly = static_cast<float>(wy);
+        }
+        display_fraction_from_logical(lx, ly, src_, fx, fy);
     }
 
     SDL_Window *window_ = nullptr;
@@ -349,6 +389,9 @@ private:
     SDL_Texture *texture_ = nullptr;
     Crop src_{};
     int win_w_ = 0, win_h_ = 0;
+    /// 拿不到显示器边界时的兜底：按原始尺寸处理，等于不缩。
+    static constexpr int win_w_fallback = 1 << 20;
+    static constexpr int win_h_fallback = 1 << 20;
     bool dragging_ = false;
 };
 
@@ -762,7 +805,8 @@ int main(int argc, char **argv) {
         if (presenter == nullptr) {
             presenter = std::make_unique<Presenter>();
             if (!presenter->open(static_cast<int>(f.width), static_cast<int>(f.height),
-                                 resolve_crop(o, f), o.scale, o.title, o.verify_at > 0)) {
+                                 resolve_crop(o, f), o.scale, o.scale_given, o.title,
+                                 o.verify_at > 0)) {
                 return 1;
             }
         }

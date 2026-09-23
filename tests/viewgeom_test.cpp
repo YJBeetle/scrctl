@@ -22,6 +22,8 @@ void check(bool ok, const std::string &what) {
 
 using scrctl::app::Crop;
 using scrctl::app::display_fraction;
+using scrctl::app::display_fraction_from_logical;
+using scrctl::app::fit_window;
 
 bool near(double v, double want, double tol = 1e-6) { return std::fabs(v - want) < tol; }
 
@@ -68,6 +70,51 @@ void test_cropped_viewport() {
     check(fx > 0.99 && fy > 0.99, "右下视口的右下角 -> 屏幕右下角");
 }
 
+/// 窗口必须放得进屏幕，且比例不能变——这次用户报的就是"窗口比例不对"。
+void test_fit_window() {
+    std::printf("\n== 窗口缩进屏幕 ==\n");
+    int w = 0, h = 0;
+    // 真机数字：裁剪框 1125x2436，MacBook 屏幕 1680x1050 点
+    fit_window(1125, 2436, 1680, 990, 1.0, false, w, h);
+    check(h <= 990 && w <= 1680, "放得进屏幕: " + std::to_string(w) + "x" + std::to_string(h));
+    const double want = 1125.0 / 2436.0;
+    check(std::fabs(static_cast<double>(w) / h - want) < 0.01,
+          "比例不变: " + std::to_string(static_cast<double>(w) / h) + " vs " + std::to_string(want));
+
+    // 屏幕够大就不该缩
+    fit_window(1125, 2436, 4000, 4000, 1.0, false, w, h);
+    check(w == 1125 && h == 2436, "屏幕够大时原样: " + std::to_string(w) + "x" + std::to_string(h));
+
+    // 用户显式给了 --scale 就不能擅自改他的数
+    fit_window(1125, 2436, 1680, 990, 0.5, true, w, h);
+    check(w == 562 && h == 1218, "--scale 0.5 照收: " + std::to_string(w) + "x" + std::to_string(h));
+
+    // 退化输入不能算出 0 尺寸的窗口（SDL 建不出窗口，症状是"闪退"）
+    fit_window(1125, 2436, 0, 0, 1.0, false, w, h);
+    check(w >= 1 && h >= 1, "拿不到屏幕尺寸时不缩成 0");
+    fit_window(0, 0, 1680, 990, 1.0, false, w, h);
+    check(w >= 1 && h >= 1, "裁剪框为 0 也不炸");
+}
+
+/// SDL 把窗口坐标换算成逻辑坐标之后剩下的那一半：加裁剪偏移、除以显示尺寸。
+void test_logical_to_fraction() {
+    std::printf("\n== 逻辑坐标 -> 归一化 ==\n");
+    const Crop full{0, 0, 1125, 2436, 1125, 2436};
+    double fx = 0, fy = 0;
+    display_fraction_from_logical(562.5, 1218, full, fx, fy);
+    check(near(fx, 0.5, 1e-3) && near(fy, 0.5, 1e-3), "未裁剪时逻辑正中 -> 屏幕正中");
+
+    // 裁剪框有偏移时，同样的逻辑坐标要算到屏幕的不同位置上——漏了偏移就是"点哪儿都偏"
+    const Crop off{100, 200, 1025, 2236, 1125, 2436};
+    display_fraction_from_logical(0, 0, off, fx, fy);
+    check(near(fx, 100.0 / 1125, 1e-6) && near(fy, 200.0 / 2436, 1e-6),
+          "裁剪偏移要加进去");
+
+    const Crop empty{};
+    display_fraction_from_logical(10, 10, empty, fx, fy);
+    check(std::isfinite(fx) && std::isfinite(fy), "空裁剪框不出 NaN");
+}
+
 void test_degenerate_window() {
     std::printf("\n== 退化输入 ==\n");
     const Crop c{0, 0, 1125, 2436, 1125, 2436};
@@ -84,6 +131,8 @@ void test_degenerate_window() {
 int main() {
     test_full_display();
     test_ctu_padding_not_in_the_denominator();
+    test_fit_window();
+    test_logical_to_fraction();
     test_cropped_viewport();
     test_degenerate_window();
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
