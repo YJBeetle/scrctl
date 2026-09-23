@@ -1,10 +1,17 @@
-// scrctl M1：把已录制的 Annex-B HEVC 播放到原生窗口，验证解码+渲染链路。
+// scrctl：把设备屏幕镜像到原生窗口。
+//
+// 两种源：真机实时流（默认，不带 --play 时）与已录制的 Annex-B 文件。两条路
+// 共用同一个喂字节 -> 拆 AU -> 解码 -> 渲染的循环，区别只在"字节从哪来"。
 //
 // 解析器是同步的——一次性 feed 整个文件会在任何一帧被画出来之前就把上千帧
-// 全解进内存（每帧 11MB）。所以这里分块喂，并用一个有上限的帧队列做背压。
+// 全解进内存（每帧 11MB）。所以分块喂，并用帧队列做背压。实时源同理：一次
+// 只取一个数据报，喂完就回到事件循环，否则窗口会在等帧的时候冻住。
 #include <SDL.h>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -12,16 +19,25 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
+#include <utility>
 #include <vector>
 
 #include "bitstream/AnnexB.h"
 #include "decode/Decoder.h"
+#include "media/StreamSession.h"
+#include "remote/Device.h"
+#include "rt/RtpHevc.h"
 
 namespace {
 
 struct Options {
-    std::string path;
+    std::string path;       ///< 空 = 走真机实时流
+    std::string serial;     ///< scrcpy 的 --serial：指定哪台设备
+    std::string record;     ///< 实时流顺手把 Annex-B 录到文件
+    bool list_devices = false;
     std::string title = "scrctl";
     bool stats = false;
     bool crop_set = false;
@@ -34,9 +50,13 @@ struct Options {
 
 void usage(const char *argv0) {
     std::printf(
-        "用法: %s --play <file.hevc> [选项]\n"
+        "用法: %s [选项]\n"
         "\n"
-        "  --play FILE          播放录制的 Annex-B HEVC\n"
+        "  (无参数)             镜像当前连接的设备\n"
+        "  --serial SERIAL      多台设备时指定哪一台（UDID）\n"
+        "  --list-devices       列出在连设备后退出\n"
+        "  --play FILE          改播已录制的 Annex-B HEVC 文件\n"
+        "  --record FILE        把实时流另存为 Annex-B\n"
         "  --crop WxH+X+Y       裁剪区域（默认自动：1136x2464 -> 1125x2436）\n"
         "  --scale F            窗口缩放系数，默认 1.0\n"
         "  --title TITLE        窗口标题\n"
@@ -58,6 +78,12 @@ bool parse_args(int argc, char **argv, Options &o) {
         };
         if (a == "--play") {
             o.path = next("--play");
+        } else if (a == "--serial") {
+            o.serial = next("--serial");
+        } else if (a == "--record") {
+            o.record = next("--record");
+        } else if (a == "--list-devices") {
+            o.list_devices = true;
         } else if (a == "--title") {
             o.title = next("--title");
         } else if (a == "--scale") {
@@ -83,10 +109,6 @@ bool parse_args(int argc, char **argv, Options &o) {
             std::fprintf(stderr, "未知参数 %s\n", a.c_str());
             return false;
         }
-    }
-    if (o.path.empty()) {
-        std::fprintf(stderr, "需要 --play\n");
-        return false;
     }
     if (o.scale <= 0.0) {
         o.scale = 1.0;
@@ -249,6 +271,211 @@ private:
     int win_w_ = 0, win_h_ = 0;
 };
 
+// ------------------------------------------------------------------ 字节源 ----
+
+/// 一次 pull 取回一段可以喂给 AnnexBParser 的字节。
+///
+/// 抽象成"取一段"而不是"取一帧"，是因为实时与文件在帧边界上表现完全不同：
+/// 文件可以一口气喂 48 KB，实时只能来一个数据报喂一个，否则窗口要等。
+class Source {
+public:
+    virtual ~Source() = default;
+    /// 返回 false 且 finished() 为真表示源已结束；返回 false 但未结束表示
+    /// 这次没取到（超时），调用方应继续跑事件循环。实现可以阻塞一小会儿再返回
+    /// false——实时源就是靠这个把"等包"和"空转"分开的。
+    virtual bool pull(std::vector<uint8_t> &out, std::string &err) = 0;
+    [[nodiscard]] virtual bool finished() const = 0;
+    /// 文件回放要按标称帧率节流；实时源本身就是节拍，不能自己再等。
+    [[nodiscard]] virtual bool paces_itself() const { return false; }
+};
+
+class FileSource : public Source {
+public:
+    explicit FileSource(std::string path, std::size_t chunk = 48 * 1024)
+        : path_(std::move(path)), chunk_(chunk) {}
+
+    bool pull(std::vector<uint8_t> &out, std::string &err) override {
+        if (!opened_ && !open_file(err)) {
+            return false;
+        }
+        if (buffer_.empty()) {
+            done_ = true;
+            return false;
+        }
+        const std::size_t n = std::min(chunk_, buffer_.size());
+        out.assign(buffer_.begin(), buffer_.begin() + static_cast<long>(n));
+        buffer_.erase(buffer_.begin(), buffer_.begin() + static_cast<long>(n));
+        if (buffer_.empty()) {
+            done_ = true;
+        }
+        return true;
+    }
+
+    [[nodiscard]] bool finished() const override { return done_; }
+    [[nodiscard]] bool paces_itself() const override { return true; }
+
+private:
+    bool open_file(std::string &err) {
+        std::ifstream in(path_, std::ios::binary);
+        if (!in) {
+            err = "打不开 " + path_;
+            return false;
+        }
+        buffer_.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        opened_ = true;
+        std::printf("读入 %s (%zu 字节)\n", path_.c_str(), buffer_.size());
+        return true;
+    }
+
+    std::string path_;
+    std::size_t chunk_;
+    std::vector<uint8_t> buffer_;
+    bool opened_ = false;
+    bool done_ = false;
+};
+
+/// 真机实时流：起流 -> 收 RTP -> 拆包成 Annex-B。
+///
+/// 收包必须在**自己的线程**上跑。渲染一帧要几十毫秒，这期间不把隧道读干净，
+/// 设备侧的中继缓冲就会溢出并**静默丢包**——它的序号照样连续（丢在编号之前），
+/// 于是我们收到一个"完整"但内容被截断的关键帧，画面顶部对、下面全糊。
+/// 实测正是这个症状：单线程版录出来的流第 2 帧就是噪声。
+///
+/// 反方向同理：pull 会阻塞等一小会儿，而不是"没有就立刻返回"。否则消费循环在
+/// 两个数据报之间空转，把一颗核吃满，还给窗口饿出事件事件——窗口看起来就是卡住。
+class LiveSource : public Source {
+public:
+    ~LiveSource() override;
+
+    bool start(const std::string &serial, const std::string &record_path, std::string &err);
+
+    bool pull(std::vector<uint8_t> &out, std::string & /*err*/) override {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (!cv_.wait_for(lock, std::chrono::milliseconds(100),
+                          [&] { return !chunks_.empty() || stopping_; })) {
+            return false;  // 这一会儿没到：不是结束，调用方去泵一遍事件循环
+        }
+        if (chunks_.empty()) {
+            return false;  // 正在关闭
+        }
+        out = std::move(chunks_.front());
+        chunks_.pop_front();
+        buffered_ -= out.size();
+        return true;
+    }
+
+    [[nodiscard]] bool finished() const override { return false; }
+
+    /// 拆包统计。画面糊掉时第一个要看的数就是这里。
+    /// 读的是工作线程发布的快照，不是直接读它的状态——拆包器只归那个线程碰。
+    void print_stats() const {
+        const auto [st, overflow] = [this] {
+            std::lock_guard<std::mutex> lock(mutex_);
+            return std::pair{snapshot_, overflow_};
+        }();
+        std::printf("  RTP: 包 %llu NAL %llu 序号断流 %llu 次/丢 %llu 包 乱序 %llu  "
+                    "丢半成品 %llu 畸形 %llu 非视频包 %llu 溢出丢弃 %zu 块\n",
+                    static_cast<unsigned long long>(st.packets),
+                    static_cast<unsigned long long>(st.nals),
+                    static_cast<unsigned long long>(st.seq_gaps),
+                    static_cast<unsigned long long>(st.seq_lost),
+                    static_cast<unsigned long long>(st.reordered),
+                    static_cast<unsigned long long>(st.dropped_fragments),
+                    static_cast<unsigned long long>(st.malformed),
+                    static_cast<unsigned long long>(st.other_payload), overflow);
+    }
+
+private:
+    void receive_loop();
+
+    std::thread worker_;
+    std::atomic<bool> stopping_{false};
+    /// print_stats() 是 const 的，要能在只读路径上取快照。
+    mutable std::mutex mutex_;
+    std::condition_variable cv_;
+    std::deque<std::vector<uint8_t>> chunks_;
+    /// 背压上限。超了只能丢，同时记数——丢了就得去要关键帧（M2.7 的 PLI）。
+    static constexpr std::size_t kMaxBuffered = 32u << 20;
+    std::size_t buffered_ = 0;
+    std::size_t overflow_ = 0;
+    scrctl::rt::HevcRtpDepacketizer::Stats snapshot_{};
+    std::unique_ptr<scrctl::remote::Device> device_;
+    std::unique_ptr<scrctl::media::StreamSession> session_;
+    /// PT 是协商出来的，构造时还不知道，所以在 start() 里赋值。
+    scrctl::rt::HevcRtpDepacketizer depacketizer_{100};
+    FILE *record_ = nullptr;
+};
+
+LiveSource::~LiveSource() {
+    stopping_ = true;
+    cv_.notify_all();
+    if (worker_.joinable()) {
+        worker_.join();
+    }
+    if (record_ != nullptr) {
+        std::fclose(record_);
+        record_ = nullptr;
+    }
+}
+
+void LiveSource::receive_loop() {
+    std::string err;
+    std::vector<uint8_t> datagram;
+    while (!stopping_) {
+        if (!session_->next_packet(datagram, 50, err)) {
+            continue;  // 超时不是结束，接着等
+        }
+        std::vector<uint8_t> bytes;
+        if (!depacketizer_.push(datagram, bytes, err) || bytes.empty()) {
+            continue;
+        }
+        if (record_ != nullptr) {
+            std::fwrite(bytes.data(), 1, bytes.size(), record_);
+        }
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            snapshot_ = depacketizer_.stats();
+            if (buffered_ > kMaxBuffered) {
+                ++overflow_;
+                continue;  // 消费者跟不上：丢掉，而不是把内存吃光
+            }
+            buffered_ += bytes.size();
+            chunks_.push_back(std::move(bytes));
+        }
+        cv_.notify_all();
+    }
+}
+
+bool LiveSource::start(const std::string &serial, const std::string &record_path,
+                       std::string &err) {
+    auto dev = scrctl::remote::Device::establish(serial, err);
+    if (!dev) {
+        return false;
+    }
+    device_ = std::make_unique<scrctl::remote::Device>(std::move(*dev));
+    scrctl::media::StreamSession::Request request;
+    session_ = scrctl::media::StreamSession::start(*device_, request, err);
+    if (session_ == nullptr) {
+        return false;
+    }
+    // RTCP 与视频共用这个 UDP 端口，只能靠 PT 分辨；不过滤的话 RTCP 会被当成
+    // HEVC 载荷解出假 NAL，把参考链一路带坏。
+    depacketizer_ = scrctl::rt::HevcRtpDepacketizer{session_->started().payload_type};
+    std::printf("流已建立：%s / iOS %s，收流端口=%u PT=%u\n",
+                device_->property("ProductType").c_str(), device_->property("OSVersion").c_str(),
+                session_->receiver_port(), session_->started().payload_type);
+    if (!record_path.empty()) {
+        record_ = std::fopen(record_path.c_str(), "wb");
+        if (record_ == nullptr) {
+            err = "打不开录制文件 " + record_path;
+            return false;
+        }
+        std::printf("录制到 %s\n", record_path.c_str());
+    }
+    worker_ = std::thread(&LiveSource::receive_loop, this);
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -261,14 +488,31 @@ int main(int argc, char **argv) {
         return 2;
     }
 
-    std::ifstream in(o.path, std::ios::binary);
-    if (!in) {
-        std::fprintf(stderr, "打不开 %s\n", o.path.c_str());
-        return 1;
+    if (o.list_devices) {
+        std::string err;
+        auto devices = scrctl::remote::Device::list(err);
+        if (!err.empty()) {
+            std::fprintf(stderr, "%s\n", err.c_str());
+            return 1;
+        }
+        for (const auto &d : devices) {
+            std::printf("%s  %s\n", d.udid.c_str(), d.connection_type.c_str());
+        }
+        return 0;
     }
-    std::vector<uint8_t> file{(std::istreambuf_iterator<char>(in)),
-                              std::istreambuf_iterator<char>()};
-    std::printf("读入 %s (%zu 字节)\n", o.path.c_str(), file.size());
+
+    std::unique_ptr<Source> source;
+    if (!o.path.empty()) {
+        source = std::make_unique<FileSource>(o.path);
+    } else {
+        auto live = std::make_unique<LiveSource>();
+        std::string err;
+        if (!live->start(o.serial, o.record, err)) {
+            std::fprintf(stderr, "起流失败: %s\n", err.c_str());
+            return 1;
+        }
+        source = std::move(live);
+    }
 
     auto decoder = scrctl::create_platform_decoder();
     std::printf("解码后端: %s\n", decoder->backend_name());
@@ -281,9 +525,6 @@ int main(int argc, char **argv) {
     int rendered = 0, decoded = 0, failed = 0;
     bool configured = false;
     std::deque<scrctl::Frame> queue;
-    // 只在队列空时才喂下一块，天然形成背压：最多一次块（约 3-4 帧）会先于
-    // 渲染被解出来，不会把整个录制一次性读进内存。
-    const size_t kChunk = 48 * 1024;
 
     scrctl::AnnexBParser parser([&](std::vector<scrctl::Nal> &&au, bool) {
         if (!configured) {
@@ -315,23 +556,36 @@ int main(int argc, char **argv) {
     });
 
     std::unique_ptr<Presenter> presenter;
-    size_t off = 0;
     const Uint64 start = SDL_GetTicks64();
     int last_reported = 0;
-
+    std::string pull_err;
     bool quit = false;
+
     while (!quit) {
-        while (queue.empty() && off < file.size()) {
-            const size_t n = std::min(kChunk, file.size() - off);
-            parser.feed(file.data() + off, n);
-            off += n;
-            if (queue.empty() && off >= file.size()) {
+        if (queue.empty()) {
+            // 没帧可画就去取一段。取不到（实时源的 50ms 超时）不是结束，
+            // 必须继续往下走一遍事件循环，否则等帧的时候窗口会整个冻住。
+            std::vector<uint8_t> bytes;
+            if (!source->pull(bytes, pull_err) && source->finished()) {
+                // 收尾必须 flush：AU 的边界靠"下一个图像的起始 slice"判定，最后一个
+                // AU 没有下一个，不 flush 就永远等不到它。
                 parser.flush();
+                if (queue.empty()) {
+                    std::printf("源已结束\n");
+                    break;
+                }
+            }
+            if (!bytes.empty()) {
+                parser.feed(bytes.data(), bytes.size());
             }
         }
         if (queue.empty()) {
-            std::printf("播放结束\n");
-            break;
+            // 没帧可画也要让窗口活着——此刻基本都是在等实时包到达，而等帧的时候
+            // 不泵事件，窗口就是"未响应"。
+            if (presenter != nullptr) {
+                quit = presenter->pump_and_should_quit();
+            }
+            continue;
         }
 
         scrctl::Frame f = std::move(queue.front());
@@ -349,17 +603,22 @@ int main(int argc, char **argv) {
         presenter->draw(f, do_verify ? o.verify_path.c_str() : nullptr);
         ++rendered;
 
-        // 按标称 60fps 节流，让录制以接近实时的速度播放。
-        const Uint64 want_ms = static_cast<Uint64>(rendered) * 1000 / 60;
-        const Uint64 now = SDL_GetTicks64() - start;
-        if (want_ms > now) {
-            SDL_Delay(static_cast<Uint32>(want_ms - now));
+        // 只有文件回放需要自己按标称帧率追节拍；实时流的到达节奏就是设备的节奏。
+        if (source->paces_itself()) {
+            const Uint64 want_ms = static_cast<Uint64>(rendered) * 1000 / 60;
+            const Uint64 now = SDL_GetTicks64() - start;
+            if (want_ms > now) {
+                SDL_Delay(static_cast<Uint32>(want_ms - now));
+            }
         }
 
         if (o.stats && rendered - last_reported >= 60) {
             const double el = (SDL_GetTicks64() - start) / 1000.0;
-            std::printf("  渲染 %d 帧  %.1f fps  (解码 %d / 失败 %d)\n", rendered, rendered / el,
+            std::printf("  渲染 %d 帧  %.1f fps  (解码 %d / 未出帧 %d)\n", rendered, rendered / el,
                         decoded, failed);
+            if (auto *live = dynamic_cast<LiveSource *>(source.get())) {
+                live->print_stats();
+            }
             last_reported = rendered;
         }
         if (o.exit_after > 0 && rendered >= o.exit_after) {
