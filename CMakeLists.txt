@@ -70,7 +70,7 @@ find_package(OpenSSL REQUIRED)
 
 # ------------------------------------------------------------- core lib -----
 add_library(scrctl_core STATIC
-        src/json/Json.cpp
+        src/jsonlite/Jsonlite.cpp
         src/plist/Plist.cpp
         src/plist/Bplist.cpp
         src/xpc/XpcValue.cpp
@@ -159,9 +159,9 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(bplist_test PRIVATE scrctl_core)
     add_test(NAME bplist COMMAND bplist_test)
 
-    add_executable(json_test tests/json_test.cpp)
-    target_link_libraries(json_test PRIVATE scrctl_core)
-    add_test(NAME json COMMAND json_test)
+    add_executable(jsonlite_test tests/jsonlite_test.cpp)
+    target_link_libraries(jsonlite_test PRIVATE scrctl_core)
+    add_test(NAME jsonlite COMMAND jsonlite_test)
 
     add_executable(xpc_test tests/xpc_test.cpp)
     target_link_libraries(xpc_test PRIVATE scrctl_core)
