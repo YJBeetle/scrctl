@@ -27,6 +27,13 @@ struct ServiceInfo {
     std::vector<std::string> features;
 };
 
+/// 一次 feature 调用的三种结局。
+///
+/// 必须把"设备答了、但说不同意"和"根本没答上"分开：前者重试多少次都是同一个错
+/// （参数就是不对），后者往往换一条连接再发一次就成（实测约 15% 的服务连接会撞上
+/// 超时/帧错位/对端关闭）。混成一个 bool，要么该重试的不重试，要么不该重试的白等。
+enum class CallResult { Ok, DeviceError, TransportError };
+
 /// 一条已打开的服务连接。XPC 类服务在 TCP 之上再走一遍 HTTP/2 + RemoteXPC
 /// 握手；lockdown shim 那批（UsesRemoteXPC=false）只是裸协议，留成裸 socket。
 class ServiceConnection {
@@ -38,8 +45,9 @@ public:
 
     /// 调一个 CoreDevice feature。`input` 放进 CoreDevice.input，回信取
     /// CoreDevice.output；设备侧失败时把 CoreDevice.error 里的话带在 err 里。
-    bool invoke(std::string_view feature_identifier, std::string_view action_identifier,
-                const xpc::Value &input, xpc::Value &output, int timeout_ms, std::string &err);
+    CallResult invoke(std::string_view feature_identifier, std::string_view action_identifier,
+                      const xpc::Value &input, xpc::Value &output, int timeout_ms,
+                      std::string &err);
 
     /// 直接一发一收，供非 CoreDevice 封装的服务用。
     bool call(const xpc::Value &request, xpc::Value &reply, int timeout_ms, std::string &err);

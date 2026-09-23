@@ -168,7 +168,8 @@ bool Device::feature(std::string_view service_name, std::string_view feature_ide
     if (conn == nullptr) {
         return false;
     }
-    return conn->invoke(feature_identifier, action_identifier, input, output, timeout_ms, err);
+    return conn->invoke(feature_identifier, action_identifier, input, output, timeout_ms, err) ==
+           CallResult::Ok;
 }
 
 }  // namespace scrctl::remote

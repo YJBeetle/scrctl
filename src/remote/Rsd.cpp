@@ -125,18 +125,20 @@ bool ServiceConnection::send_only(const xpc::Value &request, std::string &err) {
     return channel_->send_request(request, false, err);
 }
 
-bool ServiceConnection::invoke(std::string_view feature_identifier,
-                               std::string_view action_identifier, const xpc::Value &input,
-                               xpc::Value &output, int timeout_ms, std::string &err) {
+CallResult ServiceConnection::invoke(std::string_view feature_identifier,
+                                     std::string_view action_identifier, const xpc::Value &input,
+                                     xpc::Value &output, int timeout_ms, std::string &err) {
     const auto request = core_device_request(feature_identifier, action_identifier, input);
     xpc::Value reply;
     if (!call(request, reply, timeout_ms, err)) {
-        return false;
+        // 连回信都没拿到，无从判断设备同不同意——这正是"换条连接再试一次"可能有
+        // 结果的那一类。
+        return CallResult::TransportError;
     }
     const auto *out = reply.find("CoreDevice.output");
     if (out != nullptr) {
         output = *out;
-        return true;
+        return CallResult::Ok;
     }
     // 设备侧的失败写法是 CoreDevice.error = {code, userInfo.NSLocalizedDescription}。
     // 只回一句"调用失败"会把真正的因由丢干净，所以人话必须捞出来。
@@ -145,11 +147,12 @@ bool ServiceConnection::invoke(std::string_view feature_identifier,
     if (error == nullptr) {
         err = std::string(feature_identifier) + " 失败，回信里没有 CoreDevice.output: " +
               xpc::describe(reply).substr(0, 300);
-        return false;
+        return CallResult::DeviceError;
     }
     const std::string detail =
         error->at("userInfo").at("NSLocalizedDescription").as_string_or("");
     const auto code = error->at("code").as_int_or(0);
+    // 设备答了，而且答的是"不同意"：这是语义结果，重试只会再拿到同一句话。
     err = std::string(feature_identifier) + " 失败";
     if (!detail.empty()) {
         err += "：" + detail;
@@ -168,7 +171,7 @@ bool ServiceConnection::invoke(std::string_view feature_identifier,
         // 什么话都没有就把整个 error 交出去，别只报一个数字。
         err += "；error 原文: " + xpc::describe(*error).substr(0, 600);
     }
-    return false;
+    return CallResult::DeviceError;
 }
 
 // ------------------------------------------------------------------ RSD ------

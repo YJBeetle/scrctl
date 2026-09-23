@@ -552,6 +552,11 @@ bool Channel::take_message(xpc::Value &out,
                 return false;
             }
             if (st == xpc::Status::NeedMore) {
+                // "差多少字节"是判据本身：设备说它发完了而我们还在等，就是它那边
+                // 截断了；数字对得上却迟迟不来，才是流控或链路问题。
+                if (verbose_) {
+                    std::fprintf(stderr, "    ~~ 流%u 消息未完：%s\n", stream, derr.c_str());
+                }
                 break;
             }
             buf.erase(buf.begin(), buf.begin() + static_cast<std::ptrdiff_t>(used));
