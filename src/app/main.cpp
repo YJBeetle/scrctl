@@ -54,6 +54,9 @@ struct Options {
     /// 窗口与鼠标不在场时也要能验证输入通路，理由同 --verify：日志说"注入
     /// 调用返回成功"证明不了设备上真的收到了触摸。
     std::string test_touch;
+    /// 起流后按一次硬件按键（home/lock/volup/voldn/mute），然后照常镜像。
+    /// 按键效果是瞬时的，所以它要能和 --verify 组合：按完等第 N 帧回读窗口。
+    std::string test_button;
 };
 
 void usage(const char *argv0) {
@@ -73,7 +76,9 @@ void usage(const char *argv0) {
         "  --exit-after N       渲染 N 帧后退出\n"
         "  --verify N FILE      渲染到第 N 帧时把窗口内容回读存为 BMP\n"
         "  --test-touch X0,Y0,X1,Y1\n"
-        "                     注入一条直线（归一化坐标）后退出，无需真鼠标\n",
+        "                     注入一条直线（归一化坐标）后退出，无需真鼠标\n"
+        "  --test-button NAME 起流后按一次硬件按键（home/lock/volup/voldn/mute）\n"
+        "                     再照常镜像，配 --verify 才能看见瞬时效果\n",
         argv0);
 }
 
@@ -110,6 +115,8 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.verify_path = next("--verify");
         } else if (a == "--test-touch") {
             o.test_touch = next("--test-touch");
+        } else if (a == "--test-button") {
+            o.test_button = next("--test-button");
         } else if (a == "--crop") {
             const char *v = next("--crop");
             if (std::sscanf(v, "%dx%d+%d+%d", &o.crop_w, &o.crop_h, &o.crop_x, &o.crop_y) != 4) {
@@ -439,6 +446,10 @@ public:
     /// 失败过一次就不再重试，免得每帧都去撞一遍。
     bool control(double x, double y, bool down, std::string &err);
 
+    /// 按一个硬件按键（indigo 服务，惰性连）。按键的效果多半是瞬时的，所以
+    /// 它得能和 `--verify` 组合使用：先按键，再等第 N 帧回读窗口内容。
+    bool button(uint16_t usage_page, uint16_t usage_code, std::string &err);
+
     /// 拆包统计。画面糊掉时第一个要看的数就是这里。
     /// 读的是工作线程发布的快照，不是直接读它的状态——拆包器只归那个线程碰。
     void print_stats() const {
@@ -475,6 +486,7 @@ private:
     std::unique_ptr<scrctl::remote::Device> device_;
     std::unique_ptr<scrctl::media::StreamSession> session_;
     std::unique_ptr<scrctl::hid::Service> hid_;
+    std::unique_ptr<scrctl::hid::Buttons> buttons_;
     bool hid_unavailable_ = false;
     /// PT 是协商出来的，构造时还不知道，所以在 start() 里赋值。
     scrctl::rt::HevcRtpDepacketizer depacketizer_{100};
@@ -566,6 +578,16 @@ bool LiveSource::control(double x, double y, bool down, std::string &err) {
     return hid_->touch(scrctl::hid::kSurfaceMainTouchscreen, x, y, down, err);
 }
 
+bool LiveSource::button(uint16_t usage_page, uint16_t usage_code, std::string &err) {
+    if (buttons_ == nullptr) {
+        buttons_ = scrctl::hid::Buttons::open(*device_, err);
+        if (buttons_ == nullptr) {
+            return false;
+        }
+    }
+    return buttons_->press(usage_page, usage_code, 90, err);
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -633,6 +655,37 @@ int main(int argc, char **argv) {
         std::printf("--test-touch (%.3f,%.3f)->(%.3f,%.3f): %s%s\n", x0, y0, x1, y1,
                     ok ? "已注入" : "失败", ok ? "" : cerr.c_str());
         return ok ? 0 : 1;
+    }
+
+    // 按键的判据要另想办法：音量 HUD 只显示一秒多，另起一次截图会话根本来不及。
+    // 所以这里只负责"按下去"，看效果交给同一进程里已经在跑的镜像——
+    // 配 --verify N 回读第 N 帧，HUD 就在那一帧里。
+    if (live != nullptr && !o.test_button.empty()) {
+        static const std::pair<const char *, uint16_t> kCodes[] = {
+            {"home", scrctl::hid::button::kHome},   {"lock", scrctl::hid::button::kLock},
+            {"volup", scrctl::hid::button::kVolumeUp},
+            {"voldn", scrctl::hid::button::kVolumeDown}, {"mute", scrctl::hid::button::kMute},
+        };
+        uint16_t code = 0;
+        for (const auto &e : kCodes) {
+            if (o.test_button == e.first) {
+                code = e.second;
+                break;
+            }
+        }
+        if (code == 0) {
+            std::fprintf(stderr, "不认识按键 %s（可用：home/lock/volup/voldn/mute）\n",
+                         o.test_button.c_str());
+            return 2;
+        }
+        std::string berr;
+        if (live->button(scrctl::hid::button::kUsagePageConsumer, code, berr)) {
+            std::printf("--test-button %s: 已按下\n", o.test_button.c_str());
+        } else {
+            std::fprintf(stderr, "--test-button %s 失败: %s\n", o.test_button.c_str(),
+                         berr.c_str());
+            return 1;
+        }
     }
 
     auto decoder = scrctl::create_platform_decoder();

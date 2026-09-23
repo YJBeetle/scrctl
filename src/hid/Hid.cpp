@@ -13,19 +13,27 @@ namespace {
 
 constexpr std::string_view kServiceName = "com.apple.coredevice.hid.universalhidservice";
 constexpr std::string_view kFeature = "com.apple.coredevice.feature.remote.universalhidservice";
+constexpr std::string_view kIndigoServiceName = "com.apple.coredevice.hid.indigo";
+constexpr std::string_view kButtonFeature = "com.apple.coredevice.feature.remote.hid.button";
 constexpr std::size_t kTouchscreenReportLen = 58;
 
 /// dtuhidd 这批服务的外壳与 CoreDevice feature 那套**不一样**：
 /// 没有 CoreDevice.input / actionIdentifier，只有 messageType + payload +
 /// featureIdentifier。用 core_device_request() 去调它，设备的反应是不安回。
-xpc::Value request(std::string_view key, xpc::Value payload) {
+xpc::Value request(std::string_view feature_identifier, std::string_view message_type,
+                   xpc::Value payload) {
     xpc::Value msg = xpc::make_dict();
-    xpc::dict_set(msg, "featureIdentifier", xpc::make_string(std::string(kFeature)));
-    xpc::dict_set(msg, "messageType", xpc::make_string("Request"));
+    xpc::dict_set(msg, "featureIdentifier", xpc::make_string(std::string(feature_identifier)));
+    xpc::dict_set(msg, "messageType", xpc::make_string(std::string(message_type)));
+    xpc::dict_set(msg, "payload", std::move(payload));
+    return msg;
+}
+
+/// universalhidservice 的请求把动作名塞在 payload 里，动作的参数再套一层。
+xpc::Value universal_request(std::string_view key, xpc::Value payload) {
     xpc::Value body = xpc::make_dict();
     xpc::dict_set(body, std::string(key), std::move(payload));
-    xpc::dict_set(msg, "payload", std::move(body));
-    return msg;
+    return request(kFeature, "Request", std::move(body));
 }
 
 }  // namespace
@@ -81,7 +89,7 @@ std::unique_ptr<Service> Service::open(scrctl::remote::Device &device, std::stri
 }
 
 bool Service::raw_connected_services(xpc::Value &reply, std::string &err) {
-    return conn_->call(request("connectedServices", xpc::make_dict()), reply, 10000, err);
+    return conn_->call(universal_request("connectedServices", xpc::make_dict()), reply, 10000, err);
 }
 
 bool Service::surfaces(std::vector<Surface> &out, std::string &err) {
@@ -120,7 +128,7 @@ bool Service::send_report(uint64_t service_id, std::span<const uint8_t> report, 
     xpc::Value args = xpc::make_dict();
     xpc::dict_set(args, "_0", xpc::make_data(std::vector<uint8_t>(report.begin(), report.end())));
     xpc::dict_set(args, "_1", xpc::make_uint64(service_id));
-    const auto msg = request("send", std::move(args));
+    const auto msg = universal_request("send", std::move(args));
     if (reply == nullptr) {
         return conn_->send_only(msg, err);
     }
@@ -166,6 +174,39 @@ bool Service::stroke(const std::vector<std::pair<double, double>> &points, int s
         }
     }
     return true;
+}
+
+std::unique_ptr<Buttons> Buttons::open(scrctl::remote::Device &device, std::string &err,
+                                       bool verbose) {
+    if (!device.rsd().has_service(kIndigoServiceName)) {
+        err = "RSD 目录里没有 " + std::string(kIndigoServiceName);
+        return nullptr;
+    }
+    auto conn = device.connect(kIndigoServiceName, err, verbose);
+    if (conn == nullptr) {
+        return nullptr;
+    }
+    return std::unique_ptr<Buttons>(new Buttons(std::move(conn)));
+}
+
+bool Buttons::send(uint64_t state, uint16_t usage_page, uint16_t usage_code, std::string &err) {
+    xpc::Value payload = xpc::make_dict();
+    xpc::dict_set(payload, "state", xpc::make_uint64(state));
+    xpc::dict_set(payload, "usagePage", xpc::make_uint64(usage_page));
+    xpc::dict_set(payload, "usageCode", xpc::make_uint64(usage_code));
+    return conn_->send_only(request(kButtonFeature, "IndigoButtonEvent", std::move(payload)), err);
+}
+
+bool Buttons::press(uint16_t usage_page, uint16_t usage_code, int hold_ms, std::string &err) {
+    // 按下与抬起是两条独立消息，设备不安回，所以中间只能真等一会儿。
+    // 太短会被当成抖动：实测 30ms 以下偶尔不生效，这里默认按 90ms。
+    if (!send(kButtonStateDown, usage_page, usage_code, err)) {
+        return false;
+    }
+    if (hold_ms > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(hold_ms));
+    }
+    return send(kButtonStateUp, usage_page, usage_code, err);
 }
 
 }  // namespace scrctl::hid

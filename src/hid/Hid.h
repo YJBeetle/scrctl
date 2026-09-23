@@ -116,4 +116,48 @@ private:
     std::unique_ptr<scrctl::remote::ServiceConnection> conn_;
 };
 
+/// 硬件按键的 state 值。
+inline constexpr uint64_t kButtonStateDown = 1;
+inline constexpr uint64_t kButtonStateUp = 2;
+inline constexpr uint64_t kButtonStateCanceled = 3;
+
+/// 硬件按键（home / 锁屏 / 音量 / 静音）。
+///
+/// 走的是**另一条服务**：`com.apple.coredevice.hid.indigo` 的
+/// `remote.hid.button`。外壳与 universalhidservice 那批一样是
+/// `{messageType, featureIdentifier, payload}`，但 messageType 换成
+/// `IndigoButtonEvent`，payload 是 `{state, usagePage, usageCode}`。
+///
+/// indigo 上只有 button 这条路是通的：digitizer/keyboard/scroll 要 Apple 的
+/// Mercury 对端事件外壳，设备收到 dispatch 后立刻 "Resetting gesture state then
+/// canceling"，不进任何 handler。
+class Buttons {
+public:
+    static std::unique_ptr<Buttons> open(scrctl::remote::Device &device, std::string &err,
+                                         bool verbose = false);
+
+    /// 按一次：DOWN -> 停 hold_ms -> UP。state 1=按下 2=抬起 3=取消。
+    bool press(uint16_t usage_page, uint16_t usage_code, int hold_ms, std::string &err);
+
+    [[nodiscard]] bool available() const { return conn_ != nullptr; }
+
+private:
+    explicit Buttons(std::unique_ptr<scrctl::remote::ServiceConnection> conn)
+        : conn_(std::move(conn)) {}
+
+    bool send(uint64_t state, uint16_t usage_page, uint16_t usage_code, std::string &err);
+
+    std::unique_ptr<scrctl::remote::ServiceConnection> conn_;
+};
+
+/// Consumer page（0x0C）上的硬件按键 usage。
+namespace button {
+inline constexpr uint16_t kUsagePageConsumer = 0x0C;
+inline constexpr uint16_t kHome = 0x40;
+inline constexpr uint16_t kLock = 0x30;
+inline constexpr uint16_t kVolumeUp = 0xE9;
+inline constexpr uint16_t kVolumeDown = 0xEA;
+inline constexpr uint16_t kMute = 0xE2;
+}  // namespace button
+
 }  // namespace scrctl::hid
