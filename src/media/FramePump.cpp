@@ -36,6 +36,7 @@ std::unique_ptr<FramePump> FramePump::start(remote::Device &device, const Option
     }
     // 别在起流的一瞬间就判定"卡住"，那会儿还没有关键帧也正常。
     pump->last_keyframe_ms_ = now_ms();
+    pump->last_packet_ms_ = now_ms();
     return pump;
 }
 
@@ -70,6 +71,7 @@ bool FramePump::restart(std::string &err) {
     if (session_ == nullptr) {
         return false;
     }
+    last_packet_ms_ = now_ms();
 
     if (!worker_running_) {
         worker_running_ = true;
@@ -144,12 +146,30 @@ void FramePump::loop() {
 
     for (;;) {
         if (!session_->next_packet(datagram, 50, err)) {
-            std::lock_guard<std::mutex> lock(mutex_);
-            if (stopping_) {
-                return;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (stopping_) {
+                    return;
+                }
+            }
+            // 一个包都不来了：设备已经把我们这条流结束掉了（实测它会在几分钟之后
+            // 自己停，且我们从不回 RTCP 接收报告）。不重起的话用户看到的就是
+            // "窗口冻住"，而进程、线程、隧道全都好着——最难往流上想。
+            if (options_.silence_restart_ms > 0 &&
+                now_ms() - last_packet_ms_ > static_cast<uint64_t>(options_.silence_restart_ms)) {
+                std::printf("已 %d ms 没收到任何包，重起媒体会话\n", options_.silence_restart_ms);
+                last_packet_ms_ = now_ms();
+                std::string restart_err;
+                if (!restart(restart_err)) {
+                    std::fprintf(stderr, "重起媒体会话失败: %s\n", restart_err.c_str());
+                    std::this_thread::sleep_for(std::chrono::seconds(1));
+                    continue;
+                }
+                new_session_state();
             }
             continue;  // 超时不是结束
         }
+        last_packet_ms_ = now_ms();
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (stopping_) {

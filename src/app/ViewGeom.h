@@ -41,6 +41,32 @@ inline void display_fraction_from_logical(double lx, double ly, const Crop &c, d
     fy = (c.y + ly) / (c.display_h > 0 ? c.display_h : 1);
 }
 
+/// 鼠标位置 -> 整块屏幕的 0..1 归一化坐标。**这条是触摸对不对的唯一依据**。
+///
+/// 三个坐标系必须一次换算到底，任何一级用错单位都会让点击整体偏移：
+///
+/// - SDL2 的鼠标事件给的是**窗口逻辑点**（= SDL_GetWindowSize 的单位）；
+/// - 绘制面是**像素**，Retina 下是点数的两倍（= SDL_GetRendererOutputSize）；
+/// - 设了 logical size 之后还有一层**等比留边**（窗口被拉成别的比例时出现）。
+///
+/// 这里自己算而不用 SDL_RenderWindowToLogical：那个函数要的是像素，喂点数会
+/// 静默偏一半，而且不写出来就没法单测——上一版正是栽在这上面。
+inline void window_to_fraction(int wx, int wy, int win_pts_w, int win_pts_h, int out_px_w,
+                               int out_px_h, const Crop &c, double &fx, double &fy) {
+    const double scale_x = out_px_w / static_cast<double>(std::max(1, win_pts_w));
+    const double scale_y = out_px_h / static_cast<double>(std::max(1, win_pts_h));
+    const double px = wx * scale_x;
+    const double py = wy * scale_y;
+
+    const double lw = c.w > 0 ? c.w : 1;
+    const double lh = c.h > 0 ? c.h : 1;
+    const double s = std::min(out_px_w / lw, out_px_h / lh);
+    const double off_x = (out_px_w - lw * s) / 2.0;
+    const double off_y = (out_px_h - lh * s) / 2.0;
+
+    display_fraction_from_logical((px - off_x) / s, (py - off_y) / s, c, fx, fy);
+}
+
 /// 窗口尺寸：按 scale 缩放裁剪框，但**不许超过屏幕**。
 ///
 /// 手机的逻辑显示（1125x2436）比笔记本屏幕（约 1680x1050 点）高出一倍多，直接

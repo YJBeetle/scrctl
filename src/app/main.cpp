@@ -369,19 +369,17 @@ public:
     }
 
 private:
-    /// 窗口坐标 -> 整块屏幕的 0..1 归一化坐标。
-    ///
-    /// 必须经 SDL_RenderWindowToLogical：设了 logical size 之后，窗口和画面之间
-    /// 可能有等比留边，自己按窗口尺寸除就会把点击算偏，而且窗口一拉偏得更明显。
+    /// 鼠标位置 -> 整块屏幕的 0..1。换算全在 window_to_fraction 里做（那里可以
+    /// 单测），这里只负责把三个真实尺寸问出来：窗口点数、绘制面像素、逻辑尺寸。
     void to_display(int wx, int wy, double &fx, double &fy) const {
-        float lx = 0, ly = 0;
-        if (renderer_ != nullptr) {
-            SDL_RenderWindowToLogical(renderer_, wx, wy, &lx, &ly);
-        } else {
-            lx = static_cast<float>(wx);
-            ly = static_cast<float>(wy);
+        int ww = win_w_, wh = win_h_, ow = win_w_, oh = win_h_;
+        if (window_ != nullptr) {
+            SDL_GetWindowSize(window_, &ww, &wh);
         }
-        display_fraction_from_logical(lx, ly, src_, fx, fy);
+        if (renderer_ != nullptr) {
+            SDL_GetRendererOutputSize(renderer_, &ow, &oh);
+        }
+        window_to_fraction(wx, wy, ww, wh, ow, oh, src_, fx, fy);
     }
 
     SDL_Window *window_ = nullptr;

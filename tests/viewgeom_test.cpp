@@ -24,6 +24,7 @@ using scrctl::app::Crop;
 using scrctl::app::display_fraction;
 using scrctl::app::display_fraction_from_logical;
 using scrctl::app::fit_window;
+using scrctl::app::window_to_fraction;
 
 bool near(double v, double want, double tol = 1e-6) { return std::fabs(v - want) < tol; }
 
@@ -115,6 +116,43 @@ void test_logical_to_fraction() {
     check(std::isfinite(fx) && std::isfinite(fy), "空裁剪框不出 NaN");
 }
 
+/// 鼠标 -> 归一化坐标。上一版这里错了：SDL_RenderWindowToLogical 要的是绘制面
+/// 像素，而 SDL2 的鼠标事件给的是窗口点，Retina 下差 2 倍，点击整体偏到左上。
+void test_window_to_fraction() {
+    std::printf("\n== 鼠标坐标 -> 归一化 ==\n");
+    const Crop c{0, 0, 1125, 2436, 1125, 2436};
+    double fx = 0, fy = 0;
+
+    // Retina：窗口 457x990 点，绘制面 914x1976 像素。
+    window_to_fraction(0, 0, 457, 990, 914, 1976, c, fx, fy);
+    check(near(fx, 0.0, 0.01) && near(fy, 0.0, 0.01), "左上角 -> (0,0)");
+    window_to_fraction(456, 989, 457, 990, 914, 1976, c, fx, fy);
+    check(fx > 0.98 && fy > 0.98, "右下角 -> 接近 (1,1)，不被 2 倍缩放砍半");
+    window_to_fraction(228, 495, 457, 990, 914, 1976, c, fx, fy);
+    check(near(fx, 0.5, 0.02) && near(fy, 0.5, 0.02), "窗口正中 -> 屏幕正中");
+
+    // 非 Retina（1:1）必须给出同样的答案，否则就是哪里混了单位
+    window_to_fraction(228, 495, 457, 990, 457, 990, c, fx, fy);
+    check(near(fx, 0.5, 0.02) && near(fy, 0.5, 0.02), "1:1 显示器上正中仍是正中");
+
+    // 窗口被拉宽：画面等比居中、左右各留一条边。留边的存在必须反映到换算里，
+    // 否则点左边的黑边会被当成画面左边缘（用户看到的就是"点哪儿都往右错一点"）。
+    const Crop wide{0, 0, 1125, 2436, 1125, 2436};
+    window_to_fraction(600, 495, 1200, 990, 1200, 1976, wide, fx, fy);
+    check(near(fx, 0.5, 0.02) && near(fy, 0.5, 0.02), "拉宽后窗口正中依然是画面正中");
+    window_to_fraction(20, 495, 1200, 990, 1200, 1976, wide, fx, fy);
+    check(fx < 0.0, "点在左侧黑边里要算成负数（出界），而不是被夹到画面左边缘");
+    // 留边宽度 = (1200 - 1125*0.811)/2 ≈ 144 像素；画面左边缘应当落在
+    // 窗口 x ≈ 144/1200*1200 = 144 点附近，而不是 0。
+    window_to_fraction(144, 495, 1200, 990, 1200, 1976, wide, fx, fy);
+    check(near(fx, 0.0, 0.03), "画面左边缘对应的窗口位置约在 x=144");
+
+    // 裁剪框带偏移：同一个鼠标位置要算到整块屏幕的不同地方
+    const Crop off{100, 200, 1025, 2236, 1125, 2436};
+    window_to_fraction(0, 0, 1025, 2236, 1025, 2236, off, fx, fy);
+    check(near(fx, 100.0 / 1125, 1e-3) && near(fy, 200.0 / 2436, 1e-3), "裁剪偏移要加进去");
+}
+
 void test_degenerate_window() {
     std::printf("\n== 退化输入 ==\n");
     const Crop c{0, 0, 1125, 2436, 1125, 2436};
@@ -132,6 +170,7 @@ int main() {
     test_full_display();
     test_ctu_padding_not_in_the_denominator();
     test_fit_window();
+    test_window_to_fraction();
     test_logical_to_fraction();
     test_cropped_viewport();
     test_degenerate_window();

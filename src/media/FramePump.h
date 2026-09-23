@@ -42,6 +42,13 @@ public:
         /// 这条流不周期发 IDR，RTCP PLI 实测设备也不理（docs §13），所以重起是
         /// 唯一能让画面重新自洽的手段。
         int stall_restart_ms = 2000;
+        /// **完全收不到包**多久就重起会话；0 = 不检查。
+        ///
+        /// 这条是补 stall_restart_ms 的盲区：它要求"序号有缺口"才触发，可设备把
+        /// 流结束掉的时候是一个包都不发（实测：进程活着、三个线程都在等，而设备侧
+        /// getmediastreamserverstatus 已经报 running:false）。只按缺口判断的话，
+        /// 这种最常见的死法永远检不出来，用户看到的就是"窗口冻住了"。
+        int silence_restart_ms = 3000;
     };
 
     struct Stats {
@@ -109,6 +116,9 @@ private:
     Stats stats_;
     uint64_t last_keyframe_ms_ = 0;
     uint64_t gaps_at_last_check_ = 0;
+    /// 最后一个**收到的数据报**的时刻。设备结束流时是一个包都不发，只看序号缺口
+    /// 检不出来。
+    uint64_t last_packet_ms_ = 0;
 };
 
 /// 编码帧里"真正显示出来"的那一块。
