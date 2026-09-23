@@ -21,11 +21,14 @@ void check(bool ok, const std::string &what) {
 
 using scrctl::rt::HevcRtpDepacketizer;
 
-/// 一个 RTP 包：12 字节头 + 8 字节苹果子头 + 载荷。
+/// 一个 RTP 包，按真机的样子构造：12 字节头（X=1）+ 8 字节扩展头 + HEVC 载荷。
+/// 扩展头的形状是从真机包上抄的（profile 0x9011、长度 1 个 32 位字），不是编的——
+/// 上一版测试用了"X=0 + 8 字节私有子头"，正好和被测代码里多跳 8 字节的错误自洽，
+/// 于是测试全绿、真机全废。
 std::vector<uint8_t> packet(uint16_t seq, uint32_t ts, bool marker,
                             const std::vector<uint8_t> &payload, uint8_t pt = 100) {
     std::vector<uint8_t> p;
-    p.push_back(0x80);  // V=2, P=0, X=0, CC=0
+    p.push_back(0x90);  // V=2, P=0, X=1, CC=0
     p.push_back(pt | (marker ? 0x80 : 0));
     p.push_back(static_cast<uint8_t>(seq >> 8));
     p.push_back(static_cast<uint8_t>(seq));
@@ -35,9 +38,12 @@ std::vector<uint8_t> packet(uint16_t seq, uint32_t ts, bool marker,
     for (int i = 0; i < 4; ++i) {
         p.push_back(static_cast<uint8_t>(0xDEADBEEF >> (8 * (3 - i))));
     }
-    // 子头：实测第一个字节恒 0x90，其余按观测填
-    for (int i = 0; i < 8; ++i) {
-        p.push_back(i == 0 ? 0x90 : static_cast<uint8_t>(0x10 + i));
+    p.push_back(0x90);
+    p.push_back(0x11);  // profile
+    p.push_back(0x00);
+    p.push_back(0x01);  // 长度：1 个 32 位字
+    for (int i = 0; i < 4; ++i) {
+        p.push_back(static_cast<uint8_t>(0x00107954 + i));  // 扩展内容，我们不读
     }
     p.insert(p.end(), payload.begin(), payload.end());
     return p;
@@ -196,7 +202,7 @@ void test_single_and_offsets() {
     // 带 CSRC 与扩展头的包：偏移算错就会把 CSRC/扩展当载荷，解出垃圾 NAL 类型
     auto base = single(1, {0xA4});
     std::vector<uint8_t> with_csrc;
-    with_csrc.push_back(0x82);  // V=2, CC=2 -> 后面跟 8 字节 CSRC
+    with_csrc.push_back(0x92);  // V=2, X=1, CC=2 -> 8 字节 CSRC 再接 8 字节扩展头
     with_csrc.push_back(100);
     with_csrc.push_back(0);
     with_csrc.push_back(3);
@@ -206,7 +212,13 @@ void test_single_and_offsets() {
     for (int i = 0; i < 8; ++i) {  // CC=2 的 CSRC 列表
         with_csrc.push_back(static_cast<uint8_t>(0xC0 + i));
     }
-    with_csrc.insert(with_csrc.end(), 8, 0x5A);  // 苹果子头
+    with_csrc.push_back(0x90);
+    with_csrc.push_back(0x11);  // 扩展头 profile
+    with_csrc.push_back(0x00);
+    with_csrc.push_back(0x01);  // 长度 1 个 32 位字 -> 扩展共 8 字节
+    for (int i = 0; i < 4; ++i) {
+        with_csrc.push_back(0x5A);
+    }
     with_csrc.insert(with_csrc.end(), base.begin(), base.end());
     std::vector<uint8_t> out2;
     check(d.push(with_csrc, out2, err), "带 CSRC 的包可解");
@@ -214,7 +226,7 @@ void test_single_and_offsets() {
     check(n2.size() == 1 && nal_type(n2[0]) == 1, "CSRC 被正确跳过");
 
     std::vector<uint8_t> with_ext;
-    with_ext.push_back(0x90);  // V=2, X=1
+    with_ext.push_back(0x90);  // V=2, X=1, CC=0
     with_ext.push_back(100);
     with_ext.push_back(0);
     with_ext.push_back(4);
@@ -224,11 +236,11 @@ void test_single_and_offsets() {
     with_ext.push_back(0xBE);
     with_ext.push_back(0xDE);
     with_ext.push_back(0x00);
-    with_ext.push_back(0x02);  // 扩展长度 2 个 32 位字
+    with_ext.push_back(0x02);  // 扩展长度 2 个 32 位字 -> 共 12 字节
     for (int i = 0; i < 8; ++i) {
         with_ext.push_back(0x77);
     }
-    with_ext.insert(with_ext.end(), 8, 0x5A);
+    // 这个包自己带一个 2 字的扩展，覆盖"按扩展自身长度跳"的分支
     with_ext.insert(with_ext.end(), base.begin(), base.end());
     std::vector<uint8_t> out3;
     check(d.push(with_ext, out3, err), "带扩展头的包可解");

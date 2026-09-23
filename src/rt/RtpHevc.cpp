@@ -6,8 +6,6 @@ namespace scrctl::rt {
 namespace {
 
 constexpr std::size_t kRtpHeaderLen = 12;
-/// 苹果在 RTP 载荷前多塞的子头，实测固定 8 字节，语义未记录。
-constexpr std::size_t kAppleSubHeaderLen = 8;
 constexpr uint8_t kTypeAgg16 = 48;
 constexpr uint8_t kTypeFragment = 49;
 
@@ -49,7 +47,9 @@ bool parse_rtp_header(std::span<const uint8_t> d, PacketInfo &out) {
         }
         pos += csrc;
     }
-    // 有扩展头时必须按它的长度跳，否则后面整段偏移都错，且错得毫无征兆。
+    // 有扩展头时必须按它自己声明的长度跳，否则后面整段偏移都错，且错得毫无征兆。
+    // 这条流每个包都带 X=1 的 8 字节扩展头，它**就是**那 8 字节——曾被当成 RTP
+    // 之外的"苹果私有子头"，于是按长度跳过之后又多跳了 8 字节。
     if ((d[0] & 0x10) != 0) {
         if (d.size() < pos + 4) {
             return false;
@@ -60,10 +60,10 @@ bool parse_rtp_header(std::span<const uint8_t> d, PacketInfo &out) {
         }
         pos += ext;
     }
-    if (d.size() < pos + kAppleSubHeaderLen + 2) {
+    if (d.size() < pos + 2) {
         return false;
     }
-    out.payload_offset = pos + kAppleSubHeaderLen;
+    out.payload_offset = pos;
     return true;
 }
 
