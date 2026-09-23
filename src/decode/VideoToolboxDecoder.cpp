@@ -17,21 +17,29 @@ void store_be16(uint8_t *p, uint16_t v) {
     p[1] = uint8_t(v);
 }
 
-/// 回调只往调用方给的槽位放一个已 retain 的 pixel buffer，
-/// 生命周期交回 decode() 管理，避免跨帧悬挂。
-void output_callback(void *ref_con, void *source_frame_ref_con, OSStatus status,
-                     VTDecodeInfoFlags, CVImageBufferRef image_buffer, CMTime, CMTime) {
+/// 一次提交对应一个输出槽，槽必须活得比回调久。
+///
+/// 为什么要有这个结构体：回调可能在 DecodeFrame 返回**之后**才跑。之前直接把
+/// 栈上 `CVPixelBufferRef` 的地址传进去，函数返回后那块栈就作废，而下一次
+/// decode() 以同样的调用深度进来、同一个地址又被复用，于是上一帧的图像被写进
+/// 这一帧的槽里。症状是画面偶发整片噪声、且时好时坏（同一份录屏一份正常、隔
+/// 40 分钟再录的那份第 1 帧就是噪声），用 libav 解同一份文件却是干净的，这才把
+/// 范围收到解码器头上。
+///
+/// 现在每次提交后等 `WaitForAsynchronousFrames` 返回，保证所有已提交帧的回调都
+/// 跑完了，槽才离开作用域——这样栈上放就够了，不需要堆分配。
+struct OutputSlot {
+    CVPixelBufferRef pb = nullptr;
+};
+
+void output_callback(void *ref_con, void *source_frame_ref_con, OSStatus status, VTDecodeInfoFlags,
+                     CVImageBufferRef image_buffer, CMTime, CMTime) {
     (void)ref_con;
-    if (status != noErr || image_buffer == nullptr) {
+    auto *slot = static_cast<OutputSlot *>(source_frame_ref_con);
+    if (slot == nullptr || status != noErr || image_buffer == nullptr) {
         return;
     }
-    auto *out = static_cast<CVPixelBufferRef *>(source_frame_ref_con);
-    if (out != nullptr) {
-        if (*out != nullptr) {
-            CVPixelBufferRelease(*out);
-        }
-        *out = CVPixelBufferRetain(image_buffer);
-    }
+    slot->pb = CVPixelBufferRetain(image_buffer);
 }
 
 /// NAL 长度前缀字节数。
@@ -124,6 +132,9 @@ public:
 
         std::vector<uint8_t> buf;
         buf.reserve(total);
+        // NAL 按原样拷贝，含 emulation prevention 字节：长度前缀与样本字节数必须
+        // 对得上，解码器只按长度读、不会替你去 unescape（去掉了反而会让 RBSP 里
+        // 冒出 00 00 01，见 AnnexB.h 里 `Nal` 的语义）。
         for (const Nal *n : slices) {
             uint8_t len[2];
             store_be16(len, static_cast<uint16_t>(n->size()));
@@ -158,20 +169,24 @@ public:
             return false;
         }
 
-        CVPixelBufferRef pb = nullptr;
-        // decodeFlags 传 0，即不开 bit0 的异步解码 -> DecodeFrame 返回时回调已完成。
-        st = VTDecompressionSessionDecodeFrame(session_, sb, 0, &pb, nullptr);
+        OutputSlot slot;
+        st = VTDecompressionSessionDecodeFrame(session_, sb, 0, &slot, nullptr);
         CFRelease(sb);
-
-        if (st != noErr || pb == nullptr) {
-            if (pb != nullptr) {
-                CVPixelBufferRelease(pb);
+        if (st != noErr) {
+            if (slot.pb != nullptr) {
+                CVPixelBufferRelease(slot.pb);
             }
             return false;
         }
-
-        copy_out(pb, out);
-        CVPixelBufferRelease(pb);
+        // 等所有已提交帧的回调跑完，之后才允许 slot 离开作用域。代价是不做流水
+        // （一次只提交一帧，本来也不需要更深）。
+        VTDecompressionSessionWaitForAsynchronousFrames(session_);
+        if (slot.pb == nullptr) {
+            return false;
+        }
+        copy_out(slot.pb, out);
+        CVPixelBufferRelease(slot.pb);
+        slot.pb = nullptr;
         return static_cast<bool>(out);
     }
 

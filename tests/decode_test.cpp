@@ -71,7 +71,9 @@ int main(int argc, char **argv) {
         if (!decoder->decode(au, tmp) || !tmp) {
             ++failed;
             if (failed <= 20) {
-                std::printf("  [fail] AU#%d nals=%zu types=", au_count, au.size());
+                // 这里只是逐个 AU 记录"这一帧没出图"，不代表整体失败：末尾的
+                // 出帧率才是真正的判据。types 一栏能看出是不是混进了假 NAL。
+                std::printf("  [无输出] AU#%d nals=%zu types=", au_count, au.size());
                 for (const auto &n : au) {
                     std::printf("%u ", nal_type(n));
                 }
