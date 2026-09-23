@@ -25,7 +25,10 @@ std::vector<uint8_t> unescape_nal(const uint8_t *data, std::size_t len) {
     std::vector<uint8_t> out;
     out.reserve(len);
     for (std::size_t i = 0; i < len; ++i) {
-        if (i + 2 < len && data[i] == 0 && data[i + 1] == 0 && data[i + 2] == 3) {
+        // 只有 00 00 03 后面跟着 0x00..0x03 时那个 03 才是插进来的防 emulation 字节；
+        // 光看 00 00 03 就删，会在截断的 NAL 上删掉真实码流。
+        if (i + 3 < len && data[i] == 0 && data[i + 1] == 0 && data[i + 2] == 3 &&
+            data[i + 3] <= 3) {
             out.push_back(0);
             out.push_back(0);
             i += 2;  // 跳过 0x03
@@ -81,11 +84,18 @@ void AnnexBParser::emit_range(std::size_t end) {
     on_nal(std::move(raw));
 }
 
-void AnnexBParser::on_nal(std::vector<uint8_t> &&raw) {
-    Nal nal = unescape_nal(raw.data(), raw.size());
+void AnnexBParser::on_nal(std::vector<uint8_t> &&nal) {
     if (nal.size() < 3) {
         return;
     }
+    // 这里**不**去 emulation prevention 字节。曾经去过，代价很隐蔽：
+    // VideoToolbox 的长度前缀样本要求 NAL 字节与 Annex-B 里起始码之后的原样一致
+    // （含 00 00 03），hvcC 里的参数集同理（与 avcC 同一套规则），去掉之后解码器
+    // 读到的是另一串东西。实测同一台机器、同一份 SPS，两份录屏一份"看起来正常"
+    // 一份整片噪声——因为去掉 EPB 后 RBSP 里会出现 00 00 01，是否踩到取决于码流
+    // 内容，所以是概率性出错。
+    // 判类型与 first_slice_segment_in_pic_flag 都不受影响：EPB 需要前面有两个
+    // 零字节，不可能出现在 NAL 头或 RBSP 的第一个字节上。
     const uint8_t type = nal_type_of(nal);
 
     if (type == static_cast<uint8_t>(NalType::Vps)) {

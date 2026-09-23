@@ -78,10 +78,80 @@ Summary run(const std::vector<uint8_t> &file, size_t chunk) {
 
 }  // namespace
 
+/// 合成码流上的自检：不依赖录制文件，所以任何时候都跑。
+///
+/// 要守住的是"NAL 字节原样进出"。曾经解析器在 emit 之前去掉 emulation
+/// prevention 字节，喂给 VideoToolbox 的长度前缀样本因此不再是码流里的字节；
+/// 去掉之后 RBSP 里还可能凭空出现 00 00 01，是否踩到取决于内容——出错是概率性
+/// 的，拿真机录屏反而看不出来。这里把 00 00 03 直接写进 NAL，断言它原样传出。
+void test_epb_kept() {
+    std::printf("\n== NAL 字节原样保留 ==\n");
+
+    auto with_header = [](uint8_t type, const std::vector<uint8_t> &body) {
+        std::vector<uint8_t> v = {static_cast<uint8_t>((type << 1) & 0x7E), 0x01};
+        v.insert(v.end(), body.begin(), body.end());
+        return v;
+    };
+    // 载荷里两处 00 00 03：后随 0x01/0x00 的按规范是插进来的防 emulation 字节，
+    // 去掉就会改变 NAL 的字节数与内容。
+    const std::vector<uint8_t> param_body{0xAA, 0x00, 0x00, 0x03, 0x01, 0xBB,
+                                          0x00, 0x00, 0x03, 0x00, 0xCC};
+    // first_slice_segment_in_pic_flag 是 NAL 头之后的第一个 bit，所以取 0x80 开头。
+    // 结尾刻意不是 0x00：末尾 0 与后继起始码之间的归属本就模糊，不该拿来断言。
+    const std::vector<uint8_t> slice_body{0x80, 0x01, 0x00, 0x00, 0x03, 0x02, 0x55};
+
+    std::vector<std::vector<uint8_t>> want;
+    want.push_back(with_header(32, param_body));
+    want.push_back(with_header(33, param_body));
+    want.push_back(with_header(34, param_body));
+    want.push_back(with_header(19, slice_body));
+
+    static const std::vector<uint8_t> kStart{0, 0, 0, 1};
+    std::vector<uint8_t> stream;
+    for (const auto &nal : want) {
+        stream.insert(stream.end(), kStart.begin(), kStart.end());
+        stream.insert(stream.end(), nal.begin(), nal.end());
+    }
+    // 再加一个起始码把最后一个 NAL 定界（也顺便覆盖"参数集不单独成 AU"的规则）。
+    stream.insert(stream.end(), kStart.begin(), kStart.end());
+
+    std::vector<std::vector<uint8_t>> got;
+    size_t aus = 0;
+    scrctl::AnnexBParser parser([&](std::vector<scrctl::Nal> &&au, bool keyframe) {
+        ++aus;
+        check(keyframe, "合成流的 IRAP AU 被标成关键帧");
+        for (auto &nal : au) {
+            got.push_back(std::move(nal));
+        }
+    });
+    parser.feed(stream.data(), stream.size());
+    parser.flush();
+
+    check(aus == 1, "切出 1 个 AU: " + std::to_string(aus));
+    check(got == want, "4 个 NAL 与输入字节逐一相同（00 00 03 未被去掉）");
+    if (got.size() == want.size()) {
+        std::printf("  NAL 长度 期望=");
+        for (const auto &n : want) std::printf("%zu ", n.size());
+        std::printf(" 实际=");
+        for (const auto &n : got) std::printf("%zu ", n.size());
+        std::printf("\n");
+    }
+
+    // unescape_nal 仍然要留给读 RBSP 语法的人用（SPS 的 conformance window 之类），
+    // 顺带钉住它的边界：03 后随 >0x03 不是 EPB，末尾孤立的 03 也不能删。
+    const std::vector<uint8_t> in{0, 0, 3, 0x40, 0, 0, 3, 0x02, 0, 0, 3};
+    const std::vector<uint8_t> rbsp{0, 0, 3, 0x40, 0, 0, 0x02, 0, 0, 3};
+    check(scrctl::unescape_nal(in.data(), in.size()) == rbsp,
+          "只在 03 后随 <=0x03 时去掉，末尾孤立的 03 保留");
+}
+
 int main(int argc, char **argv) {
+    test_epb_kept();
     if (argc < 2) {
-        std::fprintf(stderr, "用法: %s <file.hevc>\n", argv[0]);
-        return 2;
+        // 没录制文件也要能全绿跑完：合成部分已经覆盖了这次守住的不变量。
+        std::printf("\n未给 .hevc 参数，跳过真机码流的 AU 断言。\n");
+        std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
+        return Failures == 0 ? 0 : 1;
     }
     std::ifstream in(argv[1], std::ios::binary);
     if (!in) {

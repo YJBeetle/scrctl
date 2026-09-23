@@ -158,15 +158,15 @@ if(SCRCTL_BUILD_TESTS)
     add_executable(decode_test tests/decode_test.cpp)
     target_link_libraries(decode_test PRIVATE scrctl_core)
 
-    # 这两个测试需要一个 .hevc 输入；没有就跳过而不是失败，
+    # 合成码流那部分自检不需要输入文件，任何时候都跑。
+    add_test(NAME annexb_synth COMMAND annexb_test)
+
+    # 真机录制相关的两个测试需要一个 .hevc 输入；没有就跳过而不是失败，
     # 免得干净 checkout 上 ctest 全红。
     set(SCRCTL_TEST_STREAM "" CACHE FILEPATH "用于测试的真机录制 .hevc（可留空跳过）")
     if(SCRCTL_TEST_STREAM)
         add_test(NAME annexb COMMAND annexb_test ${SCRCTL_TEST_STREAM})
         add_test(NAME decode COMMAND decode_test ${SCRCTL_TEST_STREAM} ${CMAKE_BINARY_DIR}/f.raw 5)
-    else()
-        add_test(NAME annexb_usage COMMAND annexb_test)
-        set_tests_properties(annexb_usage PROPERTIES WILL_FAIL TRUE)
     endif()
 endif()
 

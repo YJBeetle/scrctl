@@ -7,7 +7,8 @@
 
 namespace scrctl {
 
-/// 一个已去除 emulation prevention byte 的 NAL（含 2 字节 HEVC NAL header）。
+/// 一个 NAL，含 2 字节 HEVC NAL header，字节与 Annex-B 里起始码之后的部分
+/// **原样一致**（也就是保留 emulation prevention byte）。
 using Nal = std::vector<uint8_t>;
 
 enum class NalType : uint8_t {
@@ -56,8 +57,13 @@ private:
     Nal vps_, sps_, pps_;
 };
 
-/// 去掉 NAL 中的 emulation prevention byte（00 00 03 -> 00 00）。
-/// VideoToolbox 走 hvcC 风格的长度前缀样本，不接受 Annex-B 的 EPB。
+/// 去掉 NAL 中的 emulation prevention byte（00 00 03 xx, xx<=0x03 -> 00 00 xx），
+/// 得到 RBSP。只在**读语法元素**时用：SPS 的 conformance window、profile/tier
+/// 这些要按 RBSP 位流解析。
+///
+/// 不要把结果喂给解码器。长度前缀样本与 hvcC 里的参数集都要求原样保留 EPB
+/// （与 avcC 同一套规则），去掉了就不是那段码流的字节了——去掉之后 RBSP 里还
+/// 可能凭空出现 00 00 01，是否踩到取决于内容，所以错得是概率性的。
 std::vector<uint8_t> unescape_nal(const uint8_t *data, std::size_t len);
 
 }  // namespace scrctl
