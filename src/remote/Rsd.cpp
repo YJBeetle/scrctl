@@ -117,6 +117,14 @@ bool ServiceConnection::call(const xpc::Value &request, xpc::Value &reply, int t
     return channel_->call(request, reply, timeout_ms, err);
 }
 
+bool ServiceConnection::send_only(const xpc::Value &request, std::string &err) {
+    if (channel_ == nullptr) {
+        err = "这条服务连接不是 RemoteXPC 服务";
+        return false;
+    }
+    return channel_->send_request(request, false, err);
+}
+
 bool ServiceConnection::invoke(std::string_view feature_identifier,
                                std::string_view action_identifier, const xpc::Value &input,
                                xpc::Value &output, int timeout_ms, std::string &err) {

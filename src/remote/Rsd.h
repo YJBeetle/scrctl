@@ -44,6 +44,10 @@ public:
     /// 直接一发一收，供非 CoreDevice 封装的服务用。
     bool call(const xpc::Value &request, xpc::Value &reply, int timeout_ms, std::string &err);
 
+    /// 只发不收。HID 报告这类"投出去就完"的请求必须走这条路：设备对它们不安
+    /// 回信，用 call() 就是每个点等一次超时，注入延迟立刻变成秒级。
+    bool send_only(const xpc::Value &request, std::string &err);
+
     [[nodiscard]] net::TcpStream &tcp() { return *tcp_; }
     [[nodiscard]] bool is_xpc() const { return channel_ != nullptr; }
 
