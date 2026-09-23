@@ -265,11 +265,19 @@ bool TcpStream::send(std::string_view data, std::string &err) {
     return true;
 }
 
-bool TcpStream::recv(std::vector<uint8_t> &out, int timeout_ms, std::string &err) {
+bool TcpStream::recv(std::vector<uint8_t> &out, int timeout_ms, std::string &err,
+                     bool *timed_out) {
+    if (timed_out != nullptr) {
+        *timed_out = false;
+    }
     out.clear();
     if (!wait_for([this] { return rx_pos_ < rx_.size() || peer_closed_; }, timeout_ms, err)) {
         if (err.empty()) {
             err = "读超时";
+            if (timed_out != nullptr) {
+                *timed_out = true;
+                err.clear();  // 超时不是错误：调用方按自己的总 deadline 决定还要不要等
+            }
         }
         return false;
     }

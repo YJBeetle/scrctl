@@ -232,6 +232,18 @@ bool Channel::pump(int timeout_ms, std::string &err) {
         }
         if (st == http2::Status::Malformed) {
             err = perr;
+            // 把错位现场的前后字节交出来。"帧长过大"这种错误光看数字猜不出成因
+            // ——是隧道包边界读歪了、上一帧的长度算少了、还是别的流的字节混进来
+            // ——三种情况在十六进制里一眼就能分辨，靠推理则三种都能"自洽"。
+            std::fprintf(stderr, "    !! HTTP/2 帧解析失败: %s，缓冲 %zu 字节，前 64 字节:\n      ",
+                         perr.c_str(), rx_.size());
+            for (std::size_t i = 0; i < 64 && i < rx_.size(); ++i) {
+                std::fprintf(stderr, "%02x", rx_[i]);
+                if (i % 16 == 15) {
+                    std::fprintf(stderr, "\n      ");
+                }
+            }
+            std::fprintf(stderr, "\n");
             return false;
         }
         break;  // 缓冲里只剩半帧，去收字节
@@ -244,7 +256,14 @@ bool Channel::pump(int timeout_ms, std::string &err) {
     }
 
     std::vector<uint8_t> got;
-    if (!socket_.recv(got, timeout_ms, err)) {
+    bool timed_out = false;
+    if (!socket_.recv(got, timeout_ms, err, &timed_out)) {
+        if (timed_out) {
+            // 这一次 socket 读没等到字节，但链路是好的：返回"有进展"让调用方
+            // 按自己的总 deadline 决定继续等还是放弃。把它当断开，就会在设备
+            // 回信稍慢的时候报出"等设备回信时断开: 读超时"。
+            return true;
+        }
         return false;
     }
     rx_.insert(rx_.end(), got.begin(), got.end());

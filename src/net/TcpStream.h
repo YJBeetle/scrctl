@@ -32,7 +32,13 @@ public:
     bool send(std::string_view data, std::string &err);
 
     /// 读若干字节，最多等 timeout_ms。返回 false 表示超时、对端关闭或出错。
-    bool recv(std::vector<uint8_t> &out, int timeout_ms, std::string &err);
+    ///
+    /// "这次超时"与"链路坏了"必须分开：前者调用方应该继续等自己的总 deadline，
+    /// 后者才该立刻放弃。把两者混成一个 false，就会把"设备回信慢"报成"连接断开"
+    /// ——真机上见过（10 次里 1 次），而且只在回信确实还要一会儿的时候出现。
+    /// 置 `timed_out` 为 true 即表示前者，此时 err 为空。
+    bool recv(std::vector<uint8_t> &out, int timeout_ms, std::string &err,
+              bool *timed_out = nullptr);
 
     void close();
 
