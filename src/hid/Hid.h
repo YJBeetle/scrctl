@@ -70,6 +70,41 @@ inline constexpr uint8_t kStateRelease = 0x02;  ///< 抬起
 /// 屏幕外的点变成屏幕内的点击，那是比"停在边上"更糟的结果。
 [[nodiscard]] uint16_t normalize(double v);
 
+/// 把一段 ASCII 翻译成"逐个按键"的 usage 序列：需要 Shift 的字符会展开成
+/// {ShiftLeft, 该键} 两个报告。返回的是每次要发的完整按下集合，调用方逐条投递。
+///
+/// 只覆盖 US 键盘布局上能直接按出来的字符；认不出的字符被跳过而不是抛错——
+/// 自动化里"少打一个字符"比"整个动作失败"好排查。
+[[nodiscard]] std::vector<std::vector<uint16_t>> text_reports(const std::string &text);
+
+/// 键盘 usage（HID Usage Page 0x07，USB-IF 公开表）。这里只列翻译 ASCII 用得上的。
+namespace key {
+inline constexpr uint16_t kA = 0x04;  ///< a..z 连续排到 0x1D
+inline constexpr uint16_t kZ = 0x1D;
+inline constexpr uint16_t k1 = 0x1E;  ///< 1..9 到 0x26，0 是 0x27
+inline constexpr uint16_t k0 = 0x27;
+inline constexpr uint16_t kEnter = 0x28;
+inline constexpr uint16_t kEsc = 0x29;
+inline constexpr uint16_t kBackspace = 0x2A;
+inline constexpr uint16_t kTab = 0x2B;
+inline constexpr uint16_t kSpace = 0x2C;
+inline constexpr uint16_t kShiftLeft = 0xE1;  ///< 修饰键 0xE0..0xE7 各占一位
+}  // namespace key
+
+/// 39 字节的虚拟键盘报告（报告号 0x01）。
+///
+/// ```text
+///  0     0x01  报告号
+///  1-30  240 位 usage 位图（LE 位序）：usage u 按下 <=> 字节 1 + u/8 的第 u%8 位
+///  31-36 时间戳（6 字节 LE）
+///  37-38 保留
+/// ```
+///
+/// 每个报告带的是**当前按住的完整集合**，所以要"抬起"一个键，是带着去掉它的集合
+/// 再发一次，而不是发一个 release 操作码。
+[[nodiscard]] std::vector<uint8_t> keyboard_report(const std::vector<uint16_t> &usages,
+                                                   uint64_t timestamp = report_timestamp());
+
 /// 一条已打开的 universalhidservice 连接。
 class Service {
 public:
@@ -108,6 +143,12 @@ public:
     /// 让设备侧能算出速度——瞬移式的拖动会被当成抖动。
     bool stroke(const std::vector<std::pair<double, double>> &points, int step_ms,
                 std::string &err);
+
+    /// 在某个键盘面上敲一组键：发一次"这些键都按着"，停 hold_ms，再发空集合松开。
+    /// 键盘面是哪个 `_ServiceID` 要看 `surfaces()`——设备自带一个，宿主自己注册的
+    /// 另算。
+    bool type(uint64_t surface, const std::vector<uint16_t> &usages, int hold_ms,
+              std::string &err);
 
 private:
     explicit Service(std::unique_ptr<scrctl::remote::ServiceConnection> conn)

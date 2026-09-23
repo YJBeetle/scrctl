@@ -16,6 +16,7 @@ constexpr std::string_view kFeature = "com.apple.coredevice.feature.remote.unive
 constexpr std::string_view kIndigoServiceName = "com.apple.coredevice.hid.indigo";
 constexpr std::string_view kButtonFeature = "com.apple.coredevice.feature.remote.hid.button";
 constexpr std::size_t kTouchscreenReportLen = 58;
+constexpr std::size_t kKeyboardReportLen = 39;
 
 /// dtuhidd 这批服务的外壳与 CoreDevice feature 那套**不一样**：
 /// 没有 CoreDevice.input / actionIdentifier，只有 messageType + payload +
@@ -65,8 +66,22 @@ std::vector<uint8_t> touchscreen_report(uint8_t state, uint16_t x, uint16_t y,
     return r;
 }
 
-uint16_t normalize(double v) {
-    if (!(v > 0.0)) {  // 也吃掉 NaN
+std::vector<uint8_t> keyboard_report(const std::vector<uint16_t> &usages, uint64_t timestamp) {
+    std::vector<uint8_t> r(kKeyboardReportLen, 0);
+    r[0] = 0x01;
+    for (const uint16_t u : usages) {
+        // 位图只有 240 位；超出就编不下，静默丢掉比写坏别的键好。
+        if (u < 240) {
+            r[1 + u / 8] = static_cast<uint8_t>(r[1 + u / 8] | (uint8_t { 1 } << (u % 8)));
+        }
+    }
+    for (int i = 0; i < 6; ++i) {
+        r[31 + static_cast<std::size_t>(i)] = static_cast<uint8_t>(timestamp >> (8 * i));
+    }
+    return r;
+}
+
+uint16_t normalize(double v) {    if (!(v > 0.0)) {  // 也吃掉 NaN
         return 0;
     }
     if (v >= 1.0) {
@@ -176,6 +191,18 @@ bool Service::stroke(const std::vector<std::pair<double, double>> &points, int s
     return true;
 }
 
+bool Service::type(uint64_t surface, const std::vector<uint16_t> &usages, int hold_ms,
+                   std::string &err) {
+    if (!send_report(surface, keyboard_report(usages), err)) {
+        return false;
+    }
+    if (hold_ms > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(hold_ms));
+    }
+    // 松开不是"发一个 release"，而是带着去掉该键的完整集合再发一次。
+    return send_report(surface, keyboard_report({}), err);
+}
+
 std::unique_ptr<Buttons> Buttons::open(scrctl::remote::Device &device, std::string &err,
                                        bool verbose) {
     if (!device.rsd().has_service(kIndigoServiceName)) {
@@ -207,6 +234,74 @@ bool Buttons::press(uint16_t usage_page, uint16_t usage_code, int hold_ms, std::
         std::this_thread::sleep_for(std::chrono::milliseconds(hold_ms));
     }
     return send(kButtonStateUp, usage_page, usage_code, err);
+}
+
+std::vector<std::vector<uint16_t>> text_reports(const std::string &text) {
+    // usage 号来自 USB-IF 的 HID Usage Tables（page 0x07），是公开标准里的数字，
+    // 不是哪个实现的私有约定。shifted 表示这个字符要按着左 Shift 才出得来。
+    struct Entry {
+        char ch;
+        uint16_t usage;
+        bool shifted;
+    };
+    static const Entry kTable[] = {
+        { ' ', key::kSpace, false }, { '\t', key::kTab, false }, { '\n', key::kEnter, false },
+        // 数字的上档字符。少了这一组，"!" 会被当成"认不出的字符"静默跳过，
+        // 而密码、句子结尾里到处都是它们。
+        { '!', key::k1, true }, { '@', static_cast<uint16_t>(key::k1 + 1), true },
+        { '#', static_cast<uint16_t>(key::k1 + 2), true },
+        { '$', static_cast<uint16_t>(key::k1 + 3), true },
+        { '%', static_cast<uint16_t>(key::k1 + 4), true },
+        { '^', static_cast<uint16_t>(key::k1 + 5), true },
+        { '&', static_cast<uint16_t>(key::k1 + 6), true },
+        { '*', static_cast<uint16_t>(key::k1 + 7), true },
+        { '(', static_cast<uint16_t>(key::k1 + 8), true },
+        { ')', key::k0, true },
+        // 以下 usage 直接照 HID Usage Tables page 0x07 的编号写，不用"某个键加
+        // 多少"的算式——算式对了也读不出来，还容易在改表时错一位。
+        { '-', 0x2D, false }, { '_', 0x2D, true },  { '=', 0x2E, false },
+        { '+', 0x2E, true },  { '[', 0x2F, false }, { '{', 0x2F, true },
+        { ']', 0x30, false }, { '}', 0x30, true },  { '\\', 0x31, false },
+        { '|', 0x31, true },  { ';', 0x33, false }, { ':', 0x33, true },
+        { '\'', 0x34, false }, { '"', 0x34, true }, { '`', 0x35, false },
+        { '~', 0x35, true },  { ',', 0x36, false }, { '<', 0x36, true },
+        { '.', 0x37, false }, { '>', 0x37, true },  { '/', 0x38, false },
+        { '?', 0x38, true },
+    };
+
+    std::vector<std::vector<uint16_t>> out;
+    for (const char ch : text) {
+        uint16_t usage = 0;
+        bool shifted = false;
+        if (ch >= 'a' && ch <= 'z') {
+            usage = static_cast<uint16_t>(key::kA + (ch - 'a'));
+        } else if (ch >= 'A' && ch <= 'Z') {
+            usage = static_cast<uint16_t>(key::kA + (ch - 'A'));
+            shifted = true;
+        } else if (ch >= '1' && ch <= '9') {
+            usage = static_cast<uint16_t>(key::k1 + (ch - '1'));
+        } else if (ch == '0') {
+            usage = key::k0;
+        } else {
+            for (const auto &e : kTable) {
+                if (e.ch == ch) {
+                    usage = e.usage;
+                    shifted = e.shifted;
+                    break;
+                }
+            }
+        }
+        if (usage == 0) {
+            continue;  // 认不出来的字符跳过
+        }
+        if (shifted) {
+            out.push_back({ key::kShiftLeft, usage });
+        } else {
+            out.push_back({ usage });
+        }
+        out.push_back({});  // 空集合 = 全部松开
+    }
+    return out;
 }
 
 }  // namespace scrctl::hid

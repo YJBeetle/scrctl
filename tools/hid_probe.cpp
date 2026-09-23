@@ -71,6 +71,7 @@ int main(int argc, char **argv) {
     bool stroke = false;
     bool line = false;
     bool probe_reply = false;
+    std::string keys;
     double lx0 = 0.2, ly0 = 0.66, lx1 = 0.32, ly1 = 0.70;
     bool with_stream = true;
     bool want_tap = false;
@@ -100,6 +101,8 @@ int main(int argc, char **argv) {
             lx1 = std::atof(argv[i + 3]);
             ly1 = std::atof(argv[i + 4]);
             i += 4;
+        } else if (a == "--keys" && i + 1 < argc) {
+            keys = argv[++i];
         } else if (a == "--probe-reply") {
             probe_reply = true;
         } else if (a == "--no-stream") {
@@ -200,6 +203,18 @@ int main(int argc, char **argv) {
             rc = 1;
         }
     }
+    if (!keys.empty()) {
+        // 键盘面：先试设备自带的那个（list 里 512 是 "CoreDevice keyboard"）。
+        const uint64_t surface = std::strtoull(keys.c_str(), nullptr, 10);
+        std::printf("在面 %llu 上敲 a b c\n", static_cast<unsigned long long>(surface));
+        for (uint16_t usage : {scrctl::hid::key::kA, uint16_t { scrctl::hid::key::kA + 1 }, uint16_t { scrctl::hid::key::kA + 2 }}) {
+            if (!hid->type(surface, {usage}, 60, err)) {
+                std::fprintf(stderr, "敲键失败: %s\n", err.c_str());
+                rc = 1;
+                break;
+            }
+        }
+    }
     if (probe_reply) {
         // 一发一收地试：设备的态度只有这样才能拿到。send 是只发不收的，格式错了
         // 也"成功"，屏幕却没反应，现场什么都看不出来。
@@ -215,7 +230,7 @@ int main(int argc, char **argv) {
             }
         }
     }
-    if (!list && !want_tap && !stroke && !line && !probe_reply && !raw_surfaces) {
+    if (!list && !want_tap && !stroke && !line && !probe_reply && !raw_surfaces && keys.empty()) {
         usage(argv[0]);
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(200));

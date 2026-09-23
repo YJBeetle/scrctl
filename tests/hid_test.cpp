@@ -118,9 +118,47 @@ void test_send_message_golden() {
     check(got.size() == unhex(kGolden).size(), "长度 284");
 }
 
+/// 键盘报告与 ASCII 翻译。usage 号是 USB-IF HID Usage Tables page 0x07 的公开值。
+void test_keyboard() {
+    std::printf("\n== 虚拟键盘报告 ==\n");
+    const auto a = scrctl::hid::keyboard_report({ scrctl::hid::key::kA }, 0x3FC14C1Dull);
+    check(a.size() == 39, "长度 39: " + std::to_string(a.size()));
+    check(a[0] == 0x01, "报告号 0x01");
+    // usage 4 -> 字节 1 + 4/8 = 1 的第 4 位
+    check(a[1] == 0x10, "a 的位图落点正确");
+    check(hex(std::span<const uint8_t>(a.data() + 31, 6)) == "1d4cc13f0000",
+          "时间戳占 31..36");
+    const auto none = scrctl::hid::keyboard_report({}, 0x3FC14C1Dull);
+    check(none[1] == 0x00, "空集合就是全部松开");
+    // 240 位装不下的 usage 必须被丢掉而不是写坏别的字节：拿它和"空集合、同一
+    // 时间戳"比，时间戳不一样就比不出位图了。
+    const auto overflow = scrctl::hid::keyboard_report({ 500 }, 0x3FC14C1Dull);
+    check(overflow == none, "超出 240 位的 usage 被忽略");
+
+    std::printf("\n== ASCII -> usage 序列 ==\n");
+    const auto ab = scrctl::hid::text_reports("ab");
+    check(ab.size() == 4, "两个字母 = 按下/松开 各两组: " + std::to_string(ab.size()));
+    check(ab.size() == 4 && ab[0].size() == 1 && ab[0][0] == scrctl::hid::key::kA,
+          "第一个是 a 按下");
+    check(ab.size() == 4 && ab[1].empty(), "第二个是松开");
+    check(ab.size() == 4 && ab[2].size() == 1 && ab[2][0] == scrctl::hid::key::kA + 1,
+          "第三个是 b 按下");
+
+    const auto bang = scrctl::hid::text_reports("!");
+    check(bang.size() == 2 && bang[0].size() == 2, "带 Shift 的字符展开成两个 usage");
+    if (bang.size() == 2 && bang[0].size() == 2) {
+        check(bang[0][0] == scrctl::hid::key::kShiftLeft && bang[0][1] == scrctl::hid::key::k1,
+              "! = 左 Shift + 1");
+    }
+
+    const auto junk = scrctl::hid::text_reports("\u00e9\x01");
+    check(junk.empty(), "认不出的字符跳过而不是抛错");
+}
+
 }  // namespace
 
 int main() {
+    test_keyboard();
     test_touchscreen_report();
     test_normalize();
     test_send_message_golden();
