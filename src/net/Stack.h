@@ -63,6 +63,11 @@ public:
     /// 组一个 IPv6 头（上层负责 L4 头与校验和）。
     std::vector<uint8_t> wrap(const std::vector<uint8_t> &l4, uint8_t next_header) const;
 
+    /// 收到的 L4 段里校验和不对的个数。**这是"字节被改了"而不是"字节丢了"的判据**：
+    /// 不校验的话损坏的 TCP 载荷会被当成正常数据交给上层，症状是上层在莫名其妙的
+    /// 位置报"帧长过大"，看起来像它自己的 bug。
+    [[nodiscard]] uint64_t bad_checksums() const { return bad_checksums_; }
+
 private:
     void pump_loop();
     /// 读一个入站包并分发。只在泵线程里跑。
@@ -80,6 +85,7 @@ private:
     std::map<uint16_t, TcpEndpoint *> tcp_;
     std::map<uint16_t, UdpEndpoint *> udp_;
 
+    uint64_t bad_checksums_ = 0;
     std::mutex write_mu_;
     std::thread pump_;
     std::atomic<bool> stopping_{false};

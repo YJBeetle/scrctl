@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <chrono>
 #include <condition_variable>
+#include <cstdio>
 #include <cstring>
 #include <utility>
 
@@ -164,6 +165,18 @@ bool Stack::pump_once(int timeout_ms, std::string &err) {
     // 关不掉。锁序因此是固定的：ep_mu_ -> 端点自己的锁 -> 写锁，任何路径都
     // 不反过来（端点发段时不碰 ep_mu_），所以不会成环。
     std::lock_guard<std::mutex> lock(ep_mu_);
+    // 先验校验和再派发。TCP 载荷被改动而无人察觉，上层就会在错位的字节上
+    // 解析出"帧长过大"之类的怪错误，那种现场根本指不回真正的成因。
+    if (next == 6 || next == 17) {
+        const uint16_t sum = l4_checksum(packet.data() + 8, packet.data() + 24,
+                                         packet.data() + l4, packet.size() - l4, next);
+        if (sum != 0) {
+            ++bad_checksums_;
+            std::fprintf(stderr, "    !! L4 校验和错（next=%u，%zu 字节），已丢弃\n", next,
+                         packet.size() - l4);
+            return true;
+        }
+    }
     if (next == 6) {
         const uint16_t dport = get16(packet.data() + l4 + 2);
         auto it = tcp_.find(dport);
