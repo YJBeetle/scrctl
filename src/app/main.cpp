@@ -17,6 +17,7 @@
 #include <cstring>
 #include <deque>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <memory>
 #include <mutex>
@@ -25,8 +26,10 @@
 #include <utility>
 #include <vector>
 
+#include "app/ViewGeom.h"
 #include "bitstream/AnnexB.h"
 #include "decode/Decoder.h"
+#include "hid/Hid.h"
 #include "media/StreamSession.h"
 #include "remote/Device.h"
 #include "rt/RtpHevc.h"
@@ -38,6 +41,7 @@ struct Options {
     std::string serial;     ///< scrcpy 的 --serial：指定哪台设备
     std::string record;     ///< 实时流顺手把 Annex-B 录到文件
     bool list_devices = false;
+    bool no_control = false;  ///< scrcpy 的 --no-control：只看不动
     std::string title = "scrctl";
     bool stats = false;
     bool crop_set = false;
@@ -46,6 +50,10 @@ struct Options {
     int exit_after = 0;   ///< 渲染多少帧后退出（0=不限）
     int verify_at = 0;    ///< 渲染到第 N 帧时回读窗口内容
     std::string verify_path;
+    /// 注入一条直线后退出：`--test-touch x0,y0,x1,y1`。
+    /// 窗口与鼠标不在场时也要能验证输入通路，理由同 --verify：日志说"注入
+    /// 调用返回成功"证明不了设备上真的收到了触摸。
+    std::string test_touch;
 };
 
 void usage(const char *argv0) {
@@ -57,12 +65,15 @@ void usage(const char *argv0) {
         "  --list-devices       列出在连设备后退出\n"
         "  --play FILE          改播已录制的 Annex-B HEVC 文件\n"
         "  --record FILE        把实时流另存为 Annex-B\n"
+        "  --no-control         只显示不注入输入（默认下鼠标左键即触摸）\n"
         "  --crop WxH+X+Y       裁剪区域（默认自动：1136x2464 -> 1125x2436）\n"
         "  --scale F            窗口缩放系数，默认 1.0\n"
         "  --title TITLE        窗口标题\n"
         "  --stats              每秒打印帧率统计\n"
         "  --exit-after N       渲染 N 帧后退出\n"
-        "  --verify N FILE      渲染到第 N 帧时把窗口内容回读存为 BMP\n",
+        "  --verify N FILE      渲染到第 N 帧时把窗口内容回读存为 BMP\n"
+        "  --test-touch X0,Y0,X1,Y1\n"
+        "                     注入一条直线（归一化坐标）后退出，无需真鼠标\n",
         argv0);
 }
 
@@ -84,6 +95,8 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.record = next("--record");
         } else if (a == "--list-devices") {
             o.list_devices = true;
+        } else if (a == "--no-control") {
+            o.no_control = true;
         } else if (a == "--title") {
             o.title = next("--title");
         } else if (a == "--scale") {
@@ -95,6 +108,8 @@ bool parse_args(int argc, char **argv, Options &o) {
         } else if (a == "--verify") {
             o.verify_at = std::atoi(next("--verify"));
             o.verify_path = next("--verify");
+        } else if (a == "--test-touch") {
+            o.test_touch = next("--test-touch");
         } else if (a == "--crop") {
             const char *v = next("--crop");
             if (std::sscanf(v, "%dx%d+%d+%d", &o.crop_w, &o.crop_h, &o.crop_x, &o.crop_y) != 4) {
@@ -116,27 +131,28 @@ bool parse_args(int argc, char **argv, Options &o) {
     return true;
 }
 
-/// 设备编码分辨率比逻辑显示大（HEVC CTU 对齐填充）。实测 iPhone 13 mini
-/// 编码 1136x2464、逻辑显示 1125x2436，右侧 11px 与底部 28px 是垃圾像素。
-/// 触摸归一化必须用逻辑尺寸，所以这里也按逻辑尺寸裁。
-struct Crop {
-    int x = 0, y = 0, w = 0, h = 0;
-};
+/// 设备编码分辨率比逻辑显示大（HEVC CTU 对齐填充），所以画面要按逻辑尺寸裁；
+/// 裁剪框与坐标换算的几何在 ViewGeom.h，那里可以离线自检。
+using scrctl::app::Crop;
+using scrctl::app::display_fraction;
 
 Crop resolve_crop(const Options &o, const scrctl::Frame &f) {
     Crop c;
     if (o.crop_set) {
-        c = {o.crop_x, o.crop_y, o.crop_w, o.crop_h};
+        c = {o.crop_x, o.crop_y, o.crop_w, o.crop_h, o.crop_w, o.crop_h};
     } else if (f.width == 1136 && f.height == 2464) {
-        c = {0, 0, 1125, 2436};
+        c = {0, 0, 1125, 2436, 1125, 2436};
         std::printf("自动裁剪 1136x2464 -> 1125x2436（CTU 填充：右 11px / 底 28px）\n");
     } else {
-        c = {0, 0, static_cast<int>(f.width), static_cast<int>(f.height)};
+        c = {0, 0, static_cast<int>(f.width), static_cast<int>(f.height),
+             static_cast<int>(f.width), static_cast<int>(f.height)};
     }
     c.x = std::max(0, std::min(c.x, static_cast<int>(f.width) - 1));
     c.y = std::max(0, std::min(c.y, static_cast<int>(f.height) - 1));
     c.w = std::max(1, std::min(c.w, static_cast<int>(f.width) - c.x));
     c.h = std::max(1, std::min(c.h, static_cast<int>(f.height) - c.y));
+    c.display_w = std::max(1, c.display_w);
+    c.display_h = std::max(1, c.display_h);
     return c;
 }
 
@@ -237,18 +253,62 @@ public:
         return true;
     }
 
-    bool pump_and_should_quit() {
+    /// 泵一轮事件。触摸换算成"整块屏幕的 0..1 归一化坐标"再交出去——注入用的
+    /// 就是这套坐标，与分辨率无关。
+    ///
+    /// 换算必须带上裁剪偏移：窗口看到的是显示区，而触摸面的 0..1 是相对**整块
+    /// 屏幕**的。把窗口中间点成 0.5 只在"没裁剪"时才对，裁过之后要按裁剪框在
+    /// 屏幕里的位置平移一遍，否则点哪儿都偏。
+    bool pump(const std::function<void(double, double, bool)> &on_touch) {
         SDL_Event e;
+        bool quit = false;
+        // 一轮里可能堆了好几个 motion：只保留最后一个位置。鼠标 125Hz 往上时
+        // 逐个发报告没有意义，设备侧要的是轨迹形状不是事件个数。
+        bool pending_move = false;
+        double px = 0, py = 0;
         while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_QUIT) {
-                return true;
-            }
-            if (e.type == SDL_KEYDOWN &&
-                (e.key.keysym.sym == SDLK_ESCAPE || e.key.keysym.sym == SDLK_q)) {
-                return true;
+            switch (e.type) {
+                case SDL_QUIT:
+                    quit = true;
+                    break;
+                case SDL_KEYDOWN:
+                    if (e.key.keysym.sym == SDLK_ESCAPE || e.key.keysym.sym == SDLK_q) {
+                        quit = true;
+                    }
+                    break;
+                case SDL_MOUSEBUTTONDOWN:
+                    if (e.button.button == SDL_BUTTON_LEFT && on_touch) {
+                        dragging_ = true;
+                        to_display(e.button.x, e.button.y, px, py);
+                        on_touch(px, py, true);
+                    }
+                    break;
+                case SDL_MOUSEMOTION:
+                    if (dragging_ && on_touch) {
+                        to_display(e.motion.x, e.motion.y, px, py);
+                        pending_move = true;
+                    }
+                    break;
+                case SDL_MOUSEBUTTONUP:
+                    if (e.button.button == SDL_BUTTON_LEFT && on_touch) {
+                        dragging_ = false;
+                        if (pending_move) {
+                            pending_move = false;
+                            on_touch(px, py, true);
+                        }
+                        to_display(e.button.x, e.button.y, px, py);
+                        on_touch(px, py, false);
+                    }
+                    break;
+                default:
+                    break;
             }
         }
-        return false;
+        if (pending_move && on_touch) {
+            pending_move = false;
+            on_touch(px, py, true);
+        }
+        return quit;
     }
 
     ~Presenter() {
@@ -264,11 +324,17 @@ public:
     }
 
 private:
+    /// 窗口像素 -> 整块屏幕的 0..1 归一化坐标。
+    void to_display(int wx, int wy, double &fx, double &fy) const {
+        display_fraction(wx, wy, win_w_, win_h_, src_, fx, fy);
+    }
+
     SDL_Window *window_ = nullptr;
     SDL_Renderer *renderer_ = nullptr;
     SDL_Texture *texture_ = nullptr;
     Crop src_{};
     int win_w_ = 0, win_h_ = 0;
+    bool dragging_ = false;
 };
 
 // ------------------------------------------------------------------ 字节源 ----
@@ -366,6 +432,13 @@ public:
 
     [[nodiscard]] bool finished() const override { return false; }
 
+    /// 把窗口里的一次触摸投到设备上。
+    ///
+    /// HID 服务**第一次用到时才连**：连接要一个来回，没必要把它算进起流路径；
+    /// 而且设备不提供该服务（DDI 版本差异）时镜像应当照常工作，而不是整个退出。
+    /// 失败过一次就不再重试，免得每帧都去撞一遍。
+    bool control(double x, double y, bool down, std::string &err);
+
     /// 拆包统计。画面糊掉时第一个要看的数就是这里。
     /// 读的是工作线程发布的快照，不是直接读它的状态——拆包器只归那个线程碰。
     void print_stats() const {
@@ -401,6 +474,8 @@ private:
     scrctl::rt::HevcRtpDepacketizer::Stats snapshot_{};
     std::unique_ptr<scrctl::remote::Device> device_;
     std::unique_ptr<scrctl::media::StreamSession> session_;
+    std::unique_ptr<scrctl::hid::Service> hid_;
+    bool hid_unavailable_ = false;
     /// PT 是协商出来的，构造时还不知道，所以在 start() 里赋值。
     scrctl::rt::HevcRtpDepacketizer depacketizer_{100};
     FILE *record_ = nullptr;
@@ -476,6 +551,21 @@ bool LiveSource::start(const std::string &serial, const std::string &record_path
     return true;
 }
 
+bool LiveSource::control(double x, double y, bool down, std::string &err) {
+    if (hid_ == nullptr) {
+        if (hid_unavailable_) {
+            return false;
+        }
+        hid_ = scrctl::hid::Service::open(*device_, err);
+        if (hid_ == nullptr) {
+            hid_unavailable_ = true;
+            return false;
+        }
+        std::printf("控制已接通（触摸注入可用）\n");
+    }
+    return hid_->touch(scrctl::hid::kSurfaceMainTouchscreen, x, y, down, err);
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -502,25 +592,51 @@ int main(int argc, char **argv) {
     }
 
     std::unique_ptr<Source> source;
+    LiveSource *live = nullptr;
     if (!o.path.empty()) {
         source = std::make_unique<FileSource>(o.path);
     } else {
-        auto live = std::make_unique<LiveSource>();
+        auto made = std::make_unique<LiveSource>();
         std::string err;
-        if (!live->start(o.serial, o.record, err)) {
+        if (!made->start(o.serial, o.record, err)) {
             std::fprintf(stderr, "起流失败: %s\n", err.c_str());
             return 1;
         }
-        source = std::move(live);
+        live = made.get();
+        source = std::move(made);
     }
-
-    auto decoder = scrctl::create_platform_decoder();
-    std::printf("解码后端: %s\n", decoder->backend_name());
+    const bool control_enabled = live != nullptr && !o.no_control;
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
         std::fprintf(stderr, "SDL 初始化失败: %s\n", SDL_GetError());
         return 1;
     }
+
+    // 输入通路的无头自检：注入一条直线就退出。用直线而不是点一下，是因为
+    // "画布被拖走一段"在截图上可判定，而一次点击在多数应用里没有可见后果。
+    if (live != nullptr && !o.test_touch.empty()) {
+        float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+        if (std::sscanf(o.test_touch.c_str(), "%f,%f,%f,%f", &x0, &y0, &x1, &y1) != 4) {
+            std::fprintf(stderr, "--test-touch 格式应为 X0,Y0,X1,Y1，收到 %s\n",
+                         o.test_touch.c_str());
+            return 2;
+        }
+        std::string cerr;
+        bool ok = true;
+        for (int i = 0; i <= 20 && ok; ++i) {
+            const double t = i / 20.0;
+            ok = live->control(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, i < 20, cerr);
+            if (i < 20) {
+                SDL_Delay(12);
+            }
+        }
+        std::printf("--test-touch (%.3f,%.3f)->(%.3f,%.3f): %s%s\n", x0, y0, x1, y1,
+                    ok ? "已注入" : "失败", ok ? "" : cerr.c_str());
+        return ok ? 0 : 1;
+    }
+
+    auto decoder = scrctl::create_platform_decoder();
+    std::printf("解码后端: %s\n", decoder->backend_name());
 
     int rendered = 0, decoded = 0, failed = 0;
     bool configured = false;
@@ -561,6 +677,21 @@ int main(int argc, char **argv) {
     std::string pull_err;
     bool quit = false;
 
+    /// 窗口里的一次按下/移动/抬起 -> 设备上的接触/抬起。
+    ///
+    /// 注入失败只打一次：这是本地窗口在动鼠标，失败刷屏会把有用的帧率信息冲掉。
+    std::string control_err;
+    bool control_warned = false;
+    auto on_touch = [&](double x, double y, bool down) {
+        if (!control_enabled || live == nullptr) {
+            return;
+        }
+        if (!live->control(x, y, down, control_err) && !control_warned) {
+            control_warned = true;
+            std::fprintf(stderr, "注入输入失败（已停止尝试）: %s\n", control_err.c_str());
+        }
+    };
+
     while (!quit) {
         if (queue.empty()) {
             // 没帧可画就去取一段。取不到（实时源的 50ms 超时）不是结束，
@@ -583,7 +714,7 @@ int main(int argc, char **argv) {
             // 没帧可画也要让窗口活着——此刻基本都是在等实时包到达，而等帧的时候
             // 不泵事件，窗口就是"未响应"。
             if (presenter != nullptr) {
-                quit = presenter->pump_and_should_quit();
+                quit = presenter->pump(on_touch);
             }
             continue;
         }
@@ -616,8 +747,8 @@ int main(int argc, char **argv) {
             const double el = (SDL_GetTicks64() - start) / 1000.0;
             std::printf("  渲染 %d 帧  %.1f fps  (解码 %d / 未出帧 %d)\n", rendered, rendered / el,
                         decoded, failed);
-            if (auto *live = dynamic_cast<LiveSource *>(source.get())) {
-                live->print_stats();
+            if (auto *ls = dynamic_cast<LiveSource *>(source.get())) {
+                ls->print_stats();
             }
             last_reported = rendered;
         }
@@ -625,7 +756,7 @@ int main(int argc, char **argv) {
             std::printf("达到 --exit-after %d\n", o.exit_after);
             break;
         }
-        quit = presenter->pump_and_should_quit();
+        quit = presenter->pump(on_touch);
     }
 
     std::printf("完成：渲染 %d 帧，解码 %d 帧，未出帧 %d 帧\n", rendered, decoded, failed);

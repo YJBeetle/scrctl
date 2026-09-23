@@ -139,6 +139,10 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(hid_test PRIVATE scrctl_core)
     add_test(NAME hid COMMAND hid_test)
 
+    add_executable(viewgeom_test tests/viewgeom_test.cpp)
+    target_link_libraries(viewgeom_test PRIVATE scrctl_core)
+    add_test(NAME viewgeom COMMAND viewgeom_test)
+
     add_executable(net_test tests/net_test.cpp)
     target_link_libraries(net_test PRIVATE scrctl_core)
     add_test(NAME net COMMAND net_test)
