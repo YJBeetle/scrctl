@@ -32,12 +32,25 @@ namespace scrctl::rt {
 /// 都少了 2 字节真实码流。留着它才正常。规范里"允许"的字段，这条流里没有。
 class HevcRtpDepacketizer {
 public:
+    /// 只处理这个 PT 的包。RTCP 与视频共用同一个 UDP 端口（实测 PT=72 的包
+    /// 就混在视频包里到达），不过滤就会把 RTCP 当 HEVC 载荷解，产出类型 0 之类
+    /// 的假 NAL 混进码流——而这条流不周期发 IDR，一个假 NAL 就把参考链永久打断。
+    explicit HevcRtpDepacketizer(uint8_t video_payload_type = 100)
+        : video_pt_(video_payload_type) {}
+
     struct Stats {
         uint64_t packets = 0;
         uint64_t nals = 0;
         /// 因分片不完整而丢弃的 NAL 数（丢包或中途 reset）。
         uint64_t dropped_fragments = 0;
         uint64_t malformed = 0;
+        /// RTP 序号跳变处数与据此推断丢的包数。这是"画面为什么糊"的第一个
+        /// 要看的数：丢一个分片就废一整帧，而且没有 IDR 就一直废下去。
+        uint64_t seq_gaps = 0;
+        uint64_t seq_lost = 0;
+        uint64_t reordered = 0;
+        /// 非视频 PT（RTCP 等）被跳过的包数。
+        uint64_t other_payload = 0;
     };
 
     /// 吃一个 UDP 数据报，把里面完整的 NAL 以 Annex-B（4 字节起始码）追加到 out。
@@ -53,6 +66,9 @@ public:
     [[nodiscard]] uint32_t fragment_timestamp() const { return partial_ts_; }
 
 private:
+    uint8_t video_pt_;
+    bool have_seq_ = false;
+    uint16_t last_seq_ = 0;
     std::vector<uint8_t> partial_;
     uint32_t partial_ts_ = 0;
     uint8_t partial_type_ = 0;

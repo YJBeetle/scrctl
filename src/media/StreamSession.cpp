@@ -112,12 +112,19 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
 
     Started started;
     started.answer = std::move(output);
-    // answer 里设备侧的发送端口在 connection.sender.port，形态是字符串还是整数
-    // 没固定说法，两种都试。
+
+    // answer 里设备侧的发送端口在 connection.sender.port，payload type 在
+    // connection.streamConfig.RxPayloadType。
     const auto *connection = started.answer.find("connection");
     if (connection != nullptr) {
-        const auto *sender = connection->find("sender");
-        if (sender != nullptr) {
+        // 这条流的 PT 是协商出来的，不是常量 100。RTCP 与视频共用一个 UDP 端口，
+        // 拆包器只能靠 PT 区分二者，所以这个值必须交给它。取低 7 位，因为 RTP 头里
+        // 的 payload type 字段就只有 7 位。
+        if (const auto *sc = connection->find("streamConfig"); sc != nullptr) {
+            started.payload_type =
+                static_cast<uint8_t>(sc->at("RxPayloadType").as_int_or(100) & 0x7F);
+        }
+        if (const auto *sender = connection->find("sender"); sender != nullptr) {
             // 端口在这套协议里有时是整数、有时是字符串（RSD 目录里就是字符串），
             // 两种都接下来：按整数读会拿到 0，然后永远收不到包。
             if (const auto *p = sender->find("port"); p != nullptr) {

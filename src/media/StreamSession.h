@@ -28,6 +28,9 @@ public:
     struct Started {
         /// 设备侧发源的端口（answer 里带；answer 没带则为 0，表示任意源都收）。
         uint16_t sender_port = 0;
+        /// 协商出来的视频 payload type（answer 的 streamConfig.RxPayloadType）。
+        /// 拆包器只认这个 PT，其余（同端口到达的 RTCP）跳过。
+        uint8_t payload_type = 100;
         /// answer 原文，供上层记录协商结果。
         scrctl::xpc::Value answer;
     };

@@ -84,7 +84,25 @@ bool HevcRtpDepacketizer::push(std::span<const uint8_t> datagram, std::vector<ui
         err = "不是 RTP 包";
         return false;
     }
+    if (info.payload_type != video_pt_) {
+        // RTCP 或别的复用流：整包跳过，且**不**参与序号统计——它的序号是
+        // 自己那条流的，混进来会造出假的丢包。
+        ++stats_.other_payload;
+        return true;
+    }
     ++stats_.packets;
+    // 序号连续性：int16 差值处理回绕。负数就是乱序到达（我们不重排，只记账）。
+    if (have_seq_) {
+        const int delta = static_cast<int16_t>(info.sequence - last_seq_);
+        if (delta > 1) {
+            ++stats_.seq_gaps;
+            stats_.seq_lost += static_cast<uint64_t>(delta - 1);
+        } else if (delta <= 0) {
+            ++stats_.reordered;
+        }
+    }
+    have_seq_ = true;
+    last_seq_ = info.sequence;
     std::span<const uint8_t> body = datagram.subspan(info.payload_offset);
 
     while (body.size() >= 2) {

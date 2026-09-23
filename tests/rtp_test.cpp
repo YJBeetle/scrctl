@@ -254,6 +254,34 @@ void test_single_and_offsets() {
     check(!d.push(v1, out3, err), "RTP 版本不是 2 被拒");
 }
 
+void test_payload_type_filter() {
+    std::printf("\n== 只收视频 PT ==\n");
+    // RTCP 与视频同端口到达（真机实测 PT=72）。不过滤就会被当 HEVC 载荷解出
+    // 假 NAL 混进码流，而这条流不周期发 IDR，一个假 NAL 就把参考链永久打断。
+    std::vector<uint8_t> rtcp;
+    rtcp.push_back(0x82);
+    rtcp.push_back(72);
+    rtcp.insert(rtcp.end(), 20, 0x00);
+    HevcRtpDepacketizer d;
+    std::string err;
+    std::vector<uint8_t> out;
+    d.push(packet(1, 0, false, aggregation({nal_header(32)})), out, err);
+    const auto after_video = out.size();
+    d.push(rtcp, out, err);
+    check(out.size() == after_video, "RTCP 包不产出任何字节");
+    check(d.stats().other_payload == 1 && d.stats().packets == 1,
+          "RTCP 记成 other_payload，不计入视频包数与序号");
+    // 序号也不能被它带跳：再来一个正常的下一号包，不该算丢包
+    d.push(packet(2, 100, true, single(1, {0xA4})), out, err);
+    check(d.stats().seq_gaps == 0, "夹了 RTCP 之后视频序号仍然连续");
+
+    // 配成别的 PT（比如协商到 96）时，100 的包不该被解
+    HevcRtpDepacketizer other(96);
+    std::vector<uint8_t> none;
+    other.push(packet(1, 0, false, single(1, {0xA4})), none, err);
+    check(none.empty() && other.stats().other_payload == 1, "PT 不匹配就整包跳过");
+}
+
 void test_feeds_annexb_parser() {
     std::printf("\n== 与 M1 的 AU 切分器对接 ==\n");
     // 拆包输出直接喂给 AnnexBParser，验证一帧一包 + 一帧多包都能切成 AU
@@ -295,6 +323,7 @@ int main() {
     test_fragmentation();
     test_lost_fragments();
     test_single_and_offsets();
+    test_payload_type_filter();
     test_feeds_annexb_parser();
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;
