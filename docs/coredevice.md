@@ -234,3 +234,70 @@ RBSP 里可能凭空出现 00 00 01，是否踩到取决于码流内容，所以
 一次 180 帧的实测：180/180 出帧，57.8 fps（软件渲染器，因为要回读窗口内容），
 序号断流 0、溢出丢弃 0、非视频包 3 个被跳过；窗口内容回读与设备截图逐像素比，
 平均绝对差 0.828。
+
+## 12. 触摸注入（实测，iPhone 14,4 / iOS 27.0 / USB）
+
+服务：`com.apple.coredevice.hid.universalhidservice`，feature
+`com.apple.coredevice.feature.remote.universalhidservice`。
+
+**外壳与 CoreDevice feature 那套不一样。** 这批 dtuhidd 服务要的是
+`{messageType: "Request", featureIdentifier: ..., payload: {<动作>: ...}}`，没有
+`CoreDevice.input` / `actionIdentifier` / `deviceIdentifier` 那一圈。拿
+`core_device_request()` 去调它，设备不安回。
+
+**投递的是原始 HID 报告，地址是 `_ServiceID`。** 真机列出 5 个面：
+
+```text
+  257  CoreDevice touchscreen(nil)     真数，58 字节报告（id 0x09）
+  512  CoreDevice keyboard             键盘面
+ 1026  CoreDevice mainScreenButtons    侧键组
+ 1280  CoreDevice avpCustom
+ 1281  CoreDevice touchscreenGesture   触控板式指针，19 字节报告（id 0x13）
+```
+
+mainTouchscreen 的 58 字节报告：
+
+```text
+  0     0x09            报告号
+  1-2   0x01 0x05
+  3     状态：0xC2 接触 / 0x02 抬起
+  4-7   X, Y            各 UInt16 LE，归一化 0..65535
+  8-39  32 字节 0
+  40-43 0x02 0x00 0x00 0x00
+  44-49 时间戳          6 字节 LE，单调即可
+  50-57 8 字节 0
+```
+
+一次点击 = 同一坐标上一个 CONTACT 加一个 RELEASE；一次拖动 = 一串推进坐标的
+CONTACT 加末尾一个 RELEASE。**没有** begin/end 操作码，每个 CONTACT 都是"此刻
+在此处接触着"。点与点之间要留间隔（实测 12-20ms 可用），瞬移式的拖动会被当成抖动。
+
+**坐标是归一化的，不是像素。** 所以注入代码与分辨率无关；但也别指望它替你处理
+方向：设备横过来时归一化轴跟着屏幕走，这是后面做旋转适配时要操心的事。
+
+**认证门：必须有一条在跑的媒体流。** 没有会话时 dtuhidd 把面标成
+`authenticated: NO / eventSource: externalAccessory`，backboardd 丢掉每个
+digitizer 事件（"ignoring digitizer event for display <main> from unsupported
+service"）。`startmediastream` 起来就把这两个标志翻成 YES，报告一路走到 UIKit
+变成真的 `UIEventTypeTouches`；流的载荷可以完全不看，只要它在跑。流起来之后
+稍等一下再发（本项目睡 300ms）。
+
+**`send` 不安回信。** 一发一收地等会等到超时——所以投递必须走"只发不收"。
+副作用是设备拒收时本侧毫无痕迹，"编码错了"和"发得好好的但应用没反应"长得一样。
+两条应对：留一条可选的一发一收路径专门用于排查；以及把整条消息钉成字节基准
+（`tests/hid_test.cpp` 里那份 284 字节的黄金向量来自一个确认能画出东西的客户端）。
+
+**查过面之后同一条连接就不能再注入。** 实测：`connectedServices` 的回信到手后
+设备关掉连接，之后的 `send` 全打在死连接上而"发送成功"。注入用的连接不要顺手
+拿去查面。
+
+**indigo 的 digitizer/keyboard/scroll 走不通。** 它们要 Apple 的 Mercury 对端
+事件外壳，设备收到 dispatch 后立刻 "Resetting gesture state then canceling"，
+不进任何 handler。`hid.indigo` 上确定能用的是 `remote.hid.button`
+（`{messageType: "IndigoButtonEvent", payload: {state, usagePage, usageCode}}`，
+usage page 0x0C 是 Consumer：home 0x40 / lock 0x30 / volup 0xE9 / voldn 0xEA /
+mute 0xE2，state 1 按下 2 抬起 3 取消）。
+
+**读设备日志这条路在 iOS 27 上不通。** `com.apple.syslog_relay.shim.remote`
+能连上，但一行都不发（ASL 早就不承载 os_log 了）。想看 dtuhidd 的态度得走
+os_trace/LogArchive，代价另说。
