@@ -1,6 +1,8 @@
 #pragma once
 
+#include <condition_variable>
 #include <cstdint>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -32,12 +34,15 @@ public:
     /// 读若干字节，最多等 timeout_ms。返回 false 表示超时、对端关闭或出错。
     bool recv(std::vector<uint8_t> &out, int timeout_ms, std::string &err);
 
-    /// 读满 n 字节，带总超时。
-    bool recv_exact(void *dst, size_t n, int timeout_ms, std::string &err);
-
     void close();
 
     [[nodiscard]] bool connected() const { return established_; }
+
+    /// 收到的"序号不连续"的段数与字节数。本实现不重排也不缓存：落在期望序号
+    /// 之外的数据报会被丢掉（同时回一个重复 ACK 催对端重传）。排查"HTTP/2 说
+    /// 帧长过大"这类症状时第一个要看的数就是这里——那是字节流缺了一段的表现。
+    [[nodiscard]] uint64_t dropped_segments() const { return dropped_segments_; }
+    [[nodiscard]] uint64_t dropped_bytes() const { return dropped_bytes_; }
 
 private:
     struct Segment {
@@ -48,12 +53,20 @@ private:
     };
 
     bool send_segment(uint8_t flags, const std::vector<uint8_t> &payload, std::string &err);
-    /// 驱动复用层收一个包；返回 false 表示超时或隧道终止。
-    bool pump_one(int timeout_ms, std::string &err);
+    /// 复用层把目的端口属于自己的段交进来（泵线程调用）。
     void on_segment(const uint8_t *l4, std::size_t len) override;
+    /// 处理一个属于本连接的段。**必须持有 m_ 调用**（泵线程派发时已经持着）。
     bool handle_segment(const uint8_t *l4, std::size_t len, std::string &err);
+    /// 等某个条件成立，或到时间/隧道断掉。返回 true 表示条件成立。
+    template <typename Pred>
+    bool wait_for(Pred ready, int timeout_ms, std::string &err);
 
     Stack &stack_;
+
+    /// 连接状态。入站段来自泵线程、出站与读取来自应用线程，两边都会碰这些字段，
+    /// 所以全部由 m_ 保护；cv_ 在状态变化时通知（数据到达、握手完成、对端关闭）。
+    mutable std::mutex m_;
+    std::condition_variable cv_;
 
     uint16_t sport_ = 0;
     uint16_t dport_ = 0;
@@ -65,6 +78,8 @@ private:
 
     std::vector<uint8_t> rx_;
     size_t rx_pos_ = 0;
+    uint64_t dropped_segments_ = 0;
+    uint64_t dropped_bytes_ = 0;
     /// 处理段时可能要从 on_segment（无返回值）里往外传错误：复用层只负责分发，
     /// 真正的失败要由正在等这条连接的人看到。
     std::string pending_err_;

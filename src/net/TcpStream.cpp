@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <random>
 
@@ -94,9 +95,13 @@ bool TcpStream::send_segment(uint8_t flags, const std::vector<uint8_t> &payload,
 
 void TcpStream::on_segment(const uint8_t *l4, std::size_t len) {
     std::string err;
-    if (!handle_segment(l4, len, err)) {
-        pending_err_ = err;
+    {
+        std::lock_guard<std::mutex> lock(m_);
+        if (!handle_segment(l4, len, err)) {
+            pending_err_ = err;
+        }
     }
+    cv_.notify_all();
 }
 
 bool TcpStream::handle_segment(const uint8_t *l4, std::size_t len, std::string &err) {
@@ -150,6 +155,13 @@ bool TcpStream::handle_segment(const uint8_t *l4, std::size_t len, std::string &
                 return false;
             }
         } else {
+            // 序号落在期望之外：不缓存、不重排，丢掉并回一个期望序号的 ACK
+            // （等价于重复 ACK，催对端重传）。计数是为了让"HTTP/2 帧长过大"
+            // 这种字节流缺段的症状能被立刻归因到这里，而不是留给人猜。
+            ++dropped_segments_;
+            dropped_bytes_ += payload_len;
+            std::fprintf(stderr, "    !! TCP 段序号不连续：期望 %u 收到 %u 长度 %zu，已丢弃\n",
+                         rcv_nxt_, seq, payload_len);
             std::vector<uint8_t> empty;
             send_segment(kAck, empty, err);
         }
@@ -164,42 +176,67 @@ bool TcpStream::handle_segment(const uint8_t *l4, std::size_t len, std::string &
     return true;
 }
 
-bool TcpStream::pump_one(int timeout_ms, std::string &err) {
-    if (!pending_err_.empty()) {
-        err = pending_err_;
-        pending_err_.clear();
-        return false;
+template <typename Pred>
+bool TcpStream::wait_for(Pred ready, int timeout_ms, std::string &err) {
+    std::unique_lock<std::mutex> lock(m_);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    for (;;) {
+        if (ready()) {
+            return true;
+        }
+        if (!pending_err_.empty()) {
+            err = pending_err_;
+            pending_err_.clear();
+            return false;
+        }
+        // 每轮都看一眼隧道状态：泵线程退出后再不会有段进来了，不查就只剩干等
+        // 满超时，而"隧道断了"和"这一时半会儿没数据"对调用方是两回事。
+        const std::string why = stack_.pump_error();
+        if (!why.empty()) {
+            err = why;
+            return false;
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return false;
+        }
+        cv_.wait_for(lock, std::chrono::milliseconds(50));
     }
-    // 复用层可能把这一轮收到的包发给别的端点（多条连接与 UDP 共用一条隧道），
-    // 那种情况下"成功"但这条连接没进展——调用方按自己的截止时间内重试即可。
-    return stack_.pump(timeout_ms, err);
 }
 
 bool TcpStream::connect(uint16_t peer_port, std::string &err) {
+    // 先把寻址状态摆好再登记。登记那一刻起泵线程就可能往这儿派段，所以这些
+    // 字段的初始化必须在登记之前、且不需要持锁（还没有别人知道这个端点）。
     dport_ = peer_port;
     sport_ = random_port();
-    stack_.attach_tcp(sport_, this);
     snd_nxt_ = random_seq();
     rcv_nxt_ = 0;
+    established_ = false;
+    peer_closed_ = false;
+    rx_.clear();
+    rx_pos_ = 0;
+    pending_err_.clear();
+    stack_.attach_tcp(sport_, this);
 
     const int64_t deadline = now_ms() + 15000;
     int64_t next_retry = now_ms() + 500;
     std::vector<uint8_t> no_payload;
-    if (!send_segment(kSyn, no_payload, err)) {
-        return false;
+    {
+        std::lock_guard<std::mutex> lock(m_);
+        if (!send_segment(kSyn, no_payload, err)) {
+            return false;
+        }
     }
     while (now_ms() < deadline) {
         const int slice = static_cast<int>(std::max<int64_t>(1, next_retry - now_ms()));
-        std::string pump_err;
-        if (pump_one(slice, pump_err)) {
+        if (wait_for([this] { return established_ || peer_closed_; }, slice, err)) {
             if (established_) {
                 return true;
             }
-        } else if (peer_closed_) {
             return err = "握手被 RST/关闭", false;
         }
         if (now_ms() >= next_retry) {
             next_retry = now_ms() + 500;
+            std::lock_guard<std::mutex> lock(m_);
             if (!send_segment(kSyn, no_payload, err)) {
                 return false;
             }
@@ -209,6 +246,7 @@ bool TcpStream::connect(uint16_t peer_port, std::string &err) {
 }
 
 bool TcpStream::send(std::string_view data, std::string &err) {
+    std::lock_guard<std::mutex> lock(m_);
     if (!established_) {
         return err = "连接未建立", false;
     }
@@ -229,54 +267,22 @@ bool TcpStream::send(std::string_view data, std::string &err) {
 
 bool TcpStream::recv(std::vector<uint8_t> &out, int timeout_ms, std::string &err) {
     out.clear();
-    const int64_t deadline = now_ms() + timeout_ms;
-    for (;;) {
-        if (rx_pos_ < rx_.size()) {
-            out.assign(rx_.begin() + static_cast<long>(rx_pos_), rx_.end());
-            rx_pos_ = rx_.size();
-            return true;
+    if (!wait_for([this] { return rx_pos_ < rx_.size() || peer_closed_; }, timeout_ms, err)) {
+        if (err.empty()) {
+            err = "读超时";
         }
-        if (peer_closed_) {
-            return err = "对端已关闭", false;
-        }
-        const int64_t left = deadline - now_ms();
-        if (left <= 0) {
-            return err = "读超时", false;
-        }
-        std::string pump_err;
-        if (!pump_one(static_cast<int>(left), pump_err) && !pump_err.empty() &&
-            pump_err.find("超时") == std::string::npos) {
-            err = pump_err;
-            return false;
-        }
+        return false;
     }
-}
-
-bool TcpStream::recv_exact(void *dst, size_t n, int timeout_ms, std::string &err) {
-    auto *p = static_cast<uint8_t *>(dst);
-    size_t got = 0;
-    const int64_t deadline = now_ms() + timeout_ms;
-    std::vector<uint8_t> chunk;
-    while (got < n) {
-        const int64_t left = deadline - now_ms();
-        if (left <= 0) {
-            return err = "读不满：超时", false;
-        }
-        if (!recv(chunk, static_cast<int>(left), err)) {
-            return false;
-        }
-        const size_t take = std::min(chunk.size(), n - got);
-        std::memcpy(p + got, chunk.data(), take);
-        got += take;
-        if (take < chunk.size()) {
-            // 多余部分留在 rx 缓冲里，下次继续取。
-            break;
-        }
+    if (rx_pos_ >= rx_.size()) {
+        return err = peer_closed_ ? "对端已关闭" : "读超时", false;
     }
-    return got == n;
+    out.assign(rx_.begin() + static_cast<long>(rx_pos_), rx_.end());
+    rx_pos_ = rx_.size();
+    return true;
 }
 
 void TcpStream::close() {
+    std::lock_guard<std::mutex> lock(m_);
     if (!established_ || sent_fin_) {
         return;
     }

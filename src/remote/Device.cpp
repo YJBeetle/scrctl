@@ -130,6 +130,10 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
         err = "隧道给的地址不是合法 IPv6";
         return std::nullopt;
     }
+    // 泵线程必须在任何连接之前起来：端点只从自己的队列取数据，没人替它们读隧道。
+    if (!dev->stack_->start_pump(err)) {
+        return std::nullopt;
+    }
     dev->rsd_ = Rsd::open(*dev->stack_, *dev->tunnel_, identity, err, verbose);
     if (!dev->rsd_) {
         return std::nullopt;

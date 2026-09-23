@@ -1,7 +1,10 @@
 #include "net/Stack.h"
 
 #include <arpa/inet.h>
+#include <chrono>
+#include <condition_variable>
 #include <cstring>
+#include <utility>
 
 namespace scrctl::net {
 namespace {
@@ -51,9 +54,56 @@ Stack::Stack(transport::PacketTunnel &tunnel, std::string local_ip_text, std::st
                        inet_pton(AF_INET6, peer_text_.c_str(), peer_addr_.data()) == 1;
 }
 
+Stack::~Stack() { stop_pump(); }
+
+bool Stack::start_pump(std::string &err) {
+    if (pumping_) {
+        err = "泵线程已经在跑";
+        return false;
+    }
+    stopping_ = false;
+    pumping_ = true;
+    pump_ = std::thread(&Stack::pump_loop, this);
+    return true;
+}
+
+void Stack::stop_pump() {
+    stopping_ = true;
+    if (pump_.joinable()) {
+        pump_.join();
+    }
+    pumping_ = false;
+}
+
+std::string Stack::pump_error() const {
+    std::lock_guard<std::mutex> lock(err_mu_);
+    return pump_err_;
+}
+
+void Stack::pump_loop() {
+    std::string err;
+    while (!stopping_) {
+        if (!pump_once(20, err)) {
+            if (stopping_) {
+                break;
+            }
+            // 超时继续等；真正的读失败说明隧道已经断了，端点那边再等下去
+            // 也不会有包进来，所以把原因留下来让它们能报错退出。
+            if (err.find("超时") == std::string::npos) {
+                std::lock_guard<std::mutex> lock(err_mu_);
+                pump_err_ = err;
+                break;
+            }
+        }
+    }
+    pumping_ = false;
+}
+
 bool Stack::send(const std::vector<uint8_t> &ipv6_packet, std::string &err) {
     // 每个 IPv6 包单独一次写。合并写会破坏 CoreDeviceProxy 转发路径的读边界，
-    // 实测足以把整条隧道打死。
+    // 实测足以把整条隧道打死。串行化是因为泵线程也会替连接发 ACK，两个写者
+    // 交叠同样会破坏包边界。
+    std::lock_guard<std::mutex> lock(write_mu_);
     return tunnel_.send_ipv6(ipv6_packet.data(), ipv6_packet.size(), err);
 }
 
@@ -72,12 +122,24 @@ std::vector<uint8_t> Stack::wrap(const std::vector<uint8_t> &l4, uint8_t next_he
     return out;
 }
 
-void Stack::attach_tcp(uint16_t local_port, TcpEndpoint *ep) { tcp_[local_port] = ep; }
-void Stack::detach_tcp(uint16_t local_port) { tcp_.erase(local_port); }
-void Stack::attach_udp(uint16_t local_port, UdpEndpoint *ep) { udp_[local_port] = ep; }
-void Stack::detach_udp(uint16_t local_port) { udp_.erase(local_port); }
+void Stack::attach_tcp(uint16_t local_port, TcpEndpoint *ep) {
+    std::lock_guard<std::mutex> lock(ep_mu_);
+    tcp_[local_port] = ep;
+}
+void Stack::detach_tcp(uint16_t local_port) {
+    std::lock_guard<std::mutex> lock(ep_mu_);
+    tcp_.erase(local_port);
+}
+void Stack::attach_udp(uint16_t local_port, UdpEndpoint *ep) {
+    std::lock_guard<std::mutex> lock(ep_mu_);
+    udp_[local_port] = ep;
+}
+void Stack::detach_udp(uint16_t local_port) {
+    std::lock_guard<std::mutex> lock(ep_mu_);
+    udp_.erase(local_port);
+}
 
-bool Stack::pump(int timeout_ms, std::string &err) {
+bool Stack::pump_once(int timeout_ms, std::string &err) {
     std::string wait_err;
     if (!tunnel_.wait_readable(timeout_ms, wait_err)) {
         err = wait_err.empty() ? "等入站包超时" : wait_err;
@@ -97,23 +159,25 @@ bool Stack::pump(int timeout_ms, std::string &err) {
     if (std::memcmp(packet.data() + 24, local_addr_.data(), 16) != 0) {
         return true;
     }
+    // 派发期间一直持分发锁。端点析构时先 detach_tcp 再释放自己，那条 detach
+    // 要等这把锁，于是"刚把指针取出来就被释放"这个窗口被关死；放锁再派发就
+    // 关不掉。锁序因此是固定的：ep_mu_ -> 端点自己的锁 -> 写锁，任何路径都
+    // 不反过来（端点发段时不碰 ep_mu_），所以不会成环。
+    std::lock_guard<std::mutex> lock(ep_mu_);
     if (next == 6) {
         const uint16_t dport = get16(packet.data() + l4 + 2);
         auto it = tcp_.find(dport);
         if (it != tcp_.end()) {
             it->second->on_segment(packet.data() + l4, packet.size() - l4);
         }
-        return true;
-    }
-    if (next == 17) {
+    } else if (next == 17) {
         const uint16_t dport = get16(packet.data() + l4 + 2);
         auto it = udp_.find(dport);
         if (it != udp_.end()) {
             it->second->on_datagram(packet.data() + l4, packet.size() - l4);
         }
-        return true;
     }
-    return true;  // ICMPv6 等：本实现不处理
+    return true;  // 没匹配到端点也算成功：分发本来就是尽力而为
 }
 
 }  // namespace scrctl::net

@@ -1,9 +1,12 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <map>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "transport/Tunnel.h"
@@ -19,11 +22,18 @@ class UdpEndpoint;
 /// 中同时需要「RSD 控制连接 + 显示服务连接 + HID 服务连接 + 设备反推过来的 RTP
 /// UDP」，所以入站 IPv6 包必须有一个按协议和端口分发的唯一入口。
 ///
+/// 这个唯一入口就是 `start_pump()` 起的那一个线程。它读隧道、分发，端点只从自己
+/// 的队列取数据并等待——端点不再自己驱动复用层。之前是端点各自 pump，实测后果是
+/// 「镜像在跑时打开 HID 服务」直接失败：收流线程与握手线程同时在同一条隧道上读，
+/// 一方把另一方的 TCP 字节当成自己的包读走了。
+///
 /// 不做的事：邻居发现、路由、分片重组、ICMPv6、多播。隧道的对端只有一个，
 /// 地址是握手时协商好的两个，这些能力在这里没有用武之地。
 class Stack {
 public:
     Stack(transport::PacketTunnel &tunnel, std::string local_ip_text, std::string peer_ip_text);
+    /// 停泵线程并等它退出。端点必须在复用层之前析构（Device 的成员顺序保证了这点）。
+    ~Stack();
 
     [[nodiscard]] bool addresses_ok() const { return addresses_valid_; }
     [[nodiscard]] const std::array<uint8_t, 16> &local_addr() const { return local_addr_; }
@@ -31,13 +41,19 @@ public:
     [[nodiscard]] const std::string &local_text() const { return local_text_; }
     [[nodiscard]] const std::string &peer_text() const { return peer_text_; }
 
+    /// 起泵线程。整个栈的生命周期里只该调一次，且要在任何端点登记之前。
+    bool start_pump(std::string &err);
+    void stop_pump();
+    [[nodiscard]] bool pumping() const { return pumping_; }
+
+    /// 泵线程退出的原因（通常是隧道断了）。端点等不到数据时把它转给调用方，
+    /// 否则"隧道已经死了"在调用方看来和"再等等就好"没有区别。
+    [[nodiscard]] std::string pump_error() const;
+
     /// 发一个完整的 IPv6 包。**每包一次 write**：把多个包合并成一次写会破坏
     /// CoreDeviceProxy 转发路径的读边界，实测会把隧道打死。
+    /// 写要串行：泵线程替连接发 ACK 的同时，应用线程可能在发请求。
     bool send(const std::vector<uint8_t> &ipv6_packet, std::string &err);
-
-    /// 读一个入站包并按协议 + 端口分发。返回 false 表示超时或隧道已断。
-    /// 不属于任何已登记端点的包被丢弃后仍算成功——分发本来就是尽力而为。
-    bool pump(int timeout_ms, std::string &err);
 
     void attach_tcp(uint16_t local_port, TcpEndpoint *ep);
     void detach_tcp(uint16_t local_port);
@@ -48,14 +64,28 @@ public:
     std::vector<uint8_t> wrap(const std::vector<uint8_t> &l4, uint8_t next_header) const;
 
 private:
+    void pump_loop();
+    /// 读一个入站包并分发。只在泵线程里跑。
+    bool pump_once(int timeout_ms, std::string &err);
+
     transport::PacketTunnel &tunnel_;
     std::string local_text_;
     std::string peer_text_;
     std::array<uint8_t, 16> local_addr_{};
     std::array<uint8_t, 16> peer_addr_{};
     bool addresses_valid_ = false;
+
+    /// 分发表：泵线程读，端点构造/析构时写。
+    mutable std::mutex ep_mu_;
     std::map<uint16_t, TcpEndpoint *> tcp_;
     std::map<uint16_t, UdpEndpoint *> udp_;
+
+    std::mutex write_mu_;
+    std::thread pump_;
+    std::atomic<bool> stopping_{false};
+    std::atomic<bool> pumping_{false};
+    mutable std::mutex err_mu_;
+    std::string pump_err_;
 };
 
 /// IPv6 下的 L4 校验和必须带伪头，且**不能省略**：TCP/UDP 在 IPv6 里写 0 表示

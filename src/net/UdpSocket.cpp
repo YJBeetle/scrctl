@@ -14,11 +14,6 @@ void put16(uint8_t *p, uint16_t v) {
     p[1] = static_cast<uint8_t>(v);
 }
 
-int64_t now_ms() {
-    using namespace std::chrono;
-    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-}
-
 }  // namespace
 
 UdpSocket::~UdpSocket() {
@@ -62,34 +57,54 @@ bool UdpSocket::send(const std::vector<uint8_t> &payload, uint16_t peer_port, st
 }
 
 void UdpSocket::on_datagram(const uint8_t *l4, std::size_t len) {
-    if (len < kUdpHeaderLen) {
-        ++dropped_;
-        return;
+    std::size_t dropped_now = 0;
+    {
+        std::lock_guard<std::mutex> lock(m_);
+        auto reject = [&] {
+            ++dropped_;
+            ++dropped_now;
+            return;
+        };
+        if (len < kUdpHeaderLen) {
+            reject();
+            return;
+        }
+        const std::size_t declared = get16(l4 + 4);
+        if (declared < kUdpHeaderLen || declared > len) {
+            reject();
+            return;
+        }
+        const uint16_t wire_sum = get16(l4 + 6);
+        if (wire_sum == 0) {
+            reject();  // IPv6 下 0 表示未计算，按规范丢弃
+            return;
+        }
+        std::vector<uint8_t> copy(l4, l4 + declared);
+        const uint16_t check = l4_checksum(stack_.peer_addr().data(), stack_.local_addr().data(),
+                                           copy.data(), copy.size(), kNextHeaderUdp);
+        if (check != 0) {
+            reject();
+            return;
+        }
+        if (queue_.size() >= kMaxQueue) {
+            // 丢最老的，保住"最新画面"这条性质：消费者要的是现在，不是三秒前。
+            queue_.pop_front();
+            ++dropped_;
+            ++dropped_now;
+            return;
+        }
+        queue_.emplace_back(Packet{get16(l4 + 0),
+                                   std::vector<uint8_t>(l4 + kUdpHeaderLen, l4 + declared)});
     }
-    const std::size_t declared = get16(l4 + 4);
-    if (declared < kUdpHeaderLen || declared > len) {
-        ++dropped_;
-        return;
+    if (dropped_now == 0) {
+        cv_.notify_all();
     }
-    const uint16_t wire_sum = get16(l4 + 6);
-    if (wire_sum == 0) {
-        ++dropped_;  // IPv6 下 0 表示未计算，按规范丢弃
-        return;
-    }
-    std::vector<uint8_t> copy(l4, l4 + declared);
-    const uint16_t check = l4_checksum(stack_.peer_addr().data(), stack_.local_addr().data(),
-                                       copy.data(), copy.size(), kNextHeaderUdp);
-    if (check != 0) {
-        ++dropped_;
-        return;
-    }
-    queue_.push_back(Packet{get16(l4 + 0),
-                            std::vector<uint8_t>(l4 + kUdpHeaderLen, l4 + declared)});
 }
 
 bool UdpSocket::recv(std::vector<uint8_t> &payload, uint16_t &peer_port, int timeout_ms,
                      std::string &err) {
-    const auto deadline = now_ms() + timeout_ms;
+    std::unique_lock<std::mutex> lock(m_);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
     for (;;) {
         if (!queue_.empty()) {
             peer_port = queue_.front().peer_port;
@@ -97,18 +112,28 @@ bool UdpSocket::recv(std::vector<uint8_t> &payload, uint16_t &peer_port, int tim
             queue_.pop_front();
             return true;
         }
-        const auto left = deadline - now_ms();
-        if (left <= 0) {
+        // 泵线程退出后再等也不会有包进来，立刻把原因交出去。
+        const std::string why = stack_.pump_error();
+        if (!why.empty()) {
+            err = why;
+            return false;
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
             err = "收数据报超时";
             return false;
         }
-        if (!stack_.pump(static_cast<int>(left), err)) {
-            if (!queue_.empty()) {
-                continue;  // 断开前落地的最后一个数据报还是要交出去
-            }
-            return false;
-        }
+        cv_.wait_for(lock, std::chrono::milliseconds(50));
     }
+}
+
+std::size_t UdpSocket::buffered() const {
+    std::lock_guard<std::mutex> lock(m_);
+    return queue_.size();
+}
+
+std::size_t UdpSocket::dropped() const {
+    std::lock_guard<std::mutex> lock(m_);
+    return dropped_;
 }
 
 }  // namespace scrctl::net
