@@ -301,3 +301,41 @@ mute 0xE2，state 1 按下 2 抬起 3 取消）。
 **读设备日志这条路在 iOS 27 上不通。** `com.apple.syslog_relay.shim.remote`
 能连上，但一行都不发（ASL 早就不承载 os_log 了）。想看 dtuhidd 的态度得走
 os_trace/LogArchive，代价另说。
+
+## 13. 停流、关键帧请求与恢复（实测）
+
+**`stopmediastream` 的入参是 `{stopAll: Bool}`**，且必须**另开一条连接**去发
+（复用发起 start 的那条有崩溃前科）。成功回：
+
+```text
+{serverInfo: {sessions: [], running: false, runDurationSeconds: 0},
+ stoppedStreams: [4027965869]}
+```
+
+`stoppedStreams` 里那个数是 **offer 里的 u32 session_id**，不是起流时那个
+`avcMediaStreamOptionClientSessionID` UUID——两条标识各管各的。形状是问出来的：
+不带 `stopAll` 的四种候选形状设备都回 `Expected to find key stopAll.`；
+`stopAll` 给整数回 `Expected to decode Bool but found a OS_xpc_uint64`（Swift
+Codable，类型必须严格）；`stopAll=false` 配 ClientSessionID 回
+`Unable to stop media stream. Invalid request sent.`（code 9009）。定向停要的是
+别的标识符，本项目只跑一条流，没继续挖。
+
+**RTCP PLI 设备不理。** 这是 `tools/pli_probe` 专门测出来的负结果：起流后发一个
+RFC 4585 的 PLI（`0x81 206 len=2` + sender SSRC + media SSRC，12 字节），目的
+端口取 RTCP 实测的源端口（观测到 RTCP 与 RTP 同端口，不是 RFC 3550 的"奇数端口"
+惯例），两种 sender SSRC 取值（等于媒体 SSRC / 另给一个）各测一遍：
+
+```text
+基线 3 秒：包 247，IRAP 类型: 20        ← 起流那一个关键帧
+PLI 后 6 秒：包 2529，IRAP 类型:（空）
+```
+
+**这个实验第一版是错的**，值得记下来：一开始对着静止的无边记画布测，4 秒后一个
+包都收不到，"PLI 之后没有 IDR"看着成立，其实是因为**画面没在动、编码器根本不出
+帧**。现在探针在观察窗里自己拖动画布制造持续变化（包数从 247/3s 涨到 2529/6s，
+证明内容确实在动），此时仍然等不到 IRAP，负结果才算立得住。测一个"设备不理我们"
+的结论之前，先证明"设备在理别人"。
+
+**所以坏画面的唯一恢复手段是重起媒体会话**：停旧流、起新流，新会话必然带一个
+关键帧。判据要两个条件同时成立——序号断流增加 **且** 距上一次关键帧超过 2 秒。
+只看断流会误伤，丢一个分片也许下一帧就是关键帧。

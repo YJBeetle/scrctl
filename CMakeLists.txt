@@ -120,6 +120,9 @@ target_link_libraries(stream_probe PRIVATE scrctl_core)
 add_executable(hid_probe tools/hid_probe.cpp)
 target_link_libraries(hid_probe PRIVATE scrctl_core)
 
+add_executable(pli_probe tools/pli_probe.cpp)
+target_link_libraries(pli_probe PRIVATE scrctl_core)
+
 # ---------------------------------------------------------------- tests -----
 if(SCRCTL_BUILD_TESTS)
     enable_testing()
