@@ -33,6 +33,9 @@ public:
         uint8_t payload_type = 100;
         /// answer 原文，供上层记录协商结果。
         scrctl::xpc::Value answer;
+        /// 我们这次起流用的会话号（`avcMediaStreamOptionClientSessionID`），
+        /// 16 字节的 XPC UUID 原文。stopmediastream 要拿它来指认是哪条会话。
+        std::vector<uint8_t> session_uuid;
     };
 
     /// 在已经建好的会话（含隧道与 RSD 目录）上起流。
@@ -45,6 +48,23 @@ public:
 
     /// 取一个 RTP 包（UDP 数据报原文）。
     bool next_packet(std::vector<uint8_t> &packet, int timeout_ms, std::string &err);
+    /// 同上，并带出对端端口——回 RTCP 时要发给"包是从哪个端口来的"，
+    /// 而不是猜一个。
+    bool next_packet(std::vector<uint8_t> &packet, uint16_t &peer_port, int timeout_ms,
+                     std::string &err);
+
+    /// 往隧道对端的某个端口发一个数据报（RTCP 反馈用）。
+    bool send_rtp(const std::vector<uint8_t> &payload, uint16_t peer_port, std::string &err);
+
+    /// 停掉这条流。**必须另开一条连接**：设备侧对"复用发起 start 的那条连接发
+    /// stop"有崩溃前科。
+    ///
+    /// 入参形状是设备自己教的：四种形状都回 "Expected to find key stopAll."，
+    /// 带上 `stopAll: Bool` 就成功，回 `{serverInfo: {running: false...},
+    /// stoppedStreams: [<u32>]}`——那个 u32 就是 offer 里的 session_id，不是
+    /// 起流时那个 UUID。`stopAll` 给整数会被 Swift Codable 拒（"Expected to
+    /// decode Bool but found a OS_xpc_uint64"）。
+    bool stop(scrctl::remote::Device &device, std::string &err, bool verbose = false) const;
 
     [[nodiscard]] uint16_t receiver_port() const;
     [[nodiscard]] const Started &started() const { return started_; }

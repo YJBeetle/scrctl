@@ -112,6 +112,10 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
 
     Started started;
     started.answer = std::move(output);
+    // 会话号就在请求体的 typed 包装里，从 input 读回来即可，不必让
+    // build_start_request 多带一个出参。
+    started.session_uuid =
+        input.at("options").at("avcMediaStreamOptionClientSessionID").at("uuid").data;
 
     // answer 里设备侧的发送端口在 connection.sender.port，payload type 在
     // connection.streamConfig.RxPayloadType。
@@ -143,7 +147,28 @@ StreamSession::~StreamSession() = default;
 
 bool StreamSession::next_packet(std::vector<uint8_t> &packet, int timeout_ms, std::string &err) {
     uint16_t peer_port = 0;
+    return next_packet(packet, peer_port, timeout_ms, err);
+}
+
+bool StreamSession::next_packet(std::vector<uint8_t> &packet, uint16_t &peer_port,
+                                int timeout_ms, std::string &err) {
     return socket_->recv(packet, peer_port, timeout_ms, err);
+}
+
+bool StreamSession::send_rtp(const std::vector<uint8_t> &payload, uint16_t peer_port,
+                             std::string &err) {
+    return socket_->send(payload, peer_port, err);
+}
+
+bool StreamSession::stop(remote::Device &device, std::string &err, bool verbose) const {
+    // feature() 每次调用都新开一条连接，正是这里要的：不能复用起流那条。
+    auto input = xpc::make_dict();
+    xpc::dict_set(input, "stopAll", xpc::make_bool(true));
+    xpc::Value output;
+    return device.feature("com.apple.coredevice.displayservice",
+                          "com.apple.coredevice.feature.stopmediastream",
+                          "com.apple.coredevice.action.mediastreamstop", input, output, err,
+                          verbose, 10000);
 }
 
 uint16_t StreamSession::receiver_port() const { return socket_->local_port(); }

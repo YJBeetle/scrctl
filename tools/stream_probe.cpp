@@ -8,6 +8,7 @@
 // 8 字节一度被当成"苹果私有子头"，而真正的形状要从原始字节上量出来才看得见。
 #include <chrono>
 #include <cstdio>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -31,12 +32,15 @@ void hexdump(const std::vector<uint8_t> &b, std::size_t n) {
 int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     bool verbose = false;
+    bool try_stop = false;
     std::string out = "/tmp/rtp.bin";
     int seconds = 3;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "-v" || a == "--verbose") {
             verbose = true;
+        } else if (a == "--stop") {
+            try_stop = true;
         } else if (a == "-o" && i + 1 < argc) {
             out = argv[++i];
         } else if (a == "-t" && i + 1 < argc) {
@@ -98,5 +102,67 @@ int main(int argc, char **argv) {
     std::printf("共 %zu 个包 / %zu 字节，%.2f 秒 -> %.1f 包/秒, %.2f Mbps\n", count, bytes, secs,
                 count / secs, bytes * 8.0 / secs / 1e6);
     std::printf("已存 %s\n", out.c_str());
+
+    if (try_stop) {
+        // stopmediastream 的入参形状没记录。设备的错误信息会点名缺哪个键
+        // （"Expected to decode UUID but found a OS_xpc_string" 之类），
+        // 所以一次试几种形状、把每种的回话原样打出来，比照着别的实现猜快。
+        auto typed = [](std::string_view kind, scrctl::xpc::Value v) {
+            scrctl::xpc::Value w = scrctl::xpc::make_dict();
+            scrctl::xpc::dict_set(w, std::string(kind), std::move(v));
+            return w;
+        };
+        const auto uuid = scrctl::xpc::make_uuid(std::span<const uint8_t>(session->started().session_uuid));
+        struct Candidate {
+            const char *label;
+            std::string action;
+            scrctl::xpc::Value input;
+        };
+        std::vector<Candidate> cands;
+        // 第一轮设备对四种形状都回 "Expected to find key stopAll."，所以这一轮
+        // 全带上 stopAll，只变它的类型和伴生键。
+        {
+            auto in = scrctl::xpc::make_dict();
+            scrctl::xpc::dict_set(in, "stopAll", scrctl::xpc::make_bool(true));
+            cands.push_back({"stopAll=true", "com.apple.coredevice.action.mediastreamstop",
+                             std::move(in)});
+        }
+        {
+            auto in = scrctl::xpc::make_dict();
+            scrctl::xpc::dict_set(in, "stopAll", scrctl::xpc::make_bool(true));
+            scrctl::xpc::dict_set(in, "type", scrctl::xpc::make_string("video"));
+            cands.push_back({"stopAll=true + type", "com.apple.coredevice.action.mediastreamstop",
+                             std::move(in)});
+        }
+        {
+            auto in = scrctl::xpc::make_dict();
+            scrctl::xpc::dict_set(in, "stopAll", scrctl::xpc::make_uint64(1));
+            cands.push_back({"stopAll=uint64 1", "com.apple.coredevice.action.mediastreamstop",
+                             std::move(in)});
+        }
+        {
+            auto in = scrctl::xpc::make_dict();
+            scrctl::xpc::dict_set(in, "stopAll", scrctl::xpc::make_bool(false));
+            auto opts = scrctl::xpc::make_dict();
+            scrctl::xpc::dict_set(opts, "avcMediaStreamOptionClientSessionID",
+                                  typed("uuid", uuid));
+            scrctl::xpc::dict_set(in, "options", std::move(opts));
+            scrctl::xpc::dict_set(in, "type", scrctl::xpc::make_string("video"));
+            cands.push_back({"stopAll=false + ClientSessionID",
+                             "com.apple.coredevice.action.mediastreamstop", std::move(in)});
+        }
+        for (auto &c : cands) {
+            scrctl::xpc::Value out_value;
+            std::string serr;
+            const char *action = c.action.empty()
+                                     ? "com.apple.coredevice.action.mediastreamstop"
+                                     : c.action.c_str();
+            const bool ok = dev->feature("com.apple.coredevice.displayservice",
+                                            "com.apple.coredevice.feature.stopmediastream", action,
+                                            c.input, out_value, serr, verbose, 8000);
+            std::printf("\nstop 形状[%s] -> %s\n", c.label,
+                        ok ? ("成功: " + scrctl::xpc::describe(out_value)).c_str() : serr.c_str());
+        }
+    }
     return count > 0 ? 0 : 1;
 }
