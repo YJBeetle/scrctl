@@ -111,4 +111,20 @@ private:
     uint64_t gaps_at_last_check_ = 0;
 };
 
+/// 编码帧里"真正显示出来"的那一块。
+struct DisplayCrop {
+    int x = 0, y = 0, w = 0, h = 0;
+};
+
+/// 设备编码分辨率比逻辑显示大（HEVC 按 CTU 对齐填充），多出来的是垃圾像素。
+/// 实测 iPhone 13 mini：编码 1136x2464，逻辑显示 1125x2436，右 11px / 底 28px。
+///
+/// 不裁会有两个后果：画面边缘有一条噪声，以及**触摸坐标偏**——触摸面的 0..1 是
+/// 相对逻辑显示的，用编码尺寸当分母会在右下方向错出 1% 左右。
+///
+/// 正解是读 SPS 的 conformance window，那样任何机型都不用列数字；在做到那步之前，
+/// 至少让"猜出来的这对数字"只存在于一个函数里、被一个测试钉住，而不是散在
+/// 应用和控制器两边。
+[[nodiscard]] DisplayCrop display_crop(int coded_w, int coded_h);
+
 }  // namespace scrctl::media

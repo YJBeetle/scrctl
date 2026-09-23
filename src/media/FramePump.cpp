@@ -242,4 +242,11 @@ void FramePump::size(int &width, int &height) const {
     height = height_;
 }
 
+DisplayCrop display_crop(int coded_w, int coded_h) {
+    if (coded_w == 1136 && coded_h == 2464) {
+        return DisplayCrop {0, 0, 1125, 2436};
+    }
+    return DisplayCrop {0, 0, coded_w, coded_h};
+}
+
 }  // namespace scrctl::media

@@ -30,6 +30,7 @@
 #include "bitstream/AnnexB.h"
 #include "decode/Decoder.h"
 #include "hid/Hid.h"
+#include "media/FramePump.h"
 #include "media/StreamSession.h"
 #include "remote/Device.h"
 #include "rt/RtpHevc.h"
@@ -144,15 +145,17 @@ using scrctl::app::Crop;
 using scrctl::app::display_fraction;
 
 Crop resolve_crop(const Options &o, const scrctl::Frame &f) {
+    const auto auto_crop = scrctl::media::display_crop(static_cast<int>(f.width),
+                                                       static_cast<int>(f.height));
     Crop c;
     if (o.crop_set) {
         c = {o.crop_x, o.crop_y, o.crop_w, o.crop_h, o.crop_w, o.crop_h};
-    } else if (f.width == 1136 && f.height == 2464) {
-        c = {0, 0, 1125, 2436, 1125, 2436};
-        std::printf("自动裁剪 1136x2464 -> 1125x2436（CTU 填充：右 11px / 底 28px）\n");
     } else {
-        c = {0, 0, static_cast<int>(f.width), static_cast<int>(f.height),
-             static_cast<int>(f.width), static_cast<int>(f.height)};
+        c = {auto_crop.x, auto_crop.y, auto_crop.w, auto_crop.h, auto_crop.w, auto_crop.h};
+        if (static_cast<int>(f.width) != auto_crop.w || static_cast<int>(f.height) != auto_crop.h) {
+            std::printf("自动裁剪 %ux%u -> %dx%d（CTU 填充）\n", f.width, f.height, auto_crop.w,
+                        auto_crop.h);
+        }
     }
     c.x = std::max(0, std::min(c.x, static_cast<int>(f.width) - 1));
     c.y = std::max(0, std::min(c.y, static_cast<int>(f.height) - 1));

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "media/FramePump.h"
 #include "media/MediaOffer.h"
 #include "plist/Bplist.h"
 #include "util/Deflate.h"
@@ -159,6 +160,19 @@ std::string as_text(const std::vector<uint8_t> &b) {
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     using namespace scrctl::media;
+
+    std::printf("\n== 编码帧到逻辑显示的裁剪 ==\n");
+    {
+        // 真机那对数字：编码 1136x2464，逻辑显示 1125x2436（右 11 / 底 28 是 CTU 填充）。
+        const auto c = scrctl::media::display_crop(1136, 2464);
+        check(c.x == 0 && c.y == 0 && c.w == 1125 && c.h == 2436,
+              "1136x2464 -> 1125x2436");
+        // 认不出的尺寸必须原样给回去，不能"顺手"裁一刀。
+        const auto passthrough = scrctl::media::display_crop(1290, 2796);
+        check(passthrough.w == 1290 && passthrough.h == 2796, "未知分辨率不裁");
+        const auto zero = scrctl::media::display_crop(0, 0);
+        check(zero.w == 0 && zero.h == 0, "0x0 不崩");
+    }
 
     std::printf("== zlib stored 容器自身 ==\n");
     {
