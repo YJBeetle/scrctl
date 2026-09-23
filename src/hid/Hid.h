@@ -90,6 +90,7 @@ inline constexpr uint16_t kBackspace = 0x2A;
 inline constexpr uint16_t kTab = 0x2B;
 inline constexpr uint16_t kSpace = 0x2C;
 inline constexpr uint16_t kShiftLeft = 0xE1;  ///< 修饰键 0xE0..0xE7 各占一位
+inline constexpr uint16_t kGuiLeft = 0xE3;    ///< 即 iOS 上的 Command 键
 }  // namespace key
 
 /// 39 字节的虚拟键盘报告（报告号 0x01）。
@@ -150,6 +151,12 @@ public:
     /// 另算。
     bool type(uint64_t surface, const std::vector<uint16_t> &usages, int hold_ms,
               std::string &err);
+
+    /// 组合键（如 Command+V）。修饰键（usage >= 0xE0）会**先单独按下**，再发
+    /// "修饰键 + 主键"，最后全松——和 text_reports 里 Shift 的规矩同源：合成一条
+    /// 报告发过去，iOS 只会当主键被按了，修饰没生效。
+    bool press_chord(uint64_t surface, const std::vector<uint16_t> &usages, int hold_ms,
+                     std::string &err);
 
     /// 往设备自带的键盘面上敲一段 ASCII。前提是有文本框正获得焦点——没有焦点时
     /// 报告会照发不误但没有任何可见结果，所以"没生效"要先去查焦点。

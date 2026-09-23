@@ -72,6 +72,7 @@ int main(int argc, char **argv) {
     bool line = false;
     bool probe_reply = false;
     std::string keys;
+    bool paste = false;
     double lx0 = 0.2, ly0 = 0.66, lx1 = 0.32, ly1 = 0.70;
     bool with_stream = true;
     bool want_tap = false;
@@ -101,6 +102,8 @@ int main(int argc, char **argv) {
             lx1 = std::atof(argv[i + 3]);
             ly1 = std::atof(argv[i + 4]);
             i += 4;
+        } else if (a == "--paste") {
+            paste = true;
         } else if (a == "--keys" && i + 1 < argc) {
             keys = argv[++i];
         } else if (a == "--probe-reply") {
@@ -230,7 +233,20 @@ int main(int argc, char **argv) {
             }
         }
     }
-    if (!list && !want_tap && !stroke && !line && !probe_reply && !raw_surfaces && keys.empty()) {
+    if (paste) {
+        // Command+V。iOS 接了外接键盘时这是通用粘贴手势，所以"剪贴板 + 一次按键"
+        // 就是非 ASCII 文本的输入路径。
+        std::printf("发 Command+V\n");
+        if (!hid->press_chord(scrctl::hid::kSurfaceKeyboard,
+                              { scrctl::hid::key::kGuiLeft,
+                                uint16_t { scrctl::hid::key::kA + 21 } },  // v
+                              60, err)) {
+            std::fprintf(stderr, "粘贴失败: %s\n", err.c_str());
+            rc = 1;
+        }
+    }
+    if (!list && !want_tap && !stroke && !line && !probe_reply && !raw_surfaces &&
+        keys.empty() && !paste) {
         usage(argv[0]);
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(200));

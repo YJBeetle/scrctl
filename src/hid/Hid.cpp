@@ -203,6 +203,28 @@ bool Service::type(uint64_t surface, const std::vector<uint16_t> &usages, int ho
     return send_report(surface, keyboard_report({}), err);
 }
 
+bool Service::press_chord(uint64_t surface, const std::vector<uint16_t> &usages, int hold_ms,
+                          std::string &err) {
+    std::vector<uint16_t> modifiers;
+    for (const uint16_t u : usages) {
+        if (u >= 0xE0 && u <= 0xE7) {
+            modifiers.push_back(u);
+        }
+    }
+    // 先只按修饰键：iOS 读位图时要求修饰键已经在按下状态，主键才带上档/组合效果。
+    if (!modifiers.empty() &&
+        !send_report(surface, keyboard_report(modifiers), err)) {
+        return false;
+    }
+    if (!send_report(surface, keyboard_report(usages), err)) {
+        return false;
+    }
+    if (hold_ms > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(hold_ms));
+    }
+    return send_report(surface, keyboard_report({}), err);
+}
+
 bool Service::type_text(const std::string &text, int hold_ms, std::string &err) {
     for (const auto &usages : text_reports(text)) {
         if (!send_report(kSurfaceKeyboard, keyboard_report(usages), err)) {
