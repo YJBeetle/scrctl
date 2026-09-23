@@ -26,13 +26,13 @@ using scrctl::xpc::make_dict;
 using scrctl::xpc::make_string;
 using scrctl::xpc::Value;
 
-std::vector<std::string> split(const std::string& s)
+std::vector<std::string> split(const std::string& s, char sep = ',')
 {
     std::vector<std::string> out;
     size_t pos = 0;
     std::string rest = s;
     while (true) {
-        pos = rest.find(',');
+        pos = rest.find(sep);
         const auto part = rest.substr(0, pos);
         if (!part.empty()) {
             out.push_back(part);
@@ -145,6 +145,46 @@ TypeHint type_hint(const std::string& err)
     return { join_path(coding_path(err)), err.substr(from, end - from) };
 }
 
+/// 沿点号路径走到（并按需创建）叶子所在的容器。路径段是纯数字时父层按数组处理，
+/// 其余按字典处理——Swift 那边 items 这类字段是数组，不支持数组就表达不进去。
+Value* descend_any(Value& root, const std::vector<std::string>& parts)
+{
+    Value* cur = &root;
+    for (size_t i = 0; i < parts.size(); ++i) {
+        const bool want_index = !parts[i].empty() && parts[i].find_first_not_of("0123456789") == std::string::npos;
+        if (want_index) {
+            if (cur->type != scrctl::xpc::Type::Array) {
+                cur->type = scrctl::xpc::Type::Array;
+                cur->array.clear();
+            }
+            const auto idx = static_cast<size_t>(std::stoul(parts[i]));
+            while (cur->array.size() <= idx) {
+                cur->array.push_back(make_dict());
+            }
+            cur = &cur->array[idx];
+            continue;
+        }
+        if (cur->type != scrctl::xpc::Type::Dict) {
+            cur->type = scrctl::xpc::Type::Dict;
+            cur->dict.clear();
+        }
+        Value* next = nullptr;
+        for (auto& entry : cur->dict) {
+            if (entry.key == parts[i]) {
+                next = &entry.value;
+                break;
+            }
+        }
+        if (next == nullptr) {
+            // 走到这里的一定是"还要再下去一层"的容器，所以一律建字典；叶子由调用方赋值。
+            scrctl::xpc::dict_set(*cur, parts[i], make_dict());
+            next = &cur->dict.back().value;
+        }
+        cur = next;
+    }
+    return cur;
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -155,8 +195,12 @@ int main(int argc, char** argv)
     std::string service = "com.apple.coredevice.appservice";
     std::string feature;
     std::string action;
+    // dtuhidd 那批服务不吃 CoreDevice 外壳，要的是把字段直接放在消息里。
+    bool raw = false;
+    std::vector<std::string> commands;
     std::vector<std::pair<std::string, std::string>> strings;
     std::vector<std::pair<std::string, std::string>> opt_strings;
+    std::vector<std::pair<std::string, std::string>> path_strings;
     int max_rounds = 12;
     bool verbose = false;
 
@@ -174,6 +218,12 @@ int main(int argc, char** argv)
         else if (a == "--action" && i + 1 < argc) {
             action = argv[++i];
         }
+        else if (a == "--commands" && i + 1 < argc) {
+            commands = split(argv[++i]);
+        }
+        else if (a == "--raw") {
+            raw = true;
+        }
         else if (a == "--str" && i + 1 < argc) {
             const std::string kv = argv[++i];
             const auto eq = kv.find('=');
@@ -185,12 +235,17 @@ int main(int argc, char** argv)
             const auto eq = kv.find('=');
             opt_strings.emplace_back(kv.substr(0, eq), kv.substr(eq + 1));
         }
+        else if (a == "--pstr" && i + 1 < argc) {
+            const std::string kv = argv[++i];
+            const auto eq = kv.find('=');
+            path_strings.emplace_back(kv.substr(0, eq), kv.substr(eq + 1));
+        }
         else if (a == "--max-rounds" && i + 1 < argc) {
             max_rounds = std::stoi(argv[++i]);
         }
     }
 
-    if (feature.empty()) {
+    if (feature.empty() && commands.empty()) {
         std::fprintf(stderr,
                      "用法: %s --feature NAME [--action NAME] [--str k=v] [--opt-str k=v]\n",
                      argv[0]);
@@ -219,6 +274,35 @@ int main(int argc, char** argv)
     // 设备点名的类型：完整路径 -> 类型名。
     std::map<std::string, std::string> kinds;
 
+    // 一次会话里把候选命令全试一遍。每候选一条新连接（设备答过一次就可能关掉
+    // 这条连接），但隧道只建一次——建隧道要十几秒，逐个候选重跑等于把时间全花在
+    // 重建会话上。
+    if (!commands.empty()) {
+        for (const auto& cmd : commands) {
+            auto conn = dev->connect(service, err, verbose);
+            if (!conn) {
+                std::printf("%-22s 连不上: %s\n", cmd.c_str(), err.c_str());
+                continue;
+            }
+            auto input = make_dict();
+            scrctl::xpc::dict_set(input, "command", make_string(cmd));
+            for (const auto& [k, v] : opt_strings) {
+                scrctl::xpc::dict_set(input, k, make_string(v));
+            }
+            Value out;
+            std::string call_err;
+            if (!conn->call(input, out, 20000, call_err)) {
+                std::printf("%-22s 调用失败: %s\n", cmd.c_str(), call_err.c_str());
+                continue;
+            }
+            const auto text = scrctl::xpc::describe(out);
+            const bool unknown = text.find("Unknown") != std::string::npos;
+            std::printf("%-22s %s%s\n", cmd.c_str(), unknown ? "不认识" : "<<< 像是认得的 >>>",
+                        unknown ? "" : ("  " + text.substr(0, 300)).c_str());
+        }
+        return 0;
+    }
+
     for (int round = 1; round <= max_rounds; ++round) {
         auto input = make_dict();
         for (const auto& [key, value] : strings) {
@@ -226,6 +310,29 @@ int main(int argc, char** argv)
         }
         for (const auto& [key, value] : opt_strings) {
             scrctl::xpc::dict_set(descend(input, {"options"}), key, make_string(value));
+        }
+        // 斜杠路径（键里可以带点，比如 UTI）+ 特殊值：@dict 是空字典，@int:N 是整数，其余按字符串。
+        // Swift 那边有些字段是"只带一个键的枚举"，平铺的 --str 表达不出来。
+        for (const auto& [dotted, value] : path_strings) {
+            auto parts = split(dotted, '/');
+            const auto leaf = parts.back();
+            parts.pop_back();
+            Value v = make_string(value);
+            if (value == "@dict") {
+                v = make_dict();
+            }
+            else if (value == "@array") {
+                v = scrctl::xpc::make_array();
+            }
+            else if (value.starts_with("@int:")) {
+                v = scrctl::xpc::make_int64(std::stoll(value.substr(5)));
+            }
+            else if (value.starts_with("@bytes:")) {
+                // XPC 里的 Data 是原生字段，不是 base64：直接给裸字节。
+                const std::string raw = value.substr(7);
+                v = scrctl::xpc::make_data(std::vector<uint8_t>(raw.begin(), raw.end()));
+            }
+            scrctl::xpc::dict_set(*descend_any(input, parts), leaf, std::move(v));
         }
         for (const auto& path : dicts) {
             descend(input, path);
@@ -240,6 +347,19 @@ int main(int argc, char** argv)
             scrctl::xpc::dict_set(descend(input, parent), leaf, scrctl::xpc::make_array());
         }
         for (const auto& [path, key] : found) {
+            auto& parent = descend(input, path);
+            // 用户已经用 --str/--opt-str 给过值的键，别再按"缺键就补布尔"的
+            // 规则覆盖掉——否则一边收到 String 一边被写回 bool，永远收敛不了。
+            bool already = false;
+            for (const auto& entry : parent.dict) {
+                if (entry.key == key) {
+                    already = true;
+                    break;
+                }
+            }
+            if (already) {
+                continue;
+            }
             // 类型按设备点名的来；没点过的一律先给布尔（绝大多数开关都是布尔）。
             const auto joined = join_path(path) + "." + key;
             const auto it = kinds.find(joined);
@@ -257,12 +377,34 @@ int main(int argc, char** argv)
                 auto dict = scrctl::plist::Value::Dict();
                 value = scrctl::xpc::make_data(scrctl::plist::write_binary(dict));
             }
-            scrctl::xpc::dict_set(descend(input, path), key, std::move(value));
+            scrctl::xpc::dict_set(parent, key, std::move(value));
         }
 
         Value out;
         std::string call_err;
-        if (dev->feature(service, feature, action, input, out, call_err, verbose, 90000)) {
+        if (raw) {
+            auto conn = dev->connect(service, call_err, verbose);
+            if (conn == nullptr) {
+                std::fprintf(stderr, "连不上 %s: %s\n", service.c_str(), call_err.c_str());
+                return 1;
+            }
+            const bool ok = conn->call(input, out, 90000, call_err);
+            if (!ok) {
+                std::printf("\n第 %d 轮：raw 调用失败\n%s\n", round, call_err.c_str());
+                return 1;
+            }
+            // 拿到回信不等于成功：设备把"缺哪个键 / 什么类型"写在 error 里，
+            // 那正是收敛循环要吃的输入。只有不带 error 的回信才算答案。
+            const auto text = scrctl::xpc::describe(out);
+            if (out.find("error") == nullptr) {
+                std::printf("\n第 %d 轮：成功（raw）\n回信: %s\n", round, text.substr(0, 1200).c_str());
+                std::printf("请求: %s\n", scrctl::xpc::describe(input).substr(0, 400).c_str());
+                return 0;
+            }
+            call_err = text;
+            std::printf("第 %d 轮 raw 回信带 error，按提示继续\n", round);
+        }
+        if (!raw && dev->feature(service, feature, action, input, out, call_err, verbose, 90000)) {
             std::printf("\n第 %d 轮：成功\n回信: %s\n", round,
                         scrctl::xpc::describe(out).substr(0, 1500).c_str());
             std::printf("形状: %s\n", scrctl::xpc::describe(input).substr(0, 800).c_str());

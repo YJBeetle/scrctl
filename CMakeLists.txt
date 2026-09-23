@@ -90,6 +90,7 @@ add_library(scrctl_core STATIC
         src/remote/RemoteXpc.cpp
         src/remote/Rsd.cpp
         src/remote/Device.cpp
+        src/remote/Pasteboard.cpp
         src/bitstream/AnnexB.cpp
         src/hid/Hid.cpp
         src/decode/VideoToolboxDecoder.cpp)
@@ -138,6 +139,10 @@ if(SCRCTL_BUILD_TESTS)
     add_executable(rtp_test tests/rtp_test.cpp)
     target_link_libraries(rtp_test PRIVATE scrctl_core)
     add_test(NAME rtp COMMAND rtp_test)
+
+    add_executable(pasteboard_test tests/pasteboard_test.cpp)
+    target_link_libraries(pasteboard_test PRIVATE scrctl_core)
+    add_test(NAME pasteboard COMMAND pasteboard_test)
 
     add_executable(hid_test tests/hid_test.cpp)
     target_link_libraries(hid_test PRIVATE scrctl_core)
@@ -193,3 +198,6 @@ target_link_libraries(feature_schema_probe PRIVATE scrctl_core)
 
 add_executable(frame_probe tools/frame_probe.cpp)
 target_link_libraries(frame_probe PRIVATE scrctl_core)
+
+add_executable(pasteboard_probe tools/pasteboard_probe.cpp)
+target_link_libraries(pasteboard_probe PRIVATE scrctl_core)
