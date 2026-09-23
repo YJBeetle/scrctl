@@ -155,10 +155,17 @@ bool ServiceConnection::invoke(std::string_view feature_identifier,
         err += "：" + detail;
     }
     err += "（code " + std::to_string(code) + "）";
-    if (detail.empty()) {
-        // 没有人话就把整个 error 交出去。设备的错误字典里常常还藏着
-        // NSLocalizedRecoverySuggestion / 域 / 期望参数名，只报一个数字等于
-        // 让下一个人从头猜。
+    // NSDebugDescription 是"缺哪个键 / 哪个类型不对"的正式答案，NSCodingPath 指出
+    // 是哪一个键。这两个必须**原样、不截断**地交出去：整个 error 字典的 describe
+    // 会把长字符串掐掉（深层路径正好是最长的那段），而探协议时恰恰要读那半截。
+    const std::string debug = error->at("userInfo").at("NSDebugDescription").as_string_or("");
+    if (!debug.empty()) {
+        err += "\n  NSDebugDescription: " + debug;
+        // NSCodingPath 是个数组，不是字符串。
+        err += "\n  NSCodingPath: " + xpc::describe(error->at("userInfo").at("NSCodingPath"));
+    }
+    if (detail.empty() && debug.empty()) {
+        // 什么话都没有就把整个 error 交出去，别只报一个数字。
         err += "；error 原文: " + xpc::describe(*error).substr(0, 600);
     }
     return false;

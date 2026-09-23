@@ -339,3 +339,65 @@ PLI 后 6 秒：包 2529，IRAP 类型:（空）
 **所以坏画面的唯一恢复手段是重起媒体会话**：停旧流、起新流，新会话必然带一个
 关键帧。判据要两个条件同时成立——序号断流增加 **且** 距上一次关键帧超过 2 秒。
 只看断流会误伤，丢一个分片也许下一帧就是关键帧。
+
+## 14. 让设备自己交代入参形状（`tools/feature_schema_probe`）
+
+CoreDevice 的 feature 入参在设备侧是 Swift Codable，而它对**每个必填键都点名**：
+
+| 设备的回话 | 含义 |
+|---|---|
+| `Expected to find key X.` | 缺顶层或当前字典里的键 X |
+| `dictionary required here` + `NSCodingPath` | 路径末端那个键要是字典 |
+| `array required here` | 同上，要数组 |
+| `Expected to decode String but found a OS_xpc_bool instead.` | 类型不对 |
+| `Action '...' is not implemented.` | actionIdentifier 猜错了 |
+
+所以探一个没文档的 feature，正确做法不是找参考实现照抄，而是**发一次、读它点名的
+键、补上、再发**，几轮就收敛。`feature_schema_probe` 把这个循环写成了程序：一轮只
+多一次 RPC，会话不重建；它按 `NSCodingPath` 把键插到正确的嵌套层，并区分字典/数组/
+标量类型。
+
+两个不显然的地方值得记：
+
+- **类型错误报的是"正在解码的容器"，不是出错的字段**。说 `options.user` 要 String 时，
+  真正不对的是我们刚往 `user` 里补的 `shortName`。第一版按字面理解，在"要字典"和
+  "要 String"之间来回打转了 8 轮。
+- **`NSCodingPath` 必须原样交出来**。`Rsd` 原先只把整个 error 字典 `describe()` 后
+  截到 600 字节，而深层路径恰好是最长的那段，正好被掐掉——现在单独把
+  `NSDebugDescription` 与 `NSCodingPath` 不截断地附上。
+
+### 已经问出来的形状
+
+`stopmediastream` / `action.mediastreamstop`：`{stopAll: Bool}`（见 §13）。
+
+`listapps` / `action.listapps` 的必填键一共 8 个，全给 false 会回一个空数组：
+
+```text
+includeAppClips  includeRemovableApps  includeInternalApps  includeDefaultApps
+includeHiddenApps  includeContainerPaths  includeAppGroupIdentifiers
+requireContainerAccess
+```
+
+⚠️ 但只要把其中任何一个改成 true，这台 iOS 27.0 就在 60 秒内不回话（`includeDefaultApps`
+单独为 true 也一样）。所以列 App 这件事得另找路子（`streamapplist`？），别指望 listapps。
+
+`launchapplication` / **`action.launch`**（不是 `action.launchapplication`，那个直接
+"not implemented"）的结构已经剥出来，但**还没打通**：
+
+```text
+options: {
+  arguments: []                        // 数组
+  environmentVariables: {}             // 字典
+  standardIOIdentifiers: {}            // 字典
+  standardIOUsesPseudoterminals: false
+  startStopped: false
+  user: { shortName: String }
+  platformSpecificOptions: Data        // 空 Data 会被拒（"Cannot parse a NULL or
+                                       // zero-length data"），得是一段 plist
+}
+```
+
+填到这里设备回 `A URL to open must be specified in the launch options.`（code 10008），
+而 `options.url` 给了值也还是这句——说明 bundle id / URL 的真正入口不在这套键里。
+没继续挖的理由：MaaFramework 自家的 MacOS 控制单元同样不实现 start_app，它不是阻塞项。
+下次要接这个，从"`url` 键名不对"这个事实出发，别从第一轮重探。

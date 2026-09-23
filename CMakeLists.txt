@@ -186,3 +186,6 @@ if(SCRCTL_BUILD_TESTS)
 endif()
 
 install(TARGETS scrctl RUNTIME DESTINATION bin)
+
+add_executable(feature_schema_probe tools/feature_schema_probe.cpp)
+target_link_libraries(feature_schema_probe PRIVATE scrctl_core)

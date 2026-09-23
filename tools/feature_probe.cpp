@@ -94,7 +94,9 @@ int main(int argc, char **argv) {
                              "com.apple.coredevice.screencaptureservice",
                              "com.apple.coredevice.hid.indigo",
                              "com.apple.coredevice.hid.universalhidservice",
-                             "com.apple.coredevice.pasteboardservice"}) {
+                             "com.apple.coredevice.pasteboardservice",
+                             "com.apple.coredevice.appservice",
+                             "com.apple.coredevice.devicecontrol"}) {
         show_features(dev->rsd(), name);
     }
 
