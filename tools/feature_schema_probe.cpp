@@ -179,6 +179,12 @@ int main(int argc, char** argv)
             const auto eq = kv.find('=');
             strings.emplace_back(kv.substr(0, eq), kv.substr(eq + 1));
         }
+        else if (a == "--opt-str" && i + 1 < argc) {
+            // 塞进 options 那一层的字符串键。形状收敛只补布尔，语义参数得人给。
+            const std::string kv = argv[++i];
+            const auto eq = kv.find('=');
+            opt_strings.emplace_back(kv.substr(0, eq), kv.substr(eq + 1));
+        }
         else if (a == "--max-rounds" && i + 1 < argc) {
             max_rounds = std::stoi(argv[++i]);
         }
@@ -186,7 +192,7 @@ int main(int argc, char** argv)
 
     if (feature.empty()) {
         std::fprintf(stderr,
-                     "用法: %s --feature NAME [--action NAME] [--str k=v]\n",
+                     "用法: %s --feature NAME [--action NAME] [--str k=v] [--opt-str k=v]\n",
                      argv[0]);
         return 2;
     }
