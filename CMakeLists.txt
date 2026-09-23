@@ -90,6 +90,7 @@ add_library(scrctl_core STATIC
         src/remote/Rsd.cpp
         src/remote/Device.cpp
         src/bitstream/AnnexB.cpp
+        src/hid/Hid.cpp
         src/decode/VideoToolboxDecoder.cpp)
 target_include_directories(scrctl_core PUBLIC src)
 target_link_libraries(scrctl_core PUBLIC ScrctlAppleFrameworks OpenSSL::SSL OpenSSL::Crypto)
@@ -116,6 +117,9 @@ target_link_libraries(screenshot_probe PRIVATE scrctl_core)
 add_executable(stream_probe tools/stream_probe.cpp)
 target_link_libraries(stream_probe PRIVATE scrctl_core)
 
+add_executable(hid_probe tools/hid_probe.cpp)
+target_link_libraries(hid_probe PRIVATE scrctl_core)
+
 # ---------------------------------------------------------------- tests -----
 if(SCRCTL_BUILD_TESTS)
     enable_testing()
@@ -130,6 +134,10 @@ if(SCRCTL_BUILD_TESTS)
     add_executable(rtp_test tests/rtp_test.cpp)
     target_link_libraries(rtp_test PRIVATE scrctl_core)
     add_test(NAME rtp COMMAND rtp_test)
+
+    add_executable(hid_test tests/hid_test.cpp)
+    target_link_libraries(hid_test PRIVATE scrctl_core)
+    add_test(NAME hid COMMAND hid_test)
 
     add_executable(net_test tests/net_test.cpp)
     target_link_libraries(net_test PRIVATE scrctl_core)

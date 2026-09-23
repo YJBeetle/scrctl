@@ -48,13 +48,16 @@ bool call_and_dump(Device &dev, std::string_view service, std::string_view featu
 
 int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
-    // 用法：feature_probe [UDID] [--verbose]
+    // 用法：feature_probe [UDID] [--verbose] [--all]
     std::string_view udid;
     bool verbose = false;
+    bool all = false;
     for (int i = 1; i < argc; ++i) {
         const std::string_view a = argv[i];
         if (a == "-v" || a == "--verbose") {
             verbose = true;
+        } else if (a == "--all") {
+            all = true;
         } else {
             udid = a;
         }
@@ -80,6 +83,13 @@ int main(int argc, char **argv) {
                 dev->property("ProductType").c_str(), dev->property("HWModel").c_str(),
                 dev->property("OSVersion").c_str(), mask(dev->udid(), 2).c_str());
     std::printf("RSD 目录共 %zu 个服务，本项目关心的：\n", dev->rsd().services().size());
+    if (all) {
+        // 全量列一遍：想知道"有没有能读设备日志的服务"这类问题时，
+        // 只看自己预先想到的那几个名字是找不到的。
+        for (const auto &s : dev->rsd().services()) {
+            std::printf("  %s\n", s.name.c_str());
+        }
+    }
     for (const auto *name : {"com.apple.coredevice.displayservice",
                              "com.apple.coredevice.screencaptureservice",
                              "com.apple.coredevice.hid.indigo",
