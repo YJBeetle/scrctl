@@ -58,6 +58,8 @@ struct Options {
     /// 起流后按一次硬件按键（home/lock/volup/voldn/mute），然后照常镜像。
     /// 按键效果是瞬时的，所以它要能和 --verify 组合：按完等第 N 帧回读窗口。
     std::string test_button;
+    /// 起流后往设备敲一段 ASCII（要有文本框正获得焦点）。
+    std::string test_type;
 };
 
 void usage(const char *argv0) {
@@ -79,6 +81,7 @@ void usage(const char *argv0) {
         "  --test-touch X0,Y0,X1,Y1\n"
         "                     注入一条直线（归一化坐标）后退出，无需真鼠标\n"
         "  --test-button NAME 起流后按一次硬件按键（home/lock/volup/voldn/mute）\n"
+        "  --test-type TEXT   起流后往设备敲一段 ASCII（需要已聚焦的文本框）\n"
         "                     再照常镜像，配 --verify 才能看见瞬时效果\n",
         argv0);
 }
@@ -118,6 +121,8 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.test_touch = next("--test-touch");
         } else if (a == "--test-button") {
             o.test_button = next("--test-button");
+        } else if (a == "--test-type") {
+            o.test_type = next("--test-type");
         } else if (a == "--crop") {
             const char *v = next("--crop");
             if (std::sscanf(v, "%dx%d+%d+%d", &o.crop_w, &o.crop_h, &o.crop_x, &o.crop_y) != 4) {
@@ -509,6 +514,9 @@ public:
     /// 失败过一次就不再重试，免得每帧都去撞一遍。
     bool control(double x, double y, bool down, std::string &err);
 
+    /// 往设备敲一段 ASCII（复用触摸那条连接，键盘是同一个服务下的另一个面）。
+    bool type_text(const std::string &text, int hold_ms, std::string &err);
+
     /// 按一个硬件按键（indigo 服务，惰性连）。按键的效果多半是瞬时的，所以
     /// 它得能和 `--verify` 组合使用：先按键，再等第 N 帧回读窗口内容。
     bool button(uint16_t usage_page, uint16_t usage_code, std::string &err);
@@ -578,6 +586,20 @@ bool LiveSource::control(double x, double y, bool down, std::string &err) {
         std::printf("控制已接通（触摸注入可用）\n");
     }
     return hid_->touch(scrctl::hid::kSurfaceMainTouchscreen, x, y, down, err);
+}
+
+bool LiveSource::type_text(const std::string &text, int hold_ms, std::string &err) {
+    if (hid_ == nullptr) {
+        if (hid_unavailable_) {
+            return false;
+        }
+        hid_ = scrctl::hid::Service::open(*device_, err);
+        if (hid_ == nullptr) {
+            hid_unavailable_ = true;
+            return false;
+        }
+    }
+    return hid_->type_text(text, hold_ms, err);
 }
 
 bool LiveSource::button(uint16_t usage_page, uint16_t usage_code, std::string &err) {
@@ -686,6 +708,16 @@ int main(int argc, char **argv) {
         } else {
             std::fprintf(stderr, "--test-button %s 失败: %s\n", o.test_button.c_str(),
                          berr.c_str());
+            return 1;
+        }
+    }
+
+    if (live != nullptr && !o.test_type.empty()) {
+        std::string terr;
+        if (live->type_text(o.test_type, 40, terr)) {
+            std::printf("--test-type %s: 已注入\n", o.test_type.c_str());
+        } else {
+            std::fprintf(stderr, "--test-type 失败: %s\n", terr.c_str());
             return 1;
         }
     }

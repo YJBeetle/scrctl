@@ -32,6 +32,7 @@ namespace scrctl::hid {
 
 /// 设备注册的静态 HID 面。
 inline constexpr uint64_t kSurfaceMainTouchscreen = 257;   ///< 真数（0x101）
+inline constexpr uint64_t kSurfaceKeyboard = 512;          ///< 设备自带的虚拟键盘（0x200）
 inline constexpr uint64_t kSurfaceTouchGesture = 1281;     ///< 触控板式指针（0x501）
 
 /// mainTouchscreen 报告里的接触状态字节。
@@ -149,6 +150,10 @@ public:
     /// 另算。
     bool type(uint64_t surface, const std::vector<uint16_t> &usages, int hold_ms,
               std::string &err);
+
+    /// 往设备自带的键盘面上敲一段 ASCII。前提是有文本框正获得焦点——没有焦点时
+    /// 报告会照发不误但没有任何可见结果，所以"没生效"要先去查焦点。
+    bool type_text(const std::string &text, int hold_ms, std::string &err);
 
 private:
     explicit Service(std::unique_ptr<scrctl::remote::ServiceConnection> conn)

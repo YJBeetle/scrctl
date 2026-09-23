@@ -144,11 +144,17 @@ void test_keyboard() {
     check(ab.size() == 4 && ab[2].size() == 1 && ab[2][0] == scrctl::hid::key::kA + 1,
           "第三个是 b 按下");
 
+    // 带 Shift 的字符是**三条**报告：先按下 Shift，再发 Shift+键，最后全松。
+    // 合成一条 {Shift, 键} 实测只会出 "1" 而不是 "!"。
     const auto bang = scrctl::hid::text_reports("!");
-    check(bang.size() == 2 && bang[0].size() == 2, "带 Shift 的字符展开成两个 usage");
-    if (bang.size() == 2 && bang[0].size() == 2) {
-        check(bang[0][0] == scrctl::hid::key::kShiftLeft && bang[0][1] == scrctl::hid::key::k1,
-              "! = 左 Shift + 1");
+    check(bang.size() == 3, "! 展开成 3 条报告: " + std::to_string(bang.size()));
+    if (bang.size() == 3) {
+        check(bang[0].size() == 1 && bang[0][0] == scrctl::hid::key::kShiftLeft,
+              "第一条只有 Shift");
+        check(bang[1].size() == 2 && bang[1][0] == scrctl::hid::key::kShiftLeft &&
+                  bang[1][1] == scrctl::hid::key::k1,
+              "第二条是 Shift + 1");
+        check(bang[2].empty(), "第三条全松");
     }
 
     const auto junk = scrctl::hid::text_reports("\u00e9\x01");

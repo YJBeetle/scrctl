@@ -203,6 +203,18 @@ bool Service::type(uint64_t surface, const std::vector<uint16_t> &usages, int ho
     return send_report(surface, keyboard_report({}), err);
 }
 
+bool Service::type_text(const std::string &text, int hold_ms, std::string &err) {
+    for (const auto &usages : text_reports(text)) {
+        if (!send_report(kSurfaceKeyboard, keyboard_report(usages), err)) {
+            return false;
+        }
+        if (hold_ms > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(hold_ms));
+        }
+    }
+    return true;
+}
+
 std::unique_ptr<Buttons> Buttons::open(scrctl::remote::Device &device, std::string &err,
                                        bool verbose) {
     if (!device.rsd().has_service(kIndigoServiceName)) {
@@ -295,6 +307,10 @@ std::vector<std::vector<uint16_t>> text_reports(const std::string &text) {
             continue;  // 认不出来的字符跳过
         }
         if (shifted) {
+            // 先单独把 Shift 按下去，再发"Shift + 键"。合成一条 {Shift, 键} 的
+            // 报告实测只会出小写那个字符（"!" 变成 "1"）——iOS 读位图时要求
+            // 修饰键在按键之前就已经处于按下状态。
+            out.push_back({ key::kShiftLeft });
             out.push_back({ key::kShiftLeft, usage });
         } else {
             out.push_back({ usage });
