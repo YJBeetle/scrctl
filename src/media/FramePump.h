@@ -1,0 +1,114 @@
+#pragma once
+
+#include <atomic>
+#include <condition_variable>
+#include <cstdint>
+#include <cstdio>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <vector>
+
+#include "decode/Decoder.h"
+#include "rt/RtpHevc.h"
+
+namespace scrctl::media {
+
+class StreamSession;
+}
+
+namespace scrctl::remote {
+class Device;
+}
+
+namespace scrctl::media {
+
+/// 把"起流 -> 收包 -> 拆 AU -> 解码"整条链放进一个后台线程，随时能取到最新一帧。
+///
+/// 为什么要有它：`screencaptureservice` 抓一张要 344~613ms，而视频流是 60fps——
+/// 也就是说"看现在屏幕上是什么"这件事，走流比走截图服务快一个数量级。对镜像和
+/// 对自动化框架（截图 -> 识别 -> 动作 的循环）这都是决定性的差别。
+///
+/// 另外它兼任触摸注入的认证门：设备只在有媒体会话在跑时才把 HID 面标成已认证，
+/// 所以这个对象活着的时候输入才可用。
+class FramePump {
+public:
+    struct Options {
+        uint32_t display_id = 1;
+        /// 非空则顺手把 Annex-B 码流录到该文件。
+        std::string record_path;
+        /// 断流之后隔多久没等到关键帧就重起会话；0 = 从不重起。
+        /// 这条流不周期发 IDR，RTCP PLI 实测设备也不理（docs §13），所以重起是
+        /// 唯一能让画面重新自洽的手段。
+        int stall_restart_ms = 2000;
+    };
+
+    struct Stats {
+        uint64_t packets = 0;
+        uint64_t decoded = 0;
+        /// 解了但没出图的 AU 数（参考帧未就绪，或丢了分片）。
+        uint64_t no_output = 0;
+        uint64_t gaps = 0;
+        uint64_t restarts = 0;
+        /// 因解码器不可用而丢弃的帧数（取帧方跟不上时不阻塞收包线程）。
+        uint64_t dropped = 0;
+    };
+
+    /// 在已经建好的会话上起泵。失败时 err 带设备的人话。
+    static std::unique_ptr<FramePump> start(scrctl::remote::Device &device, const Options &options,
+                                            std::string &err, bool verbose = false);
+
+    ~FramePump();
+
+    FramePump(const FramePump &) = delete;
+    FramePump &operator=(const FramePump &) = delete;
+
+    /// 取最新一帧（可能是上一帧的重复副本）。timeout_ms 内一帧都没有则返回 false。
+    bool latest(Frame &out, int timeout_ms);
+
+    /// 等到帧号大于 `since` 再取。用来保证"拿到的一定比我上次看的新的"。
+    /// 返回该帧的帧号，0 表示超时。
+    uint64_t newer(Frame &out, uint64_t since, int timeout_ms);
+
+    [[nodiscard]] uint64_t serial() const;
+    [[nodiscard]] Stats stats() const;
+    /// 协商到的视频 payload type，HID 之外的调试用得上。
+    [[nodiscard]] uint8_t payload_type() const;
+    [[nodiscard]] uint16_t receiver_port() const;
+    /// 最近一帧的尺寸（还没出帧时为 0）。
+    void size(int &width, int &height) const;
+
+private:
+    FramePump(scrctl::remote::Device &device, Options options, bool verbose);
+    void loop();
+    /// 停旧会话、起新会话。第一次调用（起流）与重起共用同一条路径。
+    bool restart(std::string &err);
+
+    scrctl::remote::Device &device_;
+    Options options_;
+    bool verbose_ = false;
+
+    std::unique_ptr<StreamSession> session_;
+    std::thread worker_;
+    bool worker_running_ = false;
+    FILE *record_ = nullptr;
+
+    /// 只属于后台线程：每个会话一套，重起流时整个换掉。
+    std::unique_ptr<AnnexBParser> parser_;
+
+    /// 后台线程与取帧方之间唯一共享的就是下面这些，其余状态只属于那个线程。
+    /// 取帧方读的尺寸是快照，免得为了拿个宽高就要拷一帧像素。
+    mutable std::mutex mutex_;
+    std::condition_variable cv_;
+    Frame frame_;
+    uint64_t serial_ = 0;
+    bool stopping_ = false;
+    int width_ = 0;
+    int height_ = 0;
+    Stats stats_;
+    uint64_t last_keyframe_ms_ = 0;
+    uint64_t gaps_at_last_check_ = 0;
+};
+
+}  // namespace scrctl::media

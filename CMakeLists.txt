@@ -78,6 +78,7 @@ add_library(scrctl_core STATIC
         src/util/Deflate.cpp
         src/media/MediaOffer.cpp
         src/media/StreamSession.cpp
+        src/media/FramePump.cpp
         src/rt/RtpHevc.cpp
         src/transport/Usbmux.cpp
         src/transport/TlsChannel.cpp
@@ -189,3 +190,6 @@ install(TARGETS scrctl RUNTIME DESTINATION bin)
 
 add_executable(feature_schema_probe tools/feature_schema_probe.cpp)
 target_link_libraries(feature_schema_probe PRIVATE scrctl_core)
+
+add_executable(frame_probe tools/frame_probe.cpp)
+target_link_libraries(frame_probe PRIVATE scrctl_core)
