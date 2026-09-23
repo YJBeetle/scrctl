@@ -450,6 +450,21 @@ public:
     /// 它得能和 `--verify` 组合使用：先按键，再等第 N 帧回读窗口内容。
     bool button(uint16_t usage_page, uint16_t usage_code, std::string &err);
 
+    /// 序号断流的次数。主循环拿它和"上一次关键帧的时间"一起判断画面是否已经
+    /// 永久坏掉——这条流不周期发 IDR，也没有可用的 PLI，唯一的恢复手段是重起
+    /// 媒体会话。
+    uint64_t gaps() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return snapshot_.seq_gaps;
+    }
+
+    /// 请收包线程停掉当前流并重新起一条。新会话必然从关键帧开始。
+    void request_restart() { restart_requested_ = true; }
+
+    /// 结束流。退出时必须调：设备侧的会话状态被留在"还在推"的话，下一次建立
+    /// 会话就容易撞上莫名失败（实测约 10% 的会话起不来，正在追）。
+    void shutdown();
+
     /// 拆包统计。画面糊掉时第一个要看的数就是这里。
     /// 读的是工作线程发布的快照，不是直接读它的状态——拆包器只归那个线程碰。
     void print_stats() const {
@@ -474,6 +489,7 @@ private:
 
     std::thread worker_;
     std::atomic<bool> stopping_{false};
+    std::atomic<bool> restart_requested_{false};
     /// print_stats() 是 const 的，要能在只读路径上取快照。
     mutable std::mutex mutex_;
     std::condition_variable cv_;
@@ -493,7 +509,9 @@ private:
     FILE *record_ = nullptr;
 };
 
-LiveSource::~LiveSource() {
+LiveSource::~LiveSource() { shutdown(); }
+
+void LiveSource::shutdown() {
     stopping_ = true;
     cv_.notify_all();
     if (worker_.joinable()) {
@@ -503,12 +521,41 @@ LiveSource::~LiveSource() {
         std::fclose(record_);
         record_ = nullptr;
     }
+    if (session_ != nullptr && device_ != nullptr) {
+        std::string err;
+        if (!session_->stop(*device_, err)) {
+            std::fprintf(stderr, "停流失败: %s\n", err.c_str());
+        } else {
+            std::printf("媒体流已停止\n");
+        }
+    }
 }
 
 void LiveSource::receive_loop() {
     std::string err;
     std::vector<uint8_t> datagram;
     while (!stopping_) {
+        if (restart_requested_) {
+            restart_requested_ = false;
+            // 重起会话是恢复手段里唯一确定有效的：PLI 实测设备不理（见
+            // docs/coredevice.md 的 §12 与 pli_probe），而这条流不周期发 IDR，
+            // 参考链一断就一直断下去。新会话必然带一个关键帧过来。
+            std::printf("画面已坏（断流且等不到关键帧），重起媒体会话\n");
+            std::string serr;
+            if (!session_->stop(*device_, serr)) {
+                std::fprintf(stderr, "停旧流失败（继续起重流）: %s\n", serr.c_str());
+            }
+            scrctl::media::StreamSession::Request request;
+            auto fresh = scrctl::media::StreamSession::start(*device_, request, err);
+            if (fresh == nullptr) {
+                std::fprintf(stderr, "重起媒体流失败: %s\n", err.c_str());
+                continue;  // 旧流还在，至少画面能继续走
+            }
+            session_ = std::move(fresh);
+            depacketizer_ = scrctl::rt::HevcRtpDepacketizer{session_->started().payload_type};
+            std::printf("媒体会话已重起，收流端口=%u\n", session_->receiver_port());
+            continue;
+        }
         if (!session_->next_packet(datagram, 50, err)) {
             continue;  // 超时不是结束，接着等
         }
@@ -694,8 +741,12 @@ int main(int argc, char **argv) {
     int rendered = 0, decoded = 0, failed = 0;
     bool configured = false;
     std::deque<scrctl::Frame> queue;
+    Uint64 last_keyframe = 0;
 
-    scrctl::AnnexBParser parser([&](std::vector<scrctl::Nal> &&au, bool) {
+    scrctl::AnnexBParser parser([&](std::vector<scrctl::Nal> &&au, bool keyframe) {
+        if (keyframe) {
+            last_keyframe = SDL_GetTicks64();
+        }
         if (!configured) {
             scrctl::Nal vps, sps, pps;
             for (const auto &n : au) {
@@ -729,6 +780,7 @@ int main(int argc, char **argv) {
     int last_reported = 0;
     std::string pull_err;
     bool quit = false;
+    uint64_t gaps_at_last_check = 0;
 
     /// 窗口里的一次按下/移动/抬起 -> 设备上的接触/抬起。
     ///
@@ -796,6 +848,17 @@ int main(int argc, char **argv) {
             }
         }
 
+        // 坏画面的恢复判据：**两个条件都要**。只看断流会误伤——序号缺口本身也许
+        // 只是丢了一个分片，下一帧就是关键帧；只有"断了流而且迟迟等不到关键帧"
+        // 才是真的坏死了（这条流不周期发 IDR，也没有可用的 PLI，等是等不来的）。
+        if (live != nullptr) {
+            const uint64_t g = live->gaps();
+            if (g > gaps_at_last_check && SDL_GetTicks64() - last_keyframe > 2000) {
+                gaps_at_last_check = g;
+                live->request_restart();
+                last_keyframe = SDL_GetTicks64();  // 给新会话留出时间，别连着重起
+            }
+        }
         if (o.stats && rendered - last_reported >= 60) {
             const double el = (SDL_GetTicks64() - start) / 1000.0;
             std::printf("  渲染 %d 帧  %.1f fps  (解码 %d / 未出帧 %d)\n", rendered, rendered / el,
