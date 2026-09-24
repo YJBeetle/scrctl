@@ -69,6 +69,24 @@ public:
     [[nodiscard]] uint16_t receiver_port() const;
     [[nodiscard]] const Started &started() const { return started_; }
 
+    /// 设备侧媒体流服务的状态。**收不到包有两种完全不同的原因，必须分开**：
+    /// 静止画面上编码器本来就不发（流好着），以及设备把流结束掉了（流死了）。
+    /// 只看"多久没包"把它们混成一个，结果就是静止画面每 3 秒被无谓地重起一次。
+    enum class ServerState {
+        /// 我们这条会话还在设备的 sessions 列表里。
+        Alive,
+        /// 已经不在了——设备结束了流，必须重起才能再收到画面。
+        Ended,
+        /// 问不到，或回复形状不认识。按"未知"处理，别当成 Ended。
+        Unknown,
+    };
+
+    /// 问一次 getmediastreamserverstatus，看 `session_uuid` 还在不在设备的会话
+    /// 列表里。另开一条连接，理由同 stop()。
+    [[nodiscard]] static ServerState probe(remote::Device &device,
+                                           const std::vector<uint8_t> &session_uuid,
+                                           std::string &err, bool verbose = false);
+
 private:
     StreamSession(std::unique_ptr<scrctl::net::UdpSocket> sock, Started started)
         : socket_(std::move(sock)), started_(std::move(started)) {}

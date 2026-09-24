@@ -129,21 +129,25 @@ void FramePump::loop() {
                 std::lock_guard<std::mutex> lock(mutex_);
                 last_keyframe_ms_ = now_ms();
             }
-            // 后端装不下这个 AU 时换软解。**只在关键帧上换**：换后端等于换一条参考
-            // 链，非关键帧换过去对着的是新后端手里没有的参考帧，解出来必花；而 IDR
-            // 自己就是完整的一帧，从它起新链刚好。
+            // 后端装不下这个 AU 就换软解。真机实测两种尺寸都会超：主屏 IDR 有
+            // 49652~70101 字节，而一次转场动画里的 P 帧切片能到 256278 字节。
             const size_t biggest = largest_nal(au);
-            if (biggest > decoder->max_nal_size() && keyframe && !software_only) {
+            if (biggest > decoder->max_nal_size()) {
+                // **换后端的时机只能在关键帧**：换后端等于换一条参考链，非关键帧换
+                // 过去对着的是新后端手里没有的参考帧，解出来必花。所以非关键帧这一
+                // 帧照旧丢 + 重起会话，只把"下次要用软解"记下来——新会话开头就是
+                // IDR，从它起新链刚好。
                 software_only = true;
-                configured = false;
-                std::printf("码流里有超过 %zu 字节的 NAL（本帧最大 %zu），换软件解码后端\n",
-                            decoder->max_nal_size(), biggest);
+                if (keyframe) {
+                    configured = false;
+                }
             }
             if (!configured) {
                 if (software_only && decoder->max_nal_size() != ~size_t { 0 }) {
                     auto soft = create_software_decoder();
                     if (soft != nullptr) {
                         decoder = std::move(soft);
+                        std::printf("解码后端已切换为 %s\n", decoder->backend_name());
                     } else {
                         // 没编软解后端：这条码流平台后端就是解不了。说清楚比默默
                         // 丢帧强——症状是"永远灰屏"，不提示没人会想到去装 ffmpeg。
@@ -271,8 +275,21 @@ void FramePump::loop() {
             }
             if (options_.silence_restart_ms > 0 &&
                 now_ms() - last_packet_ms_ > static_cast<uint64_t>(options_.silence_restart_ms)) {
-                std::printf("已 %d ms 没收到任何包，重起媒体会话\n", options_.silence_restart_ms);
                 last_packet_ms_ = now_ms();
+                // **"没收到包"有两种完全不同的原因**：静止画面上编码器本来就不发
+                // （流好着，画面也不该动），以及设备把流结束了（再也收不到，窗口
+                // 冻住）。只看时间戳分不开这两者，实测静止的主屏会因此每 3 秒被
+                // 无谓重起一次。设备侧问一句就能分开：sessions 里还有我们这条吗？
+                std::string perr;
+                const auto state = StreamSession::probe(device_, session_->started().session_uuid,
+                                                        perr, verbose_);
+                if (state == StreamSession::ServerState::Alive) {
+                    continue;  // 流活着，只是画面没变化——什么都不做才是对的
+                }
+                std::printf("%s，重起媒体会话\n",
+                            state == StreamSession::ServerState::Ended
+                                ? "设备已结束这条流"
+                                : ("问不到流状态（" + perr + "）").c_str());
                 std::string restart_err;
                 if (!restart(restart_err)) {
                     std::fprintf(stderr, "重起媒体会话失败: %s\n", restart_err.c_str());

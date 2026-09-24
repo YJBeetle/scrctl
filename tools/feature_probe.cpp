@@ -40,7 +40,7 @@ bool call_and_dump(Device &dev, std::string_view service, std::string_view featu
     }
     const auto text = scrctl::xpc::describe(out);
     std::printf("  成功，输出 %zu 字节可读化后:\n    %s\n", text.size(),
-                text.substr(0, 1500).c_str());
+                text.substr(0, 9000).c_str());
     return true;
 }
 

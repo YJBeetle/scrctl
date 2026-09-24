@@ -173,4 +173,42 @@ bool StreamSession::stop(remote::Device &device, std::string &err, bool verbose)
 
 uint16_t StreamSession::receiver_port() const { return socket_->local_port(); }
 
+StreamSession::ServerState StreamSession::probe(remote::Device &device,
+                                                const std::vector<uint8_t> &session_uuid,
+                                                std::string &err, bool verbose) {
+    auto input = xpc::make_dict();
+    xpc::Value output;
+    if (!device.feature("com.apple.coredevice.displayservice",
+                        "com.apple.coredevice.feature.getmediastreamserverstatus",
+                        "com.apple.coredevice.action.mediastreamstatus", input, output, err,
+                        verbose, 10000)) {
+        return ServerState::Unknown;
+    }
+    // 实测回复形状：{sessions: [{connection: {options:
+    // {avcMediaStreamOptionClientSessionID: {uuid: ...}}, streamConfig: {...}}}],
+    // running: false, runDurationSeconds: 0}。
+    const auto *sessions = output.find("sessions");
+    if (sessions == nullptr || !sessions->is_array()) {
+        err = "getmediastreamserverstatus 的回复里没有 sessions 数组";
+        return ServerState::Unknown;
+    }
+    for (const auto &s : sessions->array) {
+        // 一层层用 find 走，少一层就是 nullptr：这条会话条目里没有 uuid 不代表
+        // 整个回复不可信，但也不能拿别的会话的 uuid 当我们自己的。
+        const auto *options = s.find("connection");
+        if (options == nullptr) {
+            continue;
+        }
+        const auto *wrapped = options->at("options").find("avcMediaStreamOptionClientSessionID");
+        if (wrapped == nullptr) {
+            continue;
+        }
+        const auto *uuid = wrapped->find("uuid");
+        if (uuid != nullptr && uuid->data == session_uuid) {
+            return ServerState::Alive;
+        }
+    }
+    return ServerState::Ended;
+}
+
 }  // namespace scrctl::media
