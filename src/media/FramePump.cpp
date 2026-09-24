@@ -11,6 +11,10 @@
 namespace scrctl::media {
 namespace {
 
+/// 设备结束一条空闲会话的实测时长：最后一个视频包之后约 6.9 秒。留 600ms 余量，
+/// 宁可多等也不要误判成"还活着"。
+constexpr uint64_t kDeviceIdleTeardownMs = 7500;
+
 uint64_t now_ms() {
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                std::chrono::steady_clock::now().time_since_epoch())
@@ -136,6 +140,10 @@ void FramePump::loop() {
     // 会话的开头拼进旧会话的尾巴里。
     auto make_parser = [&]() {
         return std::make_unique<AnnexBParser>([&](std::vector<Nal> &&au, bool keyframe) {
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                ++stats_.aus;
+            }
             if (keyframe) {
                 std::lock_guard<std::mutex> lock(mutex_);
                 last_keyframe_ms_ = now_ms();
@@ -216,6 +224,8 @@ void FramePump::loop() {
             loss_seen_ = loss_now;
             if (need_keyframe_) {
                 if (!keyframe || lost_since_prev) {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    ++stats_.dropped_awaiting_keyframe;
                     return;
                 }
                 need_keyframe_ = false;
@@ -295,13 +305,19 @@ void FramePump::loop() {
     };
 
     for (;;) {
-        // 用户动了一下手，而流已经安静了 150ms 以上：马上重起一条，不要等静默窗口
-        // 到点。不等的话手感就是"点下去愣一下画面才动"——设备在画面静止约 7 秒后
-        // 就把流结束了，而按静默判据最快也要 3 秒才发现。
+        // 用户动了手，而这条流**已经过了设备的拆流点**：直接重起一条，不用先去问
+        // 状态（问一次是一条 100~300ms 的 RPC，而重起只要 37~90ms）。
+        //
+        // 阈值只能按设备实测的拆流时间来定。它是在最后一个视频包之后约 7 秒结束会话
+        // （rtcp_probe 量到 6.9 秒），所以静默小于这个数时会话**还活着**，用户这一下
+        // 本来就会自己把画面推过来，这里重起纯属捣乱。上一版用的 150ms 就是这个错误：
+        // 画面只要变化得比 150ms 慢一点（实测复杂游戏画面就是 12fps，包间隔 80ms 上下
+        // 抖动），每次按下/拖动都会撞上一整轮"停+起+全量 IDR"，延迟一路叠加，
+        // 用户看到的就是慢动作。
         if (wake_requested_.exchange(false)) {
             const uint64_t quiet = now_ms() - last_packet_ms_;
-            if (quiet > 150) {
-                std::printf("收到操作（已静默 %llums），重起媒体会话\n",
+            if (quiet > kDeviceIdleTeardownMs) {
+                std::printf("收到操作（已静默 %llums，过了设备拆流点），重起媒体会话\n",
                             static_cast<unsigned long long>(quiet));
                 restart_now();
             }
@@ -375,7 +391,8 @@ void FramePump::loop() {
         // 卡住的判据要两条同时成立：只看序号缺口会误伤（丢一个分片也许下一帧
         // 就是关键帧），只看"多久没关键帧"又会在静止画面上白白重起。
         if (options_.stall_restart_ms > 0) {
-            const uint64_t gaps = depacketizer->stats().seq_gaps;
+            const auto &dst = depacketizer->stats();
+            const uint64_t gaps = dst.seq_gaps;
             bool stalled = false;
             {
                 std::lock_guard<std::mutex> lock(mutex_);
@@ -384,6 +401,7 @@ void FramePump::loop() {
                               static_cast<uint64_t>(options_.stall_restart_ms);
                 gaps_at_last_check_ = gaps;
                 stats_.gaps = gaps;
+                stats_.dropped_fragments = dst.dropped_fragments;
                 if (stalled) {
                     last_keyframe_ms_ = now_ms();  // 给新会话留出时间，别连着撞
                 }
