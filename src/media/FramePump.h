@@ -125,6 +125,15 @@ private:
     /// 有超大 NAL 被丢、需要重起会话。由 AU 回调置位，收包线程消费。
     std::atomic<bool> oversized_restart_ { false };
     uint64_t last_restart_ms_ = 0;
+    /// 本会话有没有解出过关键帧。开头那个 IDR 若被丢掉（比如它正好超大），
+    /// 后面所有帧都对着空参考解成一片灰，且再不会自愈。
+    std::atomic<bool> ever_keyframe_ { false };
+    uint64_t session_start_ms_ = 0;
+    int nokey_restarts_ = 0;
+    /// 丢过包之后必须等一个**完整**的关键帧才继续解，否则残缺关键帧会把参考链
+    /// 永久带坏（用户症状：先正常 -> 卡几秒 -> 之后一直花）。
+    std::atomic<bool> need_keyframe_ { false };
+    uint64_t loss_seen_ = 0;
 };
 
 /// 编码帧里"真正显示出来"的那一块。

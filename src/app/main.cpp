@@ -62,6 +62,8 @@ struct Options {
     std::string test_button;
     /// 起流后往设备敲一段 ASCII（要有文本框正获得焦点）。
     std::string test_type;
+    std::string copy_text;   ///< --copy TEXT：写进设备剪贴板后退出
+    bool paste = false;      ///< --paste：读设备剪贴板打印后退出
 };
 
 void usage(const char *argv0) {
@@ -85,6 +87,8 @@ void usage(const char *argv0) {
         "                     注入一条直线（归一化坐标）后退出，无需真鼠标\n"
         "  --test-button NAME 起流后按一次硬件按键（home/lock/volup/voldn/mute）\n"
         "  --test-type TEXT   起流后往设备敲一段 ASCII（需要已聚焦的文本框）\n"
+        "  --copy TEXT        把文本写进设备剪贴板后退出（中文走这条路）\n"
+        "  --paste            读设备剪贴板并打印后退出\n"
         "                     再照常镜像，配 --verify 才能看见瞬时效果\n",
         argv0);
 }
@@ -129,6 +133,10 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.test_button = next("--test-button");
         } else if (a == "--test-type") {
             o.test_type = next("--test-type");
+        } else if (a == "--copy") {
+            o.copy_text = next("--copy");
+        } else if (a == "--paste") {
+            o.paste = true;
         } else if (a == "--crop") {
             const char *v = next("--crop");
             if (std::sscanf(v, "%dx%d+%d+%d", &o.crop_w, &o.crop_h, &o.crop_x, &o.crop_y) != 4) {

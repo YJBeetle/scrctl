@@ -135,17 +135,41 @@ void FramePump::loop() {
             if (oversized) {
                 std::lock_guard<std::mutex> lock(mutex_);
                 ++stats_.dropped_oversized;
-                if (stats_.decoded > 0 && now_ms() - last_restart_ms_ > 5000) {
+                // 不再要求"已经有过正常画面"：开头 IDR 超大被丢时 decoded 永远
+                // 是 0，那个保护恰好把唯一该救的情况排除掉了（用户看到的就是
+                // 一片灰且永不恢复）。只限频，防死循环。
+                if (now_ms() - last_restart_ms_ > 5000) {
                     last_restart_ms_ = now_ms();
                     oversized_restart_ = true;
                 }
                 return;
             }
+            // 丢包（序号缺口或分片丢失）之后，参考链已经不可信：非关键帧解了也是
+            // 花的，而且会把坏参考继续传下去。所以丢掉一切直到一个**完整**的关键帧。
+            // "完整"= 这个关键帧自己的组装期间没再丢包；沾了丢包的关键帧同样不可信。
+            const auto &dst = depacketizer->stats();
+            const uint64_t loss_now = dst.seq_gaps + dst.dropped_fragments;
+            const bool lost_since_prev = loss_now > loss_seen_;
+            if (lost_since_prev) {
+                need_keyframe_ = true;
+            }
+            loss_seen_ = loss_now;
+            if (need_keyframe_) {
+                if (!keyframe || lost_since_prev) {
+                    return;
+                }
+                need_keyframe_ = false;
+            }
+
             Frame f;
             if (!decoder->decode(au, f) || !f) {
                 std::lock_guard<std::mutex> lock(mutex_);
                 ++stats_.no_output;
                 return;
+            }
+            if (keyframe) {
+                ever_keyframe_ = true;
+                nokey_restarts_ = 0;  // 只有真解出关键帧才重置上限，防死循环
             }
             std::lock_guard<std::mutex> lock(mutex_);
             frame_ = std::move(f);
@@ -156,6 +180,11 @@ void FramePump::loop() {
             cv_.notify_all();
         });
     };
+
+    session_start_ms_ = now_ms();
+    ever_keyframe_ = false;
+    need_keyframe_ = false;
+    loss_seen_ = 0;
 
     auto new_session_state = [&] {
         depacketizer = std::make_unique<scrctl::rt::HevcRtpDepacketizer>(session_->started().payload_type);
@@ -175,6 +204,21 @@ void FramePump::loop() {
             // 一个包都不来了：设备已经把我们这条流结束掉了（实测它会在几分钟之后
             // 自己停，且我们从不回 RTCP 接收报告）。不重起的话用户看到的就是
             // "窗口冻住"，而进程、线程、隧道全都好着——最难往流上想。
+            if (!ever_keyframe_ && now_ms() - session_start_ms_ > 5000 &&
+                nokey_restarts_ < 3) {
+                ++nokey_restarts_;
+                session_start_ms_ = now_ms();
+                std::printf("起流 %d 秒仍未解出关键帧（开头 IDR 可能被丢），重起媒体会话 (%d/3)\n",
+                            5, nokey_restarts_);
+                std::string restart_err;
+                if (!restart(restart_err)) {
+                    std::fprintf(stderr, "重起媒体会话失败: %s\n", restart_err.c_str());
+                    std::this_thread::sleep_for(std::chrono::seconds(1));
+                    continue;
+                }
+                new_session_state();
+                continue;
+            }
             if (oversized_restart_) {
                 oversized_restart_ = false;
                 std::printf("有 NAL 超过 2 字节长度前缀上限，整帧被丢，重起媒体会话\n");
