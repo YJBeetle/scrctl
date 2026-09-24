@@ -184,23 +184,15 @@ using scrctl::app::Crop;
 Crop resolve_crop(const Options &o, const scrctl::Frame &f) {
     const auto auto_crop = scrctl::media::display_crop(static_cast<int>(f.width),
                                                        static_cast<int>(f.height));
-    Crop c;
-    if (o.crop_set) {
-        c = {o.crop_x, o.crop_y, o.crop_w, o.crop_h, o.crop_w, o.crop_h};
-    } else {
-        c = {auto_crop.x, auto_crop.y, auto_crop.w, auto_crop.h, auto_crop.w, auto_crop.h};
-        if (static_cast<int>(f.width) != auto_crop.w || static_cast<int>(f.height) != auto_crop.h) {
-            std::printf("自动裁剪 %ux%u -> %dx%d（CTU 填充）\n", f.width, f.height, auto_crop.w,
-                        auto_crop.h);
-        }
+    if (!o.crop_set &&
+        (static_cast<int>(f.width) != auto_crop.w || static_cast<int>(f.height) != auto_crop.h)) {
+        std::printf("自动裁剪 %ux%u -> %dx%d（CTU 填充）\n", f.width, f.height, auto_crop.w,
+                    auto_crop.h);
     }
-    c.x = std::max(0, std::min(c.x, static_cast<int>(f.width) - 1));
-    c.y = std::max(0, std::min(c.y, static_cast<int>(f.height) - 1));
-    c.w = std::max(1, std::min(c.w, static_cast<int>(f.width) - c.x));
-    c.h = std::max(1, std::min(c.h, static_cast<int>(f.height) - c.y));
-    c.display_w = std::max(1, c.display_w);
-    c.display_h = std::max(1, c.display_h);
-    return c;
+    // 几何与夹取全在 ViewGeom.h 的 make_crop 里，那边可以离线自检。
+    return scrctl::app::make_crop(o.crop_set, o.crop_x, o.crop_y, o.crop_w, o.crop_h,
+                                  static_cast<int>(f.width), static_cast<int>(f.height),
+                                  auto_crop.w, auto_crop.h);
 }
 
 class Presenter {

@@ -15,6 +15,29 @@ struct Crop {
     int display_w = 0, display_h = 0;
 };
 
+/// 把命令行给的裁剪框落成一次会话用的 Crop。
+///
+/// `display_w/display_h` 是整块逻辑显示的尺寸，而 `--crop` 只决定"窗口里看哪一块"
+/// ——**它不换分母**。这里曾经把分母写成裁剪框自己的尺寸，于是只要给了 `--crop`，
+/// 每个触摸点都会被按比例往左上压，越靠右下偏得越多（画面看着对，点下去不对）。
+inline Crop make_crop(bool crop_given, int x, int y, int w, int h, int coded_w, int coded_h,
+                      int display_w, int display_h) {
+    Crop c;
+    if (crop_given) {
+        c = {x, y, w, h, display_w, display_h};
+    } else {
+        c = {0, 0, display_w, display_h, display_w, display_h};
+    }
+    // 夹进编码帧之内：越界的框会算出 0 或负的窗口尺寸，而 0 尺寸窗口是启动即闪退。
+    c.x = std::max(0, std::min(c.x, coded_w - 1));
+    c.y = std::max(0, std::min(c.y, coded_h - 1));
+    c.w = std::max(1, std::min(c.w, coded_w - c.x));
+    c.h = std::max(1, std::min(c.h, coded_h - c.y));
+    c.display_w = std::max(1, c.display_w);
+    c.display_h = std::max(1, c.display_h);
+    return c;
+}
+
 /// 鼠标原始坐标 -> 整块屏幕的 0..1。**触摸对不对全靠这一条**。
 ///
 /// 传进来的必须已经是**逻辑坐标**（单位 = 裁剪框像素）。SDL2 在设了

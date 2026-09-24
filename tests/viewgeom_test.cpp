@@ -109,6 +109,36 @@ void test_fit_window() {
     check(w == 562 && h == 1218, "--scale 0.5 照收，不擅自改");
 }
 
+/// `--crop` 只改"看哪一块"，不改触摸的分母。
+///
+/// 这里钉的是 resolve_crop 那个调用点：它曾经把裁剪框自己的尺寸写进 display_w/h，
+/// 于是只要给了 --crop，右下角就被压回 0.5 附近——画面看着是对的，点下去是错的。
+void test_manual_crop_keeps_the_display_denominator() {
+    std::printf("\n== 手工裁剪不改分母 ==\n");
+    using scrctl::app::make_crop;
+
+    // 编码 1136x2464、逻辑显示 1125x2436，用户裁右下那块 500x500@(600,1800)。
+    const Crop c = make_crop(true, 600, 1800, 500, 500, 1136, 2464, 1125, 2436);
+    check(c.display_w == 1125 && c.display_h == 2436, "分母仍是整块逻辑显示");
+
+    double fx = 0, fy = 0;
+    // 裁剪框的右下角 = 逻辑坐标 (1100, 2300) = 整块屏幕的 (0.978, 0.944)
+    display_fraction_from_logical(500, 500, c, fx, fy);
+    check(near(fx, 1100.0 / 1125, 0.002) && near(fy, 2300.0 / 2436, 0.002),
+          "分区右下角落在屏幕右下角附近，而不是被压回中间");
+
+    // 没给 --crop 时整块显示就是视口，中心仍是 0.5。
+    const Crop full = make_crop(false, 0, 0, 0, 0, 1136, 2464, 1125, 2436);
+    display_fraction_from_logical(562, 1218, full, fx, fy);
+    check(near(fx, 0.5, 0.002) && near(fy, 0.5, 0.002), "不裁时正中 -> (0.5,0.5)");
+
+    // 越界与零尺寸的框要夹进编码帧里：0 尺寸窗口是"启动就闪退"，比画错更糟。
+    const Crop clamped = make_crop(true, 5000, -10, 0, 0, 1136, 2464, 1125, 2436);
+    check(clamped.x == 1135 && clamped.y == 0 && clamped.w == 1 && clamped.h == 1,
+          "越界框被夹住且不为 0");
+    check(clamped.display_w == 1125 && clamped.display_h == 2436, "夹取不动分母");
+}
+
 }  // namespace
 
 int main() {
@@ -116,6 +146,7 @@ int main() {
     test_raw_to_fraction();
     test_ctu_padding_not_in_the_denominator();
     test_cropped_viewport();
+    test_manual_crop_keeps_the_display_denominator();
     test_degenerate();
     test_fit_window();
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
