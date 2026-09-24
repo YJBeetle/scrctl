@@ -213,8 +213,23 @@ RBSP 里可能凭空出现 00 00 01，是否踩到取决于码流内容，所以
 **长度前缀是 2 字节，不是 4。** `CMVideoFormatDescriptionCreateFromHEVCParameterSets`
 会正确把该参数写进 hvcC 的 `lengthSizeMinusOne`（2→1，4→3），但 `lengthSizeMinusOne=3`
 的会话对每一个样本都回 `kVTVideoDecoderBadDataErr(-12909)`，出帧率 0%。已用
-"自己 create + 自己 write"的 2×2 矩阵排除是组装写错。真机流实测最大 NAL 约
-17KB，2 字节够用；超了就是这条后端的能力边界，得改软解。
+"自己 create + 自己 write"的 2×2 矩阵排除是组装写错。
+
+**于是"单帧 > 65535 字节"是这条链路的硬风险，不是边角情况。** 主屏壁纸的一个 IDR
+实测 49652~70101 字节（`tools/nalsizes.py` 量录制文件；无边记那种深色画面只有
+17KB，所以早期结论"最大约 17KB"是被取样骗了）。VideoToolbox 喂不进去就只能整帧
+丢，而流不周期发 IDR——开头那个丢了之后参考链永远起不来，症状是**连上几秒后一片
+灰且永不恢复**。重起会话也救不了：内容不变，IDR 还是那么大。
+
+**别指望 offer 能把单帧压小，这条路实测是死的：**
+- 码率阶梯里像 bps 的 f2、像缓冲的 f3，各自缩到 0.25 再下发（以及两者同时缩），
+  IDR 是 49652 / 49789 / 49852 字节，与不缩时的 49652 没有区别；
+- 分辨率条目的 `pair_index` 从 0 扫到 6，编码尺寸一直是 1136x2464（`pair=1` 会被
+  拒：code 32035 / GKVoiceChatServiceErrorDomain）。
+设备不照 offer 里这几串数编，单帧多大由它自己定。所以唯一的解法是换一个没有 2 字节
+限制的后端：`create_software_decoder()`（libavcodec），由泵在**关键帧**上切过去——
+换后端等于换一条参考链，只有 IDR 能自洽起新链。同一份录屏两个后端都 412/412 出帧，
+同帧逐像素平均绝对差 0.92；真机 --no-window 下软解 44.7fps、VideoToolbox 42.2fps。
 
 **VideoToolbox 的回调可能在 `DecodeFrame` 返回之后才跑**，即使 decodeFlags 没开
 异步位。所以输出槽必须活得比回调久（等 `WaitForAsynchronousFrames` 再让它离开作用
