@@ -175,12 +175,19 @@ void FramePump::loop() {
             }
             // 换过后端仍然装不下，就是真没能力解这一帧：整帧丢。
             if (biggest > decoder->max_nal_size()) {
-                std::lock_guard<std::mutex> lock(mutex_);
-                ++stats_.dropped_oversized;
+                {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    ++stats_.dropped_oversized;
+                    // **丢了这一帧，参考链就断了**：后面每个 P 帧都是拿"缺失的那一帧"
+                    // 当参考解的，解出来就是花屏——而这一段会一直持续到我们重起会话为
+                    // 止。所以和丢包同一处置：置起 need_keyframe_，在拿到干净关键帧之前
+                    // 什么都不解，宁可冻在最后一帧好画上。
+                    need_keyframe_ = true;
+                }
                 // 不要求"已经有过正常画面"：开头 IDR 超大被丢时 decoded 永远是 0，
                 // 那个保护恰好把唯一该救的情况排除掉了（用户看到的就是
                 // 一片灰且永不恢复）。只限频，防死循环。
-                if (now_ms() - last_restart_ms_ > 5000) {
+                if (now_ms() - last_restart_ms_ > 1500) {
                     last_restart_ms_ = now_ms();
                     oversized_restart_ = true;
                 }
@@ -223,19 +230,38 @@ void FramePump::loop() {
         });
     };
 
-    session_start_ms_ = now_ms();
-    ever_keyframe_ = false;
-    need_keyframe_ = false;
-    loss_seen_ = 0;
-
+    /// 一条会话自己的状态。重起时必须整套换掉——留着旧会话的判断，新会话开头那个
+    /// 干净关键帧会被误判成"沾了丢包"而丢掉，画面就冻在旧帧上，要等下一次重起才
+    /// 恢复（用户症状：换过后端之后冻住一会儿又自己好了）。
     auto new_session_state = [&] {
         depacketizer = std::make_unique<scrctl::rt::HevcRtpDepacketizer>(session_->started().payload_type);
         configured = false;
         parser_ = make_parser();
+        session_start_ms_ = now_ms();
+        last_packet_ms_ = session_start_ms_;
+        ever_keyframe_ = false;
+        need_keyframe_ = false;
+        loss_seen_ = 0;
+        gaps_at_last_check_ = 0;
     };
     new_session_state();
 
     for (;;) {
+        // "该重起了"这个判断必须每轮都做，不能只挂在"读包超时"那条分支上。快速动
+        // 画面下包是连续到达的，50ms 超时永远轮不到，于是"丢了帧要去拿新关键帧"这个
+        // 决定会一直悬着——实测连丢 20 帧、画面冻住十几秒才等到一次超时才恢复。
+        if (oversized_restart_) {
+            oversized_restart_ = false;
+            std::printf("有 NAL 超过平台后端的长度前缀上限，重起媒体会话拿新关键帧\n");
+            std::string restart_err;
+            if (!restart(restart_err)) {
+                std::fprintf(stderr, "重起媒体会话失败: %s\n", restart_err.c_str());
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+            } else {
+                new_session_state();
+            }
+            continue;
+        }
         if (!session_->next_packet(datagram, 50, err)) {
             {
                 std::lock_guard<std::mutex> lock(mutex_);
@@ -252,18 +278,6 @@ void FramePump::loop() {
                 session_start_ms_ = now_ms();
                 std::printf("起流 %d 秒仍未解出关键帧（开头 IDR 可能被丢），重起媒体会话 (%d/3)\n",
                             5, nokey_restarts_);
-                std::string restart_err;
-                if (!restart(restart_err)) {
-                    std::fprintf(stderr, "重起媒体会话失败: %s\n", restart_err.c_str());
-                    std::this_thread::sleep_for(std::chrono::seconds(1));
-                    continue;
-                }
-                new_session_state();
-                continue;
-            }
-            if (oversized_restart_) {
-                oversized_restart_ = false;
-                std::printf("有 NAL 超过 2 字节长度前缀上限，整帧被丢，重起媒体会话\n");
                 std::string restart_err;
                 if (!restart(restart_err)) {
                     std::fprintf(stderr, "重起媒体会话失败: %s\n", restart_err.c_str());
