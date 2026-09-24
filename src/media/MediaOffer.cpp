@@ -98,7 +98,7 @@ std::vector<uint8_t> session_blob(const Offer &offer) {
 /// IDR 是 49652 / 49789 / 49852 字节，与不缩时的 49652 没有区别。设备不照这张表
 /// 编，单帧多大由它自己定。所以"压小关键帧"这条路是死的，超大帧只能靠软解后端。
 /// 观测值原样发，是唯一验证过能起流的一组数。
-std::vector<uint8_t> rate_table() {
+std::vector<uint8_t> rate_table(const Offer &offer) {
     std::vector<uint8_t> out;
     auto entry = [&out](std::vector<std::pair<uint32_t, uint64_t>> fields) {
         std::vector<uint8_t> body;
@@ -109,16 +109,37 @@ std::vector<uint8_t> rate_table() {
     };
     // 观测里每条的 f1 都在（值为 0 也写出来）。protobuf 语义上省略零字段与写
     // 零等价，但字节长度就不同了，所以照观测原样写，不做"优化"。
-    entry({{1, 4074}, {2, 0}, {3, 16384}});
-    entry({{1, 0}, {2, 75000000}, {3, 524288}});
-    entry({{1, 0}, {2, 40000000}, {3, 12288}});
-    entry({{1, 16}, {2, 4100}});
-    entry({{1, 0}, {2, 20000000}, {3, 98304}});
-    entry({{1, 4}, {2, 6500}});
-    entry({{1, 0}, {2, 6000000}, {3, 131072}});
-    entry({{1, 0}, {2, 100000000}, {3, 1048576}});
-    entry({{1, 0}, {2, 60000000}, {3, 262144}});
-    entry({{1, 1}, {2, 299}});
+    auto f2_of = [](const std::vector<std::pair<uint32_t, uint64_t>> &e) {
+        for (const auto [f, v] : e) {
+            if (f == 2) {
+                return v;
+            }
+        }
+        return uint64_t { 0 };
+    };
+    const std::vector<std::vector<std::pair<uint32_t, uint64_t>>> observed = {
+        {{1, 4074}, {2, 0}, {3, 16384}},        {{1, 0}, {2, 75000000}, {3, 524288}},
+        {{1, 0}, {2, 40000000}, {3, 12288}},    {{1, 16}, {2, 4100}},
+        {{1, 0}, {2, 20000000}, {3, 98304}},    {{1, 4}, {2, 6500}},
+        {{1, 0}, {2, 6000000}, {3, 131072}},    {{1, 0}, {2, 100000000}, {3, 1048576}},
+        {{1, 0}, {2, 60000000}, {3, 262144}},   {{1, 1}, {2, 299}},
+    };
+    for (auto e : observed) {
+        if (offer.rate_variant == 1 && f2_of(e) == 6000000) {
+            continue;  // 去掉 6M 这一档，看设备改挑哪一档
+        }
+        if (offer.rate_variant == 2 && f2_of(e) == 6000000) {
+            for (auto &[f, v] : e) {
+                if (f == 2) {
+                    v = 60000000;
+                }
+            }
+        }
+        if (offer.rate_variant == 3 && f2_of(e) >= 1000 && f2_of(e) < 20000000) {
+            continue;  // 只留 >=20M 的档
+        }
+        entry(e);
+    }
     return out;
 }
 
@@ -129,7 +150,7 @@ std::vector<uint8_t> media_blob(const Offer &offer) {
     put_field_bytes(out, 5, session_blob(offer));
     put_field_string(out, 6, "Viceroy 1.7.0");
     put_field_varint(out, 8, 0);
-    auto rates = rate_table();
+    auto rates = rate_table(offer);
     out.insert(out.end(), rates.begin(), rates.end());
     // f13 是从可用会话里带出来的一个时间戳常量。设备不校验它（参考实现同样
     // 用固定值），所以照抄，不去编一个"现在的时间"——编错了反而没人能解释。

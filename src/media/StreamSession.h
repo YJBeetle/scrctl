@@ -22,6 +22,10 @@ public:
         uint16_t receiver_port = 0;  ///< 0 = 随机挑一个
         uint32_t display_id = 1;
         uint32_t timeout_seconds = 20;
+        /// 申报给设备的主机能力位掩码。观测值是 140，而设备自己回
+        /// `supportedFeatures: 972`——差着的位里可能藏着更高档的编码器配置，
+        /// 所以这个数要能改，别焊死在常量上。
+        uint64_t client_supported_features = 140;
         Offer offer;
     };
 
@@ -102,6 +106,7 @@ private:
                                                      const std::string &sender_ip,
                                                      const std::vector<uint8_t> &offer_bplist,
                                                      uint32_t display_id,
-                                                     uint32_t timeout_seconds);
+                                                     uint32_t timeout_seconds,
+                                                     uint64_t client_supported_features);
 
 }  // namespace scrctl::media

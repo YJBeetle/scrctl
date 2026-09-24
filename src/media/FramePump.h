@@ -75,6 +75,14 @@ public:
         /// 单个 NAL 超过 2 字节长度前缀上限（65535）而被整帧丢掉的次数。
         /// 这条流没有周期 IDR，丢一帧参考链就永久坏，所以它同时是重起的触发器。
         uint64_t dropped_oversized = 0;
+        /// 因为"还没等到干净关键帧"（need_keyframe_）而被挡掉的 AU 数。这个数才
+        /// 是"包都收到了、画面却只有 12 帧"的真正账：它之前完全没有计数。
+        uint64_t dropped_awaiting_keyframe = 0;
+        /// 拆包器累计的"分片没收完就作废"次数。它和 seq_gaps 一起构成
+        /// need_keyframe_ 的触发条件，之前只打了 gaps。
+        uint64_t dropped_fragments = 0;
+        /// AU 切分器一共交出来多少个 AU（和 decoded 一比就知道丢在哪一层）。
+        uint64_t aus = 0;
     };
 
     /// 在已经建好的会话上起泵。失败时 err 带设备的人话。

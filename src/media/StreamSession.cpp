@@ -10,8 +10,6 @@ namespace {
 
 using namespace scrctl;
 
-/// 主机侧能力位掩码，从可用会话里带出来的观测值。
-constexpr uint64_t kClientSupportedFeatures = 140;
 constexpr int64_t kAccessNetworkType = 1;
 constexpr int64_t kTransportProtocolType = 2;
 
@@ -43,9 +41,9 @@ uint16_t pick_port() {
 xpc::Value build_start_request(const std::string &receiver_ip, uint16_t receiver_port,
                                const std::string &sender_ip,
                                const std::vector<uint8_t> &offer_bplist, uint32_t display_id,
-                               uint32_t timeout_seconds) {
+                               uint32_t timeout_seconds, uint64_t client_supported_features) {
     auto d = xpc::make_dict();
-    xpc::dict_set(d, "clientSupportedFeatures", xpc::make_uint64(kClientSupportedFeatures));
+    xpc::dict_set(d, "clientSupportedFeatures", xpc::make_uint64(client_supported_features));
     xpc::dict_set(d, "direction", xpc::make_string("output"));
     xpc::dict_set(d, "negotiatorOffer", xpc::make_data(offer_bplist));
 
@@ -101,7 +99,8 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
     const auto &tunnel_params = device.tunnel_params();
     auto input = build_start_request(tunnel_params.client_address, port,
                                      tunnel_params.server_address, blob, request.display_id,
-                                     request.timeout_seconds);
+                                     request.timeout_seconds,
+                                     request.client_supported_features);
     xpc::Value output;
     if (!device.feature("com.apple.coredevice.displayservice",
                         "com.apple.coredevice.feature.startmediastream",

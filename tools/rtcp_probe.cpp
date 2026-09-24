@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "media/StreamSession.h"
+#include "bitstream/AnnexB.h"
 #include "remote/Device.h"
 #include "rt/RtpHevc.h"
 #include "xpc/XpcValue.h"
@@ -127,6 +128,25 @@ int main(int argc, char **argv) {
     uint64_t shown_odd = 0;
     bool ours = true;
     std::string st_err;
+    /// 设备自己的 RTCP SR 里带"已发包数/已发字节数"（RFC 3550 §6.4.1，偏移 20/24）。
+    /// 拿它的每秒增量和我们每秒收到的视频包一比，就能定死"设备只编这么慢"还是
+    /// "设备发了但我们没收全"——这是唯一一条不依赖我们自己链路的读数。
+    /// 一秒内出现过几个**不同的视频 RTP 时间戳**=设备这一秒真的编了几帧。
+    /// 590 包/秒却只解出 12 帧，要么是设备只出 12 帧（每帧 48 包），要么是我们的
+    /// AU 切分把几帧并成了一帧——时间戳能把这两件事一眼分开。
+    uint32_t last_ts = 0;
+    uint32_t distinct_ts = 0;
+    /// 同一条时间轴上再放两个下游计数：拆出来的 NAL 数、以及 AU 切分给出的帧数。
+    /// 60 个不同时间戳进来却只切出 12 个 AU，责任就在切分器；NAL 就只有 12 份，
+    /// 责任在拆包器。
+    uint64_t sec_nals = 0, sec_aus = 0;
+    scrctl::rt::HevcRtpDepacketizer counter(session->started().payload_type);
+    scrctl::AnnexBParser au_counter([&](std::vector<scrctl::Nal> &&au, bool keyframe) {
+        ++sec_aus;
+    });
+    std::vector<uint32_t> ts_steps;
+    uint32_t sr_packets = 0, sr_octets = 0;
+    uint32_t last_sr_packets = 0, last_sr_octets = 0;
 
     while (now_ms() - t0 < static_cast<uint64_t>(seconds * 1000)) {
         uint16_t peer_port = 0;
@@ -140,8 +160,36 @@ int main(int argc, char **argv) {
                 ++sec_video;
                 last_video = now_ms();
                 video_ssrc = info.ssrc;
+                std::vector<uint8_t> annexb;
+                if (counter.push(packet, annexb, err)) {
+                    const uint64_t nals = counter.stats().nals;
+                    static uint64_t reported_nals = 0;
+                    if (nals > reported_nals) {
+                        sec_nals += nals - reported_nals;
+                        reported_nals = nals;
+                    }
+                    if (!annexb.empty()) {
+                        au_counter.feed(annexb.data(), annexb.size());
+                    }
+                }
+                if (info.timestamp != last_ts) {
+                    if (last_ts != 0) {
+                        ts_steps.push_back(info.timestamp - last_ts);
+                    }
+                    last_ts = info.timestamp;
+                    ++distinct_ts;
+                }
             } else {
                 ++sec_rtcp;
+                // 裸 RTCP SR：4 字节公共头 + 4 SSRC + 8 NTP + 4 RTP ts + 4 包数 + 4 字节数。
+                if (packet.size() >= 28 && (packet[1] & 0x7F) == 72) {
+                    const auto be32 = [&](std::size_t off) {
+                        return (uint32_t(packet[off]) << 24) | (uint32_t(packet[off + 1]) << 16) |
+                               (uint32_t(packet[off + 2]) << 8) | packet[off + 3];
+                    };
+                    sr_packets = be32(20);
+                    sr_octets = be32(24);
+                }
             }
             if (!video && shown_odd < 3) {
                 ++shown_odd;
@@ -179,12 +227,23 @@ int main(int argc, char **argv) {
                     st_text += "  <<< 刚刚变了";
                 }
             }
-            std::printf("%6llu ms  视频包 %4llu  非视频 %2llu  距最后视频包 %5llu ms  会话 %s\n", t,
-                        static_cast<unsigned long long>(sec_video),
-                        static_cast<unsigned long long>(sec_rtcp),
+            const long dev_pkts = static_cast<long>(sr_packets - last_sr_packets);
+            const long dev_bytes = static_cast<long>(sr_octets - last_sr_octets);
+            last_sr_packets = sr_packets;
+            last_sr_octets = sr_octets;
+            std::printf("%6llu ms  我收到视频包 %4llu  设备 SR 说它发了 %4llu 个 / %7ld 字节  "
+                        "差 %4ld  这秒内 %3u 个不同时间戳  NAL %4llu  AU %3llu  距最后视频包 "
+                        "%5llu ms  会话 %s\n",
+                        t, static_cast<unsigned long long>(sec_video), dev_pkts, dev_bytes,
+                        dev_pkts - static_cast<long>(sec_video), distinct_ts,
+                        static_cast<unsigned long long>(sec_nals),
+                        static_cast<unsigned long long>(sec_aus),
                         static_cast<unsigned long long>(now_ms() - last_video), st_text.c_str());
             sec_video = 0;
             sec_rtcp = 0;
+            distinct_ts = 0;
+            sec_nals = 0;
+            sec_aus = 0;
         }
     }
 
@@ -194,5 +253,11 @@ int main(int argc, char **argv) {
                     pt == video_pt ? "（协商的视频）" : "");
     }
     std::printf("视频 SSRC=%08x\n", video_ssrc);
+    if (ts_steps.size() > 2) {
+        std::sort(ts_steps.begin(), ts_steps.end());
+        std::printf("相邻两帧的时间戳差：最小 %u 中位 %u 最大 %u（时钟率未知，"
+                    "但**不同取值的个数**就是帧数）\n", ts_steps.front(),
+                    ts_steps[ts_steps.size() / 2], ts_steps.back());
+    }
     return 0;
 }

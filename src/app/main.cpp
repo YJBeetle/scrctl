@@ -616,11 +616,15 @@ public:
             return;
         }
         const auto st = pump_->stats();
-        std::printf("  流: 包 %llu 解码 %llu 未出帧 %llu 断流 %llu 次 重起 %llu 次 超大NAL丢 %llu\n",
+        std::printf("  流: 包 %llu AU %llu 解码 %llu 未出帧 %llu 等关键帧丢 %llu\n",
                     static_cast<unsigned long long>(st.packets),
+                    static_cast<unsigned long long>(st.aus),
                     static_cast<unsigned long long>(st.decoded),
                     static_cast<unsigned long long>(st.no_output),
+                    static_cast<unsigned long long>(st.dropped_awaiting_keyframe));
+        std::printf("      序号缺口 %llu 分片作废 %llu 重起 %llu 次 超大NAL丢 %llu\n",
                     static_cast<unsigned long long>(st.gaps),
+                    static_cast<unsigned long long>(st.dropped_fragments),
                     static_cast<unsigned long long>(st.restarts),
                     static_cast<unsigned long long>(st.dropped_oversized));
     }

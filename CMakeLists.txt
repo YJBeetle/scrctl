@@ -176,6 +176,9 @@ target_link_libraries(fir_probe PRIVATE scrctl_core)
 add_executable(restart_gap_probe tools/restart_gap_probe.cpp)
 target_link_libraries(restart_gap_probe PRIVATE scrctl_core)
 
+add_executable(bitrate_probe tools/bitrate_probe.cpp)
+target_link_libraries(bitrate_probe PRIVATE scrctl_core)
+
 # ---------------------------------------------------------------- tests -----
 if(SCRCTL_BUILD_TESTS)
     enable_testing()
