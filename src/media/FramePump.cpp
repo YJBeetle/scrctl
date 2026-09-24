@@ -280,14 +280,30 @@ void FramePump::loop() {
         return true;
     };
 
+    /// 不问状态，直接重起。用户动手时走这条：问一次会话状态是一条 RPC（实测
+    /// 100~300ms），而停掉再加起回来只要 37~90ms（tools/restart_gap_probe 量的）。
+    /// 先问再起重等于把手感里最大的一笔开销花在"确认一个本来就打算处理的事实"上。
+    /// 会话其实还活着时重起也不亏：新会话必然带一个干净的关键帧，画面立刻是最新的。
+    auto restart_now = [&]() {
+        std::string restart_err;
+        if (!restart(restart_err)) {
+            std::fprintf(stderr, "重起媒体会话失败: %s\n", restart_err.c_str());
+            return false;
+        }
+        new_session_state();
+        return true;
+    };
+
     for (;;) {
-        // 用户动了一下手，而流已经安静了 150ms 以上：立刻确认一次，不要等静默窗口
-        // 到点。不等的话手感就是"点下去愣一下画面才动"——设备在画面静止约 3 秒后
+        // 用户动了一下手，而流已经安静了 150ms 以上：马上重起一条，不要等静默窗口
+        // 到点。不等的话手感就是"点下去愣一下画面才动"——设备在画面静止约 7 秒后
         // 就把流结束了，而按静默判据最快也要 3 秒才发现。
         if (wake_requested_.exchange(false)) {
             const uint64_t quiet = now_ms() - last_packet_ms_;
             if (quiet > 150) {
-                revive_if_dead("收到操作");
+                std::printf("收到操作（已静默 %llums），重起媒体会话\n",
+                            static_cast<unsigned long long>(quiet));
+                restart_now();
             }
             continue;
         }
