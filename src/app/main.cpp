@@ -460,7 +460,8 @@ public:
     [[nodiscard]] virtual bool finished() const { return false; }
     /// 文件回放要自己按标称帧率追节拍；实时流的到达节奏就是设备的节奏。
     [[nodiscard]] virtual bool paces_itself() const { return false; }
-    virtual void print_stats() const {}
+    /// 打一段读数。实现方自己按调用间隔算速率，所以调用方只管按秒催。
+    virtual void print_stats() {}
 };
 
 /// 已录制的 Annex-B 文件。
@@ -611,27 +612,82 @@ public:
     /// 它得能和 `--verify` 组合使用：先按键，再等第 N 帧回读窗口内容。
     bool button(uint16_t usage_page, uint16_t usage_code, std::string &err);
 
-    void print_stats() const override {
+    /// **必须打速率，不能打累计数。** 第一版这里打的是累计包数，结果"包 1778"
+    /// 被当成每秒读数读了 16 秒，直接把结论带偏到"设备只编 12 帧"上——而它真正的
+    /// 意思是这一段里我们一共只收到 110 包/秒。一个没有分母的数不是读数。
+    void print_stats() override {
         if (pump_ == nullptr) {
             return;
         }
         const auto st = pump_->stats();
-        std::printf("  流: 包 %llu AU %llu 解码 %llu 未出帧 %llu 等关键帧丢 %llu\n",
+        const uint64_t now = SDL_GetTicks64();
+        const double secs = last_stats_ms_ == 0
+                                ? 1.0
+                                : std::max(0.001, static_cast<double>(now - last_stats_ms_) / 1000.0);
+        const auto rate = [&](uint64_t now_value, uint64_t before) {
+            return static_cast<double>(now_value - before) / secs;
+        };
+        // 设备的 SR 每 `RTCPSendInterval` 秒才来一个（实测空闲时会拖到 4 秒以上），
+        // 所以它的增量**不能**除以打印窗口，否则一次增量被摊成一秒的速率，数会虚高
+        // 好几倍。除以"上一次 SR 变化到现在"的真实间隔。
+        double dev_rate = 0;
+        // 重起会话会让设备侧的累计数归零，做差会下溢成一个天文数字。
+        const bool dev_reset = st.dev_sent_packets < last_dev_packets_;
+        if (dev_reset) {
+            last_dev_packets_ = st.dev_sent_packets;
+            last_dev_change_ms_ = now;
+            last_dev_rate_ = 0;
+        } else if (st.dev_sent_packets != last_dev_packets_ && last_dev_change_ms_ != 0) {
+            dev_rate = static_cast<double>(st.dev_sent_packets - last_dev_packets_) /
+                       std::max(0.001, static_cast<double>(now - last_dev_change_ms_) / 1000.0);
+        } else {
+            dev_rate = last_dev_rate_;
+        }
+        std::printf("  流: 设备发了 %6.0f/s 我收到 %6.0f/s 差 %+6.0f | AU %5.1f/s 解码 %5.1f/s\n",
+                    dev_rate, rate(st.packets, last_packets_),
+                    rate(st.packets, last_packets_) - dev_rate, rate(st.aus, last_aus_),
+                    rate(st.decoded, last_decoded_));
+        std::printf("      累计 设备 %llu 我 %llu AU %llu 解码 %llu\n",
+                    static_cast<unsigned long long>(st.dev_sent_packets),
                     static_cast<unsigned long long>(st.packets),
                     static_cast<unsigned long long>(st.aus),
-                    static_cast<unsigned long long>(st.decoded),
+                    static_cast<unsigned long long>(st.decoded));
+        std::printf("      每帧耗时：拆包 %.1f ms 解码 %.1f ms 交付 %.1f ms（AU %llu 次）\n",
+                    (st.ms_depacketize) / std::max<uint64_t>(1, st.packets),
+                    st.ms_decode / std::max<uint64_t>(1, st.decode_calls),
+                    st.ms_publish / std::max<uint64_t>(1, st.decode_calls),
+                    static_cast<unsigned long long>(st.decode_calls));
+        std::printf("      非视频载荷 %llu 未出帧 %llu 等关键帧丢 %llu 序号缺口 %llu 分片作废 %llu 重起 %llu "
+                    "超大NAL丢 %llu\n",
+                    static_cast<unsigned long long>(st.other_payload),
                     static_cast<unsigned long long>(st.no_output),
-                    static_cast<unsigned long long>(st.dropped_awaiting_keyframe));
-        std::printf("      序号缺口 %llu 分片作废 %llu 重起 %llu 次 超大NAL丢 %llu\n",
+                    static_cast<unsigned long long>(st.dropped_awaiting_keyframe),
                     static_cast<unsigned long long>(st.gaps),
                     static_cast<unsigned long long>(st.dropped_fragments),
                     static_cast<unsigned long long>(st.restarts),
                     static_cast<unsigned long long>(st.dropped_oversized));
+        last_packets_ = st.packets;
+        if (st.dev_sent_packets != last_dev_packets_) {
+            last_dev_rate_ = dev_rate;
+            last_dev_change_ms_ = now;
+            last_dev_packets_ = st.dev_sent_packets;
+        }
+        last_aus_ = st.aus;
+        last_decoded_ = st.decoded;
+        last_stats_ms_ = now;
     }
 
 private:
     std::unique_ptr<scrctl::remote::Device> device_;
     std::unique_ptr<scrctl::media::FramePump> pump_;
+    uint64_t last_packets_ = 0;
+    uint64_t last_dev_packets_ = 0;
+    uint64_t last_dev_change_ms_ = 0;
+    double last_dev_rate_ = 0;
+    uint64_t last_aus_ = 0;
+    uint64_t last_decoded_ = 0;
+    uint64_t last_stats_ms_ = 0;
+
     std::unique_ptr<scrctl::hid::Service> hid_;
     std::unique_ptr<scrctl::hid::Buttons> buttons_;
     bool hid_unavailable_ = false;
@@ -827,6 +883,7 @@ int main(int argc, char **argv) {
     std::unique_ptr<Presenter> presenter;
     const Uint64 start = SDL_GetTicks64();
     int last_reported = 0;
+    Uint64 last_stats_at = SDL_GetTicks64();
     bool quit = false;
 
     /// 窗口里的一次按下/移动/抬起 -> 设备上的接触/抬起。
@@ -844,8 +901,10 @@ int main(int argc, char **argv) {
         }
     };
 
+    // 帧缓冲要跨迭代复用：每轮新建一个 Frame 意味着每帧重新申请 11MB、重新缺页，
+    // 而取帧那边是 `out = frame_` 的整幅拷贝——两者叠起来实测就是每帧几十毫秒。
+    scrctl::Frame f;
     while (!quit) {
-        scrctl::Frame f;
         // 50ms：再长一点，等帧期间窗口对关闭/移动的反应就开始发木。
         if (!source->next(f, 50)) {
             if (source->finished()) {
@@ -862,11 +921,14 @@ int main(int argc, char **argv) {
 
         // 统计放在 no_window 分支**之前**：--no-window 正是拿它测吞吐量的模式
         // （有窗口时能直接看到帧率，无窗口时这行输出就是唯一的读数）。
-        if (o.stats && rendered - last_reported >= 60) {
+        // 按秒催，不按"每 60 帧"——12fps 时每 60 帧是 5 秒，读数就摊在一段很长的
+        // 窗口上，速率和累计值根本分不出来。
+        if (o.stats && SDL_GetTicks64() - last_stats_at >= 1000) {
             const double el = (SDL_GetTicks64() - start) / 1000.0;
             std::printf("  渲染 %d 帧  %.1f fps\n", rendered, rendered / el);
             source->print_stats();
             last_reported = rendered;
+            last_stats_at = SDL_GetTicks64();
         }
 
         if (o.no_window) {

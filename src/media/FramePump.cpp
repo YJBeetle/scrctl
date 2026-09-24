@@ -231,8 +231,19 @@ void FramePump::loop() {
                 need_keyframe_ = false;
             }
 
-            Frame f;
-            if (!decoder->decode(au, f) || !f) {
+            // 刻意不清空 publishing_.pixels：clear() 之后 resize() 会把 11MB 重新
+            // 写一遍零，等于把省下的分配又换成一次 memset。解码器只在尺寸变了时
+            // 才 resize，尺寸没变就是原地覆写。
+            Frame &f = publishing_;
+            const uint64_t t_decode0 = now_ms();
+            const bool ok = decoder->decode(au, f);
+            const uint64_t t_published0 = now_ms();
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                stats_.ms_decode += static_cast<double>(t_published0 - t_decode0);
+                ++stats_.decode_calls;
+            }
+            if (!ok || !f) {
                 std::lock_guard<std::mutex> lock(mutex_);
                 ++stats_.no_output;
                 return;
@@ -242,12 +253,17 @@ void FramePump::loop() {
                 nokey_restarts_ = 0;  // 只有真解出关键帧才重置上限，防死循环
             }
             std::lock_guard<std::mutex> lock(mutex_);
-            frame_ = std::move(f);
+            // 交换而不是搬走：`frame_ = std::move(f)` 会把 f 的 11MB 缓冲区带走，
+            // 下一帧的解码目标就得重新分配并重新缺页——那笔开销实测就是每帧几十毫秒
+            // 的主要来源。交换之后 publishing_ 拿回上一帧的缓冲区，尺寸正好，
+            // 从第二帧起一次分配都没有。
+            std::swap(frame_, publishing_);
             width_ = static_cast<int>(frame_.width);
             height_ = static_cast<int>(frame_.height);
             ++serial_;
             ++stats_.decoded;
             cv_.notify_all();
+            stats_.ms_publish += static_cast<double>(now_ms() - t_published0);
         });
     };
 
@@ -371,16 +387,38 @@ void FramePump::loop() {
             continue;  // 超时不是结束
         }
         last_packet_ms_ = now_ms();
+        // 设备的 SR 是裸 RTCP（开头 0x81 0xc8），混在视频同一个端口上每秒来一个。
+        // 它自带的"累计已发视频包数"在偏移 20，是设备侧的权威计数。
+        uint64_t dev_pkts = 0, dev_octets = 0;
+        if (datagram.size() >= 28 && datagram[0] == 0x81 && datagram[1] == 0xc8) {
+            const auto be32 = [&datagram](std::size_t off) {
+                return (uint64_t(datagram[off]) << 24) | (uint64_t(datagram[off + 1]) << 16) |
+                       (uint64_t(datagram[off + 2]) << 8) | datagram[off + 3];
+            };
+            dev_pkts = be32(20);
+            dev_octets = be32(24);
+        }
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (stopping_) {
                 return;
             }
             ++stats_.packets;
+            if (dev_pkts != 0) {
+                stats_.dev_sent_packets = dev_pkts;
+                stats_.dev_sent_octets = dev_octets;
+            }
         }
 
         std::vector<uint8_t> bytes;
-        if (!depacketizer->push(datagram, bytes, err) || bytes.empty()) {
+        const uint64_t t_dp0 = now_ms();
+        const bool pushed = depacketizer->push(datagram, bytes, err);
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            stats_.other_payload = depacketizer->stats().other_payload;
+            stats_.ms_depacketize += static_cast<double>(now_ms() - t_dp0);
+        }
+        if (!pushed || bytes.empty()) {
             continue;
         }
         if (record_ != nullptr) {

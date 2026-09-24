@@ -83,6 +83,18 @@ public:
         uint64_t dropped_fragments = 0;
         /// AU 切分器一共交出来多少个 AU（和 decoded 一比就知道丢在哪一层）。
         uint64_t aus = 0;
+        /// 设备在它自己的 RTCP SR 里报的累计已发视频包数/字节数（最后一次看到的值）。
+        /// 这是**唯一不经过我们链路的读数**：拿它和 packets 一比，就能分清
+        /// "设备只编这么点"和"设备发了但我们没收全"，而且是在同一条会话里比。
+        uint64_t dev_sent_packets = 0;
+        uint64_t dev_sent_octets = 0;
+        /// 非视频载荷（设备的 RTCP SR）被跳过的包数。它同时用来回答"我们到底有没有
+        /// 收到 SR"——scrctl 的会话里这个数一直是 0，而探针每秒都收到一个。
+        uint64_t other_payload = 0;
+        /// 每一段各花了多少毫秒（累计）。12fps 却烧掉 1.5 个核，那 120ms/帧 必须
+        /// 有个归属：收包、拆包、切 AU、解码、还是把帧交给取帧方。
+        double ms_depacketize = 0, ms_decode = 0, ms_publish = 0;
+        uint64_t decode_calls = 0;
     };
 
     /// 在已经建好的会话上起泵。失败时 err 带设备的人话。
@@ -140,6 +152,8 @@ private:
     mutable std::mutex mutex_;
     std::condition_variable cv_;
     Frame frame_;
+    /// 解码目标。发布时和 frame_ 交换，所以它的容量在第二帧之后就一直复用着。
+    Frame publishing_;
     uint64_t serial_ = 0;
     bool stopping_ = false;
     int width_ = 0;

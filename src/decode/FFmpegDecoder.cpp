@@ -159,7 +159,12 @@ private:
         }
 
         const auto row_bytes = static_cast<uint32_t>(w) * 4;
-        out.pixels.assign(static_cast<size_t>(row_bytes) * static_cast<size_t>(h), 0);
+        // 只在尺寸变了的时候 resize。原来这里是 `assign(n, 0)`：每帧先 memset 掉
+        // 11MB，而紧接着 sws_scale 会把每个像素都写一遍——那次清零纯属白给。
+        const size_t need = static_cast<size_t>(row_bytes) * static_cast<size_t>(h);
+        if (out.pixels.size() != need) {
+            out.pixels.resize(need);
+        }
         out.width = static_cast<uint32_t>(w);
         out.height = static_cast<uint32_t>(h);
         out.row_pitch = row_bytes;
