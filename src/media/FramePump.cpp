@@ -34,8 +34,9 @@ void warn_no_software() {
     }
     warned = true;
     std::fprintf(stderr,
-                 "关键帧超过了平台解码后端的长度前缀上限，而这台机器上没编软件解码后端"
-                 "（需要 libavcodec）——只能整帧丢，画面会一直灰着或一直花。\n"
+                 "这台机器上没编软件解码后端（需要 libavcodec），已退回平台后端。"
+                 "平台后端只吃 2 字节的 NAL 长度前缀，而这条流单帧能到 256278 字节——"
+                 "遇到那种帧会整帧丢弃并重起会话（表现为一次卡顿或花屏）。\n"
                  "装 ffmpeg 的开发头文件后重新配置构建：brew install ffmpeg。\n");
 }
 
@@ -114,11 +115,21 @@ void FramePump::loop() {
     std::string err;
     std::vector<uint8_t> datagram;
 
-    auto decoder = create_platform_decoder();
+    /// 已经决定用软解（或者被迫换到软解）。跨会话保持：同一段画面的帧尺寸不会
+    /// 突然变小，重起一次就重新试探一次只会多付一次建会话的代价。
+    bool software_only = false;
+    std::unique_ptr<Decoder> decoder;
+    if (!options_.use_hardware) {
+        decoder = create_software_decoder();
+        software_only = decoder != nullptr;
+        if (!software_only) {
+            warn_no_software();
+        }
+    }
+    if (decoder == nullptr) {
+        decoder = create_platform_decoder();
+    }
     bool configured = false;
-    /// 已经决定改用软解（或者根本没有软解可用）。跨会话保持：同一段画面的关键帧
-    /// 尺寸不会突然变小，重起一次就重新试探一次只会多付一次建会话的代价。
-    bool software_only = options_.prefer_software;
     std::unique_ptr<scrctl::rt::HevcRtpDepacketizer> depacketizer;
 
     // 每个会话一套解析器：重起流意味着 AU 边界要从头算，留着半截 NAL 会把新
@@ -246,7 +257,40 @@ void FramePump::loop() {
     };
     new_session_state();
 
+    /// 流已经不来了（设备在画面静止时会自己把流结束掉）时，问一句"我们这条还在
+    /// 设备上吗"，不在就重起。`why` 只用于日志：是静默到点催的，还是用户操作催的。
+    auto revive_if_dead = [&](const char *why) {
+        std::string perr;
+        const auto state = StreamSession::probe(device_, session_->started().session_uuid, perr,
+                                                verbose_);
+        if (state == StreamSession::ServerState::Alive) {
+            return false;  // 流活着，只是画面没变化——什么都不做才是对的
+        }
+        std::printf("%s：%s，重起媒体会话\n",
+                    why,
+                    state == StreamSession::ServerState::Ended
+                        ? "设备已结束这条流"
+                        : ("问不到流状态（" + perr + "）").c_str());
+        std::string restart_err;
+        if (!restart(restart_err)) {
+            std::fprintf(stderr, "重起媒体会话失败: %s\n", restart_err.c_str());
+            return false;
+        }
+        new_session_state();
+        return true;
+    };
+
     for (;;) {
+        // 用户动了一下手，而流已经安静了 150ms 以上：立刻确认一次，不要等静默窗口
+        // 到点。不等的话手感就是"点下去愣一下画面才动"——设备在画面静止约 3 秒后
+        // 就把流结束了，而按静默判据最快也要 3 秒才发现。
+        if (wake_requested_.exchange(false)) {
+            const uint64_t quiet = now_ms() - last_packet_ms_;
+            if (quiet > 150) {
+                revive_if_dead("收到操作");
+            }
+            continue;
+        }
         // "该重起了"这个判断必须每轮都做，不能只挂在"读包超时"那条分支上。快速动
         // 画面下包是连续到达的，50ms 超时永远轮不到，于是"丢了帧要去拿新关键帧"这个
         // 决定会一直悬着——实测连丢 20 帧、画面冻住十几秒才等到一次超时才恢复。
@@ -290,27 +334,7 @@ void FramePump::loop() {
             if (options_.silence_restart_ms > 0 &&
                 now_ms() - last_packet_ms_ > static_cast<uint64_t>(options_.silence_restart_ms)) {
                 last_packet_ms_ = now_ms();
-                // **"没收到包"有两种完全不同的原因**：静止画面上编码器本来就不发
-                // （流好着，画面也不该动），以及设备把流结束了（再也收不到，窗口
-                // 冻住）。只看时间戳分不开这两者，实测静止的主屏会因此每 3 秒被
-                // 无谓重起一次。设备侧问一句就能分开：sessions 里还有我们这条吗？
-                std::string perr;
-                const auto state = StreamSession::probe(device_, session_->started().session_uuid,
-                                                        perr, verbose_);
-                if (state == StreamSession::ServerState::Alive) {
-                    continue;  // 流活着，只是画面没变化——什么都不做才是对的
-                }
-                std::printf("%s，重起媒体会话\n",
-                            state == StreamSession::ServerState::Ended
-                                ? "设备已结束这条流"
-                                : ("问不到流状态（" + perr + "）").c_str());
-                std::string restart_err;
-                if (!restart(restart_err)) {
-                    std::fprintf(stderr, "重起媒体会话失败: %s\n", restart_err.c_str());
-                    std::this_thread::sleep_for(std::chrono::seconds(1));
-                    continue;
-                }
-                new_session_state();
+                revive_if_dead("静默超时");
             }
             continue;  // 超时不是结束
         }

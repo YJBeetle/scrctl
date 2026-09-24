@@ -66,8 +66,9 @@ struct Options {
     bool paste = false;      ///< --paste：读设备剪贴板打印后退出
     bool no_window = false;  ///< --no-window：不起窗口，只收流（脚本/自动化用）
     int win_w = 0, win_h = 0;  ///< --window-width/height：显式窗口尺寸，0=自动
-    /// 直接用软件解码后端，不试平台的。见 FramePump::Options::prefer_software。
-    bool soft_decode = false;
+    /// 用平台硬件解码后端（VideoToolbox），而不是默认的软件解码。
+    /// 见 FramePump::Options::use_hardware——默认软解的原因是硬解吃不下超过 65535 字节的帧。
+    bool hw_decode = false;
 };
 
 void usage(const char *argv0) {
@@ -86,9 +87,9 @@ void usage(const char *argv0) {
         "  --debug-input        打印每次鼠标的原始坐标与换算结果（定坐标问题时用）\n"
         "  --crop WxH+X+Y       裁剪区域（也吃 scrcpy 的 W:H:X:Y；默认自动裁 CTU 填充）\n"
         "  --scale F            窗口缩放系数，默认 1.0\n"
-        "  --soft-decode        用软件解码（libavcodec），不走 VideoToolbox。\n"
-        "                     关键帧超过 64KB 时会自动切过去，这个开关是手工提前\n"
-        "                     切，用来对照两个后端的表现\n"
+        "  --hw-decode          改用平台硬件解码（VideoToolbox）。默认是软件解码：\n"
+        "                     硬解只吃 2 字节 NAL 长度前缀，而这条流单帧能到\n"
+        "                     256KB，装不下的帧会被丢掉并重起会话\n"
         "  --title TITLE        窗口标题\n"
         "  --stats              每秒打印帧率统计\n"
         "  --exit-after N       渲染 N 帧后退出\n"
@@ -131,8 +132,8 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.win_w = std::atoi(next("--window-width"));
         } else if (a == "--window-height" && i + 1 < argc) {
             o.win_h = std::atoi(next("--window-height"));
-        } else if (a == "--soft-decode") {
-            o.soft_decode = true;
+        } else if (a == "--hw-decode") {
+            o.hw_decode = true;
         } else if (a == "--debug-input") {
             o.debug_input = true;
         } else if (a == "--scale") {
@@ -581,7 +582,7 @@ class LiveSource final : public FrameSource {
 public:
     ~LiveSource() override;
 
-    bool start(const std::string &serial, const std::string &record_path, bool soft_decode,
+    bool start(const std::string &serial, const std::string &record_path, bool hw_decode,
                std::string &err);
 
     bool next(scrctl::Frame &out, int timeout_ms) override {
@@ -635,7 +636,7 @@ private:
 
 LiveSource::~LiveSource() = default;
 
-bool LiveSource::start(const std::string &serial, const std::string &record_path, bool soft_decode,
+bool LiveSource::start(const std::string &serial, const std::string &record_path, bool hw_decode,
                        std::string &err) {
     auto dev = scrctl::remote::Device::establish(serial, err);
     if (!dev) {
@@ -645,7 +646,7 @@ bool LiveSource::start(const std::string &serial, const std::string &record_path
 
     scrctl::media::FramePump::Options options;
     options.record_path = record_path;
-    options.prefer_software = soft_decode;
+    options.use_hardware = hw_decode;
     pump_ = scrctl::media::FramePump::start(*device_, options, err);
     if (pump_ == nullptr) {
         return false;
@@ -665,6 +666,11 @@ bool LiveSource::start(const std::string &serial, const std::string &record_path
 }
 
 bool LiveSource::control(double x, double y, bool down, std::string &err) {
+    // 手一动就是"接下来画面一定会变"的信号。设备在画面静止时会把流结束掉，而泵
+    // 最快也要等满静默窗口才发现——不催这一次，手感就是"点下去愣一下才动"。
+    if (pump_ != nullptr) {
+        pump_->wake();
+    }
     if (hid_ == nullptr) {
         if (hid_unavailable_) {
             return false;
@@ -735,7 +741,7 @@ int main(int argc, char **argv) {
     } else {
         auto made = std::make_unique<LiveSource>();
         std::string err;
-        if (!made->start(o.serial, o.record, o.soft_decode, err)) {
+        if (!made->start(o.serial, o.record, o.hw_decode, err)) {
             std::fprintf(stderr, "起流失败: %s\n", err.c_str());
             return 1;
         }
