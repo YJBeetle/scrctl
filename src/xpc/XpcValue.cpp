@@ -203,9 +203,14 @@ public:
     }
 
     /// 从 `start` 起算补零到 4 字节边界。
+    ///
+    /// 必须夹在段末之内：段恰好在非 4 字节边界结束时，"补齐"会把游标推到段外，
+    /// 于是 remaining() 变成 size_t 下溢出来的天文数字，后面每一次读取都拿着它
+    /// 当"还有这么多字节"去越界读。
     void align_from(const uint8_t *start) {
         const auto used = static_cast<std::size_t>(p_ - start);
-        p_ += (4 - used % 4) % 4;
+        const std::size_t pad = (4 - used % 4) % 4;
+        p_ += std::min(pad, remaining());
     }
 
     /// NUL 结尾串 + 补零。没有长度前缀，只能扫到 NUL，所以必须限制在段内。

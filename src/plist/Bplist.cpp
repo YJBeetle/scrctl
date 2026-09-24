@@ -112,6 +112,11 @@ private:
         if ((wide >> 4) != 1) {
             return fail("长形态的计数头不是 0x1X");
         }
+        // 计数最多 8 字节。不夹这一刀，(wide & 0xF) 能到 15，于是这里去扫 32768
+        // 个字节"凑一个大端整数"——虽然不越界，但纯属浪费，而且凑出来的数毫无意义。
+        if ((wide & 0xF) > 3) {
+            return fail("计数宽度不合理");
+        }
         const std::size_t width = std::size_t{1} << (wide & 0xF);
         if (pos + width > n_) {
             return fail("计数字节被截断");
@@ -119,6 +124,13 @@ private:
         out = be_at(d_ + pos, width);
         pos += width;
         return true;
+    }
+
+    /// 从 `pos` 起还有没有 `len` 个字节。**必须先减后比**：len 是文件里读出来的
+    /// 64 位值，写成 `pos + len > n_` 时加法会绕回一个小数，守卫直接失效，
+    /// 后面就拿着这个假长度去拷贝/遍历。
+    [[nodiscard]] bool fits(std::size_t pos, std::size_t len) const {
+        return pos <= n_ && len <= n_ - pos;
     }
 
     bool decode(std::size_t idx, int depth, Value &out) {
@@ -175,7 +187,7 @@ private:
             }
             case 0x4: {  // data
                 std::size_t len = 0;
-                if (!read_length(pos, low, len) || pos + len > n_) {
+                if (!read_length(pos, low, len) || !fits(pos, len)) {
                     return fail("data 越界");
                 }
                 out = Value::OfData(std::vector<uint8_t>(d_ + pos, d_ + pos + len));
@@ -183,7 +195,7 @@ private:
             }
             case 0x5: {  // ASCII
                 std::size_t len = 0;
-                if (!read_length(pos, low, len) || pos + len > n_) {
+                if (!read_length(pos, low, len) || !fits(pos, len)) {
                     return fail("字符串越界");
                 }
                 out.kind = Kind::String;
@@ -192,7 +204,8 @@ private:
             }
             case 0x6: {  // UTF-16BE -> UTF-8
                 std::size_t chars = 0;
-                if (!read_length(pos, low, chars) || pos + chars * 2 > n_) {
+                // 除过去而不是乘过去：chars * 2 会绕回，绕回之后守卫形同不存在。
+                if (!read_length(pos, low, chars) || pos > n_ || chars > (n_ - pos) / 2) {
                     return fail("UTF-16 串越界");
                 }
                 out.kind = Kind::String;
@@ -217,8 +230,16 @@ private:
                 if (!read_length(pos, low, count)) {
                     return false;
                 }
-                if (count > (n_ - pos) / ref_size_) {
+                // pos > n_ 时 (n_ - pos) 会绕回一个巨大值，下面的除法守卫就形同不存在。
+                if (pos > n_ || count > (n_ - pos) / ref_size_) {
                     return fail("元素引用数超出剩余字节");
+                }
+                // 字典的引用表是"先全部键、再全部值"连着排的两段，所以下面按
+                // (count + i) 取值。只按 count 检查长度的话，值那半截落在缓冲区
+                // 之外——count 只要超过剩余引用数的一半就会越界读。
+                const std::size_t refs = high == 0xD ? count * 2 : count;
+                if (refs > (n_ - pos) / ref_size_) {
+                    return fail("字典的键值两段引用放不下");
                 }
                 if (high == 0xA) {
                     out = Value::Array();

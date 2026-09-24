@@ -89,12 +89,14 @@ std::optional<std::array<uint8_t, 16>> parse_uuid_text(std::string_view text) {
         if (v < 0) {
             return std::nullopt;
         }
+        // 先判界再写：写在后面的话，第 33 个十六进制字符会去动 out[16]——
+        // 那是数组外的第一个字节。
+        if (digits >= out.size() * 2) {
+            return std::nullopt;
+        }
         out[digits / 2] = static_cast<uint8_t>(digits % 2 == 0 ? (v << 4)
                                                               : (out[digits / 2] | v));
         ++digits;
-        if (digits > 32) {
-            return std::nullopt;
-        }
     }
     if (digits != 32) {
         return std::nullopt;

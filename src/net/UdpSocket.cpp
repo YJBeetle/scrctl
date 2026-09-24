@@ -57,12 +57,11 @@ bool UdpSocket::send(const std::vector<uint8_t> &payload, uint16_t peer_port, st
 }
 
 void UdpSocket::on_datagram(const uint8_t *l4, std::size_t len) {
-    std::size_t dropped_now = 0;
+    bool queued = false;
     {
         std::lock_guard<std::mutex> lock(m_);
         auto reject = [&] {
             ++dropped_;
-            ++dropped_now;
             return;
         };
         if (len < kUdpHeaderLen) {
@@ -87,16 +86,17 @@ void UdpSocket::on_datagram(const uint8_t *l4, std::size_t len) {
             return;
         }
         if (queue_.size() >= kMaxQueue) {
-            // 丢最老的，保住"最新画面"这条性质：消费者要的是现在，不是三秒前。
+            // 丢最老的、留下这个新的：消费者要的是"现在"而不是三秒前。
+            // 这里不能 pop 完就 return——那等于一次丢两个包（最老的和新到的都没
+            // 进队列），而 RTP 侧的序号缺口又会被上层当成网络丢包去重起会话。
             queue_.pop_front();
             ++dropped_;
-            ++dropped_now;
-            return;
         }
         queue_.emplace_back(Packet{get16(l4 + 0),
                                    std::vector<uint8_t>(l4 + kUdpHeaderLen, l4 + declared)});
+        queued = true;
     }
-    if (dropped_now == 0) {
+    if (queued) {
         cv_.notify_all();
     }
 }

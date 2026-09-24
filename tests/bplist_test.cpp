@@ -186,6 +186,48 @@ void test_reject_malformed() {
           "自引用被深度上限拦下: " + err);
 }
 
+/// 两个"长度守卫自己算错"的形状。都是手算出来的最小文件，不是随手截断：
+///
+/// - 字典的引用表是键、值两段，只按 count 检查剩余字节的话，值那半截会读到
+///   缓冲区外面去（第一条：count=40 恰好等于剩余字节，值引用从第 51 字节开始，
+///   而整个文件只有 51 字节）。
+/// - UTF-16 的字节数按 `chars * 2` 算，chars 是文件里读的 64 位值，乘 2 会绕回
+///   0（第二条：chars = 2^63，乘完正好是 0），于是 `pos + 0 > n_` 恒不成立。
+///
+/// 这两条在 ASAN 构建下会直接把越界读变成崩溃报告；不开 ASAN 时它们至少要求
+/// 解析器**拒绝**而不是返回一个看起来正常的值。
+void test_hostile_lengths_rejected() {
+    const std::string dict_half =
+        "62706c6973743030df1028080808080808080800000000000000010100000000000000080000000000000000000000000000000b";
+    std::string err;
+    check(!scrctl::plist::parse_binary(unhex(dict_half), &err).has_value(),
+          "字典只按键那半截算长度会被拒: " + err);
+
+    const std::string utf16_wrap =
+        "62706c69737430306f13800000000000000008000000000000000101000000000000000100000000000000000000000000000012";
+    err.clear();
+    check(!scrctl::plist::parse_binary(unhex(utf16_wrap), &err).has_value(),
+          "UTF-16 长度乘 2 绕回会被拒: " + err);
+}
+
+/// 截断扫描：基准文件从 0 字节到全长逐个前缀试一遍。
+///
+/// 手写用例只能覆盖想得到的那几种，而"守卫算错"错在哪一个长度上没法凭脑子推；
+/// 截断前缀是最便宜的穷举。真正的判据是"不崩"——在 ASAN 构建下跑这里，任何
+/// 越界读都会立刻变成崩溃报告。
+void test_truncation_is_safe() {
+    const auto full = unhex(kReference);
+    std::size_t rejected = 0;
+    for (std::size_t cut = 0; cut <= full.size(); ++cut) {
+        std::string err;
+        const std::vector<uint8_t> head(full.begin(), full.begin() + static_cast<long>(cut));
+        if (!scrctl::plist::parse_binary(head, &err).has_value()) {
+            ++rejected;
+        }
+    }
+    check(rejected == full.size(), "除全长外的每个前缀都被干净地拒绝");
+}
+
 }  // namespace
 
 int main() {
@@ -193,6 +235,8 @@ int main() {
     test_write_shapes();
     test_dict_key_order_is_stable();
     test_reject_malformed();
+    test_hostile_lengths_rejected();
+    test_truncation_is_safe();
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;
 }

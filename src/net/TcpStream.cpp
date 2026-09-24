@@ -148,6 +148,12 @@ bool TcpStream::handle_segment(const uint8_t *l4, std::size_t len, std::string &
     if (payload_len > 0) {
         // 只接受期望序号的数据；乱序暂不支持。
         if (seq == rcv_nxt_) {
+            // 取走全部已收字节后 vector 不会自己缩——一条长连接收过多少字节就
+            // 永久占多少内存。所以"已经读空了"这个时刻要主动回收。
+            if (rx_pos_ == rx_.size()) {
+                rx_.clear();
+                rx_pos_ = 0;
+            }
             rx_.insert(rx_.end(), l4 + tcp_hdr, l4 + len);
             rcv_nxt_ += static_cast<uint32_t>(payload_len);
             std::vector<uint8_t> empty;
@@ -168,8 +174,12 @@ bool TcpStream::handle_segment(const uint8_t *l4, std::size_t len, std::string &
     }
 
     if ((flags & kFin) != 0) {
-        if (seq_ge(rcv_nxt_, seq) || payload_len == 0) {
-            rcv_nxt_ = seq + static_cast<uint32_t>(payload_len) + 1;
+        // FIN 自己占一个序号，但**只有它落在我们已收末尾之后或之上**才能推期望序号：
+        // 无条件推的话，一个重复到达的 FIN（序号比 rcv_nxt_ 小）会把期望序号拉回
+        // 去，之后每个数据段都被判成"序号不连续"而丢掉——表现是连接突然再也不来数据。
+        const uint32_t after_fin = seq + static_cast<uint32_t>(payload_len) + 1;
+        if (seq_ge(after_fin, rcv_nxt_)) {
+            rcv_nxt_ = after_fin;
         }
         peer_closed_ = true;
     }

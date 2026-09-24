@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "remote/RemoteXpc.h"
 #include "xpc/XpcValue.h"
 
 namespace {
@@ -357,6 +358,76 @@ void test_describe() {
           "UUID 打成分组形式");
 }
 
+/// 截断穷举：把一份合法编码从 0 字节到全长逐个前缀喂给解码器。
+///
+/// 为什么值得扫而不是手写用例：这个格式里"补齐到 4 字节边界"的地方有好几处，
+/// 每一处的守卫都可能算错——段恰好在非边界结束时把游标推出段末，`remaining()`
+/// 就会下溢成一个天文数字，后面的读取全部越界。错在哪个长度上没法凭脑子推，
+/// 而截断前缀是最便宜的穷举。真正的判据是"不崩"（ASAN 构建下越界读会直接变成
+/// 崩溃报告），这里只额外要求：非法输入必须被拒，不能返回一个看着正常的值。
+void test_truncation_is_safe() {
+    auto nested = make_dict();
+    dict_set(nested, "short", make_string("a"));
+    dict_set(nested, "three", make_string("abc"));
+    dict_set(nested, "five!", make_string("abcde"));
+    dict_set(nested, "Port", make_uint64(49152));
+    dict_set(nested, "when", make_int64(-1));
+    auto inner = make_dict();
+    dict_set(inner, "deep", make_string(std::string(70, 'z')));
+    dict_set(nested, "nested", std::move(inner));
+    const auto full = encode(nested);
+
+    std::size_t rejected = 0;
+    std::string first_err;
+    for (std::size_t cut = 0; cut < full.size(); ++cut) {
+        std::string err;
+        const std::span<const uint8_t> head(full.data(), cut);
+        if (!decode(head, err).has_value()) {
+            ++rejected;
+            if (first_err.empty()) {
+                first_err = err;
+            }
+        }
+    }
+    check(rejected == full.size(), "每个真前缀都被拒绝（首个原因: " + first_err + "）");
+    std::string err;
+    check(decode(full, err).has_value(), "全长那份仍然解得回来: " + err);
+
+    // 信封层同样扫一遍：24 字节头 + 载荷，声明长度与实际长度的每一种错配。
+    const auto golden = unhex(kHandshakeGolden);
+    bool any_accepted = false;
+    for (std::size_t cut = 0; cut < golden.size(); ++cut) {
+        Message m;
+        std::size_t used = 0;
+        std::string e;
+        if (decode_message(std::span<const uint8_t>(golden.data(), cut), m, used, e) ==
+            Status::Ok) {
+            any_accepted = true;
+        }
+    }
+    check(!any_accepted, "截断的信封没有一个能被当成完整消息");
+}
+
+/// UUID 文本解析：这是"先写后判界"那一类的典型形状。
+///
+/// 逐字符填 16 字节数组时，如果长度检查放在写之后，第 33 个十六进制字符就会去动
+/// out[16]——数组外的第一个字节，而且写在栈上。所以这里专门喂超长的、以及刚好
+/// 该被拒的输入。
+void test_uuid_text_bounds() {
+    check(scrctl::remote::parse_uuid_text("6EB71A28-1234-5678-9ABC-DEF012345678").has_value(), "标准 8-4-4-4-12");
+    check(scrctl::remote::parse_uuid_text("6EB71A2812345678 9ABCDEF012345678").has_value() == false,
+          "有空格要拒");
+    check(scrctl::remote::parse_uuid_text("").has_value() == false, "空串要拒");
+    check(scrctl::remote::parse_uuid_text("6EB71A28-1234-5678-9ABC-DEF01234567").has_value() == false,
+          "少一个字符要拒");
+    // 33 个：多出来的那一个正是原来会写到数组外的那一次。
+    check(scrctl::remote::parse_uuid_text("6EB71A28123456789ABCDEF0123456789").has_value() == false,
+          "多一个字符要拒，且不能写出界");
+    check(scrctl::remote::parse_uuid_text(std::string(200, 'a')).has_value() == false, "长串要拒");
+    auto v = scrctl::remote::parse_uuid_text("6eb71a28-1234-5678-9abc-def012345678");
+    check(v.has_value() && (*v)[0] == 0x6e && (*v)[15] == 0x78, "小写也认，字节序从高位起");
+}
+
 }  // namespace
 
 int main() {
@@ -365,6 +436,8 @@ int main() {
     test_golden_decode();
     test_message_envelope();
     test_describe();
+    test_truncation_is_safe();
+    test_uuid_text_bounds();
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;
 }

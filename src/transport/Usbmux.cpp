@@ -15,6 +15,8 @@ namespace {
 constexpr uint32_t kProtoVersion = 1;
 constexpr uint32_t kMsgPlist = 8;
 constexpr size_t kHeaderLen = 16;
+/// 一帧负载的上限。对方声明的长度必须先跟它比再去申请内存。
+constexpr uint32_t kMaxPayload = 16u << 20;
 constexpr uint16_t kLockdownPort = 62078;
 constexpr const char *kClientName = "scrctl";
 
@@ -239,7 +241,10 @@ bool Usbmux::round_trip(const plist::Value &request, plist::Value &reply, std::s
         return false;
     }
     const uint32_t total = get_u32_le(rhdr);
-    if (total < kHeaderLen) {
+    // 上限必须有，且不能只判下界：total 是对方给的 32 位数，只挡 `< kHeaderLen`
+    // 的话，一个 0xFFFFFFFF 就会让我们先去申请 4GB 内存——那是 DoS，不是解析失败。
+    // usbmuxd 的回复实际是 KB 级（设备列表、配对记录），16MB 已经宽到没边。
+    if (total < kHeaderLen || total - kHeaderLen > kMaxPayload) {
         err = "mux 帧长度异常: " + std::to_string(total);
         return false;
     }
