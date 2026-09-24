@@ -101,8 +101,18 @@ int main(int argc, char **argv) {
         const uint64_t before = pump->serial();
         const auto t0 = now_ms();
         pump->wake();
+        // 轮着问，顺便把"泵有没有真的开始救流"这件事记下来：只量"到第一帧多久"的话，
+        // 分不清慢是在等 RPC 还是在等设备吐 IDR。
         scrctl::Frame f;
-        const uint64_t got_serial = pump->newer(f, before, 8000);
+        uint64_t got_serial = 0;
+        bool saw_reviving = false;
+        while (now_ms() - t0 < 8000) {
+            saw_reviving = saw_reviving || pump->reviving();
+            got_serial = pump->newer(f, before, 20);
+            if (got_serial != 0) {
+                break;
+            }
+        }
         const int ms = static_cast<int>(now_ms() - t0);
         if (got_serial == 0) {
             std::printf("第 %d 次：静默 %llums 后 wake()，8 秒内没有帧 —— 失败\n", trial,
@@ -110,8 +120,9 @@ int main(int argc, char **argv) {
             continue;
         }
         samples.push_back(ms);
-        std::printf("第 %d 次：静默 %llums -> wake() 到第一帧 %dms（帧号 %llu -> %llu）\n", trial,
+        std::printf("第 %d 次：静默 %llums -> wake() 到第一帧 %dms（%s，帧号 %llu -> %llu）\n", trial,
                     static_cast<unsigned long long>(quiet), ms,
+                    saw_reviving ? "走到了重起" : "没走重起",
                     static_cast<unsigned long long>(before),
                     static_cast<unsigned long long>(got_serial));
     }

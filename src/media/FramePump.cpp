@@ -99,6 +99,10 @@ FramePump::~FramePump() {
 }
 
 bool FramePump::restart(std::string &err) {
+    /// 一进来就置位，新会话的第一帧交出来时清掉：取帧方拿它区分"等不到新帧"的两种
+    /// 原因（救流还在路上 / 屏幕本来就静止），见头文件里的 reviving()。
+    reviving_ = true;
+
     if (session_ != nullptr) {
         std::string stop_err;
         if (!session_->stop(device_, stop_err, verbose_)) {
@@ -114,6 +118,7 @@ bool FramePump::restart(std::string &err) {
     request.offer = options_.offer;
     session_ = StreamSession::start(device_, request, err, verbose_);
     if (session_ == nullptr) {
+        reviving_ = false;  // 没救起来，别让取帧方一直多等
         return false;
     }
     last_packet_ms_ = now_ms();
@@ -269,6 +274,7 @@ void FramePump::loop() {
                 nokey_restarts_ = 0;  // 只有真解出关键帧才重置上限，防死循环
             }
             std::lock_guard<std::mutex> lock(mutex_);
+            reviving_ = false;  // 救流要交代的"第一帧"到手了，取帧方不必再多等
             // 交换而不是搬走：`frame_ = std::move(f)` 会把 f 的 11MB 缓冲区带走，
             // 下一帧的解码目标就得重新分配并重新缺页——那笔开销实测就是每帧几十毫秒
             // 的主要来源。交换之后 publishing_ 拿回上一帧的缓冲区，尺寸正好，
@@ -302,10 +308,14 @@ void FramePump::loop() {
     /// 流已经不来了（设备在画面静止时会自己把流结束掉）时，问一句"我们这条还在
     /// 设备上吗"，不在就重起。`why` 只用于日志：是静默到点催的，还是用户操作催的。
     auto revive_if_dead = [&](const char *why) {
+        // 置位在问设备**之前**：那一条 RPC 自己就要 100~300ms，取帧方在这段时间里
+        // 读到 false 就会把旧帧交出去。
+        reviving_ = true;
         std::string perr;
         const auto state = StreamSession::probe(device_, session_->started().session_uuid, perr,
                                                 verbose_);
         if (state == StreamSession::ServerState::Alive) {
+            reviving_ = false;
             return false;  // 流活着，只是画面没变化——什么都不做才是对的
         }
         std::printf("%s：%s，重起媒体会话\n",
@@ -316,6 +326,7 @@ void FramePump::loop() {
         std::string restart_err;
         if (!restart(restart_err)) {
             std::fprintf(stderr, "重起媒体会话失败: %s\n", restart_err.c_str());
+            reviving_ = false;
             return false;
         }
         new_session_state();
