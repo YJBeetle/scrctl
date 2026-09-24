@@ -32,8 +32,10 @@ namespace scrctl::rt {
 /// 都少了 2 字节真实码流。留着它才正常。规范里"允许"的字段，这条流里没有。
 class HevcRtpDepacketizer {
 public:
-    /// 只处理这个 PT 的包。RTCP 与视频共用同一个 UDP 端口（实测 PT=72 的包
-    /// 就混在视频包里到达），不过滤就会把 RTCP 当 HEVC 载荷解，产出类型 0 之类
+    /// 只处理这个 PT 的包。RTCP 与视频共用同一个 UDP 端口，而且它是**裸 RTCP**：
+    /// 那条 SR 开头是 `81 c8`，`0xc8` 是 RTCP 的 PT=200，而 RTP 的 PT 字段只有
+    /// 7 位，`0xc8 & 0x7f` 正好是 72——所以它一度被记成"混在视频包里的 PT=72"。
+    /// 不过滤就会把 RTCP 当 HEVC 载荷解，产出类型 0 之类
     /// 的假 NAL 混进码流——而这条流不周期发 IDR，一个假 NAL 就把参考链永久打断。
     explicit HevcRtpDepacketizer(uint8_t video_payload_type = 100)
         : video_pt_(video_payload_type) {}
