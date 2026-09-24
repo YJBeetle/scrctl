@@ -882,7 +882,6 @@ int main(int argc, char **argv) {
     int rendered = 0;
     std::unique_ptr<Presenter> presenter;
     const Uint64 start = SDL_GetTicks64();
-    int last_reported = 0;
     Uint64 last_stats_at = SDL_GetTicks64();
     bool quit = false;
 
@@ -927,7 +926,6 @@ int main(int argc, char **argv) {
             const double el = (SDL_GetTicks64() - start) / 1000.0;
             std::printf("  渲染 %d 帧  %.1f fps\n", rendered, rendered / el);
             source->print_stats();
-            last_reported = rendered;
             last_stats_at = SDL_GetTicks64();
         }
 
