@@ -1,8 +1,9 @@
 // 探针：把 HID 注入这条路走通，并在真机上看到结果。
 //
 // 判据不是"设备没报错"——send 是只发不收的，链路层永远"成功"。真正的判据是
-// 屏幕上出现我们画的东西：先在无边记里画一笔，再截图比对。所以这个探针必须
-// 自己起一条媒体流（认证门），否则报告会被 backboardd 丢掉而这边毫无感觉。
+// 屏幕上出现我们画的东西：先在无边记里画一笔，再截图比对（这套按带比对的读法
+// 见 tools/hid_gate_probe + gate_diff.py）。默认顺手起一条媒体流只是为了让画面
+// 有人看着；"没流就注入不进去"这条早先的结论已经被 hid_gate_probe 推翻。
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -18,8 +19,7 @@
 
 namespace {
 
-/// 视频流的载荷没人看，但**必须**把包读干净：不读的话设备侧中继缓冲溢出，
-/// 而且 HID 认证门要的是"流在跑"这个状态。
+/// 视频流的载荷没人看，但**必须**把包读干净：不读的话设备侧中继缓冲溢出。
 class Drainer {
 public:
     explicit Drainer(scrctl::media::StreamSession &session) : session_(session) {
@@ -57,7 +57,7 @@ void usage(const char *argv0) {
         "  --stroke  在屏幕中央画一条短斜线（验证画面真的收到了触摸）\n"
         "  --line    画一条插值直线，用于注入前后的截图对比\n"
         "  --probe-reply  一发一收地发一对报告，把设备的回信原样打出来\n"
-        "  --no-stream  故意不起流：用来确认认证门确实在挡\n"
+        "  --no-stream  不起流。用来复验注入到底要不要一条在跑的流（结论：不要，见 hid_gate_probe）\n"
         "  --swipe-loop N  连续横向拖动 N 秒。在无边记里它就是平移画布，是一个\n"
         "                    可控的持续高运动画面源（量帧率时不用它就没法排除\n"
         "                    \'画面本来没在动\'）\n",

@@ -23,12 +23,14 @@ namespace scrctl::hid {
 /// 外壳，实测设备收到 dispatch 后立刻 "Resetting gesture state then canceling"，
 /// 不进任何 handler。indigo 上确定能用的是 button（硬件按键）。
 ///
-/// **必须有一条在跑的视频流。** 这是认证门，不是巧合：没有媒体会话时 dtuhidd 把
-/// 我们的 HID 面标成 `authenticated: NO / eventSource: externalAccessory`，
-/// backboardd 会把每一个 digitizer 事件丢掉（"ignoring digitizer event for
-/// display <main> from unsupported service"）。起一条 `startmediastream` 就会把
-/// 这两个标志翻成 YES，报告一路走到 UIKit 变成真的 `UIEventTypeTouches`；流本身
-/// 的载荷可以不看。
+/// **输入不要求"此刻有一条流在跑"。** 早先的观测是：没有媒体会话时 dtuhidd 把我们
+/// 的面标成 `authenticated: NO / eventSource: externalAccessory`，backboardd 丢掉
+/// 每个 digitizer 事件（"ignoring digitizer event for display <main> from
+/// unsupported service"），于是得出结论"必须先起一条流"。2026-09-25 用
+/// `tools/hid_gate_probe` 按四种状态各画一条线复测——流活着、设备已把流结束掉 9
+/// 秒、我们自己拆了流、全新进程从头到尾没起过流——**四条全部落地**（按纵向带比对
+/// 截图，`tools/gate_diff.py`）。那条标志到底挂在什么上没查清（`connectedServices`
+/// 回信里 describe() 把它省略掉了），所以别把它当硬前提写进代码，也别为它加等待。
 
 /// 设备注册的静态 HID 面。
 inline constexpr uint64_t kSurfaceMainTouchscreen = 257;   ///< 真数（0x101）
