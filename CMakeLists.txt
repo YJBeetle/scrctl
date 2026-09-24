@@ -115,6 +115,7 @@ add_library(scrctl_core STATIC
         src/remote/Rsd.cpp
         src/remote/Device.cpp
         src/remote/Pasteboard.cpp
+        src/remote/App.cpp
         src/bitstream/AnnexB.cpp
         src/hid/Hid.cpp)
 target_include_directories(scrctl_core PUBLIC src)
@@ -157,6 +158,9 @@ target_link_libraries(screenshot_probe PRIVATE scrctl_core)
 
 add_executable(stream_probe tools/stream_probe.cpp)
 target_link_libraries(stream_probe PRIVATE scrctl_core)
+
+add_executable(app_launch_probe tools/app_launch_probe.cpp)
+target_link_libraries(app_launch_probe PRIVATE scrctl_core)
 
 add_executable(hid_probe tools/hid_probe.cpp)
 target_link_libraries(hid_probe PRIVATE scrctl_core)
@@ -203,6 +207,10 @@ if(SCRCTL_BUILD_TESTS)
     add_executable(pasteboard_test tests/pasteboard_test.cpp)
     target_link_libraries(pasteboard_test PRIVATE scrctl_core)
     add_test(NAME pasteboard COMMAND pasteboard_test)
+
+    add_executable(app_test tests/app_test.cpp)
+    target_link_libraries(app_test PRIVATE scrctl_core)
+    add_test(NAME app COMMAND app_test)
 
     add_executable(hid_test tests/hid_test.cpp)
     target_link_libraries(hid_test PRIVATE scrctl_core)

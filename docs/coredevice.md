@@ -601,22 +601,32 @@ requireContainerAccess
 单独为 true 也一样）。所以列 App 这件事得另找路子（`streamapplist`？），别指望 listapps。
 
 `launchapplication` / **`action.launch`**（不是 `action.launchapplication`，那个直接
-"not implemented"）的结构已经剥出来，但**还没打通**：
+"not implemented"）**已打通**（2026-09-25，iPhone14,4 / iOS 27.0，Safari 与无边记都
+被切到前台）。完整形状在 `remote/App.cpp`，两个关键点都是"照着字段名猜一定猜错"：
 
 ```text
-options: {
-  arguments: []                        // 数组
-  environmentVariables: {}             // 字典
-  standardIOIdentifiers: {}            // 字典
-  standardIOUsesPseudoterminals: false
-  startStopped: false
-  user: { shortName: String }
-  platformSpecificOptions: Data        // 空 Data 会被拒（"Cannot parse a NULL or
-                                       // zero-length data"），得是一段 plist
-}
+{ applicationSpecifier: { bundleIdentifier: { _0: "<bundle id>" } },   // 顶层！
+  options: { arguments: [], environmentVariables: {},
+             standardIOUsesPseudoterminals: true, startStopped: false,
+             terminateExisting: <bool>, user: { shortName: "mobile" },
+             platformSpecificOptions: <Data: 一段 plist，空字典的 plist 就行> },
+  standardIOIdentifiers: {} }
 ```
 
-填到这里设备回 `A URL to open must be specified in the launch options.`（code 10008），
-而 `options.url` 给了值也还是这句——说明 bundle id / URL 的真正入口不在这套键里。
-没继续挖的理由：MaaFramework 自家的 MacOS 控制单元同样不实现 start_app，它不是阻塞项。
-下次要接这个，从"`url` 键名不对"这个事实出发，别从第一轮重探。
+1. **bundle id 在顶层的 `applicationSpecifier`，而且还要再套一层 `_0`**（XPC 里带
+   关联值的枚举 case 就是这个形状）。之前所有次尝试都把它塞在 `options` 里，设备的
+   回话是 `A URL to open must be specified in the launch options.`（code 10008）——
+   一个 specifier 都没认出来时它退到"按 URL 启动"那条分支去要 url。**这句报错是误导
+   性的**，照着它找"url 键名"会一路找错。
+2. `platformSpecificOptions` 不能是零长 Data（"Cannot parse a NULL or zero-length
+   data"），得是一段解得开的 plist。
+
+**`terminateExisting: true` 不是"更安全地重来"，是会把 App 弄丢。** 实测对一个正在
+前台的 App 用它：设备先把实例杀掉，然后回 `The process identifier of the launched
+application could not be determined. It may have already terminated.`（code 10004）
+——**返回失败而前台 App 已经没了**，比不调用还糟。所以默认走 false（只唤起、不动在跑
+的实例），这也正好与 MaaFramework Android 侧的语义一致：那边 start_app 是
+`monkey -p <pkg> 1`，stop_app 才是 `am force-stop`。
+
+形状钉在 `tests/app_test.cpp`（离线，不碰设备）——这条 RPC 键放错位置时设备不给字段级
+报错，所以线上看不出来，只能在这里拦。
