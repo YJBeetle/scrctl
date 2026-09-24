@@ -1,5 +1,6 @@
 #include "media/FramePump.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 
@@ -14,6 +15,28 @@ uint64_t now_ms() {
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                std::chrono::steady_clock::now().time_since_epoch())
         .count());
+}
+
+/// 一个 AU 里最大的那个 NAL 有多大。后端装不装得下，只看这一个数。
+size_t largest_nal(const std::vector<Nal> &au) {
+    size_t m = 0;
+    for (const auto &n : au) {
+        m = std::max(m, n.size());
+    }
+    return m;
+}
+
+/// 只说一次：这是"配构建时没装 ffmpeg"这一个事实，刷屏对定位没帮助。
+void warn_no_software() {
+    static bool warned = false;
+    if (warned) {
+        return;
+    }
+    warned = true;
+    std::fprintf(stderr,
+                 "关键帧超过了平台解码后端的长度前缀上限，而这台机器上没编软件解码后端"
+                 "（需要 libavcodec）——只能整帧丢，画面会一直灰着或一直花。\n"
+                 "装 ffmpeg 的开发头文件后重新配置构建：brew install ffmpeg。\n");
 }
 
 }  // namespace
@@ -67,6 +90,7 @@ bool FramePump::restart(std::string &err) {
 
     StreamSession::Request request;
     request.display_id = options_.display_id;
+    request.offer = options_.offer;
     session_ = StreamSession::start(device_, request, err, verbose_);
     if (session_ == nullptr) {
         return false;
@@ -92,6 +116,9 @@ void FramePump::loop() {
 
     auto decoder = create_platform_decoder();
     bool configured = false;
+    /// 已经决定改用软解（或者根本没有软解可用）。跨会话保持：同一段画面的关键帧
+    /// 尺寸不会突然变小，重起一次就重新试探一次只会多付一次建会话的代价。
+    bool software_only = options_.prefer_software;
     std::unique_ptr<scrctl::rt::HevcRtpDepacketizer> depacketizer;
 
     // 每个会话一套解析器：重起流意味着 AU 边界要从头算，留着半截 NAL 会把新
@@ -102,7 +129,28 @@ void FramePump::loop() {
                 std::lock_guard<std::mutex> lock(mutex_);
                 last_keyframe_ms_ = now_ms();
             }
+            // 后端装不下这个 AU 时换软解。**只在关键帧上换**：换后端等于换一条参考
+            // 链，非关键帧换过去对着的是新后端手里没有的参考帧，解出来必花；而 IDR
+            // 自己就是完整的一帧，从它起新链刚好。
+            const size_t biggest = largest_nal(au);
+            if (biggest > decoder->max_nal_size() && keyframe && !software_only) {
+                software_only = true;
+                configured = false;
+                std::printf("码流里有超过 %zu 字节的 NAL（本帧最大 %zu），换软件解码后端\n",
+                            decoder->max_nal_size(), biggest);
+            }
             if (!configured) {
+                if (software_only && decoder->max_nal_size() != ~size_t { 0 }) {
+                    auto soft = create_software_decoder();
+                    if (soft != nullptr) {
+                        decoder = std::move(soft);
+                    } else {
+                        // 没编软解后端：这条码流平台后端就是解不了。说清楚比默默
+                        // 丢帧强——症状是"永远灰屏"，不提示没人会想到去装 ffmpeg。
+                        warn_no_software();
+                        software_only = false;
+                    }
+                }
                 Nal vps, sps, pps;
                 for (const auto &n : au) {
                     if (n.size() < 2) {
@@ -121,22 +169,12 @@ void FramePump::loop() {
                 }
                 configured = true;
             }
-            // 2 字节长度前缀装不下的 NAL（实测见过 70101 字节）只能整帧丢，而这条
-            // 流没有周期 IDR，丢一帧参考链就永久坏。所以把它当"画面已死"，触发
-            // 重起拿新关键帧。只在已经有过正常画面之后才触发，避免首帧就超大时
-            // 反复重起成死循环。
-            bool oversized = false;
-            for (const auto &n : au) {
-                if (n.size() > 65535) {
-                    oversized = true;
-                    break;
-                }
-            }
-            if (oversized) {
+            // 换过后端仍然装不下，就是真没能力解这一帧：整帧丢。
+            if (biggest > decoder->max_nal_size()) {
                 std::lock_guard<std::mutex> lock(mutex_);
                 ++stats_.dropped_oversized;
-                // 不再要求"已经有过正常画面"：开头 IDR 超大被丢时 decoded 永远
-                // 是 0，那个保护恰好把唯一该救的情况排除掉了（用户看到的就是
+                // 不要求"已经有过正常画面"：开头 IDR 超大被丢时 decoded 永远是 0，
+                // 那个保护恰好把唯一该救的情况排除掉了（用户看到的就是
                 // 一片灰且永不恢复）。只限频，防死循环。
                 if (now_ms() - last_restart_ms_ > 5000) {
                     last_restart_ms_ = now_ms();

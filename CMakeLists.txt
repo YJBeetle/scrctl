@@ -68,6 +68,30 @@ endif()
 # OpenSSL 是 Apache-2.0，与本项目许可兼容。
 find_package(OpenSSL REQUIRED)
 
+# ---------------------------------------------------------------- 解码后端 ---
+# VideoToolbox 的长度前缀只有 2 字节可用（4 字节的会话见一个样本拒一个），所以
+# 单帧超过 65535 字节的码流它吃不下——真机主屏的 IDR 实测 70101 字节。那种码流
+# 只有软解能救，而 Linux/Windows 上软解又是唯一后端，所以 libavcodec 找得到就编。
+#
+# 找不到时降级：只留平台后端，超大 NAL 仍然只能丢帧。这样没有 ffmpeg 开发件的
+# 机器仍然能构建，只是失去对高分辨率细节画面的兜底。
+option(SCRCTL_LIBAV "用 libavcodec 编软件 HEVC 解码后端（超大 NAL 的兜底）" ON)
+set(SCRCTL_LIBAV_FOUND OFF)
+if(SCRCTL_LIBAV)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(LIBAV IMPORTED_TARGET libavcodec libavutil libswscale)
+    endif()
+    if(LIBAV_FOUND)
+        set(SCRCTL_LIBAV_FOUND ON)
+    elseif(SCRCTL_LIBAV STREQUAL "ON")
+        message(WARNING
+                "没找到 libavcodec/libswscale（pkg-config）。软件解码后端不编，"
+                "关键帧超过 65535 字节的码流会出现无法解码的丢帧。"
+                "装 ffmpeg 开发件后重新配置即可。")
+    endif()
+endif()
+
 # ------------------------------------------------------------- core lib -----
 add_library(scrctl_core STATIC
         src/jsonlite/Jsonlite.cpp
@@ -92,11 +116,26 @@ add_library(scrctl_core STATIC
         src/remote/Device.cpp
         src/remote/Pasteboard.cpp
         src/bitstream/AnnexB.cpp
-        src/hid/Hid.cpp
-        src/decode/VideoToolboxDecoder.cpp)
+        src/hid/Hid.cpp)
 target_include_directories(scrctl_core PUBLIC src)
 target_link_libraries(scrctl_core PUBLIC ScrctlAppleFrameworks OpenSSL::SSL OpenSSL::Crypto)
 target_compile_options(scrctl_core PRIVATE -Wall -Wextra)
+
+# 解码后端按平台与依赖挑：平台后端在 Apple 上是 VideoToolbox，别处只能借用软解；
+# 软解后端有 libavcodec 就用，没有就换回返回 nullptr 的占位实现。
+if(APPLE)
+    target_sources(scrctl_core PRIVATE src/decode/VideoToolboxDecoder.cpp)
+else()
+    target_sources(scrctl_core PRIVATE src/decode/PlatformDecoderFallback.cpp)
+endif()
+if(SCRCTL_LIBAV_FOUND)
+    target_sources(scrctl_core PRIVATE src/decode/FFmpegDecoder.cpp)
+    # 必须是 PUBLIC：解码后端编在静态库里，最终链接由各个可执行文件做，
+    # 搜索路径不传下去就是"库找到了、链接找不到"。
+    target_link_libraries(scrctl_core PUBLIC PkgConfig::LIBAV)
+else()
+    target_sources(scrctl_core PRIVATE src/decode/SoftwareDecoderStub.cpp)
+endif()
 
 # ----------------------------------------------------------------- app ------
 add_executable(scrctl src/app/main.cpp)

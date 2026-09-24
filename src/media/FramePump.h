@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "decode/Decoder.h"
+#include "media/MediaOffer.h"
 #include "rt/RtpHevc.h"
 
 namespace scrctl::media {
@@ -49,6 +50,14 @@ public:
         /// getmediastreamserverstatus 已经报 running:false）。只按缺口判断的话，
         /// 这种最常见的死法永远检不出来，用户看到的就是"窗口冻住了"。
         int silence_restart_ms = 3000;
+        /// 起流时用的 offer（码率、能力串都在这里）。每次重起沿用同一份。
+        Offer offer;
+        /// 直接用软件解码后端，不试平台的。
+        ///
+        /// 两个用途：定位"硬件解码器在这条码流上到底怎么了"的对照实验，以及在
+        /// 平台后端能力不足（关键帧超过 65535 字节）时手工兜底。正常情况下
+        /// 泵会在遇到第一个装不下的关键帧时自动切过去，不需要人给这个开关。
+        bool prefer_software = false;
     };
 
     struct Stats {

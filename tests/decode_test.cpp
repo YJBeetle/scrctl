@@ -20,10 +20,13 @@ uint8_t nal_type(const scrctl::Nal &n) { return n.size() >= 2 ? uint8_t((n[0] >>
 
 int main(int argc, char **argv) {
     if (argc < 3) {
-        std::fprintf(stderr, "用法: %s <in.hevc> <out.raw> [帧序号]\n", argv[0]);
+        std::fprintf(stderr, "用法: %s <in.hevc> <out.raw> [帧序号] [--soft]\n", argv[0]);
         return 2;
     }
-    const int want = argc > 3 ? std::atoi(argv[3]) : 30;
+    const int want = argc > 3 && argv[3][0] != '-' ? std::atoi(argv[3]) : 30;
+    // 两个后端要能对同一份文件各导一帧出来比，所以选后端得是可选项而不是另一条
+    // 命令行。软解在平台后端装不下的码流（关键帧 > 65535 字节）上是唯一的出路。
+    const bool soft = argc > 4 && std::strcmp(argv[4], "--soft") == 0;
 
     std::ifstream in(argv[1], std::ios::binary);
     if (!in) {
@@ -32,7 +35,11 @@ int main(int argc, char **argv) {
     }
     std::vector<uint8_t> file{(std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()};
 
-    auto decoder = scrctl::create_platform_decoder();
+    auto decoder = soft ? scrctl::create_software_decoder() : scrctl::create_platform_decoder();
+    if (decoder == nullptr) {
+        std::fprintf(stderr, "这个构建里没有对应的解码后端\n");
+        return 2;
+    }
     std::printf("解码后端: %s\n", decoder->backend_name());
 
     bool configured = false;

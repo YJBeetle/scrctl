@@ -51,7 +51,9 @@ std::vector<uint8_t> field_varint(uint32_t field, uint64_t v) {
 // ------------------------------------------------------------- 各层结构 --------
 // 下面这些字段号与取值全部来自一次可用会话的观测。语义不明的都标了出来。
 
-/// 分辨率条目：{1, pair, 50115, 0}。50115 的含义未知，但设备认它。
+/// 分辨率条目：{1, pair, 50115, 0}。50115 与 pair 的含义未知，但设备认它。
+///
+/// 别指望 pair 是"挑一档分辨率"：把它从 0 扫到 6，编码尺寸一直是 1136x2464。
 std::vector<uint8_t> res_entry(uint64_t pair_index) {
     return msg({field_varint(1, 1), field_varint(2, pair_index), field_varint(3, 50115),
                 field_varint(4, 0)});
@@ -90,8 +92,12 @@ std::vector<uint8_t> session_blob(const Offer &offer) {
     return out;
 }
 
-/// 码率阶梯。f2 看着是 bps 上限、f3 是缓冲或 QP 相关量；改 --bit-rate 时要动的
-/// 应该就是这几对，但先照观测原样发。
+/// 码率阶梯。f2 看着是 bps 上限、f3 是缓冲或 QP 相关量。
+///
+/// **改它没有用，别再试了**：把 f2、f3 各自缩到 0.25（以及同时缩）再下发，主屏
+/// IDR 是 49652 / 49789 / 49852 字节，与不缩时的 49652 没有区别。设备不照这张表
+/// 编，单帧多大由它自己定。所以"压小关键帧"这条路是死的，超大帧只能靠软解后端。
+/// 观测值原样发，是唯一验证过能起流的一组数。
 std::vector<uint8_t> rate_table() {
     std::vector<uint8_t> out;
     auto entry = [&out](std::vector<std::pair<uint32_t, uint64_t>> fields) {

@@ -192,6 +192,9 @@ public:
 
     [[nodiscard]] const char *backend_name() const override { return "VideoToolbox"; }
 
+    /// 2 字节长度前缀的硬上限。超过就得换软解，不是这里能救的。
+    [[nodiscard]] size_t max_nal_size() const override { return kMaxNalSize; }
+
 private:
     void teardown() {
         if (session_ != nullptr) {

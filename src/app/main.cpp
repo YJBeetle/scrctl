@@ -66,6 +66,8 @@ struct Options {
     bool paste = false;      ///< --paste：读设备剪贴板打印后退出
     bool no_window = false;  ///< --no-window：不起窗口，只收流（脚本/自动化用）
     int win_w = 0, win_h = 0;  ///< --window-width/height：显式窗口尺寸，0=自动
+    /// 直接用软件解码后端，不试平台的。见 FramePump::Options::prefer_software。
+    bool soft_decode = false;
 };
 
 void usage(const char *argv0) {
@@ -84,6 +86,9 @@ void usage(const char *argv0) {
         "  --debug-input        打印每次鼠标的原始坐标与换算结果（定坐标问题时用）\n"
         "  --crop WxH+X+Y       裁剪区域（也吃 scrcpy 的 W:H:X:Y；默认自动裁 CTU 填充）\n"
         "  --scale F            窗口缩放系数，默认 1.0\n"
+        "  --soft-decode        用软件解码（libavcodec），不走 VideoToolbox。\n"
+        "                     关键帧超过 64KB 时会自动切过去，这个开关是手工提前\n"
+        "                     切，用来对照两个后端的表现\n"
         "  --title TITLE        窗口标题\n"
         "  --stats              每秒打印帧率统计\n"
         "  --exit-after N       渲染 N 帧后退出\n"
@@ -126,6 +131,8 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.win_w = std::atoi(next("--window-width"));
         } else if (a == "--window-height" && i + 1 < argc) {
             o.win_h = std::atoi(next("--window-height"));
+        } else if (a == "--soft-decode") {
+            o.soft_decode = true;
         } else if (a == "--debug-input") {
             o.debug_input = true;
         } else if (a == "--scale") {
@@ -582,7 +589,8 @@ class LiveSource final : public FrameSource {
 public:
     ~LiveSource() override;
 
-    bool start(const std::string &serial, const std::string &record_path, std::string &err);
+    bool start(const std::string &serial, const std::string &record_path, bool soft_decode,
+               std::string &err);
 
     bool next(scrctl::Frame &out, int timeout_ms) override {
         if (pump_ == nullptr) {
@@ -635,7 +643,7 @@ private:
 
 LiveSource::~LiveSource() = default;
 
-bool LiveSource::start(const std::string &serial, const std::string &record_path,
+bool LiveSource::start(const std::string &serial, const std::string &record_path, bool soft_decode,
                        std::string &err) {
     auto dev = scrctl::remote::Device::establish(serial, err);
     if (!dev) {
@@ -645,6 +653,7 @@ bool LiveSource::start(const std::string &serial, const std::string &record_path
 
     scrctl::media::FramePump::Options options;
     options.record_path = record_path;
+    options.prefer_software = soft_decode;
     pump_ = scrctl::media::FramePump::start(*device_, options, err);
     if (pump_ == nullptr) {
         return false;
@@ -734,7 +743,7 @@ int main(int argc, char **argv) {
     } else {
         auto made = std::make_unique<LiveSource>();
         std::string err;
-        if (!made->start(o.serial, o.record, err)) {
+        if (!made->start(o.serial, o.record, o.soft_decode, err)) {
             std::fprintf(stderr, "起流失败: %s\n", err.c_str());
             return 1;
         }
@@ -849,6 +858,15 @@ int main(int argc, char **argv) {
             continue;
         }
 
+        // 统计放在 no_window 分支**之前**：--no-window 正是拿它测吞吐量的模式
+        // （有窗口时能直接看到帧率，无窗口时这行输出就是唯一的读数）。
+        if (o.stats && rendered - last_reported >= 60) {
+            const double el = (SDL_GetTicks64() - start) / 1000.0;
+            std::printf("  渲染 %d 帧  %.1f fps\n", rendered, rendered / el);
+            source->print_stats();
+            last_reported = rendered;
+        }
+
         if (o.no_window) {
             // 无窗口模式：只消费帧不画。给脚本/自动化用（Maa 那条路就不要窗口）。
             ++rendered;
@@ -882,12 +900,6 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (o.stats && rendered - last_reported >= 60) {
-            const double el = (SDL_GetTicks64() - start) / 1000.0;
-            std::printf("  渲染 %d 帧  %.1f fps\n", rendered, rendered / el);
-            source->print_stats();
-            last_reported = rendered;
-        }
         if (o.exit_after > 0 && rendered >= o.exit_after) {
             std::printf("达到 --exit-after %d\n", o.exit_after);
             break;

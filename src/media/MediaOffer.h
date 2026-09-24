@@ -29,6 +29,16 @@ struct Offer {
     /// 53–55fps。苹果自己 Xcode 抓包里的 offer 恰恰是带 VRAE:0 的那个慢版本。
     std::string avc_features = "FLS;SW:1;";
     std::string hevc_features = "FLS;SW:1;";
+
+    /// 这里**没有**码率/分辨率旋钮，因为实测它们不管用：把码率阶梯里像 bps 的
+    /// f2、像缓冲的 f3 各自缩到 0.25（以及两者同时 0.25）之后再下发，主屏 IDR
+    /// 分别是 49652 / 49789 / 49852 字节，和不缩一样；把分辨率条目的 pair_index
+    /// 从 0 扫到 6，编码尺寸始终是 1136x2464。也就是说设备不照 offer 里这几串数
+    /// 编，单帧多大由它自己定。
+    ///
+    /// 后果要记清楚：单帧能长到 70101 字节，而 VideoToolbox 只吃 2 字节长度前缀
+    /// （上限 65535），所以"关键帧大到喂不进去"不是小概率的边角情况，而是常态
+    /// 风险——只能靠软解后端兜，见 decode/Decoder.h 的 create_software_decoder。
 };
 
 /// negotiatorOffer 的 bplist 字节，直接塞进 startmediastream 请求的
