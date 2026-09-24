@@ -60,6 +60,9 @@ public:
         uint64_t restarts = 0;
         /// 因解码器不可用而丢弃的帧数（取帧方跟不上时不阻塞收包线程）。
         uint64_t dropped = 0;
+        /// 单个 NAL 超过 2 字节长度前缀上限（65535）而被整帧丢掉的次数。
+        /// 这条流没有周期 IDR，丢一帧参考链就永久坏，所以它同时是重起的触发器。
+        uint64_t dropped_oversized = 0;
     };
 
     /// 在已经建好的会话上起泵。失败时 err 带设备的人话。
@@ -119,6 +122,9 @@ private:
     /// 最后一个**收到的数据报**的时刻。设备结束流时是一个包都不发，只看序号缺口
     /// 检不出来。
     uint64_t last_packet_ms_ = 0;
+    /// 有超大 NAL 被丢、需要重起会话。由 AU 回调置位，收包线程消费。
+    std::atomic<bool> oversized_restart_ { false };
+    uint64_t last_restart_ms_ = 0;
 };
 
 /// 编码帧里"真正显示出来"的那一块。

@@ -121,6 +121,26 @@ void FramePump::loop() {
                 }
                 configured = true;
             }
+            // 2 字节长度前缀装不下的 NAL（实测见过 70101 字节）只能整帧丢，而这条
+            // 流没有周期 IDR，丢一帧参考链就永久坏。所以把它当"画面已死"，触发
+            // 重起拿新关键帧。只在已经有过正常画面之后才触发，避免首帧就超大时
+            // 反复重起成死循环。
+            bool oversized = false;
+            for (const auto &n : au) {
+                if (n.size() > 65535) {
+                    oversized = true;
+                    break;
+                }
+            }
+            if (oversized) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                ++stats_.dropped_oversized;
+                if (stats_.decoded > 0 && now_ms() - last_restart_ms_ > 5000) {
+                    last_restart_ms_ = now_ms();
+                    oversized_restart_ = true;
+                }
+                return;
+            }
             Frame f;
             if (!decoder->decode(au, f) || !f) {
                 std::lock_guard<std::mutex> lock(mutex_);
@@ -155,6 +175,18 @@ void FramePump::loop() {
             // 一个包都不来了：设备已经把我们这条流结束掉了（实测它会在几分钟之后
             // 自己停，且我们从不回 RTCP 接收报告）。不重起的话用户看到的就是
             // "窗口冻住"，而进程、线程、隧道全都好着——最难往流上想。
+            if (oversized_restart_) {
+                oversized_restart_ = false;
+                std::printf("有 NAL 超过 2 字节长度前缀上限，整帧被丢，重起媒体会话\n");
+                std::string restart_err;
+                if (!restart(restart_err)) {
+                    std::fprintf(stderr, "重起媒体会话失败: %s\n", restart_err.c_str());
+                    std::this_thread::sleep_for(std::chrono::seconds(1));
+                    continue;
+                }
+                new_session_state();
+                continue;
+            }
             if (options_.silence_restart_ms > 0 &&
                 now_ms() - last_packet_ms_ > static_cast<uint64_t>(options_.silence_restart_ms)) {
                 std::printf("已 %d ms 没收到任何包，重起媒体会话\n", options_.silence_restart_ms);
