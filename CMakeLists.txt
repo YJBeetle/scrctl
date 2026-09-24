@@ -164,6 +164,18 @@ target_link_libraries(hid_probe PRIVATE scrctl_core)
 add_executable(pli_probe tools/pli_probe.cpp)
 target_link_libraries(pli_probe PRIVATE scrctl_core)
 
+add_executable(rtcp_probe tools/rtcp_probe.cpp)
+target_link_libraries(rtcp_probe PRIVATE scrctl_core)
+
+add_executable(lifetime_probe tools/lifetime_probe.cpp)
+target_link_libraries(lifetime_probe PRIVATE scrctl_core)
+
+add_executable(fir_probe tools/fir_probe.cpp)
+target_link_libraries(fir_probe PRIVATE scrctl_core)
+
+add_executable(restart_gap_probe tools/restart_gap_probe.cpp)
+target_link_libraries(restart_gap_probe PRIVATE scrctl_core)
+
 # ---------------------------------------------------------------- tests -----
 if(SCRCTL_BUILD_TESTS)
     enable_testing()
