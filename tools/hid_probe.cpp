@@ -57,7 +57,10 @@ void usage(const char *argv0) {
         "  --stroke  在屏幕中央画一条短斜线（验证画面真的收到了触摸）\n"
         "  --line    画一条插值直线，用于注入前后的截图对比\n"
         "  --probe-reply  一发一收地发一对报告，把设备的回信原样打出来\n"
-        "  --no-stream  故意不起流：用来确认认证门确实在挡\n",
+        "  --no-stream  故意不起流：用来确认认证门确实在挡\n"
+        "  --swipe-loop N  连续横向拖动 N 秒。在无边记里它就是平移画布，是一个\n"
+        "                    可控的持续高运动画面源（量帧率时不用它就没法排除\n"
+        "                    \'画面本来没在动\'）\n",
         argv0);
 }
 
@@ -75,6 +78,7 @@ int main(int argc, char **argv) {
     bool paste = false;
     double lx0 = 0.2, ly0 = 0.66, lx1 = 0.32, ly1 = 0.70;
     bool with_stream = true;
+    int swipe_seconds = 0;
     bool want_tap = false;
     double tx = 0.5, ty = 0.5;
     std::string serial;
@@ -110,6 +114,8 @@ int main(int argc, char **argv) {
             probe_reply = true;
         } else if (a == "--no-stream") {
             with_stream = false;
+        } else if (a == "--swipe-loop" && i + 1 < argc) {
+            swipe_seconds = std::stoi(argv[++i]);
         } else if (a == "-h" || a == "--help") {
             usage(argv[0]);
             return 0;
@@ -183,7 +189,7 @@ int main(int argc, char **argv) {
         }
     }
     if (stroke) {
-        // 只在画面正中一小段：这台机器上只允许碰无边记的画布，别去够系统边缘。
+        // 只在画面正中一小段，不去够系统边缘——边缘那几条手势会叫出控制中心。
         std::printf("画一条中央短斜线\n");
         const std::vector<std::pair<double, double>> pts = {{0.44, 0.44}, {0.47, 0.46},
                                                             {0.50, 0.48}, {0.53, 0.50},
@@ -205,6 +211,34 @@ int main(int argc, char **argv) {
             std::fprintf(stderr, "画线失败: %s\n", err.c_str());
             rc = 1;
         }
+    }
+    if (swipe_seconds > 0) {
+        // 横向拖动画布是一个**零风险的持续高运动画面源**（无边记里就是平移视图，
+        // 用户已明确允许在这个画布上操作）。为什么需要它：量到"scrctl 的会话只有
+        // 12 帧/秒"时，第一个要排除的解释就是"画面本来就没在动"——只有喂一个确定
+        // 在动的内容，12 帧这个数才有意义。
+        const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(swipe_seconds);
+        bool rightward = true;
+        long flips = 0;
+        while (std::chrono::steady_clock::now() < until) {
+            const double x0 = rightward ? 0.82 : 0.18;
+            const double x1 = rightward ? 0.18 : 0.82;
+            std::vector<std::pair<double, double>> pts;
+            for (int i = 0; i <= 16; ++i) {
+                const double t = i / 16.0;
+                pts.emplace_back(x0 + (x1 - x0) * t, 0.55);
+            }
+            std::string serr;
+            if (!hid->stroke(pts, 14, serr)) {
+                std::fprintf(stderr, "拖动失败: %s\n", serr.c_str());
+                rc = 1;
+                break;
+            }
+            rightward = !rightward;
+            ++flips;
+            std::this_thread::sleep_for(std::chrono::milliseconds(240));
+        }
+        std::printf("横向拖了 %ld 次\n", flips);
     }
     if (!keys.empty()) {
         // 键盘面：先试设备自带的那个（list 里 512 是 "CoreDevice keyboard"）。
@@ -246,7 +280,7 @@ int main(int argc, char **argv) {
         }
     }
     if (!list && !want_tap && !stroke && !line && !probe_reply && !raw_surfaces &&
-        keys.empty() && !paste) {
+        keys.empty() && !paste && swipe_seconds == 0) {
         usage(argv[0]);
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
