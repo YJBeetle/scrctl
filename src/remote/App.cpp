@@ -26,6 +26,23 @@ std::vector<uint8_t> empty_plist() {
     return {text.begin(), text.end()};
 }
 
+/// 幂等的读类 RPC：撞上**传输类**失败就换一条连接再问一次。
+/// 依据是 Rsd.h 里那条实测——约 15% 的服务连接会撞一次超时/帧错位/对端关闭，而换一条
+/// 连接重发往往就成了；设备真答了"不同意"（DeviceError）的话重试只会再拿到同一句话，
+/// 所以那种直接交回去。
+CallResult ask_idempotent(Device &device, std::string_view feature_identifier,
+                          const xpc::Value &input, xpc::Value &output, std::string &err,
+                          bool verbose, int timeout_ms) {
+    for (int attempt = 1; attempt <= 3; ++attempt) {
+        const auto result = device.feature_call(kService, feature_identifier, "", input, output,
+                                               err, verbose, timeout_ms);
+        if (result != CallResult::TransportError || attempt == 3) {
+            return result;
+        }
+    }
+    return CallResult::TransportError;
+}
+
 /// file:///private/var/... -> /private/var/...
 /// 设备的 executableURL 带 scheme，而 app 列表里的 path 不带，不对齐就永远匹配不上。
 std::string strip_file_scheme(std::string_view url) {
@@ -111,10 +128,6 @@ std::vector<int64_t> App::matching_pids(const xpc::Value &processes,
 }
 
 bool App::list(Device &device, std::vector<Entry> &out, std::string &err, bool verbose) {
-    auto conn = device.connect(kService, err, verbose);
-    if (conn == nullptr) {
-        return false;
-    }
     if (!device.rsd().supports(kService, "com.apple.coredevice.feature.streamapplist")) {
         err = "这台设备的 appservice 没有声明 streamapplist，不退回 listapps（那个是大回复）";
         return false;
@@ -141,21 +154,31 @@ bool App::list(Device &device, std::vector<Entry> &out, std::string &err, bool v
     xpc::dict_set(input, "actualInput", std::move(flags));
     xpc::dict_set(input, "streamProxy", std::move(proxy));
 
-    const auto got = conn->stream(
-        "com.apple.coredevice.feature.streamapplist", "", input,
-        [&out](const xpc::Value &one) {
-            Entry e {
-                .bundle_id = one.at("bundleIdentifier").as_string_or(""),
-                .path = one.at("path").as_string_or(""),
-                .name = one.at("name").as_string_or(""),
-            };
-            if (!e.bundle_id.empty()) {
-                out.push_back(std::move(e));
-            }
-            return true;
-        },
-        30000, err);
-    return got == CallResult::Ok;
+    // 整条流失败时重开一条连接重跑一遍（同样是"传输类失败换连接就好"那一类）。
+    const auto collect = [&out](const xpc::Value &one) {
+        Entry e {
+            .bundle_id = one.at("bundleIdentifier").as_string_or(""),
+            .path = one.at("path").as_string_or(""),
+            .name = one.at("name").as_string_or(""),
+        };
+        if (!e.bundle_id.empty()) {
+            out.push_back(std::move(e));
+        }
+        return true;
+    };
+    for (int attempt = 1; attempt <= 3; ++attempt) {
+        auto conn = device.connect(kService, err, verbose);
+        if (conn == nullptr) {
+            return false;
+        }
+        const auto got = conn->stream("com.apple.coredevice.feature.streamapplist", "", input,
+                                      collect, 30000, err);
+        if (got != CallResult::TransportError || attempt == 3) {
+            return got == CallResult::Ok;
+        }
+        out.clear();  // 上一条连接可能已经推了一半
+    }
+    return false;
 }
 
 bool App::stop(Device &device, const std::string &bundle_id, std::string &err, bool verbose) {
@@ -170,8 +193,8 @@ bool App::stop(Device &device, const std::string &bundle_id, std::string &err, b
     }
 
     xpc::Value procs;
-    if (!device.feature(kService, "com.apple.coredevice.feature.listprocesses", "",
-                        xpc::make_dict(), procs, err, verbose, 30000)) {
+    if (ask_idempotent(device, "com.apple.coredevice.feature.listprocesses", xpc::make_dict(),
+                       procs, err, verbose, 30000) != CallResult::Ok) {
         return false;
     }
     const auto pids = matching_pids(procs, it->path);
@@ -187,13 +210,47 @@ bool App::stop(Device &device, const std::string &bundle_id, std::string &err, b
         xpc::dict_set(process, "processIdentifier", xpc::make_int64(pid));
         xpc::dict_set(input, "process", std::move(process));
         xpc::dict_set(input, "signal", xpc::make_int64(kSigKill));
-        xpc::Value output;
-        if (!device.feature(kService, "com.apple.coredevice.feature.sendsignaltoprocess", "",
-                            input, output, err, verbose, 30000)) {
-            err = "杀 " + bundle_id + " 的进程 " + std::to_string(pid) + " 失败: " + err;
+        // 这条 RPC 实测会撞"等设备回信超时"——那是**传输类**失败（约 15% 的服务连接
+        // 会撞一次），不是设备拒绝，而每次 feature_call 都开新连接，正是它的解法。
+        // SIGKILL 重复发是幂等的，所以放心重试。
+        bool killed = false;
+        for (int attempt = 1; attempt <= 3 && !killed; ++attempt) {
+            xpc::Value output;
+            const auto result = device.feature_call(
+                kService, "com.apple.coredevice.feature.sendsignaltoprocess", "", input, output,
+                err, verbose, 30000);
+            if (result == CallResult::Ok) {
+                killed = true;
+            } else if (result == CallResult::DeviceError) {
+                err = "杀 " + bundle_id + " 的进程 " + std::to_string(pid) + " 失败: " + err;
+                return false;
+            }
+        }
+        if (!killed) {
+            err = "杀 " + bundle_id + " 的进程 " + std::to_string(pid) +
+                  " 三次都问不到回信: " + err;
             return false;
         }
     }
+
+    // **等它真的没了再返回。** SIGKILL 的 RPC 是"发出去了"，不是"进程已经死了"，
+    // 而紧接着的 launchapplication 撞上未死干净的旧进程会回 code 10004 且**真的起不
+    // 来**（实测停完立刻起，连试 4 次 500ms 间隔全败；等进程表干净之后再起就一次成）。
+    // 让 stop 同步，调用方就不必自己去猜要等多久。
+    for (int wait = 0; wait < 40; ++wait) {
+        xpc::Value again;
+        std::string perr;
+        if (ask_idempotent(device, "com.apple.coredevice.feature.listprocesses",
+                           xpc::make_dict(), again, perr, verbose, 30000) != CallResult::Ok) {
+            break;  // 问不动就不再等，信号已经发出去了
+        }
+        if (matching_pids(again, it->path).empty()) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+    std::printf("stop_app(%s)：信号已发出，但进程表里还能看到它（旧进程可能卡在退出路径上）\n",
+                bundle_id.c_str());
     return true;
 }
 

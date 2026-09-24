@@ -157,19 +157,27 @@ std::unique_ptr<ServiceConnection> Device::connect(std::string_view service_name
     return rsd_->connect_service(service_name, err, verbose);
 }
 
-bool Device::feature(std::string_view service_name, std::string_view feature_identifier,
-                     std::string_view action_identifier, const xpc::Value &input,
-                     xpc::Value &output, std::string &err, bool verbose, int timeout_ms) {
+CallResult Device::feature_call(std::string_view service_name,
+                                std::string_view feature_identifier,
+                                std::string_view action_identifier, const xpc::Value &input,
+                                xpc::Value &output, std::string &err, bool verbose,
+                                int timeout_ms) {
     if (rsd_ && !rsd_->supports(service_name, feature_identifier)) {
         err = std::string(service_name) + " 没有声明 feature " + std::string(feature_identifier);
-        return false;
+        return CallResult::DeviceError;
     }
     auto conn = connect(service_name, err, verbose);
     if (conn == nullptr) {
-        return false;
+        return CallResult::TransportError;
     }
-    return conn->invoke(feature_identifier, action_identifier, input, output, timeout_ms, err) ==
-           CallResult::Ok;
+    return conn->invoke(feature_identifier, action_identifier, input, output, timeout_ms, err);
+}
+
+bool Device::feature(std::string_view service_name, std::string_view feature_identifier,
+                     std::string_view action_identifier, const xpc::Value &input,
+                     xpc::Value &output, std::string &err, bool verbose, int timeout_ms) {
+    return feature_call(service_name, feature_identifier, action_identifier, input, output, err,
+                        verbose, timeout_ms) == CallResult::Ok;
 }
 
 }  // namespace scrctl::remote

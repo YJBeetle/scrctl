@@ -60,6 +60,16 @@ public:
                  std::string_view action_identifier, const xpc::Value &input, xpc::Value &output,
                       std::string &err, bool verbose = false, int timeout_ms = 10000);
 
+    /// 同上，但把三种结局分开交出来。
+    ///
+    /// 需要按类型重试的调用方要用这个：`TransportError`（超时/帧错位/对端关闭，实测
+    /// 约 15% 的服务连接会撞一次）换一条连接再发一次往往就成了，而 `DeviceError`
+    /// 是设备答了"不同意"，重试只会再拿到同一句话。都折成 bool 的话，要么该重试的
+    /// 不重试，要么不该重试的白等。
+    CallResult feature_call(std::string_view service_name, std::string_view feature_identifier,
+                            std::string_view action_identifier, const xpc::Value &input,
+                            xpc::Value &output, std::string &err, bool verbose, int timeout_ms);
+
 private:
     std::string udid_;
     std::string connection_type_;
