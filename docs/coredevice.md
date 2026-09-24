@@ -597,8 +597,54 @@ includeHiddenApps  includeContainerPaths  includeAppGroupIdentifiers
 requireContainerAccess
 ```
 
-⚠️ 但只要把其中任何一个改成 true，这台 iOS 27.0 就在 60 秒内不回话（`includeDefaultApps`
-单独为 true 也一样）。所以列 App 这件事得另找路子（`streamapplist`？），别指望 listapps。
+⚠️ 但只要把其中任何一个改成 true，这台 iOS 27.0 就在 60 秒内不回话。**真正的原因不是
+那个开关，是回复尺寸**（2026-09-25 定论）：全部为 false 时秒回一个空数组，而一个 App
+都不漏的列表在这台设备上是 239 条、每条带完整安装路径——正好落在"服务连接上的大回复
+传不完"那一类（§15）。所以列 App 一律走 `streamapplist`，别再碰 listapps。
+
+### 流式 feature（streamapplist / streamprocesslist）
+
+不是"一条大回信"，而是**一次请求 + 一串小回信**，所以天然绕开尺寸问题。形状：
+
+```text
+请求：CoreDevice.input = { actualInput:  <真正的参数>,
+                           streamProxy:  { sideChannel: <客户端自己生成的 XPC UUID> } }
+回信：一串，每条带 CoreDevice.XPCMessageKey.sideChannelStatus，值是单键枚举
+        pushing:        { elements: [ ... ] }   若干条
+        finishStreaming: {}                     最后一条
+        receivedError:  ...                     中途失败时取代上面两条
+```
+
+`XPCSideChannel.uniqueIdentifier` 会把那个 UUID 原样带回来；一条连接只跑一条流时
+不需要校验。整条流的失败是一个普通的 `CoreDevice.error` 回信，不是 sideChannelStatus。
+实测（iPhone14,4 / iOS 27.0）：239 个 App 全部推完，正常收尾。
+实现见 `ServiceConnection::stream`，用法见 `App::list`。
+
+### 停一个 App
+
+设备目录里**没有** terminate/kill app 这种 feature，只有 `sendsignaltoprocess`，而它
+只认 pid；`listprocesses` 又只回 `{processIdentifier, executableURL}`。所以
+bundle id → 进程要绕一圈（`App::stop`）：
+
+```text
+streamapplist  →  该 bundle id 的安装目录（…/<UUID>/MobileSafari.app）
+listprocesses  →  可执行文件路径落在这个目录下的所有 pid
+sendsignaltoprocess {process:{processIdentifier}, signal:9}  逐个发
+```
+
+匹配必须带上末尾那个 `/`（`…/Foo.app` 不能把 `…/Foo.app2` 算进来），钉在
+`tests/app_test.cpp`。真机判据用进程表而不是截图：`--grep MobileSafari.app` 从
+1 个变 0 个，总进程数 312 → 303（它自己的 XPC 服务跟着没了）。
+
+**刚杀掉的 App 立刻再起，设备有概率回 code 10004** "The process identifier of the
+launched application could not be determined. It may have already terminated."——这句
+字面上像"起来了但报不出 pid"，实测**是真的没起来**（进程表里 0 个）。它是进程还没死
+干净时的竞态：隔 2 秒再起必成，立刻起则时好时坏，而成功那次往往要 300~400ms（平时
+50ms）。所以 `App::launch` 把它当可重试错误，最多 4 次、间隔 500ms。加了重试之后
+"停→起"连跑 5 次全成。
+
+这条也修正了本文早先那句"`terminateExisting: true` 会先杀掉再报 10004"：10004 跟那个
+开关无关，任何"刚杀完就起"都会撞。不杀（false）仍然更稳，理由见下面。
 
 `launchapplication` / **`action.launch`**（不是 `action.launchapplication`，那个直接
 "not implemented"）**已打通**（2026-09-25，iPhone14,4 / iOS 27.0，Safari 与无边记都
@@ -622,11 +668,11 @@ requireContainerAccess
    data"），得是一段解得开的 plist。
 
 **`terminateExisting: true` 不是"更安全地重来"，是会把 App 弄丢。** 实测对一个正在
-前台的 App 用它：设备先把实例杀掉，然后回 `The process identifier of the launched
-application could not be determined. It may have already terminated.`（code 10004）
-——**返回失败而前台 App 已经没了**，比不调用还糟。所以默认走 false（只唤起、不动在跑
-的实例），这也正好与 MaaFramework Android 侧的语义一致：那边 start_app 是
-`monkey -p <pkg> 1`，stop_app 才是 `am force-stop`。
+前台的 App 用它：设备先把实例杀掉，然后回 code 10004（"…could not be determined"）
+——**返回失败而前台 App 已经没了**，比不调用还糟。事后看，10004 的真凶是"刚杀完就起"
+这个竞态而不是这个开关本身（见下一节），但开关确实每次都制造一次竞态，而 false 不制造。
+所以默认走 false（只唤起、不动在跑的实例），这也正好与 MaaFramework Android 侧的语义
+一致：那边 start_app 是 `monkey -p <pkg> 1`，`am force-stop` 才是 stop_app。
 
 形状钉在 `tests/app_test.cpp`（离线，不碰设备）——这条 RPC 键放错位置时设备不给字段级
 报错，所以线上看不出来，只能在这里拦。

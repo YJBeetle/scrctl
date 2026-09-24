@@ -83,6 +83,40 @@ int main() {
     check(!keep.at("options").at("terminateExisting").as_bool_or(true),
           "terminate_existing=false 时该项为假（与 Android 的 monkey -p 语义对齐）");
 
+    std::printf("== 进程归属：bundle 目录 -> pid ==\n");
+    // stop_app 的全部风险都在这条匹配上：匹配不到就"返回真而 App 还活着"，匹配多了
+    // 就杀错进程。而这两种在线上都没有任何痕迹。样本形状取自真机 listprocesses。
+    auto proc = [](int64_t pid, const char *url) {
+        auto relative = make_dict();
+        dict_set(relative, "relative", make_string(url));
+        auto exe = make_dict();
+        dict_set(exe, "executableURL", std::move(relative));
+        dict_set(exe, "processIdentifier", make_int64(pid));
+        return exe;
+    };
+    constexpr const char *kAppPath =
+        "/private/var/containers/Bundle/Application/F256/MobileSafari.app";
+    auto tokens = make_array();
+    // 主进程
+    array_push(tokens, proc(24368, "file:///private/var/containers/Bundle/Application/"
+                                         "F256/MobileSafari.app/MobileSafari"));
+    // 同 App 的扩展进程，也该算进来
+    array_push(tokens, proc(24370, "file:///private/var/containers/Bundle/Application/"
+                                         "F256/MobileSafari.app/PlugIns/Ext.appex/Ext"));
+    // 只差一个字符的另一个 App——没有末尾那个 '/' 就会被前缀误伤
+    array_push(tokens, proc(24369, "file:///private/var/containers/Bundle/Application/"
+                                         "F256/MobileSafari.app2/MobileSafari"));
+    // 系统守护进程
+    array_push(tokens, proc(100, "file:///usr/libexec/wifianalyticsd"));
+    auto processes = make_dict();
+    dict_set(processes, "processTokens", std::move(tokens));
+
+    const auto pids = App::matching_pids(processes, kAppPath);
+    check(pids.size() == 2, "只认出属于这个 App 的两个进程");
+    check(!pids.empty() && pids[0] == 24368 && pids[1] == 24370,
+          "pid 与顺序都对，且 .app2 那种近似名没被误伤");
+    check(App::matching_pids(processes, "").empty(), "空路径不匹配任何东西（防误杀全部）");
+
     std::printf(Failures == 0 ? "\n全部通过\n" : "\n%d 项失败\n", Failures);
     return Failures == 0 ? 0 : 1;
 }

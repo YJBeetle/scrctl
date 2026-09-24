@@ -125,6 +125,38 @@ bool ServiceConnection::send_only(const xpc::Value &request, std::string &err) {
     return channel_->send_request(request, false, err);
 }
 
+namespace {
+
+/// 设备侧的失败写法是 CoreDevice.error = {code, userInfo.NSLocalizedDescription}。
+/// 只回一句"调用失败"会把真正的因由丢干净，所以人话必须捞出来。
+std::string device_error_text(std::string_view feature_identifier, const xpc::Value &error) {
+    const std::string detail =
+        error.at("userInfo").at("NSLocalizedDescription").as_string_or("");
+    const auto code = error.at("code").as_int_or(0);
+    // 设备答了，而且答的是"不同意"：这是语义结果，重试只会再拿到同一句话。
+    std::string err = std::string(feature_identifier) + " 失败";
+    if (!detail.empty()) {
+        err += "：" + detail;
+    }
+    err += "（code " + std::to_string(code) + "）";
+    // NSDebugDescription 是"缺哪个键 / 哪个类型不对"的正式答案，NSCodingPath 指出
+    // 是哪一个键。这两个必须**原样、不截断**地交出去：整个 error 字典的 describe
+    // 会把长字符串掐掉（深层路径正好是最长的那段），而探协议时恰恰要读那半截。
+    const std::string debug = error.at("userInfo").at("NSDebugDescription").as_string_or("");
+    if (!debug.empty()) {
+        err += "\n  NSDebugDescription: " + debug;
+        // NSCodingPath 是个数组，不是字符串。
+        err += "\n  NSCodingPath: " + xpc::describe(error.at("userInfo").at("NSCodingPath"));
+    }
+    if (detail.empty() && debug.empty()) {
+        // 什么话都没有就把整个 error 交出去，别只报一个数字。
+        err += "；error 原文: " + xpc::describe(error).substr(0, 600);
+    }
+    return err;
+}
+
+}  // namespace
+
 CallResult ServiceConnection::invoke(std::string_view feature_identifier,
                                      std::string_view action_identifier, const xpc::Value &input,
                                      xpc::Value &output, int timeout_ms, std::string &err) {
@@ -140,8 +172,6 @@ CallResult ServiceConnection::invoke(std::string_view feature_identifier,
         output = *out;
         return CallResult::Ok;
     }
-    // 设备侧的失败写法是 CoreDevice.error = {code, userInfo.NSLocalizedDescription}。
-    // 只回一句"调用失败"会把真正的因由丢干净，所以人话必须捞出来。
     output = xpc::make_dict();
     const auto *error = reply.find("CoreDevice.error");
     if (error == nullptr) {
@@ -149,29 +179,59 @@ CallResult ServiceConnection::invoke(std::string_view feature_identifier,
               xpc::describe(reply).substr(0, 300);
         return CallResult::DeviceError;
     }
-    const std::string detail =
-        error->at("userInfo").at("NSLocalizedDescription").as_string_or("");
-    const auto code = error->at("code").as_int_or(0);
-    // 设备答了，而且答的是"不同意"：这是语义结果，重试只会再拿到同一句话。
-    err = std::string(feature_identifier) + " 失败";
-    if (!detail.empty()) {
-        err += "：" + detail;
-    }
-    err += "（code " + std::to_string(code) + "）";
-    // NSDebugDescription 是"缺哪个键 / 哪个类型不对"的正式答案，NSCodingPath 指出
-    // 是哪一个键。这两个必须**原样、不截断**地交出去：整个 error 字典的 describe
-    // 会把长字符串掐掉（深层路径正好是最长的那段），而探协议时恰恰要读那半截。
-    const std::string debug = error->at("userInfo").at("NSDebugDescription").as_string_or("");
-    if (!debug.empty()) {
-        err += "\n  NSDebugDescription: " + debug;
-        // NSCodingPath 是个数组，不是字符串。
-        err += "\n  NSCodingPath: " + xpc::describe(error->at("userInfo").at("NSCodingPath"));
-    }
-    if (detail.empty() && debug.empty()) {
-        // 什么话都没有就把整个 error 交出去，别只报一个数字。
-        err += "；error 原文: " + xpc::describe(*error).substr(0, 600);
-    }
+    err = device_error_text(feature_identifier, *error);
     return CallResult::DeviceError;
+}
+
+CallResult ServiceConnection::stream(std::string_view feature_identifier,
+                                     std::string_view action_identifier, const xpc::Value &input,
+                                     const std::function<bool(const xpc::Value &)> &on_element,
+                                     int timeout_ms, std::string &err) {
+    if (channel_ == nullptr) {
+        err = "这条服务连接不是 XPC 通道，流式 feature 走不了";
+        return CallResult::TransportError;
+    }
+    const auto request = core_device_request(feature_identifier, action_identifier, input);
+    if (!channel_->send_request(request, true, err)) {
+        return CallResult::TransportError;
+    }
+    for (;;) {
+        xpc::Value reply;
+        if (!channel_->receive(reply, timeout_ms, err)) {
+            return CallResult::TransportError;
+        }
+        const auto *status = reply.find("CoreDevice.XPCMessageKey.sideChannelStatus");
+        if (status == nullptr) {
+            // 整条流失败时设备发的是一个普通 error 回信，不是 sideChannelStatus。
+            const auto *error = reply.find("CoreDevice.error");
+            if (error != nullptr) {
+                err = device_error_text(feature_identifier, *error);
+            } else {
+                err = std::string(feature_identifier) +
+                      " 的回信既没有 sideChannelStatus 也没有 error: " +
+                      xpc::describe(reply).substr(0, 300);
+            }
+            return CallResult::DeviceError;
+        }
+        if (status->find("receivedError") != nullptr) {
+            err = std::string(feature_identifier) + " 中途失败：" +
+                  xpc::describe(status->at("receivedError")).substr(0, 400);
+            return CallResult::DeviceError;
+        }
+        if (status->find("finishStreaming") != nullptr) {
+            return CallResult::Ok;
+        }
+        const auto *pushing = status->find("pushing");
+        const auto *elements = pushing == nullptr ? nullptr : pushing->find("elements");
+        if (elements == nullptr) {
+            continue;  // 空批次
+        }
+        for (const auto &element : elements->array) {
+            if (!on_element(element)) {
+                return CallResult::Ok;  // 调用方说够了
+            }
+        }
+    }
 }
 
 // ------------------------------------------------------------------ RSD ------

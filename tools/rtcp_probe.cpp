@@ -231,7 +231,7 @@ int main(int argc, char **argv) {
             const long dev_bytes = static_cast<long>(sr_octets - last_sr_octets);
             last_sr_packets = sr_packets;
             last_sr_octets = sr_octets;
-            std::printf("%6llu ms  我收到视频包 %4llu  设备 SR 说它发了 %4llu 个 / %7ld 字节  "
+            std::printf("%6llu ms  我收到视频包 %4llu  设备 SR 说它发了 %4ld 个 / %7ld 字节  "
                         "差 %4ld  这秒内 %3u 个不同时间戳  NAL %4llu  AU %3llu  距最后视频包 "
                         "%5llu ms  会话 %s\n",
                         t, static_cast<unsigned long long>(sec_video), dev_pkts, dev_bytes,

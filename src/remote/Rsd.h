@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -55,6 +56,26 @@ public:
     /// 只发不收。HID 报告这类"投出去就完"的请求必须走这条路：设备对它们不安
     /// 回信，用 call() 就是每个点等一次超时，注入延迟立刻变成秒级。
     bool send_only(const xpc::Value &request, std::string &err);
+
+    /// 流式 feature：一次请求、**多条**回信，直到设备发 finishStreaming。
+    ///
+    /// 为什么要有它：`listapps` 把全部 App 一次性装进一个回信，在这台设备上是几 MB，
+    /// 而大回复正是我们传不稳的那一类（docs §15）；实测它还会因为 include* 为 true
+    /// 直接 60 秒不回话。流式的那条（`streamapplist` / `streamprocesslist`）把同样的
+    /// 内容切成一批一批的小回信，绕开尺寸问题。
+    ///
+    /// 协议形状（设备侧是 CoreDeviceUtilities 的 StreamingAction.swift）：请求把参数
+    /// 裹在 `CoreDevice.input.actualInput` 下，并给一个
+    /// `streamProxy.sideChannel` = 客户端自己生成的 UUID；回信一串，每条带
+    /// `CoreDevice.XPCMessageKey.sideChannelStatus`，值是枚举
+    /// `pushing:{elements:[...]}` / `finishStreaming:{}` / `receivedError:...`。
+    ///
+    /// on_element 对每个元素调一次；返回 false 表示"够了，别推了"（比如只找一个
+    /// bundle id，命中就可以收工）。
+    CallResult stream(std::string_view feature_identifier, std::string_view action_identifier,
+                      const xpc::Value &input,
+                      const std::function<bool(const xpc::Value &)> &on_element, int timeout_ms,
+                      std::string &err);
 
     [[nodiscard]] net::TcpStream &tcp() { return *tcp_; }
     [[nodiscard]] bool is_xpc() const { return channel_ != nullptr; }

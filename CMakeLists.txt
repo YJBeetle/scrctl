@@ -159,6 +159,9 @@ target_link_libraries(screenshot_probe PRIVATE scrctl_core)
 add_executable(stream_probe tools/stream_probe.cpp)
 target_link_libraries(stream_probe PRIVATE scrctl_core)
 
+add_executable(applist_probe tools/applist_probe.cpp)
+target_link_libraries(applist_probe PRIVATE scrctl_core)
+
 add_executable(app_launch_probe tools/app_launch_probe.cpp)
 target_link_libraries(app_launch_probe PRIVATE scrctl_core)
 
