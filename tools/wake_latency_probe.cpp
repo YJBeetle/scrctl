@@ -32,6 +32,11 @@ int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     std::string_view udid;
     int trials = 5;
+    // 静默多久之后催一次。泵里"该不该重起"的判定用的是"最后一个数据报静默满 2 秒"
+    // （设备的 RTCP SR 每秒一个，连它都停了才算死），所以这个参数扫过 2 秒上下，
+    // 就能看出阈值是不是卡在正确的位置上：3000ms 那一档必须和 9000ms 那一档一样
+    // 一次就重起成功。
+    int quiet_target = 9000;
     bool verbose = false;
     for (int i = 1; i < argc; ++i) {
         const std::string_view a = argv[i];
@@ -39,8 +44,10 @@ int main(int argc, char **argv) {
             verbose = true;
         } else if (a == "--trials" && i + 1 < argc) {
             trials = std::atoi(argv[++i]);
+        } else if (a == "--quiet" && i + 1 < argc) {
+            quiet_target = std::atoi(argv[++i]);
         } else if (a == "-h" || a == "--help") {
-            std::printf("用法: %s [--trials N] [-v] [UDID]\n", argv[0]);
+            std::printf("用法: %s [--trials N] [--quiet 毫秒] [-v] [UDID]\n", argv[0]);
             return 0;
         } else if (a.starts_with("-")) {
             std::fprintf(stderr, "未知选项 %s\n", std::string(a).c_str());
@@ -75,12 +82,13 @@ int main(int argc, char **argv) {
 
     std::vector<int> samples;
     for (int trial = 1; trial <= trials; ++trial) {
-        // 等到一个包都不来：设备死之前还会每秒发自己的 RTCP SR，所以包计数停住
-        // 才是"会话真没了"。
-        const auto settle = now_ms();
+        // 等到"一个包都不来"满 quiet_target。设备的 RTCP SR 每秒一个，所以
+        //   quiet_target=1500 落在"可疑区间"（该去问设备那一条）
+        //   quiet_target=4000 落在"两个心跳都没了"（该直接重起那一条）
+        // 两档都必须催回一帧，只是花的钱不一样。
         uint64_t last_pkts = pump->stats().packets;
-        uint64_t last_change = settle;
-        while (now_ms() - last_change < 9000) {
+        uint64_t last_change = now_ms();
+        while (now_ms() - last_change < static_cast<uint64_t>(quiet_target)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(250));
             const uint64_t got = pump->stats().packets;
             if (got != last_pkts) {

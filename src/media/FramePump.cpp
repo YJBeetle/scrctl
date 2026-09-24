@@ -11,9 +11,25 @@
 namespace scrctl::media {
 namespace {
 
-/// 设备结束一条空闲会话的实测时长：最后一个视频包之后约 6.9 秒。留 600ms 余量，
-/// 宁可多等也不要误判成"还活着"。
-constexpr uint64_t kDeviceIdleTeardownMs = 7500;
+/// 设备的 RTCP SR 周期：流活着的时候每秒一个，画面完全静止也照发。它是"这条流还
+/// 活着"的心跳——也是"静默多久算可疑"这把尺的来源。
+/// 实测（docs §13 的时间轴）：视频包 13.1s 停，SR 照旧 14–19s 每秒一个，20.0s 会话
+/// 从表里消失的**同一秒** SR 才停。所以静默是从会话死亡那一刻开始计时的。
+constexpr uint64_t kSrPeriodMs = 1000;
+/// 静默超过一个 SR 周期加一点余量：可疑，但一个 UDP 丢包就能造出同样的现象，
+/// 分不清"流死了"和"SR 丢了"，所以这条只能问设备（一条 100~300ms 的状态 RPC）。
+constexpr uint64_t kQuietSuspiciousMs = kSrPeriodMs + 200;
+/// 静默到两个 SR 周期以上：连着丢两个心跳的概率低到不值得为它花一条 RPC，
+/// 直接重起（37~90ms）。
+constexpr uint64_t kQuietCertainMs = 2 * kSrPeriodMs + 500;
+/// 光靠时间戳永远有一段"刚死但还没到阈值"的盲区（实测：静置 20 秒去截图时，会话
+/// 其实已经死了 1.3 秒，任何大于 1.3 秒的阈值都会漏）。所以催流那条路在可疑区间
+/// 必须去问设备，而不是把阈值调大——调大只会把盲区推到别处。
+///
+/// 也别把它调回 7.5 秒：那是"最后一个视频包之后 6.9 秒"这个实测拆流时长，量的是
+/// 视频包而不是数据报，拿它当数据报静默的阈值等于把两把不同的尺当成一把，结果是
+/// 拆完流之后有 5 秒多的窗口里我们以为流还活着——用户的手感就是"点了没反应，愣
+/// 一下画面才跳"。
 
 uint64_t now_ms() {
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -321,21 +337,23 @@ void FramePump::loop() {
     };
 
     for (;;) {
-        // 用户动了手，而这条流**已经过了设备的拆流点**：直接重起一条，不用先去问
-        // 状态（问一次是一条 100~300ms 的 RPC，而重起只要 37~90ms）。
-        //
-        // 阈值只能按设备实测的拆流时间来定。它是在最后一个视频包之后约 7 秒结束会话
-        // （rtcp_probe 量到 6.9 秒），所以静默小于这个数时会话**还活着**，用户这一下
-        // 本来就会自己把画面推过来，这里重起纯属捣乱。上一版用的 150ms 就是这个错误：
-        // 画面只要变化得比 150ms 慢一点（实测复杂游戏画面就是 12fps，包间隔 80ms 上下
-        // 抖动），每次按下/拖动都会撞上一整轮"停+起+全量 IDR"，延迟一路叠加，
-        // 用户看到的就是慢动作。
+        // 用户动了手（或者自动化框架来取帧了）。分三档处理，判据是"距离最后一个数据报
+        // 多久"，而设备的 RTCP SR 每秒一个就是这条流的心跳：
+        //   静默 ≤ 1.2s   心跳还在，流活着。什么都不做（这是画面在动时的常见情况）
+        //   1.2s ~ 2.5s   可疑：可能是流死了，也可能是连着丢了 SR。问设备一句
+        //                 （getmediastreamserverstatus，实测 100~300ms），死了才重起
+        //   > 2.5s        两个心跳都没了，不再为一次 RPC 花时间，直接重起（37~90ms）
+        // 中间那一档不能省：光靠时间戳永远有"刚死但还没到阈值"的盲区（实测静置 20 秒
+        // 去截图时会话已经死了 1.3 秒），而把阈值调大只会把盲区推到别处。
         if (wake_requested_.exchange(false)) {
             const uint64_t quiet = now_ms() - last_packet_ms_;
-            if (quiet > kDeviceIdleTeardownMs) {
-                std::printf("收到操作（已静默 %llums，过了设备拆流点），重起媒体会话\n",
+            if (quiet > kQuietCertainMs) {
+                std::printf("收到操作（最后一个数据报已静默 %llums，连着两个每秒 SR 都没来），"
+                            "重起媒体会话\n",
                             static_cast<unsigned long long>(quiet));
                 restart_now();
+            } else if (quiet > kQuietSuspiciousMs) {
+                revive_if_dead("收到操作");
             }
             continue;
         }
