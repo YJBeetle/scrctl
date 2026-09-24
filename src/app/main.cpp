@@ -64,6 +64,8 @@ struct Options {
     std::string test_type;
     std::string copy_text;   ///< --copy TEXT：写进设备剪贴板后退出
     bool paste = false;      ///< --paste：读设备剪贴板打印后退出
+    bool no_window = false;  ///< --no-window：不起窗口，只收流（脚本/自动化用）
+    int win_w = 0, win_h = 0;  ///< --window-width/height：显式窗口尺寸，0=自动
 };
 
 void usage(const char *argv0) {
@@ -71,13 +73,16 @@ void usage(const char *argv0) {
         "用法: %s [选项]\n"
         "\n"
         "  (无参数)             镜像当前连接的设备\n"
-        "  --serial SERIAL      多台设备时指定哪一台（UDID）\n"
+        "  -s, --serial SERIAL  多台设备时指定哪一台（UDID）\n"
         "  --list-devices       列出在连设备后退出\n"
         "  --play FILE          改播已录制的 Annex-B HEVC 文件\n"
-        "  --record FILE        把实时流另存为 Annex-B\n"
-        "  --no-control         只显示不注入输入（默认下鼠标左键即触摸）\n"
+        "  -r, --record FILE    把实时流另存为 Annex-B\n"
+        "  -n, --no-control     只显示不注入输入（默认下鼠标左键即触摸）\n"
+        "  --no-window          不起窗口只收流（脚本/自动化用）\n"
+        "  --window-title TEXT  窗口标题（--title 同义）\n"
+        "  --window-width N / --window-height N  显式窗口尺寸，默认按屏幕自动缩\n"
         "  --debug-input        打印每次鼠标的原始坐标与换算结果（定坐标问题时用）\n"
-        "  --crop WxH+X+Y       裁剪区域（默认自动：1136x2464 -> 1125x2436）\n"
+        "  --crop WxH+X+Y       裁剪区域（也吃 scrcpy 的 W:H:X:Y；默认自动裁 CTU 填充）\n"
         "  --scale F            窗口缩放系数，默认 1.0\n"
         "  --title TITLE        窗口标题\n"
         "  --stats              每秒打印帧率统计\n"
@@ -105,18 +110,24 @@ bool parse_args(int argc, char **argv, Options &o) {
         };
         if (a == "--play") {
             o.path = next("--play");
-        } else if (a == "--serial") {
+        } else if (a == "-s" || a == "--serial") {
             o.serial = next("--serial");
-        } else if (a == "--record") {
+        } else if (a == "-r" || a == "--record") {
             o.record = next("--record");
         } else if (a == "--list-devices") {
             o.list_devices = true;
-        } else if (a == "--no-control") {
+        } else if (a == "-n" || a == "--no-control") {
             o.no_control = true;
+        } else if (a == "--no-window") {
+            o.no_window = true;
+        } else if (a == "--window-title" || a == "--title") {
+            o.title = next("--window-title");
+        } else if (a == "--window-width" && i + 1 < argc) {
+            o.win_w = std::atoi(next("--window-width"));
+        } else if (a == "--window-height" && i + 1 < argc) {
+            o.win_h = std::atoi(next("--window-height"));
         } else if (a == "--debug-input") {
             o.debug_input = true;
-        } else if (a == "--title") {
-            o.title = next("--title");
         } else if (a == "--scale") {
             o.scale = std::atof(next("--scale"));
             o.scale_given = true;
@@ -139,8 +150,9 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.paste = true;
         } else if (a == "--crop") {
             const char *v = next("--crop");
-            if (std::sscanf(v, "%dx%d+%d+%d", &o.crop_w, &o.crop_h, &o.crop_x, &o.crop_y) != 4) {
-                std::fprintf(stderr, "--crop 格式应为 WxH+X+Y，收到 %s\n", v);
+            if (std::sscanf(v, "%dx%d+%d+%d", &o.crop_w, &o.crop_h, &o.crop_x, &o.crop_y) != 4 &&
+                std::sscanf(v, "%d:%d:%d:%d", &o.crop_w, &o.crop_h, &o.crop_x, &o.crop_y) != 4) {
+                std::fprintf(stderr, "--crop 格式应为 WxH+X+Y 或 scrcpy 的 W:H:X:Y，收到 %s\n", v);
                 return false;
             }
             o.crop_set = true;
@@ -187,8 +199,12 @@ Crop resolve_crop(const Options &o, const scrctl::Frame &f) {
 class Presenter {
 public:
     bool open(int frame_w, int frame_h, const Crop &crop, double scale, bool scale_given,
-              const std::string &title, bool want_readback) {
+              const std::string &title, bool want_readback, int want_w = 0, int want_h = 0) {
         src_ = crop;
+        if (want_w > 0 && want_h > 0) {
+            win_w_ = want_w;
+            win_h_ = want_h;
+        } else {
         SDL_Rect desk{};
         if (SDL_GetDisplayBounds(0, &desk) != 0 || desk.w <= 0) {
             desk.w = win_w_fallback;
@@ -196,9 +212,10 @@ public:
         }
         // 留一条标题栏的余量，别让窗口刚好顶满屏幕。
         scrctl::app::fit_window(crop.w, crop.h, desk.w, desk.h - 60, scale, scale_given, win_w_, win_h_);
-        if (!scale_given && win_w_ < crop.w) {
-            std::printf("屏幕只有 %dx%d 点，窗口缩到 %dx%d（--scale 可覆盖）\n", desk.w, desk.h,
-                        win_w_, win_h_);
+            if (!scale_given && win_w_ < crop.w) {
+                std::printf("屏幕只有 %dx%d 点，窗口缩到 %dx%d（--scale 可覆盖）\n", desk.w,
+                            desk.h, win_w_, win_h_);
+            }
         }
 
         window_ = SDL_CreateWindow(title.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -832,12 +849,22 @@ int main(int argc, char **argv) {
             continue;
         }
 
+        if (o.no_window) {
+            // 无窗口模式：只消费帧不画。给脚本/自动化用（Maa 那条路就不要窗口）。
+            ++rendered;
+            if (o.exit_after > 0 && rendered >= o.exit_after) {
+                std::printf("达到 --exit-after %d\n", o.exit_after);
+                break;
+            }
+            continue;
+        }
+
         if (presenter == nullptr) {
             presenter = std::make_unique<Presenter>();
             presenter->set_debug_input(o.debug_input);
             if (!presenter->open(static_cast<int>(f.width), static_cast<int>(f.height),
                                  resolve_crop(o, f), o.scale, o.scale_given, o.title,
-                                 o.verify_at > 0)) {
+                                 o.verify_at > 0, o.win_w, o.win_h)) {
                 return 1;
             }
         }
