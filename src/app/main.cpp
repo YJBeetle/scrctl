@@ -49,6 +49,7 @@ struct Options {
     int crop_w = 0, crop_h = 0, crop_x = 0, crop_y = 0;
     double scale = 1.0;   ///< 窗口相对裁剪尺寸的缩放
     bool scale_given = false;  ///< 显式给过 --scale 就别再自动缩进屏幕
+    bool debug_input = false;  ///< 把每次鼠标事件的原始坐标与算出的归一化值都打出来
     int exit_after = 0;   ///< 渲染多少帧后退出（0=不限）
     int verify_at = 0;    ///< 渲染到第 N 帧时回读窗口内容
     std::string verify_path;
@@ -73,6 +74,7 @@ void usage(const char *argv0) {
         "  --play FILE          改播已录制的 Annex-B HEVC 文件\n"
         "  --record FILE        把实时流另存为 Annex-B\n"
         "  --no-control         只显示不注入输入（默认下鼠标左键即触摸）\n"
+        "  --debug-input        打印每次鼠标的原始坐标与换算结果（定坐标问题时用）\n"
         "  --crop WxH+X+Y       裁剪区域（默认自动：1136x2464 -> 1125x2436）\n"
         "  --scale F            窗口缩放系数，默认 1.0\n"
         "  --title TITLE        窗口标题\n"
@@ -107,6 +109,8 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.list_devices = true;
         } else if (a == "--no-control") {
             o.no_control = true;
+        } else if (a == "--debug-input") {
+            o.debug_input = true;
         } else if (a == "--title") {
             o.title = next("--title");
         } else if (a == "--scale") {
@@ -149,7 +153,6 @@ bool parse_args(int argc, char **argv, Options &o) {
 /// 设备编码分辨率比逻辑显示大（HEVC CTU 对齐填充），所以画面要按逻辑尺寸裁；
 /// 裁剪框与坐标换算的几何在 ViewGeom.h，那里可以离线自检。
 using scrctl::app::Crop;
-using scrctl::app::display_fraction;
 
 Crop resolve_crop(const Options &o, const scrctl::Frame &f) {
     const auto auto_crop = scrctl::media::display_crop(static_cast<int>(f.width),
@@ -304,6 +307,19 @@ public:
     /// 换算必须带上裁剪偏移：窗口看到的是显示区，而触摸面的 0..1 是相对**整块
     /// 屏幕**的。把窗口中间点成 0.5 只在"没裁剪"时才对，裁过之后要按裁剪框在
     /// 屏幕里的位置平移一遍，否则点哪儿都偏。
+    void set_debug_input(bool on) { debug_input_ = on; }
+
+    /// 原始坐标、实时窗口点数、实时绘制面像素、算出的归一化值，一行全打出来。
+    /// 只有同时看到这四个数才能判断鼠标到底活在哪个坐标系里。
+    void report_input(int raw_x, int raw_y, double fx, double fy, const char *tag) const {
+        int pw = 0, ph = 0, ow = 0, oh = 0;
+        SDL_GetWindowSize(window_, &pw, &ph);
+        SDL_GetRendererOutputSize(renderer_, &ow, &oh);
+        std::fprintf(stderr,
+                     "[input] %s 原始(%d,%d) 逻辑%d x%d / 窗口%d x%d / 绘制面%d x%d -> (%.3f, %.3f)\n",
+                     tag, raw_x, raw_y, src_.w, src_.h, pw, ph, ow, oh, fx, fy);
+    }
+
     bool pump(const std::function<void(double, double, bool)> &on_touch) {
         SDL_Event e;
         bool quit = false;
@@ -325,12 +341,18 @@ public:
                     if (e.button.button == SDL_BUTTON_LEFT && on_touch) {
                         dragging_ = true;
                         to_display(e.button.x, e.button.y, px, py);
+                        if (debug_input_) {
+                            report_input(e.button.x, e.button.y, px, py, "按下");
+                        }
                         on_touch(px, py, true);
                     }
                     break;
                 case SDL_MOUSEMOTION:
                     if (dragging_ && on_touch) {
                         to_display(e.motion.x, e.motion.y, px, py);
+                        if (debug_input_) {
+                            report_input(e.motion.x, e.motion.y, px, py, "移动");
+                        }
                         pending_move = true;
                     }
                     break;
@@ -369,17 +391,17 @@ public:
     }
 
 private:
-    /// 鼠标位置 -> 整块屏幕的 0..1。换算全在 window_to_fraction 里做（那里可以
-    /// 单测），这里只负责把三个真实尺寸问出来：窗口点数、绘制面像素、逻辑尺寸。
-    void to_display(int wx, int wy, double &fx, double &fy) const {
-        int ww = win_w_, wh = win_h_, ow = win_w_, oh = win_h_;
-        if (window_ != nullptr) {
-            SDL_GetWindowSize(window_, &ww, &wh);
-        }
-        if (renderer_ != nullptr) {
-            SDL_GetRendererOutputSize(renderer_, &ow, &oh);
-        }
-        window_to_fraction(wx, wy, ww, wh, ow, oh, src_, fx, fy);
+    /// 鼠标位置 -> 整块屏幕的 0..1。
+    ///
+    /// **原始值就是逻辑坐标**：设了 SDL_RenderSetLogicalSize 之后，SDL2 会把鼠标
+    /// 事件换算到逻辑空间再交给我们（实测：窗口 457 点 / 绘制面 914 像素，而右下角
+    /// 的原始坐标是 1121 x 2431 —— 正好是逻辑尺寸 1125x2436）。所以这里只剩
+    /// "加裁剪偏移、除以显示尺寸"。
+    ///
+    /// 这里连续错过两次，都是擅自假设原始值活在点或像素空间再去除一遍，结果整体
+    /// 差 2.46 倍。留一条运行期核对：万一某个 SDL 版本行为不同，越界会立刻显形。
+    void to_display(int raw_x, int raw_y, double &fx, double &fy) const {
+        display_fraction_from_logical(raw_x, raw_y, src_, fx, fy);
     }
 
     SDL_Window *window_ = nullptr;
@@ -391,6 +413,7 @@ private:
     static constexpr int win_w_fallback = 1 << 20;
     static constexpr int win_h_fallback = 1 << 20;
     bool dragging_ = false;
+    bool debug_input_ = false;
 };
 
 // ---------------------------------------------------------------- 帧的来源 ----
@@ -802,6 +825,7 @@ int main(int argc, char **argv) {
 
         if (presenter == nullptr) {
             presenter = std::make_unique<Presenter>();
+            presenter->set_debug_input(o.debug_input);
             if (!presenter->open(static_cast<int>(f.width), static_cast<int>(f.height),
                                  resolve_crop(o, f), o.scale, o.scale_given, o.title,
                                  o.verify_at > 0)) {
