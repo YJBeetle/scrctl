@@ -65,6 +65,13 @@ public:
     /// 一次往返。
     bool call(const xpc::Value &request, xpc::Value &reply, int timeout_ms, std::string &err);
 
+    /// 没人发消息的时候也要有人读这条连接：设备的 HTTP/2 层会发 PING，也要收回我们
+    /// 对 WINDOW_UPDATE 的处理，没人应答它就把整条 xpc_connection 取消掉。
+    ///
+    /// 返回 false 只在"链路真的断了"（对端关闭/GOAWAY/帧错位）；单纯读超时算有进展，
+    /// 语义和 pump 一致。
+    bool service(int timeout_ms, std::string &err) { return pump(timeout_ms, err); }
+
     /// 设备在握手时自报的身份：Model / OSVersion / Udid / Properties 等。
     [[nodiscard]] const xpc::Value *peer_info() const {
         return peer_info_.has_value() ? &*peer_info_ : nullptr;

@@ -19,7 +19,8 @@
 //
 // 对照组 `none` 什么都不发。两臂**交替**各跑若干轮：单次对照不算对照（docs §13）。
 //
-// 用法：rr_keepalive_probe [--seconds N] [--attempts N] [--what none,rr,poll,poll5] [--verbose]
+// 用法：rr_keepalive_probe [--seconds N] [--attempts N] [--what none,rr,poll,poll5]
+//                          [--timeout N] [--hold] [--event-channel] [--avc-features STR] [--verbose]
 //
 // 第二轮加的 `poll` 臂是因为第一批数据把"空闲超时"这个模型打掉了：四臂里最后一个视频
 // 包分别落在 +11.1s / +7.1s / +7.1s / +7.1s，而**每一臂都是 +20.0s 整**停止收 SR 并在
@@ -34,9 +35,11 @@
 //
 // 存活信号仍然用设备自己每秒一个的 SR（被动、不引入流量）；`poll` 臂会引入 RPC，所以
 // 它的对照意义是"这一臂能不能活过 20 秒"，而不是"SR 数说明什么"。
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <map>
+#include <memory>
 #include <optional>
 #include <random>
 #include <set>
@@ -392,6 +395,23 @@ int main(int argc, char **argv) {
     // Xcode DeviceHub 的请求之间唯一差的一个键——苹果的 `timeout` 也是 20，却活了 715 秒。
     // 这一臂就是判"是不是这个键让租期失效"。
     bool event_channel = false;
+    /// 握着那条起流连接不放，并在它上面持续 service() + 定期查状态。
+    ///
+    /// 为什么要这一位：95.8 秒的苹果抓包里，carrying 两次 mediastreamstart 的那条
+    /// displayservice 连接（sport 61689 -> dport 54626）SYN 之后**整场没有 FIN 也没有
+    /// RST**，一路活到抓包结束；而它的会话在报着 20 秒租期的情况下 74 秒没断。我们这边
+    /// 每次 feature 调用都是"开连接→发一次→丢连接"（Device::feature_call），所以
+    /// "会话有没有一个还开着的宿主连接"是从没被控住的变量。
+    /// 上一轮"握着连接"那一臂测的是握了但没人读它——设备发 PING 没人 ACK，10 秒就
+    /// cancel；这一臂把 service() 放上，先证明我们能不能握 60 秒，再看租期。
+    bool hold_connection = false;
+    /// 只握连接不起流（见使用处的说明）。
+    bool hold_idle = false;
+    /// 握着连接时不要每 5 秒在同一条连接上查一次状态。
+    /// 为什么要有：查状态本身是一次请求，而"我们在一条设备上刚答完话的连接上再发一次
+    /// 请求"这件事完全可能是把会话搞死的原因——不去掉它，就分不清"设备自己关的"和
+    /// "被我们第二次调用搞关的"。
+    bool hold_no_poll = false;
     // AVC 那条形串。抓包对齐到的最后一处可见差别：苹果发 `FLS;VRAE:0;SW:1;`，我们和 p3
     // 都发 `FLS;SW:1;`（p3 还专门注释说 VRAE:0 不能进）。设备会把它回显成
     // `TxCodecFeatureListString`，所以这条改动是可以在 answer 里验证"它收没收下"的——
@@ -420,6 +440,12 @@ int main(int argc, char **argv) {
             no_timeout_key = true;
         } else if (a == "--event-channel") {
             event_channel = true;
+        } else if (a == "--hold") {
+            hold_connection = true;
+        } else if (a == "--hold-idle") {
+            hold_idle = true;
+        } else if (a == "--hold-no-poll") {
+            hold_no_poll = true;
         } else if (a == "--avc-features" && i + 1 < argc) {
             avc_features = argv[++i];
         } else if (a == "--attempts" && i + 1 < argc) {
@@ -484,6 +510,63 @@ int main(int argc, char **argv) {
     if (!dev) {
         std::fprintf(stderr, "建立会话失败: %s\n", err.c_str());
         return 1;
+    }
+
+    // `--hold-idle`：不开媒体会话，只开一条 displayservice 连接、调一次 getsupportinfo，
+    // 然后握着它空转 --seconds 秒。
+    //
+    // 为什么要单独问这个：握连接那一臂里设备在 +241ms 就把连接关了，而媒体流同时刻冻住
+    // （61 个包、0 个 SR）。这两种解释完全相反，且都还在桌上：
+    //   (a) "答完话就关"是**这条服务连接本身**的固有生命周期——那我们和苹果差的是别的；
+    //   (b) 关连接是**会话被结束**的一个症状——那连接根本不是原因。
+    // 把媒体会话从实验里拿掉就能二选一：这里如果也在 ~240ms 被关，是 (a)；如果空转 30 秒
+    // 不被关，那 240ms 那个关是跟着会话一起来的，是 (b)。
+    if (hold_idle) {
+        std::string cerr;
+        auto conn = dev->connect("com.apple.coredevice.displayservice", cerr, verbose);
+        if (conn == nullptr) {
+            std::fprintf(stderr, "开连接失败: %s\n", cerr.c_str());
+            return 1;
+        }
+        scrctl::xpc::Value out;
+        auto in = scrctl::xpc::make_dict();
+        const auto r = conn->invoke("com.apple.coredevice.feature.getmediasupportinfo",
+                                    "com.apple.coredevice.action.mediastreamgetsupportinfo", in,
+                                    out, 10000, cerr);
+        std::printf("[idle] 第一次调用：%s，输出类型 %d\n",
+                    r == scrctl::remote::CallResult::Ok ? "成功" : cerr.c_str(),
+                    static_cast<int>(out.type));
+        const uint64_t it0 = now_ms();
+        uint64_t next_poll = it0 + 5000;
+        int polls = 0;
+        std::string serr;
+        long long died_ms = -1;
+        while (now_ms() - it0 < static_cast<uint64_t>(seconds) * 1000) {
+            if (!conn->service(200, serr)) {
+                died_ms = static_cast<long long>(now_ms() - it0);
+                std::printf("    [idle] 连接在 +%lldms 被对端关掉: %s\n", died_ms, serr.c_str());
+                break;
+            }
+            if (now_ms() >= next_poll) {
+                next_poll += 5000;
+                scrctl::xpc::Value po;
+                std::string qerr;
+                auto pi = scrctl::xpc::make_dict();
+                const auto pr = conn->invoke(
+                    "com.apple.coredevice.feature.getmediasupportinfo",
+                    "com.apple.coredevice.action.mediastreamgetsupportinfo", pi, po, 10000, qerr);
+                std::printf("    [idle] +%llus 同一条连接再调一次：%s\n",
+                            static_cast<unsigned long long>((now_ms() - it0) / 1000),
+                            pr == scrctl::remote::CallResult::Ok ? "成功" : qerr.c_str());
+                if (pr == scrctl::remote::CallResult::Ok) {
+                    ++polls;
+                }
+            }
+        }
+        std::printf("[idle] 结论：握着这条 displayservice 连接 %lld 毫秒，%s，同连接复查成功 %d 次\n",
+                    died_ms >= 0 ? died_ms : static_cast<long long>(now_ms() - it0),
+                    died_ms >= 0 ? "被设备关了" : "设备没关", polls);
+        return 0;
     }
 
     // 把 --what 按逗号拆开（不用子串匹配：那会让 "poll" 命中 "poll5"）。
@@ -566,11 +649,71 @@ int main(int argc, char **argv) {
             req.offer.avc_features = avc_features;
             req.timeout_seconds = lease;
             req.session_event_channel = event_channel_uuid;
-            auto session = scrctl::media::StreamSession::start(*dev, req, start_err, verbose);
+
+            // 握着连接那一臂：自己开一条 displayservice 连接，用它来起流，然后**不放**，
+            // 另起一个线程只管 service()——空转时替这条连接读一眼，好让设备的 PING 有人
+            // 应答。查状态也走这同一条连接：这样"连接还活着"和"会话还在表里"是同一时刻
+            // 从同一条链路上拿到的两个证据，而不是两条连接各说一套。
+            // 一个线程独占这条 Channel 是有意的：Channel 的 rx_/pending_ 没有锁，
+            // service() 和 invoke() 并发跑会互相吃掉字节。
+            std::unique_ptr<scrctl::remote::ServiceConnection> held;
+            std::atomic<bool> hold_done { false };
+            std::atomic<int> hold_polls { 0 };
+            std::atomic<long long> hold_died_ms { -1 };
+            std::thread hold_thread;
+            if (hold_connection) {
+                std::string cerr;
+                held = dev->connect("com.apple.coredevice.displayservice", cerr, verbose);
+                if (held == nullptr) {
+                    std::fprintf(stderr, "[%s] 开连接失败: %s\n", w.c_str(), cerr.c_str());
+                    std::this_thread::sleep_for(2s);
+                    continue;
+                }
+            }
+            auto session = scrctl::media::StreamSession::start(*dev, req, start_err, verbose,
+                                                               held.get());
             if (!session) {
                 std::fprintf(stderr, "[%s] 起流失败: %s\n", w.c_str(), start_err.c_str());
                 std::this_thread::sleep_for(2s);
                 continue;
+            }
+            const uint64_t arm_t0 = now_ms();
+            if (held != nullptr) {
+                hold_thread = std::thread([&] {
+                    std::string serr;
+                    uint64_t next_status = 0;
+                    while (!hold_done.load()) {
+                        if (!held->service(200, serr)) {
+                            hold_died_ms.store(static_cast<long long>(now_ms() - arm_t0));
+                            std::printf("    [hold] 连接在 +%lldms 断了: %s\n",
+                                        static_cast<long long>(now_ms() - arm_t0), serr.c_str());
+                            return;
+                        }
+                        if (!hold_no_poll && now_ms() >= next_status) {
+                            next_status = now_ms() + 5000;
+                            scrctl::xpc::Value out;
+                            std::string qerr;
+                            auto in = scrctl::xpc::make_dict();
+                            const auto r = held->invoke(
+                                "com.apple.coredevice.feature.getmediastreamserverstatus",
+                                "com.apple.coredevice.action.mediastreamstatus", in, out, 10000,
+                                qerr);
+                            if (r == scrctl::remote::CallResult::Ok) {
+                                ++hold_polls;
+                                const auto *ss = out.find("sessions");
+                                std::printf("    [hold] +%lldms 同一条连接查到会话 %zu 条\n",
+                                            static_cast<long long>(now_ms() - arm_t0),
+                                            ss != nullptr && ss->is_array()
+                                                ? ss->array.size()
+                                                : static_cast<std::size_t>(0));
+                            } else {
+                                std::printf("    [hold] +%lldms 同一条连接查状态失败(%d): %s\n",
+                                            static_cast<long long>(now_ms() - arm_t0),
+                                            static_cast<int>(r), qerr.c_str());
+                            }
+                        }
+                    }
+                });
             }
             std::printf("第 %d 轮 [%s]：流已起，观察 %d 秒（不去碰设备，让画面自己静止）"
                         "offer: allowRTCPFB=%d ltrpEnabled=%d\n",
@@ -850,6 +993,13 @@ int main(int argc, char **argv) {
                 if (!arm.alive_at_end) {
                     ++tally[w].second;
                 }
+            }
+            if (hold_thread.joinable()) {
+                hold_done.store(true);
+                hold_thread.join();
+                std::printf("  [hold] 这一臂握着连接：同一条连接上成功查到会话 %d 次，连接%s\n",
+                            hold_polls.load(),
+                            hold_died_ms.load() < 0 ? "整场没断" : "中途断了");
             }
             std::string serr;
             session->stop(*dev, serr, verbose);

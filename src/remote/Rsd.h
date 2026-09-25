@@ -80,6 +80,10 @@ public:
     [[nodiscard]] net::TcpStream &tcp() { return *tcp_; }
     [[nodiscard]] bool is_xpc() const { return channel_ != nullptr; }
 
+    /// 空转期间替这条连接读一眼（处理设备的 PING / WINDOW_UPDATE）。
+    /// false 只表示链路真断了，读超时不算。
+    bool service(int timeout_ms, std::string &err);
+
 private:
     std::unique_ptr<net::TcpStream> tcp_;
     std::unique_ptr<Channel> channel_;

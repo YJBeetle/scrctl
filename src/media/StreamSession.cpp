@@ -87,8 +87,9 @@ xpc::Value build_start_request(const std::string &receiver_ip, uint16_t receiver
 }
 
 std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
-                                                    const Request &request, std::string &err,
-                                                    bool verbose) {
+                                                   const Request &request, std::string &err,
+                                                   bool verbose,
+                                                   remote::ServiceConnection *on_conn) {
     const auto info = device.rsd().service("com.apple.coredevice.displayservice");
     if (!info) {
         err = "设备目录里没有 displayservice（DDI 是否已挂载？）";
@@ -117,10 +118,22 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
                                      request.timeout_seconds,
                                      request.client_supported_features, event_channel);
     xpc::Value output;
-    if (!device.feature("com.apple.coredevice.displayservice",
-                        "com.apple.coredevice.feature.startmediastream",
-                        "com.apple.coredevice.action.mediastreamstart", input, output, err,
-                        verbose, 30000)) {
+    if (on_conn != nullptr) {
+        // 在调用方持有的那条连接上起流。注意 invoke 的返回值有三态，这里只关心
+        // "设备有没有按我们的请求建会话"，所以非 Ok 一律算失败并把 err 交出去。
+        const auto r = on_conn->invoke("com.apple.coredevice.feature.startmediastream",
+                                       "com.apple.coredevice.action.mediastreamstart", input,
+                                       output, 30000, err);
+        if (r != remote::CallResult::Ok) {
+            if (r == remote::CallResult::TransportError && err.empty()) {
+                err = "在持有的连接上发 startmediastream 失败（链路断了）";
+            }
+            return nullptr;
+        }
+    } else if (!device.feature("com.apple.coredevice.displayservice",
+                               "com.apple.coredevice.feature.startmediastream",
+                               "com.apple.coredevice.action.mediastreamstart", input, output, err,
+                               verbose, 30000)) {
         return nullptr;
     }
 

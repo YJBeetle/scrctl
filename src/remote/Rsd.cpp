@@ -125,6 +125,14 @@ bool ServiceConnection::send_only(const xpc::Value &request, std::string &err) {
     return channel_->send_request(request, false, err);
 }
 
+bool ServiceConnection::service(int timeout_ms, std::string &err) {
+    if (channel_ == nullptr) {
+        err = "这条服务连接不是 RemoteXPC 服务";
+        return false;
+    }
+    return channel_->service(timeout_ms, err);
+}
+
 namespace {
 
 /// 设备侧的失败写法是 CoreDevice.error = {code, userInfo.NSLocalizedDescription}。
