@@ -134,6 +134,21 @@ FramePump::~FramePump() {
     if (worker_.joinable()) {
         worker_.join();
     }
+    // 收完尾必须把设备侧那条会话停掉。不停的话进程退了、设备还在往一个没人收的端口
+    // 编码推流，一直到它自己那 20 秒租期到点——手机白烧电与带宽。更要紧的是同一台设备
+    // 同时只容得下一条流：下一条 `startmediastream` 会把这条顶掉（docs §13，
+    // `tools/two_session_probe`），所以"上一个进程没停干净"会直接变成"这一个进程每两
+    // 秒被拆一次流"。
+    //
+    // 必须在 join 之后：worker 还在跑的时候它会自己调 restart()，那边也在动 session_。
+    if (session_ != nullptr) {
+        std::string stop_err;
+        if (!session_->stop(device_, stop_err, verbose_)) {
+            std::fprintf(stderr, "退出时停不掉设备侧那条流（它会自己活到 20 秒租期结束）: %s\n",
+                         stop_err.c_str());
+        }
+        session_.reset();
+    }
     if (record_ != nullptr) {
         std::fclose(record_);
     }

@@ -12,6 +12,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -70,6 +71,17 @@ struct Options {
     /// 见 FramePump::Options::use_hardware——默认软解的原因是硬解吃不下超过 65535 字节的帧。
     bool hw_decode = false;
 };
+
+/// Ctrl-C 与 `kill` 应当让进程走正常退出路径（停流、关会话），而不是只能被 SIGKILL。
+/// 这件事在 SDL 之后才成立：SDL 初始化时会接管 SIGINT/SIGTERM，而它接管之后没有任何
+/// 东西转达给这个循环——实测 `kill -TERM`、`kill -INT` 和 Ctrl-C 都动不了它（进程照跑，
+/// 最后只能 kill -9）。后果不只是"退不出去"：它一边跑一边占着设备那条媒体会话，而同一台
+/// 设备同时只容得下一条（第二条 startmediastream 会把第一条顶掉，docs §13），于是两个
+/// scrctl 互相拆对方的流——实测就是这样刷出"每 2.5 秒被设备结束一次流"的假象，而设备
+/// 什么都没做错。
+std::atomic<bool> g_stop_requested { false };
+
+void on_stop_signal(int) { g_stop_requested = true; }
 
 void usage(const char *argv0) {
     std::printf(
@@ -857,6 +869,10 @@ int main(int argc, char **argv) {
         std::fprintf(stderr, "SDL 初始化失败: %s\n", SDL_GetError());
         return 1;
     }
+    // 必须在 SDL_Init **之后**：signal() 是抢椅子，谁最后装谁说了算，先装会被它盖掉
+    // （而 sdl2-compat 没有提供 SDL_HINT_NO_SIGNALS 可以让它别接）。
+    std::signal(SIGINT, on_stop_signal);
+    std::signal(SIGTERM, on_stop_signal);
 
     // 输入通路的无头自检：注入一条直线就退出。用直线而不是点一下，是因为
     // "画布被拖走一段"在截图上可判定，而一次点击在多数应用里没有可见后果。
@@ -948,6 +964,10 @@ int main(int argc, char **argv) {
     scrctl::Frame f;
     int last_rendered = 0;
     while (!quit) {
+        if (g_stop_requested.load()) {
+            std::printf("收到退出信号，走正常退出路径（要把设备侧那条流停掉）\n");
+            break;
+        }
         // 读数放在取帧**之前**。以前它挂在"这一轮取到帧了"那条分支里，于是断流的那
         // 几秒恰好是不打印的那几秒——日志在最有信息量的时刻静音，恢复之后又连着几行
         // 看不出为什么掉帧（用户报"有时候会断"，而日志里那一段什么都沒有，只有事后
