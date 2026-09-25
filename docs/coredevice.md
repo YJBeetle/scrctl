@@ -593,10 +593,11 @@ SIGTERM 之后干净停流。改之前这 75 秒里会有 4 次接续（每次�
 
 ### 那有没有"保活"？在我们这条路（CoreDevice feature）上没有——三条独立的证据
 
-> 这一节的标题原先是无条件的"没有保活"。**范围要收窄**：三条证据只覆盖
-> `com.apple.coredevice.feature.startmediastream` 这条路，而 Apple 自己的客户端不走这条路
-> （下面"那 DeviceHub 为什么不断流"一节把这件事测出来了）。结论对我们不变——我们只有
-> 这条路可走——但别拿它去解释 DeviceHub 的行为。
+> 这一节的标题原先是无条件的"没有保活"。**范围要收窄**：三条证据覆盖的是
+> `com.apple.coredevice.feature.startmediastream` 这条路，而我们后来抓到苹果客户端的
+> **请求原文**——它走的正是这个 feature、`timeout` 也照样报 20（见下面"把苹果的请求逐键
+> 对齐之后"那一节）。所以"苹果不断流"既不是反证也不是保活的证据，它是一桩**还没解释完的
+> 差异**；对我们这条路的结论不变——我们只有这条路可走（用户态、免 root、可跨平台）。
 
 键名叫 `RTCPTimeoutInterval`、旁边还写着 `RTCPTimeoutEnabled=true`、`RTCPSendInterval=1`，
 读起来就是一个"收到对端 RTCP 就复位"的空闲计时器。它**不是**。三条各自成立的证据：
@@ -718,21 +719,68 @@ com.apple.coredevice.feature.startmediastream 失败（code 4865）
   NSDebugDescription: Expected to find key timeout.
 ```
 
-**假设否掉了，但它留下的结论比原假设更要紧**：这个键在 feature 层是必填的，而设备又替
-DeviceHub 的会话补上了 `timeout`/`type` 两个键（我们发什么它就回显什么）——所以
-**DeviceHub 那条会话不是从 `com.apple.coredevice.feature.startmediastream` 建的**。它走的是
-`CoreDeviceMediaStreamSupport`/AVC 那一层，也就是本节前面那批符号
-（`streamDidRTCPTimeOut` / `streamDidRecoverFromRTCPTimeOut`）所在的地方。三条推论：
+**但上面那段"DeviceHub 不走这个 feature"的结论是错的**，被下一节的抓包直接否掉了：它走的
+就是 `com.apple.coredevice.feature.startmediastream`，连 `timeout` 也照样报 20。会话条目里
+没有 `timeout`/`type` 只是因为设备把它消费掉了、没往记录里放——不是"这个客户端没发"。
+一条从"设备回显了什么"倒推"客户端发了什么"的推理，中间缺了一环：**回显是子集，不是同射**。
 
-1. "DeviceHub 不断流"**不能**拿来当"存在我们没找到的保活"的反证。两条路的租期机制不是
-   同一个：苹果那一路的 20 秒大概真是空闲计时器（它的接收端会发 RTCP/RCTL 去复位），
-   而我们这一路的 20 秒是 feature 层装的一条硬租期。
-2. 上面那三条"RTCP 不复位计时器"的证据仍然成立，但适用范围要写清：**CoreDevice feature
-   这条路**。产品结论不变，因为我们只有这条路可走（用户态、免 root、可跨平台）。
-3. 设计照旧：报长租期（3600）+ 提前找静止间隙接续。要问的"苹果那一路的租期到底多大、
-   到期怎么恢复"，从 feature 这条路问不到答案，要问就得去观测 AVC 那层（设备侧 pcapd 或
-   lldb 注入）——成本明显高过它现在能改变我们代码的可能性。**#18 到这就关掉**：它要的那个
-   答案已经拿到了，是"苹果根本不通过这个 feature 报 timeout"。
+#### 把苹果的请求逐键对齐之后：租期照旧，五个假设连同数据一起作废
+
+抓包方法（这次真的用到，而且不需要 root）：DeviceHub 的媒体会话跑在本机 **utun7**
+（`fda4:4c2:5901::2` 就是这台 Mac 在那个隧道里的地址），隧道已经被 `remoted` 解封装，所以
+**内层的 RTP/RTCP 和 XPC 消息都是明文**。`sudo tcpdump -i utun7 -w /tmp/dh.pcap` 抓 95 秒，
+再用 p3 的 `XpcWrapper`（外层 magic `0x29B00B92`、内层 `0x42133742`/v5）按消息边界切开解码。
+注意外层还套了 **HTTP/2**（流开头是 `PRI * HTTP/2.0`，XPC 装在 DATA 帧里）。
+
+解出来的苹果请求，和我们的逐键比对：
+
+```text
+CoreDevice.input = { options{avcMediaStreamOptionClientSessionID:uuid,
+                             AccessNetworkType:1, TransportProtocolType:2,
+                             CoreDeviceVideoDisplayMode:"DisplayByID", VideoStreamForDisplayID:1},
+                     receiverIP, receiverPort, senderIP, direction:"output",
+                     clientSupportedFeatures:140, type:"audio"|"video",
+                     timeout:20,                       ← 和我们一样是 20
+                     sessionEventChannel:<UUID>,       ← 只有这一项我们没有
+                     negotiatorOffer:<bplist> }
+actionIdentifier = com.apple.coredevice.action.mediastreamstart
+```
+
+另外几条从抓包里读到的事实：先起音频再起视频、两条共用一个 `ClientSessionID`、
+**但每条各有自己的 `sessionEventChannel`**（所以它是按流给的）；`startmediastream` 整场只发了
+**2 次**（+25.02s、+25.28s），之后 70 秒没有第三次——它真的是"起一次就一直活着"。
+它的保活包形状我们**早就复刻对了**：视频 44B RR+SDES @1Hz（和 p3、和我们的一模一样），
+外加 RCTL 32B @20/s 和每帧 16B 回执 @60/s（约 80 包/秒）；音频 RR+SDES @1.000Hz 且带真实
+jitter/LSR/DLSR。设备在它那条连接上**只在头 1.5 秒说过话**，之后 70 秒一个字都不推。
+
+在这个基础上判掉的假设，每个都带数：
+
+| 假设 | 判据 | 结果 |
+| --- | --- | --- |
+| 不发 `timeout` 就能绕开租期 | `--no-timeout-key` 两臂 | **feature 层必填**，直接拒：`code 4865 / Expected to find key timeout.` |
+| 悬空的 `sessionEventChannel` 能破租期 | `--timeout 20 --event-channel --what none` | +19.961s 死，死时表里 0 条会话 |
+| 苹果那套全量 RTCP 能复位计时器 | `--timeout 20 --what rctlrr --hz 20`，60 秒发了 **1650** 个包 | +20.005s 死 |
+| 差在 offer 的 `VRAE:0` 上 | `--avc-features 'FLS;VRAE:0;SW:1;'` + 事件通道 + 全量 RTCP | 设备**照收并回显** `TxCodecFeatureListString=VRAE:0;SW:1;FLS`（和 DeviceHub 一模一样），然后 +20.005s 死 |
+| 租期其实是"控制连接断开后的宽限期"，握着连接就不会到期 | 改 `start()` 握住那条连接 | **根本握不住**：四次存活探测（+10/20/30/40s）全部"对端已关闭"——设备在 +10 秒之前就把我们这条 displayservice 连接关了 |
+| 信封里的 `coreDeviceVersion` 是策略开关（苹果 642.16，我们 629.3） | 查 p3 | p3 也发 629.3 且也 20 秒死 → 不是它（642.16 没实测） |
+
+**目前唯一还站得住的差异在传输框架那一层**：苹果那条 displayservice 连接是 HTTP/2 复用的，
+空闲 70 秒设备都不关；我们（和 p3）是裸 XPC 一问一答，设备发完回复就把连接掐掉。于是
+`timeout` 很可能是"**这个客户端没有活着的控制通道**"的替代物——有通道就一直留着，没通道就
+按报的秒数回收。要证它就得在我们的栈里实现 HTTP/2 客户端（HPACK 头压缩 + 帧复用 + 流控），
+那是一个协议子项目的量级，而收益只是"省掉每小时一次约 300ms 的接续"。**决定：不做**，产品
+维持 3600 秒长租期 + 提前找静止间隙接续；这一节留作将来真要动手时的起点，不必从抓包重做。
+
+**两个方法论账，都要记**：
+
+1. **后台开着的 DeviceHub 会抢那唯一的槽**，而它抢走之后我们的会话"提前死"看起来和租期
+   一模一样。这一轮里 `+16.99s 死` 的那一臂事后确认是被抢的，全部重测才拿到干净的 20.0s。
+   判据补进了探针：收不到包的那一刻把表里每条会话的身份打出来（是不是我们的 uuid、
+   `type` 在不在、活了多久），"到点死"和"被顶掉"从此当场可分（`dump_sessions()`）。
+2. **我自己引入过一次干扰**：拿一条已被设备关掉的连接去发探测，那一臂死在 **+10.4 秒**
+   而不是 20 秒——探测本身改变了被测对象。所以那个"每 10 秒探一次连接"的代码没有留下来。
+   （同一个坑的第三种形态：`lsof` 在我们的架构上**看不见**连接，因为 TCP/IP 栈是用户态的；
+   "探针看不见"不等于"没发生"。）
 
 **这批 8 秒实验里有一处没解释的现象，记下来别丢**：修好"发送节奏"之后重跑同样三臂
 （`--hz 1/10/25`），每一臂都在**起流后约 1.1 秒**就视频档和 SR 档一起停掉（344 个视频包、
