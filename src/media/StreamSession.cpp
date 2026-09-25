@@ -172,15 +172,23 @@ bool StreamSession::stop(remote::Device &device, std::string &err, bool verbose)
 
 uint16_t StreamSession::receiver_port() const { return socket_->local_port(); }
 
-StreamSession::ServerState StreamSession::probe(remote::Device &device,
-                                                const std::vector<uint8_t> &session_uuid,
-                                                std::string &err, bool verbose) {
+xpc::Value StreamSession::status(remote::Device &device, std::string &err, bool verbose) {
     auto input = xpc::make_dict();
     xpc::Value output;
     if (!device.feature("com.apple.coredevice.displayservice",
                         "com.apple.coredevice.feature.getmediastreamserverstatus",
                         "com.apple.coredevice.action.mediastreamstatus", input, output, err,
                         verbose, 10000)) {
+        return xpc::Value {};
+    }
+    return output;
+}
+
+StreamSession::ServerState StreamSession::probe(remote::Device &device,
+                                                const std::vector<uint8_t> &session_uuid,
+                                                std::string &err, bool verbose) {
+    const xpc::Value output = status(device, err, verbose);
+    if (output.type == xpc::Type::Null) {
         return ServerState::Unknown;
     }
     // 实测回复形状：{sessions: [{connection: {options:

@@ -232,6 +232,53 @@ std::vector<uint8_t> build_rctl_companion(uint32_t our_ssrc, uint32_t last_rtp_t
     return v;
 }
 
+/// 把一棵 xpc 树的全部叶子打出来（`path = value` 一行一个）。
+///
+/// 为什么不用 `describe()`：它给字典条目做截断，而"设备有没有收到我们发的 RTCP"这件事
+/// 恰恰藏在一个我们事先想不到的键里——只打自己预先想到的那几个键，就永远发现不了设备
+/// 其实给了一个我们没读的键。这条教训在 `bitrate_probe --dump-answer` 上已经用过一次。
+void walk(const scrctl::xpc::Value &v, const std::string &path, int depth) {
+    if (depth > 6) {
+        return;  // 防御性：设备的树不该这么深，真到了就是形状和预期不一样
+    }
+    switch (v.type) {
+    case scrctl::xpc::Type::Dict:
+        for (const auto &e : v.dict) {
+            walk(e.value, path.empty() ? std::string(e.key) : path + "." + std::string(e.key),
+                 depth + 1);
+        }
+        break;
+    case scrctl::xpc::Type::Array:
+        for (std::size_t i = 0; i < v.array.size(); ++i) {
+            walk(v.array[i], path + "[" + std::to_string(i) + "]", depth + 1);
+        }
+        break;
+    case scrctl::xpc::Type::String:
+        std::printf("    %s = \"%s\"\n", path.c_str(), v.string.c_str());
+        break;
+    case scrctl::xpc::Type::Bool:
+        std::printf("    %s = %s\n", path.c_str(), v.boolean ? "真" : "假");
+        break;
+    case scrctl::xpc::Type::Int64:
+        std::printf("    %s = %lld\n", path.c_str(), static_cast<long long>(v.int64));
+        break;
+    case scrctl::xpc::Type::UInt64:
+        std::printf("    %s = %llu\n", path.c_str(),
+                    static_cast<unsigned long long>(v.uint64));
+        break;
+    case scrctl::xpc::Type::Double:
+        std::printf("    %s = %.6g\n", path.c_str(), v.real);
+        break;
+    case scrctl::xpc::Type::Data:
+    case scrctl::xpc::Type::Uuid:
+        std::printf("    %s = <%zu 字节>\n", path.c_str(), v.data.size());
+        break;
+    default:
+        std::printf("    %s = (type %08x)\n", path.c_str(), static_cast<unsigned>(v.type));
+        break;
+    }
+}
+
 struct Arm {
     std::string what;
     bool got_idr = false;
@@ -274,12 +321,23 @@ int main(int argc, char **argv) {
     // 当成客户端等回复的超时），那么回多少种 RTCP 都不可能把流留住超过 20 秒——因为
     // 那个 20 是我们自己写的。改这一个整数就能判掉这个假设，比造包便宜两个数量级。
     uint32_t timeout_seconds = 20;
+    // RTCP 的发送频率（每秒几个）。默认 1 是照参考实现的口径（"One RR/s keeps it
+    // alive"）。为什么要能改：如果设备那个计时器真的"收到 RTCP 就复位"，那 1/s 在
+    // `--timeout 6` 下必然活过 6 秒；反过来，1/s 不够而 5/s 够，说明它要的是"在
+    // `RTCPSendInterval` 之内至少收到一个"。只试一种频率就宣布"RTCP 不能续命"，
+    // 是拿一个样本当结论。
+    double hz = 1.0;
+    bool dump_status = false;
     std::string what = "none,rrsrc,rrsrcsd";
     bool verbose = false;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--seconds" && i + 1 < argc) {
             seconds = std::stoi(argv[++i]);
+        } else if (a == "--hz" && i + 1 < argc) {
+            hz = std::stod(argv[++i]);
+        } else if (a == "--dump-status") {
+            dump_status = true;
         } else if (a == "--timeout" && i + 1 < argc) {
             timeout_seconds = static_cast<uint32_t>(std::stoul(argv[++i]));
         } else if (a == "--attempts" && i + 1 < argc) {
@@ -418,11 +476,17 @@ int main(int argc, char **argv) {
             uint16_t highest_seq = 0;
             uint64_t last_video = 0;
             uint64_t next_rr = t0;
+            const uint64_t rr_period_ms = hz > 0.0 ? std::max(1LL, (long long)(1000.0 / hz)) : 1000;
             uint64_t next_poll = t0;
             // RCTL 那两臂要报的是**真实收到的**东西，所以收包时得记三样：最后一个视频包
             // 的 RTP 时间戳、累计视频包数、以及"上一帧有多少个包"（marker 那一下结算）。
             uint32_t rtp_last_ts = 0;
             uint32_t rtp_packets = 0;
+            /// 我们**发出去**了多少个 RTCP。这一列是探针的自证：判活看的是设备那边的
+            /// SR 时钟，而"我这侧一个 RTCP 都没发出去"和"发了但设备不认"在那一列上完全
+            /// 一样——不记这个数，就会把"什么都没做"读成"做了没用"（lifetime_probe 栽过
+            /// 的那个坑，docs §13 记着）。
+            uint64_t rtcp_sent = 0;
             uint32_t cur_frame_pkts = 0;
             uint32_t last_frame_pkts = 0;
             uint64_t next_rctl = t0;
@@ -482,7 +546,15 @@ int main(int argc, char **argv) {
                     ? neg_source_port
                     : session->started().sender_port + (port_plus_one ? 1 : 0));
             while (now_ms() < until) {
-                while (session->next_packet(packet, peer, 30, err)) {
+                // 每圈最多收 kDrainPerRound 个包就回到外层。不封顶的话外层那些"到点就
+                // 发一个 RTCP"的判断**在忙画面上永远轮不到**：视频包一秒几百个地来，内层
+                // 的 `while (next_packet(...))` 一直不空,于是 --hz 10 实测只发出 21 个包
+                // （和 --hz 1 一模一样），"频率"这一维等于没测。
+                constexpr int kDrainPerRound = 32;
+                for (int drained = 0; drained < kDrainPerRound; ++drained) {
+                    if (!session->next_packet(packet, peer, 30, err)) {
+                        break;
+                    }
                     // 出包循环里也要看时刻。**这一条是长租期暴露出来的 bug**：租期只有
                     // 20 秒时，流一死 next_packet 就开始超时返回 false，内层循环必然退出，
                     // 于是"内层循环会因为流一直活着而永不退出"这件事从来没暴露过。
@@ -514,6 +586,8 @@ int main(int argc, char **argv) {
                                 rtp_last_ts);
                             if (!session->send_rtp(comp, dest_port, serr)) {
                                 arm.note = "RCTL 伴随包发送失败: " + serr;
+                            } else {
+                                ++rtcp_sent;
                             }
                         }
                     } else if (is_rtcp_sr(packet)) {
@@ -532,10 +606,12 @@ int main(int argc, char **argv) {
                                    rtp_last_ts, last_frame_pkts, rtp_packets);
                     if (!session->send_rtp(rctl, dest_port, serr)) {
                         arm.note = "RCTL 发送失败: " + serr;
+                    } else {
+                        ++rtcp_sent;
                     }
                 }
                 if (send_rr && media_ssrc != 0 && now_ms() >= next_rr) {
-                    next_rr += 1000;
+                    next_rr += rr_period_ms;
                     std::string serr;
                     // 发送者 SSRC：
                     //   mine 臂用 answer 的 `RemoteSSRC`（设备给我们这端分配的）
@@ -577,6 +653,8 @@ int main(int argc, char **argv) {
                     }
                     if (!session->send_rtp(rr, dest_port, serr)) {
                         arm.note = "RTCP 发送失败: " + serr;
+                    } else {
+                        ++rtcp_sent;
                     }
                 }
                 if (poll_every_ms != 0 && now_ms() >= next_poll) {
@@ -591,11 +669,51 @@ int main(int argc, char **argv) {
                 }
                 if (now_ms() >= next_tick) {
                     next_tick += 10000;
-                    std::printf("  +%3llus 视频包 %6llu SR 心跳 %4llu（租期 %us）\n",
+                    std::printf("  +%3llus 视频包 %6llu SR 心跳 %4llu 发出 RTCP %5llu（租期 %us）\n",
                                 static_cast<unsigned long long>((now_ms() - t0) / 1000),
                                 static_cast<unsigned long long>(video_seen),
-                                static_cast<unsigned long long>(sr_seen), timeout_seconds);
+                                static_cast<unsigned long long>(sr_seen),
+                                static_cast<unsigned long long>(rtcp_sent), timeout_seconds);
+                    if (dump_status) {
+                        std::string qerr;
+                        const auto st = scrctl::media::StreamSession::status(*dev, qerr, verbose);
+                        // 把自己的 uuid 和表里每一条的 uuid 并排打出来。为什么要这么麻烦：
+                        // `probe()` 只回"在/不在/不知道"，而"不在"有两种完全不同的原因——
+                        // 会话真的结束了，和**我们的 uuid 没匹配上**（字节序、包装层级都
+                        // 能让这两种长得一模一样）。分不清这个，就会把一条活着的会话判成
+                        // 死了并重起，而这条判据是泵里救流那条路的依据。
+                        std::printf("    我们的 session_uuid = ");
+                        for (uint8_t b : session->started().session_uuid) {
+                            std::printf("%02x", b);
+                        }
+                        std::printf("\n");
+                        if (const auto *ss = st.find("sessions"); ss != nullptr) {
+                            for (std::size_t i = 0; i < ss->array.size(); ++i) {
+                                const auto *opt = ss->array[i].find("connection");
+                                const auto *w = opt != nullptr
+                                    ? opt->at("options")
+                                          .find("avcMediaStreamOptionClientSessionID")
+                                    : nullptr;
+                                const auto *u = w != nullptr ? w->find("uuid") : nullptr;
+                                std::printf("    表里第 %zu 条 uuid = ", i);
+                                if (u == nullptr) {
+                                    std::printf("(读不到)");
+                                } else {
+                                    for (uint8_t b : u->data) {
+                                        std::printf("%02x", b);
+                                    }
+                                }
+                                std::printf("\n");
+                            }
+                        }
+                        walk(st, "状态", 0);
+                    }
                 }
+            }
+            if (dump_status) {
+                std::printf("  观察窗结束时的设备状态原文：\n");
+                std::string qerr;
+                walk(scrctl::media::StreamSession::status(*dev, qerr, verbose), "状态", 0);
             }
             std::string perr;
             arm.alive_at_end = scrctl::media::StreamSession::probe(

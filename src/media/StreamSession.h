@@ -100,6 +100,13 @@ public:
                                            const std::vector<uint8_t> &session_uuid,
                                            std::string &err, bool verbose = false);
 
+    /// 设备回的状态原文（整个 `getmediastreamserverstatus` 的输出）。单独开这一条是
+    /// 为了"判活"之外的用途：`probe()` 只回一个三值枚举，而当我们想查"设备到底有没有
+    /// 收到我们发过去的 RTCP"时，需要的恰恰是它自己报的那些计数器——那种问题没法用
+    /// 枚举回答。取不到时返回 Null。
+    [[nodiscard]] static scrctl::xpc::Value status(remote::Device &device, std::string &err,
+                                                   bool verbose = false);
+
 private:
     StreamSession(std::unique_ptr<scrctl::net::UdpSocket> sock, Started started)
         : socket_(std::move(sock)), started_(std::move(started)) {}
