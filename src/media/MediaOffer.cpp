@@ -76,16 +76,26 @@ std::vector<uint8_t> codec_bank(uint64_t payload_type, std::string_view features
     return out;
 }
 
-/// 会话本体：session_id + 两个编码器条目 + 四个语义未明的定值。
+/// 会话本体：session_id、两个开关、两个编码器条目、三个定值。
 std::vector<uint8_t> session_blob(const Offer &offer) {
     std::vector<uint8_t> out;
     put_field_varint(out, 1, offer.session_id);
-    put_field_varint(out, 2, 0);
+    // 字段名是别人从 `VCMediaNegotiationBlobVideoSettings` 的 `__objc_methname` 方法名表
+    // 里恢复出来的，整张表：f1 SSRC(=session_id)、f2 allowRTCPFB、f3 videoPayloadCollections
+    // （即编码器 bank）、f4 customVideoWidth、f5 customVideoHeight、f6 tilesPerFrame、
+    // f7 ltrpEnabled、f8 pixelFormats、f9 hdrModesSupported、f10 fecEnabled、f11 rtxEnabled、
+    // f12 blackFrameOnClearScreenEnabled、f13 foveationSupported、f14 enableInterleavedEncoding。
+    // 于是我们那几个"语义未明的定值"有了名字：f8=63 按名字读是像素格式位掩码（低 6 位全
+    // 开，具体哪 6 种没查），f10=1 是打开 FEC，f12=1 是"清屏时输出黑帧"。为什么仍然照观测发而不是发我们以为更好
+    // 的值：f11 rtxEnabled 发 1 会被设备判 Invalid Parameter，说明这张表里不是每个字段都能
+    // 随手改。f6/f9/f13/f14 我们的观测里没有，就不写（省略与写零在语义上等价，但字节长度不等价）。
+    //
+    // 字段号要按升序写，且两个开关默认关时整个 blob 必须和观测字节完全一致——
+    // 起流这件事只验证过"逐字节照抄观测"这一种写法。
+    put_field_varint(out, 2, offer.allow_rtcp_fb ? 1 : 0);
     put_field_bytes(out, 3, codec_bank(123, offer.hevc_features, 1, 4));
     put_field_bytes(out, 3, codec_bank(100, offer.avc_features, 14, 2));
-    // f7/f8/f10/f12：观测值 0 / 63 / 1 / 1。参考实现把 allowRTCPFB、fecEnabled、
-    // tilesPerFrame 这类开关也归在这一带，但对应关系没确认，所以先照观测写死。
-    put_field_varint(out, 7, 0);
+    put_field_varint(out, 7, offer.ltrp_enabled ? 1 : 0);
     put_field_varint(out, 8, 63);
     put_field_varint(out, 10, 1);
     put_field_varint(out, 12, 1);

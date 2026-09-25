@@ -30,6 +30,26 @@ struct Offer {
     std::string avc_features = "FLS;SW:1;";
     std::string hevc_features = "FLS;SW:1;";
 
+    /// offer 里 `VideoSettings` 的第 2 个字段，`allowRTCPFB`。默认 0 = 不申报。
+    ///
+    /// 为什么要能改它：设备那条 20 秒租期明写着是 `RTCPTimeoutInterval`（docs §13），
+    /// 而我们把 RR 的字节数（长度域是 16 位，不是 32 位）、SSRC（用 answer 分配的
+    /// `RemoteSSRC` 当发送者）、目的端口全都对成和参考实现一模一样之后，**仍然 20.0 秒
+    /// 死**。到这一步我们与 Apple 客户端已知的差别就只剩 offer 里这两个开关。如果设备
+    /// 是因为这一位为 0 而根本不理会我们发过去的 RTCP，那这里才是那个门。
+    ///
+    /// 另一个已知的连带后果（参考实现的抓包笔记原文）："the device ignores RTCP PLI for
+    /// refresh; it honors **FIR (PT=206 FMT=4, requires `allowRTCPFB`)**"。也就是说这一位
+    /// 是"要不要受理关键帧请求"的总闸——我们的 fir_probe 当年是在闸关着的情况下测 FIR 的。
+    bool allow_rtcp_fb = false;
+    /// `VideoSettings` 第 7 个字段 `ltrpEnabled`（长期参考图）。参考实现记着苹果 Xcode
+    /// 抓包里的 offer 用的是 1，而我们的观测值是 0（当时照抄观测）。做成开关是为了把
+    /// "与 Apple 的差异"这一列清干净，不是因为我们猜它管租期。
+    ///
+    /// 顺带两条实测口径（参考实现在 iPhone18,4/iOS 27.0 上）：这一位设备是**受理并照办**的
+    /// （answer 的 streamConfig 里会回 `IsltrpEnabled`），而且 LTRP 开/关不改变编码器丢帧数。
+    bool ltrp_enabled = false;
+
     /// 码率阶梯的变体，**只有 tools/bitrate_probe 会改它，产品路径恒为 0**。
     /// 0 = 原样（唯一验证过能起流的一组数）；1 = 去掉 f2=6000000 那档；
     /// 2 = 把那档改成 60000000；3 = 只留 >=20M 的档。
