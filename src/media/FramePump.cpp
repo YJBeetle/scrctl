@@ -39,10 +39,28 @@ constexpr uint64_t kOversizedRetryMs = 60000;
 /// 认可的 RTCP"的超时，只是我们还不知道它认哪一种。
 ///
 /// 既然续不上，就**别去续**：在它到点之前自己重起。留 2 秒余量是给 RPC 抖动的
-/// （停+起实测 37~90ms，但两条 RPC 偶尔慢到近一秒）。主动重起的代价是换会话那
-/// ~200ms 里没有新帧，而被动等死的代价是 1.2 秒起步的盲区外加"交回一张旧画面"——
+/// （停+起实测 37~90ms，但两条 RPC 偶尔慢到近一秒）。主动重起的代价是换会话那约
+/// 300ms 里没有新帧，而被动等死的代价是 1.2 秒起步的盲区外加"交回一张旧画面"——
 /// 每 20 秒都会来一次，就是用户说的"有时候会断"。
+///
+/// 这 300ms 躲不掉（`tools/two_session_probe`：第二次 startmediastream 会把第一条
+/// 会话直接从设备表里顶掉，两条不能并存，所以"先起新的、拿到 IDR 再切"这种无缝交接
+/// 不成立），但**时刻可以挑**：租期强制我们每 20 秒付一次这笔钱，而付在静止画面上
+/// 是免费的——显示的那一帧本来就停在那里，新会话回来的第一帧跟它一模一样。所以到点
+/// 之后不急着重起，先在剩下的余量里等一个"画面静止"的间隙。
 constexpr uint64_t kSessionLeaseMs = 18000;
+/// 接续这一刻起流、到拿到新 IDR 为止的耗时（`tools/two_session_probe` 实测：起流
+/// RPC 84ms，RPC 返回后 100ms 收到第一个视频包，306ms 收到第一个 IDR）。硬截止要
+/// 在它之后、设备的 20.0 秒之前落下来。
+constexpr uint64_t kSessionLeaseHardMs = 19400;
+/// 等不到静止间隙也得分手了。过了设备的 20 秒这条会话必然已经不在，这时候再去问一句
+/// 设备"它还活着吗"（100~300ms）纯属白等——直接重起更快，也更准。
+constexpr uint64_t kSessionLeaseDeadMs = 20000;
+/// 接续之前要等的那段"画面静止"有多久才算数。设备在静止画面上一个视频包都不发（只有
+/// 每秒那个 SR），所以 1 秒没有视频包就意味着屏幕上这一帧已经是最终的那一张。
+/// 注意量的是**视频包**不是"任何数据报"：后者被 SR 心跳喂着，静止画面上它永远不超过
+/// 1 秒，拿它当"画面静止"的判据会一次都等不到。
+constexpr uint64_t kRenewQuietMs = 1000;
 /// 光靠时间戳永远有一段"刚死但还没到阈值"的盲区（实测：静置 20 秒去截图时，会话
 /// 其实已经死了 1.3 秒，任何大于 1.3 秒的阈值都会漏）。所以催流那条路在可疑区间
 /// 必须去问设备，而不是把阈值调大——调大只会把盲区推到别处。
@@ -103,6 +121,7 @@ std::unique_ptr<FramePump> FramePump::start(remote::Device &device, const Option
     // 别在起流的一瞬间就判定"卡住"，那会儿还没有关键帧也正常。
     pump->last_keyframe_ms_ = now_ms();
     pump->last_packet_ms_ = now_ms();
+    pump->last_video_ms_ = now_ms();
     return pump;
 }
 
@@ -144,6 +163,7 @@ bool FramePump::restart(std::string &err) {
         return false;
     }
     last_packet_ms_ = now_ms();
+    last_video_ms_ = last_packet_ms_;
 
     if (!worker_running_) {
         worker_running_ = true;
@@ -339,6 +359,7 @@ void FramePump::loop() {
         parser_ = make_parser();
         session_start_ms_ = now_ms();
         last_packet_ms_ = session_start_ms_;
+        last_video_ms_ = session_start_ms_;
         ever_keyframe_ = false;
         need_keyframe_ = false;
         loss_seen_ = 0;
@@ -445,12 +466,14 @@ void FramePump::loop() {
         // 中间那一档不能省——光靠时间戳永远有"刚死但还没到阈值"的盲区（实测静置 20 秒
         // 去截图时会话已经死了 1.3 秒），而把阈值调大只会把盲区推到别处。
         if (wake_requested_.exchange(false)) {
-            // 租期过了就别再判"静默够不够久"：这条会话已经不存在了，任何一帧都必然是
-            // 旧的。直接重起（37~90ms）比先花 100~300ms 问一句设备更省，也更准。
-            if (now_ms() - session_start_ms_ > kSessionLeaseMs) {
-                std::printf("收到操作：会话已起流 %llums，过了 %llu 秒租期，直接重起接续\n",
+            // 过了设备那 20 秒这条会话已经不存在了：这一帧必然是旧的，先去问一句设备
+            // （100~300ms）纯属白等，直接重起（约 300ms 拿到新 IDR）更快也更准。
+            // 18~20 秒那一段**还活着**，不能因为"快到租期了"就把手上这一帧扔了——用
+            // 户这一下要的就是它；接续自有下面那条按静止时刻挑的分支去安排。
+            if (now_ms() - session_start_ms_ > kSessionLeaseDeadMs) {
+                std::printf("收到操作：会话已起流 %llums，过了设备那 %llu 秒租期，直接重起接续\n",
                             static_cast<unsigned long long>(now_ms() - session_start_ms_),
-                            static_cast<unsigned long long>(kSessionLeaseMs / 1000));
+                            static_cast<unsigned long long>(kSessionLeaseDeadMs / 1000));
                 restart_now();
             } else {
                 judge_quiet(now_ms() - last_packet_ms_, kQuietCertainMs, 0, "收到操作");
@@ -460,11 +483,36 @@ void FramePump::loop() {
         // 没人催流、但有人在收帧（镜像那条路）：租期将到就自己接续。这条受
         // silence_restart_ms 管，因为拉模型（控制单元）没有持续收帧的人，让它每 18 秒
         // 重起一次纯属白烧设备。
-        if (options_.silence_restart_ms > 0 && now_ms() - session_start_ms_ > kSessionLeaseMs) {
-            std::printf("会话到租期（起流已 %llums），主动重起接续\n",
-                        static_cast<unsigned long long>(now_ms() - session_start_ms_));
-            restart_now();
-            continue;
+        //
+        // 到点之后**不马上**重起：剩下那 1.4 秒拿来挑一个静止的间隙。画面在动的时候
+        // 接续是看得见的一次顿挫，画面静止的时候接续是免费的（显示的那一帧不动，新
+        // 会话回来的第一帧和它一样），而设备不管你挑不挑都在 20 秒拆流——所以这一笔
+        // 钱非付不可，能选的只有什么时候付。
+        if (options_.silence_restart_ms > 0) {
+            const uint64_t age = now_ms() - session_start_ms_;
+            if (age > kSessionLeaseMs) {
+                const uint64_t quiet_video = now_ms() - last_video_ms_;
+                if (quiet_video >= kRenewQuietMs) {
+                    std::printf("会话到租期（起流已 %llums），画面已静止 %llums（数据报静默 "
+                                "%llums），趁这一会儿重起接续（用户看不见这次换会话）\n",
+                                static_cast<unsigned long long>(age),
+                                static_cast<unsigned long long>(quiet_video),
+                                static_cast<unsigned long long>(now_ms() - last_packet_ms_));
+                    restart_now();
+                    continue;
+                }
+                if (age >= kSessionLeaseHardMs) {
+                    std::printf("会话到租期（起流已 %llums），等不到静止的间隙（视频包只静默了 "
+                                "%llums，数据报 %llums），硬接续（约 300ms 没有新帧）\n",
+                                static_cast<unsigned long long>(age),
+                                static_cast<unsigned long long>(quiet_video),
+                                static_cast<unsigned long long>(now_ms() - last_packet_ms_));
+                    restart_now();
+                    continue;
+                }
+                // 还在 [18s, 19.4s) 且画面在动：什么都不做，回到循环里继续收这一条流
+                // 的帧（它还有至少 600ms 才到期），下一个静止的间隙再来接。
+            }
         }
         // "该重起了"这个判断必须每轮都做，不能只挂在"读包超时"那条分支上。快速动
         // 画面下包是连续到达的，50ms 超时永远轮不到，于是"丢了帧要去拿新关键帧"这个
@@ -526,8 +574,12 @@ void FramePump::loop() {
         last_packet_ms_ = now_ms();
         // 设备的 SR 是裸 RTCP（开头 0x81 0xc8），混在视频同一个端口上每秒来一个。
         // 它自带的"累计已发视频包数"在偏移 20，是设备侧的权威计数。
+        const bool is_sr = datagram.size() >= 28 && datagram[0] == 0x81 && datagram[1] == 0xc8;
+        if (!is_sr) {
+            last_video_ms_ = now_ms();
+        }
         uint64_t dev_pkts = 0, dev_octets = 0;
-        if (datagram.size() >= 28 && datagram[0] == 0x81 && datagram[1] == 0xc8) {
+        if (is_sr) {
             const auto be32 = [&datagram](std::size_t off) {
                 return (uint64_t(datagram[off]) << 24) | (uint64_t(datagram[off + 1]) << 16) |
                        (uint64_t(datagram[off + 2]) << 8) | datagram[off + 3];
@@ -541,6 +593,11 @@ void FramePump::loop() {
                 return;
             }
             ++stats_.packets;
+            if (is_sr) {
+                ++stats_.sr_packets;
+            } else {
+                ++stats_.video_packets;
+            }
             if (dev_pkts != 0) {
                 stats_.dev_sent_packets = dev_pkts;
                 stats_.dev_sent_octets = dev_octets;

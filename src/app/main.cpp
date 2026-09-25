@@ -691,6 +691,12 @@ public:
                     static_cast<unsigned long long>(st.dropped_awaiting_keyframe),
                     static_cast<unsigned long long>(st.restarts),
                     static_cast<unsigned long long>(st.dropped_oversized));
+        // 泵自己按数据报开头分的两类，跨会话连着涨。这两个数是"画面在不在变"的读数：
+        // 视频那一档停下来不动而 SR 照每秒一个，就是屏幕静止（流还活着）；两档都停，
+        // 才是设备把流结束掉了。租期接续挑的就是前一种时刻（见 FramePump 的 kRenewQuietMs）。
+        std::printf("      全程 视频数据报 %llu SR 心跳 %llu（视频档停=画面静止，两档都停=流死了）\n",
+                    static_cast<unsigned long long>(st.video_packets),
+                    static_cast<unsigned long long>(st.sr_packets));
         last_packets_ = st.packets;
         if (st.dev_sent_packets != last_dev_packets_) {
             last_dev_rate_ = dev_rate;
