@@ -159,6 +159,12 @@ target_link_libraries(screenshot_probe PRIVATE scrctl_core)
 add_executable(rr_keepalive_probe tools/rr_keepalive_probe.cpp)
 target_link_libraries(rr_keepalive_probe PRIVATE scrctl_core)
 
+add_executable(two_session_probe tools/two_session_probe.cpp)
+target_link_libraries(two_session_probe PRIVATE scrctl_core)
+
+add_executable(lease_renew_probe tools/lease_renew_probe.cpp)
+target_link_libraries(lease_renew_probe PRIVATE scrctl_core)
+
 add_executable(stream_probe tools/stream_probe.cpp)
 target_link_libraries(stream_probe PRIVATE scrctl_core)
 
