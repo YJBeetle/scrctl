@@ -302,12 +302,25 @@ void FramePump::loop() {
         need_keyframe_ = false;
         loss_seen_ = 0;
         gaps_at_last_check_ = 0;
+        // 设备的 SR 累计数每条会话从零重数，我们的 packets 跨会话连着涨。留下这个
+        // 基线，读数才是在同一条数轴上比（见 Stats::session_packets_base）。
+        // 设备那一侧则反过来：它的数要跟着会话归零，否则重起后的第一秒里读数是
+        // "设备 11872 我 83"，像是把一万包凭空丢了，而真相只是这一会话的第一条 SR
+        // 还没到。
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            stats_.session_packets_base = stats_.packets;
+            stats_.dev_sent_packets = 0;
+            stats_.dev_sent_octets = 0;
+        }
     };
     new_session_state();
 
     /// 流已经不来了（设备在画面静止时会自己把流结束掉）时，问一句"我们这条还在
     /// 设备上吗"，不在就重起。`why` 只用于日志：是静默到点催的，还是用户操作催的。
-    auto revive_if_dead = [&](const char *why) {
+    /// `quiet_ms` 是判据用的那段静默时长，打出来是为了能事后对账：救流到底花了几秒，
+    /// 只有这个数说得清（阈值调一档，日志里就应该看得见它动了）。
+    auto revive_if_dead = [&](const char *why, uint64_t quiet_ms) {
         // 置位在问设备**之前**：那一条 RPC 自己就要 100~300ms，取帧方在这段时间里
         // 读到 false 就会把旧帧交出去。
         reviving_ = true;
@@ -316,10 +329,14 @@ void FramePump::loop() {
                                                 verbose_);
         if (state == StreamSession::ServerState::Alive) {
             reviving_ = false;
+            if (verbose_) {
+                std::printf("%s：静默 %llums，但设备说这条流还活着（画面本来就静止），什么都不做\n",
+                            why, static_cast<unsigned long long>(quiet_ms));
+            }
             return false;  // 流活着，只是画面没变化——什么都不做才是对的
         }
-        std::printf("%s：%s，重起媒体会话\n",
-                    why,
+        std::printf("%s：静默 %llums，%s，重起媒体会话\n", why,
+                    static_cast<unsigned long long>(quiet_ms),
                     state == StreamSession::ServerState::Ended
                         ? "设备已结束这条流"
                         : ("问不到流状态（" + perr + "）").c_str());
@@ -347,25 +364,46 @@ void FramePump::loop() {
         return true;
     };
 
+    /// 流静默之后该不该救、怎么救。三档，判据是"距离最后一个数据报多久"，而设备的
+    /// RTCP SR 每秒一个就是这条流的心跳（画面完全静止也照发，所以心跳停 = 会话没了）：
+    ///   静默 ≤ 1.2s   心跳还在，流活着。什么都不做（画面在动时这是常见情况）
+    ///   1.2s ~ blind_at  可疑：流死了，也可能只是连着丢了 SR。问设备一句
+    ///                    （getmediastreamserverstatus，实测 100~300ms），死了才重起
+    ///   > blind_at       不再为一次 RPC 花时间，直接重起（停掉再加起 37~90ms）
+    ///
+    /// 催流（wake()）和静默自催共用它：同一件事不该因为发现的人是"用户的手"还是
+    /// "定时器"就有不同的容忍度。以前静默自催是单独一套——盲等 silence_restart_ms
+    /// （3 秒）才问一句，于是画面从设备最后一包到我们重起好要冻 3 秒多；而设备实测
+    /// 6.9 秒就把流结束掉了，那 3 秒里屏幕只要有任何变化，用户看到的就是"有时候会断"。
+    ///
+    /// `blind_at`：催流用两个心跳（2.5s，用户正在等，不值得再花一条 RPC 去确认一个
+    /// 本来就打算处理的事实），静默自催用 silence_restart_ms。
+    /// `ask_every_ms` 只给中间那一档节流：静默时 last_packet_ms_ 不动，quiet 会一直
+    /// 停在阈值之上，而定时轮子是 50ms 一圈——不设门槛就是每 50ms 一条 RPC 的风暴。
+    /// 催流那条路传 0（不节流）：那是有人正在等，且 wake_requested_ 是一个 bool，
+    /// RPC 期间攒下的催不会变成并发的一串。
+    uint64_t last_ask_ms_ = 0;
+    auto judge_quiet = [&](uint64_t quiet, uint64_t blind_at, uint64_t ask_every_ms,
+                           const char *why) {
+        if (quiet > blind_at) {
+            std::printf("%s：最后一个数据报已静默 %llums，连着两个每秒 SR 都没来，重起媒体会话\n",
+                        why, static_cast<unsigned long long>(quiet));
+            restart_now();
+        } else if (quiet > kQuietSuspiciousMs) {
+            const uint64_t now = now_ms();
+            if (ask_every_ms == 0 || now - last_ask_ms_ >= ask_every_ms) {
+                last_ask_ms_ = now;
+                revive_if_dead(why, quiet);
+            }
+        }
+    };
+
     for (;;) {
-        // 用户动了手（或者自动化框架来取帧了）。分三档处理，判据是"距离最后一个数据报
-        // 多久"，而设备的 RTCP SR 每秒一个就是这条流的心跳：
-        //   静默 ≤ 1.2s   心跳还在，流活着。什么都不做（这是画面在动时的常见情况）
-        //   1.2s ~ 2.5s   可疑：可能是流死了，也可能是连着丢了 SR。问设备一句
-        //                 （getmediastreamserverstatus，实测 100~300ms），死了才重起
-        //   > 2.5s        两个心跳都没了，不再为一次 RPC 花时间，直接重起（37~90ms）
-        // 中间那一档不能省：光靠时间戳永远有"刚死但还没到阈值"的盲区（实测静置 20 秒
+        // 用户动了手（或者自动化框架来取帧了）：按 judge_quiet 那三档心跳判据处理。
+        // 中间那一档不能省——光靠时间戳永远有"刚死但还没到阈值"的盲区（实测静置 20 秒
         // 去截图时会话已经死了 1.3 秒），而把阈值调大只会把盲区推到别处。
         if (wake_requested_.exchange(false)) {
-            const uint64_t quiet = now_ms() - last_packet_ms_;
-            if (quiet > kQuietCertainMs) {
-                std::printf("收到操作（最后一个数据报已静默 %llums，连着两个每秒 SR 都没来），"
-                            "重起媒体会话\n",
-                            static_cast<unsigned long long>(quiet));
-                restart_now();
-            } else if (quiet > kQuietSuspiciousMs) {
-                revive_if_dead("收到操作");
-            }
+            judge_quiet(now_ms() - last_packet_ms_, kQuietCertainMs, 0, "收到操作");
             continue;
         }
         // "该重起了"这个判断必须每轮都做，不能只挂在"读包超时"那条分支上。快速动
@@ -408,10 +446,11 @@ void FramePump::loop() {
                 new_session_state();
                 continue;
             }
-            if (options_.silence_restart_ms > 0 &&
-                now_ms() - last_packet_ms_ > static_cast<uint64_t>(options_.silence_restart_ms)) {
-                last_packet_ms_ = now_ms();
-                revive_if_dead("静默超时");
+            if (options_.silence_restart_ms > 0) {
+                const uint64_t quiet = now_ms() - last_packet_ms_;
+                judge_quiet(quiet, std::max<uint64_t>(kQuietCertainMs,
+                                                       static_cast<uint64_t>(options_.silence_restart_ms)),
+                            kSrPeriodMs, "静默超时");
             }
             continue;  // 超时不是结束
         }
