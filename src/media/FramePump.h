@@ -144,6 +144,14 @@ public:
     /// （实测三次全这样）。
     [[nodiscard]] bool reviving() const { return reviving_; }
 
+    /// 视频这条路是不是已经**确认走不通**：连续几次重起都因为"单帧超过解码后端上限"
+    /// 而一帧都没解出来。这不是等一次新关键帧就能好的事——画面本身太复杂（实测无边记
+    /// 画满白线的看板，IDR 256278 字节，重起十次还是同一个尺寸），而 VideoToolbox 只吃
+    /// 2 字节长度前缀。置起之后泵改成很偶尔才试一次（画面变简单时要能自己回来），
+    /// 调用方则应该改走别的取图方式（控制单元走截图服务），别再为等帧花预算。
+    /// 解出任意一帧就自动清掉。
+    [[nodiscard]] bool video_unusable() const { return video_unusable_; }
+
     /// 等到帧号大于 `since` 再取。返回该帧的帧号，0 表示超时。
     ///
     /// **`since` 要用调用这一刻的 serial()，不要用"我上次取走的那一帧的号"。**
@@ -203,6 +211,10 @@ private:
     /// 用户刚刚动过（见 wake()）。由收包线程取走并做一次"流还活着吗"的检查。
     std::atomic<bool> wake_requested_ { false };
     uint64_t last_restart_ms_ = 0;
+    /// 因为"单帧超过后端上限"而重起过几次了。解出一帧就清零；到顶之后改成很偶尔
+    /// 试一次（见 kMaxOversizedRestarts）。
+    int oversized_restarts_ = 0;
+    std::atomic<bool> video_unusable_ { false };
     /// 本会话有没有解出过关键帧。开头那个 IDR 若被丢掉（比如它正好超大），
     /// 后面所有帧都对着空参考解成一片灰，且再不会自愈。
     std::atomic<bool> ever_keyframe_ { false };

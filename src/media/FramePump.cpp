@@ -22,6 +22,14 @@ constexpr uint64_t kQuietSuspiciousMs = kSrPeriodMs + 200;
 /// 静默到两个 SR 周期以上：连着丢两个心跳的概率低到不值得为它花一条 RPC，
 /// 直接重起（37~90ms）。
 constexpr uint64_t kQuietCertainMs = 2 * kSrPeriodMs + 500;
+/// 连续几次"因为单帧太大而重起"之后就不再按节拍重试。理由：这种失败不是偶发的，
+/// 是画面本身复杂到后端吃不下（无边记画满白线的看板，IDR 256278 字节），重起十次
+/// 拿回来的还是同一个尺寸。以前只限频（1.5 秒一次），于是设备只要停在这种画面上，
+/// 我们就每 1.5 秒做一次停+起、永不成功、一帧也拿不到，而手机白烧电与带宽。
+constexpr int kMaxOversizedRestarts = 3;
+/// 到顶之后的重试间隔。不是彻底停手：用户把画面弄简单了（关掉看板、回到主屏）之后
+/// 这条流还得能自己活回来，所以偶尔还得试一次。解出一帧之后计数清零，回到正常节奏。
+constexpr uint64_t kOversizedRetryMs = 60000;
 /// 光靠时间戳永远有一段"刚死但还没到阈值"的盲区（实测：静置 20 秒去截图时，会话
 /// 其实已经死了 1.3 秒，任何大于 1.3 秒的阈值都会漏）。所以催流那条路在可疑区间
 /// 必须去问设备，而不是把阈值调大——调大只会把盲区推到别处。
@@ -226,9 +234,24 @@ void FramePump::loop() {
                 }
                 // 不要求"已经有过正常画面"：开头 IDR 超大被丢时 decoded 永远是 0，
                 // 那个保护恰好把唯一该救的情况排除掉了（用户看到的就是
-                // 一片灰且永不恢复）。只限频，防死循环。
+                // 一片灰且永不恢复）。
+                if (oversized_restarts_ >= kMaxOversizedRestarts) {
+                    if (!video_unusable_) {
+                        video_unusable_ = true;
+                        std::printf("连续 %d 次重起都因为单帧超过解码后端上限而拿不到画面："
+                                    "这条流在当前后端解不了（画面太复杂）。改成每 %llu 秒才试一次；"
+                                    "取帧方请改走截图服务，别再等帧。\n",
+                                    oversized_restarts_,
+                                    static_cast<unsigned long long>(kOversizedRetryMs / 1000));
+                    }
+                    // 到顶之后这里不再安排重起——重试由主循环那个退避计时统一管，
+                    // 两处都排会互相把对方的间隔吃掉。
+                    return;
+                }
+                // 没到上限时只限频，防死循环。
                 if (now_ms() - last_restart_ms_ > 1500) {
                     last_restart_ms_ = now_ms();
+                    ++oversized_restarts_;
                     oversized_restart_ = true;
                 }
                 return;
@@ -272,6 +295,10 @@ void FramePump::loop() {
             if (keyframe) {
                 ever_keyframe_ = true;
                 nokey_restarts_ = 0;  // 只有真解出关键帧才重置上限，防死循环
+                // 解出来就说明后端吃得下：退避计数清零，画面再变复杂时还能重新按
+                // 正常节奏试，而不是一次性永久判死。
+                oversized_restarts_ = 0;
+                video_unusable_ = false;
             }
             std::lock_guard<std::mutex> lock(mutex_);
             reviving_ = false;  // 救流要交代的"第一帧"到手了，取帧方不必再多等
@@ -409,6 +436,15 @@ void FramePump::loop() {
         // "该重起了"这个判断必须每轮都做，不能只挂在"读包超时"那条分支上。快速动
         // 画面下包是连续到达的，50ms 超时永远轮不到，于是"丢了帧要去拿新关键帧"这个
         // 决定会一直悬着——实测连丢 20 帧、画面冻住十几秒才等到一次超时才恢复。
+        // 退避计时必须由泵自己走，不能挂在"又收到一个超大 AU"上：降级之后会话早就被
+        // 设备拆掉了，一个包都收不到，那个条件永远不成立，降级就成了一个出不来的坑
+        // （调用方会永远停在截图服务上，哪怕画面早就变简单了）。
+        if (video_unusable_ && now_ms() - last_restart_ms_ >= kOversizedRetryMs) {
+            last_restart_ms_ = now_ms();
+            oversized_restart_ = true;
+            std::printf("降级满 %llu 秒，再试一次这条视频流（画面可能已经变简单了）\n",
+                        static_cast<unsigned long long>(kOversizedRetryMs / 1000));
+        }
         if (oversized_restart_) {
             oversized_restart_ = false;
             std::printf("有 NAL 超过平台后端的长度前缀上限，重起媒体会话拿新关键帧\n");
