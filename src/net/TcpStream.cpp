@@ -291,6 +291,18 @@ bool TcpStream::recv(std::vector<uint8_t> &out, int timeout_ms, std::string &err
         }
         return false;
     }
+    // 取字节必须和 on_segment 用同一把锁。`wait_for` 一返回，它自己的 unique_lock 就
+    // 已经放了，于是"把 [rx_pos_, end) 拷出去"和"把 rx_pos_ 推到末尾"这两步之间可以
+    // 插进来一个段：它往 rx_ 尾部追加了字节，而紧接着的 `rx_pos_ = rx_.size()` 把这些
+    // 新字节当成"已经交出去过"——静默丢掉一整段。
+    //
+    // 这就是"大回复（>1MB）在服务连接上稳定传不完"的真凶：回复越大段越多，撞上这个
+    // 窗口的概率越高，而小回复几乎碰不到。症状是上层看到 HTTP/2 帧长过大——设备会把
+    // 一个 9 字节的帧头单独写成一个段，丢掉这样一个段之后，下一个帧头正好错位成载荷
+    // 字节。TCP 序号这边完全连续（段是被我们取走之后丢的，不是没收到的），所以
+    // "序号不连续"那条日志一声不响，现场什么痕迹都没有；最后是把入流字节 dump 下来
+    // 离线重放帧序列才看出来的（见 Channel::dump_ / SCRCTL_H2_DUMP）。
+    std::lock_guard<std::mutex> lock(m_);
     if (rx_pos_ >= rx_.size()) {
         return err = peer_closed_ ? "对端已关闭" : "读超时", false;
     }

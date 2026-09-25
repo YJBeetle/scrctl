@@ -1,8 +1,10 @@
 #include "remote/RemoteXpc.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <string_view>
 
 namespace scrctl::remote {
@@ -215,6 +217,7 @@ std::optional<Channel> Channel::open(net::TcpStream &socket, std::string &err, b
 }
 
 bool Channel::pump(int timeout_ms, std::string &err) {
+    maybe_open_dump();
     bool processed = false;
     for (;;) {
         http2::Frame f;
@@ -237,8 +240,14 @@ bool Channel::pump(int timeout_ms, std::string &err) {
             // 把错位现场的前后字节交出来。"帧长过大"这种错误光看数字猜不出成因
             // ——是隧道包边界读歪了、上一帧的长度算少了、还是别的流的字节混进来
             // ——三种情况在十六进制里一眼就能分辨，靠推理则三种都能"自洽"。
-            std::fprintf(stderr, "    !! HTTP/2 帧解析失败: %s，缓冲 %zu 字节，前 64 字节:\n      ",
-                         perr.c_str(), rx_.size());
+            // 那个**流内偏移**（进来过多少减去手上还剩多少）是为了能和
+            // SCRCTL_H2_DUMP 留下的原始字节文件对上：有了它，这个现场就能离线重放。
+            std::fprintf(stderr,
+                         "    !! HTTP/2 帧解析失败: %s，缓冲 %zu 字节，流内偏移 %llu（本连接累计进 "
+                         "%llu），前 64 字节:\n      ",
+                         perr.c_str(), rx_.size(),
+                         static_cast<unsigned long long>(rx_total_ - rx_.size()),
+                         static_cast<unsigned long long>(rx_total_));
             for (std::size_t i = 0; i < 64 && i < rx_.size(); ++i) {
                 std::fprintf(stderr, "%02x", rx_[i]);
                 if (i % 16 == 15) {
@@ -269,7 +278,32 @@ bool Channel::pump(int timeout_ms, std::string &err) {
         return false;
     }
     rx_.insert(rx_.end(), got.begin(), got.end());
+    rx_total_ += got.size();
+    if (dump_ != nullptr) {
+        std::fwrite(got.data(), 1, got.size(), dump_.get());
+        std::fflush(dump_.get());
+    }
     return true;
+}
+
+/// 开 dump 文件。环境变量给的是前缀，每条连接一个序号——一次调用链上同时有好几条
+/// 服务连接（displayservice / screencaptureservice / indigo），混在一个文件里就没法
+/// 重放了。
+void Channel::maybe_open_dump() {
+    if (dump_ != nullptr || opened_dump_) {
+        return;
+    }
+    opened_dump_ = true;
+    const char *prefix = std::getenv("SCRCTL_H2_DUMP");
+    if (prefix == nullptr || prefix[0] == '\0') {
+        return;
+    }
+    static std::atomic<int> seq { 0 };
+    const std::string path = std::string(prefix) + "." + std::to_string(seq.fetch_add(1)) + ".bin";
+    dump_.reset(std::fopen(path.c_str(), "wb"));
+    if (dump_ != nullptr) {
+        std::fprintf(stderr, "    H2 入流 dump -> %s\n", path.c_str());
+    }
 }
 
 bool Channel::handle_frame(const http2::Frame &f, std::string &err) {

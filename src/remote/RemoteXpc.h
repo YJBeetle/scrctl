@@ -3,7 +3,9 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -105,6 +107,23 @@ private:
 
     net::TcpStream &socket_;
     std::vector<uint8_t> rx_;  ///< 还没凑成一帧的原始字节
+    /// 这条连接一共进来过多少字节。和 `rx_.size()` 一减就是"当前这个帧头在流里的
+    /// 偏移"——诊断错位时这是唯一能把现场对回 dump 文件的坐标。
+    uint64_t rx_total_ = 0;
+    /// SCRCTL_H2_DUMP=/前缀 时，把这条连接的原始入流字节按序另存一份
+    /// （/前缀.<n>.bin）。"帧长过大"这类错位光看缓冲区猜不出是谁错：把原始字节留下
+    /// 来就能离线重放一遍——文件自己帧对得上，就是我们消费错；对不上，就是链路与
+    /// 设备给的字节错。两种成因的修法完全不同，别靠猜。
+    /// 用 unique_ptr 管是因为 Channel 会被 move（`open()` 返回 optional<Channel>），
+    /// 裸 FILE* 会让两份对象指向同一个句柄。
+    struct FileCloser {
+        int operator()(FILE* f) const { return std::fclose(f); }
+    };
+    std::unique_ptr<FILE, FileCloser> dump_ { nullptr };
+    /// dump 只在第一次 pump 时决定一次（每连接），不在每轮里翻环境变量。
+    bool opened_dump_ = false;
+    /// 开 dump 文件（见 `dump_`）。
+    void maybe_open_dump();
     /// 按流号分开缓冲：一条消息可能被拆成多个 DATA 帧，不同流的消息混在一个缓冲里
     /// 拼，顺序一错就整条解不出来。
     std::map<uint32_t, std::vector<uint8_t>> pending_;
