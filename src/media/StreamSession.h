@@ -48,6 +48,9 @@ public:
         /// 端口全程不变、`startmediastream` 整场只有两次（音频一次 + 视频一次，不是重试）；
         /// 而它那条 carrying 两次起流的连接从头到尾没有 FIN/RST。我们照同一份请求逐键发，
         /// 20.0 秒死。差异只剩"连接是否被持有并服务"和 RTCP 里那几个字段的取值。
+        /// （后来两条也都判完了：握着起流那条连接并持续 `service()`、在 `deviceinfo` 上挂
+        /// `displayinfoupdates` 订阅、在 `universalhidservice` 上附着，各自一臂全部照旧
+        /// 死在 19.97~20.00 秒；RCTL 的字段语义另外量出了我们填错的一位。见 docs §13。）
         std::optional<uint32_t> timeout_seconds = 3600;
         /// 发往设备的 `sessionEventChannel` 键：**一个 XPC UUID**，不是端点句柄。
         ///
@@ -61,6 +64,12 @@ public:
         /// 设备端口 54583 = `com.apple.coredevice.deviceinfo` 上，而它的 feature 列表里有
         /// `displayinfoupdates`——那是**显示器/方向/背光状态订阅**，和媒体会话的租期无关。
         /// 所以这一位目前解释不了苹果的 74 秒不断，别把它当保活手段。
+        ///
+        /// 而且"苹果那边一定接了个对端"这个前提也是猜的：拿它那两条腿的两个 UUID 的
+        /// 16 字节原文在整场抓包里搜，**各只出现 1 次**，就是各自那条起流请求，
+        /// 之后设备与客户端都没再提过（对比 `ClientSessionID` 出现 6 次）。
+        /// 也就是说苹果自己也没在这个窗口里给它接上对端——我们填的悬空 UUID
+        /// 恰好就是苹果的形状，不是我们漏了一步。
         std::optional<std::vector<uint8_t>> session_event_channel;
         /// 申报给设备的主机能力位掩码。观测值是 140，而设备自己回
         /// `supportedFeatures: 972`——差着的位里可能藏着更高档的编码器配置，
