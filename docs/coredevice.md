@@ -585,6 +585,15 @@ db1aac0e 00000001 00000000…      报告块，24 字节——比 RFC 3550 的 2
 我们的 RTP 解析器会把它读成"PT=72"：`0xc8` 的 bit7 是 RTCP PT=200 的一部分，而 RTP
 的 PT 只有 7 位，`0xc8 & 0x7f = 72`，marker 位还被顺带读成 1。
 
+**设备在通话中会直接拒绝起流：code 9022** "A phone or VoIP call is currently in
+progress on the device."。这不是我们这边的问题，也不是会话表被占住——同时刻查
+`getmediastreamserverstatus` 回的是 `{sessions: [], running: false}`，表是空的。
+顺手排掉一个更吓人的怀疑：**`kill -9` 掉 scrctl 不会在设备上留下僵尸会话**（留的话
+这里就会看到 sessions 非空，而后面每次起流都被拒）。所以 9022 的真实含义就是"设备
+正在通话"：这时**截图服务是好的**（实测 `capturescreenshot` 照样出图），只有视频流
+起不来——正是控制单元那条兜底路径，所以碰到它不要绕、不要重试，让调用方按它自己的
+"还没有第一帧"处理（scrctl 命令行则是提示去挂断，见 `src/app/main.cpp` 起流失败处）。
+
 ## 14. 让设备自己交代入参形状（`tools/feature_schema_probe`）
 
 CoreDevice 的 feature 入参在设备侧是 Swift Codable，而它对**每个必填键都点名**：

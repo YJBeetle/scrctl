@@ -832,6 +832,14 @@ int main(int argc, char **argv) {
         std::string err;
         if (!made->start(o.serial, o.record, o.hw_decode, err)) {
             std::fprintf(stderr, "起流失败: %s\n", err.c_str());
+            // 设备在通话中会直接拒绝起流（code 9022）。实测这时它的会话表是空的
+            // （getmediastreamserverstatus 回 sessions: []），所以不是"有条旧流占着"，
+            // 重试也不会成——不点出来，用户只会以为是我们的流没起来。截图服务不受影响，
+            // 受影响的只有这条视频流。
+            if (err.find("9022") != std::string::npos) {
+                std::fprintf(stderr,
+                             "提示：设备正在通话，挂断之后再试即可（不是本地的问题，重起 scrctl 没用）。\n");
+            }
             return 1;
         }
         live = made.get();
