@@ -27,13 +27,22 @@
 //   RR   (RFC 3550 §6.4.2) —— 接收报告。上次 A/B 里"发到视频端口就不再有结束事件"
 //        这个现象一直没解释，一并复测一遍（这次的包每个字段都算过字节数，见 build_rr）。
 //
-// 判据：静默到点之后发一次请求，观察 6 秒里有没有 IRAP（NAL type 19/20/21）到达。
-// 对照组 `none` 什么都不发，用来证明"静止画面上本来一个包都不会来"——少了这条，
-// "发了就有帧"这个结论不成立（docs §13 里第一版 PLI 实验就是栽在这）。
-// 但这一轮对照有了第二个用途：会话是 20 秒硬租期，所以**对照组必须也在租期内观察**，
-// 否则"没帧"可能只是"流已经死了"。上面阶段 2 那个 14 秒截止就是为这件事设的。
+// 判据：**先空观察 3 秒（前摇），然后每 2 秒发一次请求，总共 12 秒**，数两种 IRAP
+// （NAL type 19/20/21 = IDR/CRA/BLI）：前摇里来的（与我们无关），和"跟在我们某一次发送
+// 之后 1.5 秒内"来的。只有后者非 0、而且对照行 `none` 的后者为 0，才是"设备受理了这种
+// 请求"。
 //
-// 用法：fir_probe [--what none,pli,plim,plim+fb,fir205m+fb,fir205m+fb+ltrp,rrm] [--attempts N] [--verbose]
+// 为什么不是"看有没有 IRAP"，也不是"画面静止时一个包都不来"：
+//   - 只看"有没有 IRAP"会被**起流自带的那个 IDR**污染。它有几十上百个分片，阶段 1 在第
+//     一个分片就判定成功并 break，剩下的分片随后几毫秒内组装完成——于是连从不发包的对照
+//     臂都会报"IRAP 在 +1ms 到"。上一版就是这么把五个臂全读成"被受理"的（前摇那一列就是
+//     为了把这个假象挡在判据外面）。
+//   - 指望"静止画面上本来一个包都不来"当对照前提，在这次跑图上根本不成立：无边记看板上有
+//     东西一直在动，六个臂每 6 秒都是 3600 个视频包上下。相关性判据不依赖画面静止。
+//   - 会话是 20 秒硬租期那件事也已经不成立了（那是我们自己报的 `timeout`，见 docs §13），
+//     所以现在可以让整个观察窗拉到十几秒而不必赶在拆流之前。
+//
+// 用法：fir_probe [--what none,plim,plim+fb,fir205m,fir205m+fb,fir205m+fb+ltrp] [--attempts N] [--verbose]
 // 臂名后缀 `m' = 用 answer 分配的 SSRC 角色；`+fb'/`+ltrp' = 改 offer 里那两个开关。
 #include <chrono>
 #include <cstdio>
@@ -177,6 +186,18 @@ struct Attempt {
     std::string what;
     uint64_t packets = 0;
     std::set<int> irap;
+    /// 前摇（还没开始发请求的那 3 秒）里来的 IRAP 次数。这一列必须是 0，否则本轮的相关
+    /// 性读数不作数——那种 IRAP 与我们无关，而它会伪装成“请求被受理了”。上一版就是这么
+    /// 中招的：起流自带的那个 IDR 有几十上百个分片，阶段 1 在第一个分片就 break，剩下的
+    /// 分片在阶段 3 的头几毫秒里组装完成，于是连从不发包的 none 臂都报出“IRAP 在 +1ms 到”。
+    uint64_t irap_preroll = 0;
+    /// 观察窗里“这个 AU 含 IRAP”发生了**几次**。注意不能只记“有没有”：画面在动时
+    /// 每一次都要重新数，否则一次自发 IDR 就能让后面所有臂都看起来"成功"。
+    uint64_t irap_events = 0;
+    /// 其中落在"我们上一次发请求之后 1.5 秒内"的次数。这一列才是判据：它把"设备给了
+    /// 一个 IDR"和"设备是因为我们才给"分开。对照组 `none` 从不发请求，所以它的这一列
+    /// 必然是 0，而它的 `irap_events` 就是那条流**自己**的 IDR 产生率。
+    uint64_t irap_after_send = 0;
     bool ended = false;
 };
 
@@ -300,15 +321,18 @@ int main(int argc, char **argv) {
             std::printf("\n[%s] 已拿到起流 IDR（媒体 SSRC=%08x），等画面静止…\n", w.c_str(),
                         media_ssrc);
 
-            // 阶段 2：等到静默（不碰设备，画面自然停下来）。
+            // 阶段 2：尽量等到静默（不碰设备，画面自然停下来）。
             //
-            // 截止时刻必须卡在**起流后 14 秒**而不是"再等 20 秒"：这条流有 20 秒的硬租期
-            // （docs §13），等到租期过了才发请求，测到的只是"会话已经没了，当然不理"，
-            // 那种阴性结果和"设备认不认这种请求"没有关系。14 秒是给后面 6 秒观察期留余量。
-            uint64_t quiet_deadline = now_ms() + 20000;
-            if (session_t0 + 14000 < quiet_deadline) {
-                quiet_deadline = session_t0 + 14000;
-            }
+            // 这一步现在是"能等到更好、等不到也继续"：静止画面上一个视频包都不来，对照
+            // 组的读数最干净；而现在的判据是**相关性**（IRAP 是否跟在我们的请求后面 1.5 秒
+            // 内到），它在画面动着的时候同样成立。所以这里只留 8 秒——等到静止就用最干净的
+            // 判据，等不到别白等。
+            //
+            // 顺带把这一段的历史记清楚：以前这个等待必须卡在起流后 14 秒以内，因为租期只有
+            // 20 秒，等满再发请求就落在会话已经没了的时刻，测到的只是"流死了当然不理"——
+            // 加上阶段 1 最多 6 秒、阶段 3 要 6 秒，那时这条探针的时间预算根本不够。
+            // **这正是"设备不理 PLI/FIR"那个旧结论最可疑的地方。**
+            const uint64_t quiet_deadline = now_ms() + 8000;
             while (now_ms() < quiet_deadline && now_ms() - last_video < 2500) {
                 while (session->next_packet(packet, peer, 200, err)) {
                     if (now_ms() >= quiet_deadline || now_ms() - last_video >= 2500) {
@@ -324,13 +348,16 @@ int main(int argc, char **argv) {
                 }
             }
             if (now_ms() - last_video < 2500) {
-                std::printf("[%s] 20 秒内画面一直没静止，判据不成立，跳过\n", w.c_str());
-                std::string serr;
-                session->stop(*dev, serr, verbose);
-                continue;
+                // 画面一直没静止。**不跳过这一轮**，改成用相关性判据（见阶段 3 那段）：
+                // 静止判据只是让"对照组的 0"变得显然，而它不是必要条件。
+                std::printf("[%s] 8 秒内画面没静止过（上一帧距今 %llums），改用\"IRAP 是否跟着"
+                            "请求来\"的判据\n", w.c_str(),
+                            static_cast<unsigned long long>(now_ms() - last_video));
+            } else {
+                std::printf("[%s] 已静默 %llums（起流至今 %llu ms），发请求\n", w.c_str(),
+                            static_cast<unsigned long long>(now_ms() - last_video),
+                            static_cast<unsigned long long>(now_ms() - session_t0));
             }
-            std::printf("[%s] 已静默 %llu ms，发请求\n", w.c_str(),
-                        static_cast<unsigned long long>(now_ms() - last_video));
 
             // 阶段 3：发一次请求，观察 4 秒。
             // 请求里的两个 SSRC。answer 的 `LocalSSRC` 是设备自己那条流（实测与 RTP 头里
@@ -348,13 +375,29 @@ int main(int argc, char **argv) {
             std::printf("[%s] SSRC 角色：%s（发送者=%08x 被请求的流=%08x）\n", w.c_str(),
                         roles_ok ? "用 answer 分配的" : "两个位置都填设备的流号（对照）",
                         sender_ssrc, target_ssrc);
+            // 阶段 3 的时间轴：**先空观察 3 秒，再每 2 秒发一次请求，总共 12 秒。**
+            //
+            // 这个前摇不是可有可无的。上一版从"拿到起流 IDR"直接接进阶段 3 并且**立刻**
+            // 发第一个包，结果五个臂（包括从不发包的 none）全都报出"IRAP 在 +1~2ms 到"，
+            // 看起来像是 FIR 被受理了，其实那一个是起流自带的那个 IDR 的**尾巴**：一个
+            // IDR 由几十上百个 UDP 包组成，阶段 1 在它的第一个分片就 break 了，剩下的
+            // 分片在阶段 3 的头几毫秒里被组装完成，于是每一臂都"收到一个 IRAP"。发请求
+            // 恰好也在 +0ms，相关性就是这么造出来的。
+            //
+            // 判据因此是"前摇那 3 秒里一个 IRAP 都没有" + "只有发过请求的臂在后面出现
+            // 跟发的时刻 1.5 秒之内的 IRAP"。前摇非 0 就说明这条流自己在产 IDR，
+            // 那一轮的相关性读数不作数（画面在动时本来就该怀疑这件事）。
+            constexpr uint64_t kPreRollMs = 3000;
+            constexpr uint64_t kWindowMs = 12000;
+            constexpr uint64_t kSendEveryMs = 2000;
             uint16_t fir_seq = 1;
-            uint64_t next_send = now_ms();
             const uint64_t t0 = now_ms();
-            while (now_ms() - t0 < 6000) {
+            uint64_t next_send = t0 + kPreRollMs;
+            uint64_t last_send_ms = 0;
+            while (now_ms() - t0 < kWindowMs) {
                 if (base != "none" && now_ms() >= next_send) {
                     // pli1 只发一次，用来分清"一发就够"和"得反复催"。
-                    next_send += (base == "pli1" ? 99000 : 1000);
+                    next_send += (base == "pli1" ? 999000 : kSendEveryMs);
                     std::vector<uint8_t> msg;
                     if (base == "pli" || base == "pli1") {
                         msg = build_pli(sender_ssrc, target_ssrc);
@@ -370,6 +413,7 @@ int main(int argc, char **argv) {
                     }
                     std::string serr;
                     const bool ok = session->send_rtp(msg, session->started().sender_port, serr);
+                    last_send_ms = now_ms();
                     std::printf("        %4llu ms 发 %s %zu 字节: ",
                                 static_cast<unsigned long long>(now_ms() - t0), w.c_str(),
                                 msg.size());
@@ -377,7 +421,7 @@ int main(int argc, char **argv) {
                     std::printf(" -> %s\n", ok ? "已发" : serr.c_str());
                 }
                 while (session->next_packet(packet, peer, 50, err)) {
-                    if (now_ms() - t0 >= 6000) {
+                    if (now_ms() - t0 >= kWindowMs) {
                         break;  // 内层循环要自己会退出，理由见阶段 1 那段
                     }
                     scrctl::rt::PacketInfo info{};
@@ -389,13 +433,47 @@ int main(int argc, char **argv) {
                     media_ssrc = info.ssrc;
                     highest_seq = info.sequence;
                     std::ignore = dp.push(packet, annexb, err);
-                    for (int t : irap_in(annexb)) {
-                        at.irap.insert(t);
+                    // 只扫**这一帧新追加**的那段。annexb 是累加的（depacketizer 把完整 NAL
+                    // 追加进来），不清就会把阶段 1 那个起流自带的 IDR 一直留在窗口里，
+                    // 之后每一帧都"又看见一次 IRAP"——那种读数会把三个臂全判成成功。
+                    const std::set<int> found = irap_in(annexb);
+                    annexb.clear();
+                    if (!found.empty()) {
+                        const uint64_t now = now_ms();
+                        for (int t : found) {
+                            at.irap.insert(t);
+                        }
+                        if (now - t0 < kPreRollMs) {
+                            // 前摇里来的 IRAP 与我们的请求无关：它是起流那个 IDR 的尾巴，
+                            // 或者是这条流自己产的。两种都让本轮的相关性读数变得可疑。
+                            ++at.irap_preroll;
+                            std::printf("        %4llu ms 收到 IRAP（前摇内，与请求无关）\n",
+                                        static_cast<unsigned long long>(now - t0));
+                            continue;
+                        }
+                        ++at.irap_events;
+                        // 相关性判据：画面在动的时候"有没有来 IDR"本身没有意义，有意义的
+                        // 只有"是不是跟在我们那一个包后面 1.5 秒内来的"。
+                        if (last_send_ms != 0 && now - last_send_ms <= 1500) {
+                            ++at.irap_after_send;
+                            std::printf("        %4llu ms 收到 IRAP（发请求后 %llums）\n",
+                                        static_cast<unsigned long long>(now - t0),
+                                        static_cast<unsigned long long>(now - last_send_ms));
+                        } else {
+                            std::printf("        %4llu ms 收到 IRAP，但距上次发请求 %s，算自发\n",
+                                        static_cast<unsigned long long>(now - t0),
+                                        last_send_ms == 0 ? "从没发过" : "超过 1.5 秒");
+                        }
                     }
                 }
             }
-            std::printf("[%s] 观察 6 秒：视频包 %llu 个，IRAP:", w.c_str(),
-                        static_cast<unsigned long long>(at.packets));
+            std::printf("[%s] 观察 %llu 秒（前摇 3 秒不发包）：视频包 %llu 个，前摇 IRAP %llu 次，"
+                        "IRAP 事件 %llu 次（其中跟在请求后 1.5s 内 %llu 次）类型:",
+                        w.c_str(), static_cast<unsigned long long>(kWindowMs / 1000),
+                        static_cast<unsigned long long>(at.packets),
+                        static_cast<unsigned long long>(at.irap_preroll),
+                        static_cast<unsigned long long>(at.irap_events),
+                        static_cast<unsigned long long>(at.irap_after_send));
             for (int t : at.irap) {
                 std::printf(" %d", t);
             }
@@ -406,19 +484,21 @@ int main(int argc, char **argv) {
         }
     }
 
-    std::printf("\n==== 汇总（静默 2.5 秒后发请求，观察 6 秒）====\n");
-    std::printf("%-6s %-10s %s\n", "请求", "视频包", "到的 IRAP");
+    std::printf("\n==== 汇总（前摇 3 秒不发包，之后每 2 秒发一次请求，共 12 秒）====\n");
+    std::printf("%-14s %-9s %-11s %-9s %s\n", "臂", "视频包", "前摇 IRAP", "IRAP 次数",
+                "其中跟在请求后 1.5s 内");
     for (const auto &r : results) {
-        std::printf("%-6s %-10llu", r.what.c_str(), static_cast<unsigned long long>(r.packets));
-        if (r.irap.empty()) {
-            std::printf(" -");
-        }
-        for (int t : r.irap) {
-            std::printf(" %d", t);
-        }
-        std::printf("\n");
+        std::printf("%-14s %-9llu %-11llu %-9llu %llu\n", r.what.c_str(),
+                    static_cast<unsigned long long>(r.packets),
+                    static_cast<unsigned long long>(r.irap_preroll),
+                    static_cast<unsigned long long>(r.irap_events),
+                    static_cast<unsigned long long>(r.irap_after_send));
     }
-    std::printf("\n判读：none 那行必须是 0 包（否则画面没静止，判据不成立）；"
-                "某行同时给出包和 IRAP，就说明设备认这种请求，静止画面也能被它自己喂活。\n");
+    std::printf("\n判读：先看「前摇 IRAP」这一列，它必须全 0——前摇那 3 秒我们一个包都不发，\n"
+                "那里来的 IRAP 只可能是起流那个 IDR 的尾巴或者流自己产的，有它在这一轮后面\n"
+                "的相关性读数就不作数。然后看最后一列：只有它是 0 以外的数、而且对照行（none）\n"
+                "那一列是 0，才说明设备是因为我们发的那一个包才给的 IDR。\n"
+                "「IRAP 次数」非 0 而最后一列是 0，说明这条流自己在产 IDR（画面在动时本来就该\n"
+                "怀疑这件事），这种画面下测不出请求受理与否，要换一个真静止的画面。\n");
     return 0;
 }
