@@ -347,10 +347,12 @@ int main(int argc, char **argv) {
             const bool ltrp = flags.find("ltrp") != std::string::npos;
 
             const int poll_every_ms = base == "poll" ? 2000 : (base == "poll5" ? 5000 : 0);
-            // RTCP 变体。寿命实验已经钉死"会话是起流后 20 秒的硬租期，喂画面也救不了"，
-            // 而协商参数里就写着 `RTCPTimeoutInterval: 20`——也就是说这 20 秒是"没收到
-            // 接收端 RTCP"的超时。我们发裸 RR 它照死，所以问题不是"要不要回 RTCP"，
-            // 而是"它认的那一份 RTCP 长什么样"。这几个变体各改一个变量：
+            // RTCP 变体。这一批臂是"回 RTCP 能不能续命"这个问题留下的：当时以为会话是
+            // 起流后 20 秒的硬租期、而协商参数里写着 `RTCPTimeoutInterval: 20`，于是把
+            // 那 20 秒读成"没收到接收端 RTCP 的超时"。**这个解释后来被推翻了**（那个 20
+            // 就是我们在请求里报的 `timeout`，见 --timeout），但这批臂作为"RTCP 能不能
+            // 延长租期"的负结果仍然成立——答案是完全不能，报多长就多少秒死，一视同仁。
+            // 这几个变体各改一个变量：
             //   rr      裸 RR，发送者 SSRC 用我们自己编的，发到设备那个媒体端口
             //   rrsame  同上，但发送者 SSRC = 设备的媒体 SSRC
             //   rrsdes  RR + SDES(CNAME) 复合包（设备的 SR 就是 SR+SDES 复合来的）
