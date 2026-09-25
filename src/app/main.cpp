@@ -629,8 +629,9 @@ public:
         };
         // 设备的 SR 每 `RTCPSendInterval` 秒才来一个（实测空闲时会拖到 4 秒以上），
         // 所以它的增量**不能**除以打印窗口，否则一次增量被摊成一秒的速率，数会虚高
-        // 好几倍。除以"上一次 SR 变化到现在"的真实间隔。
+        // 好几倍。除以"上一次 SR 变化到现在"的真实间隔，并且把这个间隔一起打出来。
         double dev_rate = 0;
+        uint64_t dev_span_ms = 0;
         // 重起会话会让设备侧的累计数归零，做差会下溢成一个天文数字。
         const bool dev_reset = st.dev_sent_packets < last_dev_packets_;
         if (dev_reset) {
@@ -638,18 +639,39 @@ public:
             last_dev_change_ms_ = now;
             last_dev_rate_ = 0;
         } else if (st.dev_sent_packets != last_dev_packets_ && last_dev_change_ms_ != 0) {
+            dev_span_ms = now - last_dev_change_ms_;
             dev_rate = static_cast<double>(st.dev_sent_packets - last_dev_packets_) /
-                       std::max(0.001, static_cast<double>(now - last_dev_change_ms_) / 1000.0);
+                       std::max(0.001, dev_span_ms / 1000.0);
         } else {
+            // 这一档没有新的 SR，沿用上一个 SR 算出来的速率——分母也就还是它的分母。
             dev_rate = last_dev_rate_;
+            dev_span_ms = last_dev_span_ms_;
         }
-        std::printf("  流: 设备发了 %6.0f/s 我收到 %6.0f/s 差 %+6.0f | AU %5.1f/s 解码 %5.1f/s\n",
-                    dev_rate, rate(st.packets, last_packets_),
-                    rate(st.packets, last_packets_) - dev_rate, rate(st.aus, last_aus_),
+        // 本会话收到的包数。设备 SR 里的累计数是**每条会话从零重数**的，而我们的
+        // packets 全程连着涨，所以只有减掉基线两者才在同一条数轴上——以前直接打
+        // 全程累计，重起过一次之后读数长成"累计 设备 143 我 5866"，像丢了五千包。
+        const uint64_t mine_session =
+            st.packets > st.session_packets_base ? st.packets - st.session_packets_base : 0;
+        std::printf("  流: 设备发了 %6.0f/s 我收到 %6.0f/s | AU %5.1f/s 解码 %5.1f/s\n", dev_rate,
+                    rate(st.packets, last_packets_), rate(st.aus, last_aus_),
                     rate(st.decoded, last_decoded_));
-        std::printf("      累计 设备 %llu 我 %llu AU %llu 解码 %llu\n",
+        // 两个"每秒"的分母不是一把尺：SR 大约每秒才来一个，它的增量只能除以"上一个
+        // SR 到现在"，而我们的速率除以打印窗口（实测这个窗口在 0.6~1.3 秒之间飘）。
+        // 所以这两个数**相减没有意义**——早先那行 `差 +283 / -283` 就是把它们硬减出来
+        // 的，一虚一实读成"在大量丢包"，而真正的丢包读数在下面那行 `序号缺口` 上，
+        // 全程是 0。这里把两个分母都打出来，谁看谁会别再犯。
+        if (dev_span_ms == 0) {
+            std::printf("      分母：设备那档还没有 SR 可除（第一条 SR 未到），我 %.1fs\n", secs);
+        } else {
+            std::printf("      分母：设备 %.1fs（SR 每 ~1s 一个） 我 %.1fs（两档相减无意义）\n",
+                        dev_span_ms / 1000.0, secs);
+        }
+        // 这一行的两个数是唯一在同一条数轴上的读数（都按会话起点归零），所以它是
+        // "设备到底发了多少 vs 我们收到多少"的权威比。AU/解码不在这个轴上：它们
+        // 全程连着涨，没有会话基线，所以老实标成"全程"。
+        std::printf("      本会话累计 设备 %llu 我 %llu｜全程 AU %llu 解码 %llu\n",
                     static_cast<unsigned long long>(st.dev_sent_packets),
-                    static_cast<unsigned long long>(st.packets),
+                    static_cast<unsigned long long>(mine_session),
                     static_cast<unsigned long long>(st.aus),
                     static_cast<unsigned long long>(st.decoded));
         std::printf("      每帧耗时：拆包 %.1f ms 解码 %.1f ms 交付 %.1f ms（AU %llu 次）\n",
@@ -657,18 +679,22 @@ public:
                     st.ms_decode / std::max<uint64_t>(1, st.decode_calls),
                     st.ms_publish / std::max<uint64_t>(1, st.decode_calls),
                     static_cast<unsigned long long>(st.decode_calls));
-        std::printf("      非视频载荷 %llu 未出帧 %llu 等关键帧丢 %llu 序号缺口 %llu 分片作废 %llu 重起 %llu "
-                    "超大NAL丢 %llu\n",
+        // 计数器不是一套基线，混在一行里就会读出"重起之后非视频载荷从 19 变成 0，
+        // 是不是把 SR 弄丢了"这种假问题：前三个跟着拆包器每会话归零（拆包器换会话就
+        // 重建），后四个全程累加。分开标。
+        std::printf("      本会话 非视频载荷 %llu 序号缺口 %llu 分片作废 %llu\n",
                     static_cast<unsigned long long>(st.other_payload),
+                    static_cast<unsigned long long>(st.gaps),
+                    static_cast<unsigned long long>(st.dropped_fragments));
+        std::printf("      全程 未出帧 %llu 等关键帧丢 %llu 重起 %llu 超大NAL丢 %llu\n",
                     static_cast<unsigned long long>(st.no_output),
                     static_cast<unsigned long long>(st.dropped_awaiting_keyframe),
-                    static_cast<unsigned long long>(st.gaps),
-                    static_cast<unsigned long long>(st.dropped_fragments),
                     static_cast<unsigned long long>(st.restarts),
                     static_cast<unsigned long long>(st.dropped_oversized));
         last_packets_ = st.packets;
         if (st.dev_sent_packets != last_dev_packets_) {
             last_dev_rate_ = dev_rate;
+            last_dev_span_ms_ = dev_span_ms;
             last_dev_change_ms_ = now;
             last_dev_packets_ = st.dev_sent_packets;
         }
@@ -684,6 +710,9 @@ private:
     uint64_t last_dev_packets_ = 0;
     uint64_t last_dev_change_ms_ = 0;
     double last_dev_rate_ = 0;
+    /// 上一个 SR 增量是除以多长的间隔算出来的。打印时要用它，不然读者会把这个
+    /// "每秒"当成和"我收到"同一个分母，然后去减两个不同分母的数。
+    uint64_t last_dev_span_ms_ = 0;
     uint64_t last_aus_ = 0;
     uint64_t last_decoded_ = 0;
     uint64_t last_stats_ms_ = 0;
@@ -903,7 +932,31 @@ int main(int argc, char **argv) {
     // 帧缓冲要跨迭代复用：每轮新建一个 Frame 意味着每帧重新申请 11MB、重新缺页，
     // 而取帧那边是 `out = frame_` 的整幅拷贝——两者叠起来实测就是每帧几十毫秒。
     scrctl::Frame f;
+    int last_rendered = 0;
     while (!quit) {
+        // 读数放在取帧**之前**。以前它挂在"这一轮取到帧了"那条分支里，于是断流的那
+        // 几秒恰好是不打印的那几秒——日志在最有信息量的时刻静音，恢复之后又连着几行
+        // 看不出为什么掉帧（用户报"有时候会断"，而日志里那一段什么都沒有，只有事后
+        // 被拉低的平均帧率）。没帧的时候窗口照样过，打出来就是 0 fps，那才是真相。
+        //
+        // 按秒催、不按"每 60 帧"（12fps 时每 60 帧是 5 秒，读数摊在很长的窗口上，
+        // 速率和累计值分不出来）；而且**必须打本段的速率**：`渲染 N 帧` 那一路历史上
+        // 打的是"总数 / 全程时间"，一次 3 秒的停顿会把平均帧率压到 47，之后每一行都
+        // 显示 47.3、47.6、47.9、48.2，看起来像"恢复之后还在持续掉帧"——而实测那几段
+        // 的瞬时值是 55、55、56，早就好了。平均数只能用来发现"一直在掉"，不能用来
+        // 判断"现在在掉"。
+        if (o.stats && SDL_GetTicks64() - last_stats_at >= 1000) {
+            const Uint64 at = SDL_GetTicks64();
+            const double win = std::max(0.001, static_cast<double>(at - last_stats_at) / 1000.0);
+            const int got = rendered - last_rendered;
+            std::printf("  渲染 %d 帧（本段 %d 帧 = %.1f fps，全程均 %.1f fps）\n", rendered, got,
+                        got / win,
+                        rendered / std::max(0.001, static_cast<double>(at - start) / 1000.0));
+            source->print_stats();
+            last_stats_at = at;
+            last_rendered = rendered;
+        }
+
         // 50ms：再长一点，等帧期间窗口对关闭/移动的反应就开始发木。
         if (!source->next(f, 50)) {
             if (source->finished()) {
@@ -916,17 +969,6 @@ int main(int argc, char **argv) {
                 quit = presenter->pump(on_touch);
             }
             continue;
-        }
-
-        // 统计放在 no_window 分支**之前**：--no-window 正是拿它测吞吐量的模式
-        // （有窗口时能直接看到帧率，无窗口时这行输出就是唯一的读数）。
-        // 按秒催，不按"每 60 帧"——12fps 时每 60 帧是 5 秒，读数就摊在一段很长的
-        // 窗口上，速率和累计值根本分不出来。
-        if (o.stats && SDL_GetTicks64() - last_stats_at >= 1000) {
-            const double el = (SDL_GetTicks64() - start) / 1000.0;
-            std::printf("  渲染 %d 帧  %.1f fps\n", rendered, rendered / el);
-            source->print_stats();
-            last_stats_at = SDL_GetTicks64();
         }
 
         if (o.no_window) {
