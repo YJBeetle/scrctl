@@ -41,7 +41,8 @@ uint16_t pick_port() {
 xpc::Value build_start_request(const std::string &receiver_ip, uint16_t receiver_port,
                                const std::string &sender_ip,
                                const std::vector<uint8_t> &offer_bplist, uint32_t display_id,
-                               uint32_t timeout_seconds, uint64_t client_supported_features) {
+                               std::optional<uint32_t> timeout_seconds,
+                               uint64_t client_supported_features) {
     auto d = xpc::make_dict();
     xpc::dict_set(d, "clientSupportedFeatures", xpc::make_uint64(client_supported_features));
     xpc::dict_set(d, "direction", xpc::make_string("output"));
@@ -68,7 +69,13 @@ xpc::Value build_start_request(const std::string &receiver_ip, uint16_t receiver
     xpc::dict_set(d, "receiverIP", xpc::make_string(receiver_ip));
     xpc::dict_set(d, "receiverPort", xpc::make_uint64(receiver_port));
     xpc::dict_set(d, "senderIP", xpc::make_string(sender_ip));
-    xpc::dict_set(d, "timeout", xpc::make_uint64(timeout_seconds));
+    // 这个键**可以整个不发**，且不发不等于发 0：设备侧是两条不同的机制。带着键就是一条
+    // 硬性租期（到点摘会话，不看我们发过什么）；不带键时 answer 里 `RTCPTimeoutInterval`
+    // 仍是默认的 20.0，但那是它自己的 RTCP 空闲计时器——Apple 客户端（Xcode DeviceHub）
+    // 就是不带这个键，而它的会话在 158 秒里一次没换过。判据见 StreamSession.h 里那段。
+    if (timeout_seconds.has_value()) {
+        xpc::dict_set(d, "timeout", xpc::make_uint64(*timeout_seconds));
+    }
     xpc::dict_set(d, "type", xpc::make_string("video"));
     return d;
 }

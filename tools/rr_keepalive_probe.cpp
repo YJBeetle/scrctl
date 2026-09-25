@@ -37,6 +37,7 @@
 #include <chrono>
 #include <cstdio>
 #include <map>
+#include <optional>
 #include <set>
 #include <span>
 #include <string>
@@ -321,6 +322,17 @@ int main(int argc, char **argv) {
     // 当成客户端等回复的超时），那么回多少种 RTCP 都不可能把流留住超过 20 秒——因为
     // 那个 20 是我们自己写的。改这一个整数就能判掉这个假设，比造包便宜两个数量级。
     uint32_t timeout_seconds = 20;
+    // 整个 `timeout` 键都不发（而不是发 0）。动机是从设备自己的会话表里读到的现象：
+    // Xcode DeviceHub 正在镜像时，它的会话条目里没有 `timeout` 键、`RTCPTimeoutInterval`
+    // 仍是 20.0，而 `runDurationSeconds` 爬到了 158 秒没换过会话。当时唯一的读法是
+    // "报数=硬租期，不报=能被 RTCP 复位的空闲计时器"。
+    //
+    // **实测否掉了它：feature 层要求这个键，不发直接起不了流**
+    // （`code 4865 / "Expected to find key timeout."`，`none` 和 `rrsrcsd` 两臂都撞在这）。
+    // 留下的结论比原假设更要紧：会话条目里的 `timeout`/`type` 是 feature 层替客户端补的，
+    // 所以 DeviceHub 那条会话根本不是从这个 feature 建的，它的"不断流"不能拿来当
+    // "存在我们没找到的保活"的证据。这一臂留着，是为了让这条推理链随时可以重跑。
+    bool no_timeout_key = false;
     // RTCP 的发送频率（每秒几个）。默认 1 是照参考实现的口径（"One RR/s keeps it
     // alive"）。为什么要能改：如果设备那个计时器真的"收到 RTCP 就复位"，那 1/s 在
     // `--timeout 6` 下必然活过 6 秒；反过来，1/s 不够而 5/s 够，说明它要的是"在
@@ -340,6 +352,8 @@ int main(int argc, char **argv) {
             dump_status = true;
         } else if (a == "--timeout" && i + 1 < argc) {
             timeout_seconds = static_cast<uint32_t>(std::stoul(argv[++i]));
+        } else if (a == "--no-timeout-key") {
+            no_timeout_key = true;
         } else if (a == "--attempts" && i + 1 < argc) {
             attempts = std::stoi(argv[++i]);
         } else if (a == "--what" && i + 1 < argc) {
@@ -348,6 +362,12 @@ int main(int argc, char **argv) {
             verbose = true;
         }
     }
+
+    // 后面所有打印都走这两个，免得某一处还按"我们一定发了 timeout"来印数字。
+    const std::optional<uint32_t> lease =
+        no_timeout_key ? std::optional<uint32_t>{} : std::optional<uint32_t>{timeout_seconds};
+    const std::string lease_text =
+        no_timeout_key ? "不发 timeout 键" : std::to_string(timeout_seconds) + "s";
 
     // 自检：这条探针的全部结论都建立在"我发出去的包是合法的"上面，而它已经两次栽在
     // 长度字段写成 32 位上（docs §13）。所以先把三种包的字节数和头里的 length 域打出来
@@ -455,7 +475,7 @@ int main(int argc, char **argv) {
             scrctl::media::StreamSession::Request req;
             req.offer.allow_rtcp_fb = fb;
             req.offer.ltrp_enabled = ltrp;
-            req.timeout_seconds = timeout_seconds;
+            req.timeout_seconds = lease;
             auto session = scrctl::media::StreamSession::start(*dev, req, start_err, verbose);
             if (!session) {
                 std::fprintf(stderr, "[%s] 起流失败: %s\n", w.c_str(), start_err.c_str());
@@ -522,11 +542,11 @@ int main(int argc, char **argv) {
                         has_local ? std::to_string(neg_local_ssrc).c_str() : "(没有)",
                         has_remote ? std::to_string(neg_remote_ssrc).c_str() : "(没有)",
                         neg_rtcp_port, session->started().sender_port, neg_source_port);
-            std::printf("  请求 timeout=%u -> answer RTCPTimeoutInterval=%s RTCPTimeoutEnabled=%s\n",
-                        timeout_seconds,
+            std::printf("  请求 timeout=%s -> answer RTCPTimeoutInterval=%s RTCPTimeoutEnabled=%s\n",
+                        lease_text.c_str(),
                         has_interval ? std::to_string(rtcp_interval).c_str() : "(没有)",
                         rtcp_enabled == 1 ? "真" : (rtcp_enabled == 0 ? "假/没读到" : "其它"));
-            if (has_interval && rtcp_interval != timeout_seconds) {
+            if (!no_timeout_key && has_interval && rtcp_interval != timeout_seconds) {
                 std::printf("  两者不等：设备没有照抄我们报的那个数\n");
             }
             if (has_source_port && neg_source_port != session->started().sender_port) {
@@ -669,11 +689,11 @@ int main(int argc, char **argv) {
                 }
                 if (now_ms() >= next_tick) {
                     next_tick += 10000;
-                    std::printf("  +%3llus 视频包 %6llu SR 心跳 %4llu 发出 RTCP %5llu（租期 %us）\n",
+                    std::printf("  +%3llus 视频包 %6llu SR 心跳 %4llu 发出 RTCP %5llu（租期 %s）\n",
                                 static_cast<unsigned long long>((now_ms() - t0) / 1000),
                                 static_cast<unsigned long long>(video_seen),
                                 static_cast<unsigned long long>(sr_seen),
-                                static_cast<unsigned long long>(rtcp_sent), timeout_seconds);
+                                static_cast<unsigned long long>(rtcp_sent), lease_text.c_str());
                     if (dump_status) {
                         std::string qerr;
                         const auto st = scrctl::media::StreamSession::status(*dev, qerr, verbose);

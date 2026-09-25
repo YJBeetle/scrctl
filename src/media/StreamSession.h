@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -30,7 +31,25 @@ public:
         ///
         /// 之所以默认值不是抓包观测到的那个 20：那是 Apple 客户端自己报的数，不是设备的
         /// 脾气。报 20 的代价是每 20 秒换一次会话，也就是用户看到的"有时候会断"。
-        uint32_t timeout_seconds = 3600;
+        ///
+        /// **`nullopt` = 整个键都不发**。留着它不是为了用，是为了把一条测过的事实钉在
+        /// 可执行的探针上：这个键在 CoreDevice 的 feature 层是**必填**的，不发就起不了流
+        /// （`code 4865 / "Expected to find key timeout."`，两臂都撞在这上面）。
+        ///
+        /// 为什么值得去试"不发"：直接从设备侧读 Xcode DeviceHub 正在跑的那条会话
+        /// （`getmediastreamserverstatus`），它的条目里**没有 `timeout` 键**（也没有
+        /// `type`），`RTCPTimeoutInterval` 仍是 20.0，而 `status.runDurationSeconds` 一路
+        /// 爬到 158 秒、SSRC 和两端端口全程不变——它两分半没换过一次会话。当时唯一的读法
+        /// 是"报数=硬租期，不报=用设备那个能被 RTCP 复位的空闲计时器"。实测否掉了这个
+        /// 读法，留下的是更简单也更要紧的一条：**会话条目里的 `timeout`/`type` 是 feature
+        /// 层替客户端塞进去的，而 feature 层要求客户端必须给。所以 DeviceHub 那条会话不是
+        /// 从这个 feature 建的**（它走的是 `CoreDeviceMediaStreamSupport`/AVC 那一层，
+        /// 也就是 §13 里那批 `streamDidRTCPTimeOut` 符号所在的地方）。
+        ///
+        /// 这条推论的直接后果：上面"报多少就多少秒死、RTCP 复位不了"只适用于**我们这条路**
+        /// （CoreDevice feature），不适用于苹果自己那条路。别拿"DeviceHub 不断流"去反推
+        /// "所以一定有保活、是我们没找到"——两条路的租期机制不是同一个。
+        std::optional<uint32_t> timeout_seconds = 3600;
         /// 申报给设备的主机能力位掩码。观测值是 140，而设备自己回
         /// `supportedFeatures: 972`——差着的位里可能藏着更高档的编码器配置，
         /// 所以这个数要能改，别焊死在常量上。
@@ -122,7 +141,7 @@ private:
                                                      const std::string &sender_ip,
                                                      const std::vector<uint8_t> &offer_bplist,
                                                      uint32_t display_id,
-                                                     uint32_t timeout_seconds,
+                                                     std::optional<uint32_t> timeout_seconds,
                                                      uint64_t client_supported_features);
 
 }  // namespace scrctl::media

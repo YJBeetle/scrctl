@@ -591,7 +591,12 @@ SIGTERM 之后干净停流。改之前这 75 秒里会有 4 次接续（每次�
 报 3600 而不是报到顶，是因为租期越长，进程被 SIGKILL 时留在设备侧的那条僵尸会话就占住设备
 越久（一台设备一次只容一条流，Xcode 的 DeviceHub 也共用这一格）。正常退出路径我们会主动停。
 
-### 那有没有"保活"？没有——三条独立的证据
+### 那有没有"保活"？在我们这条路（CoreDevice feature）上没有——三条独立的证据
+
+> 这一节的标题原先是无条件的"没有保活"。**范围要收窄**：三条证据只覆盖
+> `com.apple.coredevice.feature.startmediastream` 这条路，而 Apple 自己的客户端不走这条路
+> （下面"那 DeviceHub 为什么不断流"一节把这件事测出来了）。结论对我们不变——我们只有
+> 这条路可走——但别拿它去解释 DeviceHub 的行为。
 
 键名叫 `RTCPTimeoutInterval`、旁边还写着 `RTCPTimeoutEnabled=true`、`RTCPSendInterval=1`，
 读起来就是一个"收到对端 RTCP 就复位"的空闲计时器。它**不是**。三条各自成立的证据：
@@ -683,6 +688,51 @@ IDR）。**为什么是 5 秒而不是我们那次接续的约 300ms**：它要�
 租期、现在跑了几秒、是哪一路"是**能在设备侧直接读到的**，不必只靠"uuid 还在不在"这一位。
 `StreamSession::status()` 已经把整棵树取回来了，将来要把接续时刻钉得更准，从这几个字段取
 比用我们自己的墙钟更贴近设备的事实。
+
+#### 那 DeviceHub 为什么不断流？——它压根不走这个 feature
+
+观测方法便宜得出奇：让 Xcode 的 DeviceHub 把镜像起起来，同时用只读 RPC
+`getmediastreamserverstatus` 每 7 秒问一次设备"你手上现在有哪些会话"。不用逆向、不用抓包、
+不用 root。（这一步是用户点的：他打开 DeviceHub 的同时我轮询。）
+
+设备回的内容，12 次抽样：
+
+- 两条会话，`TxPayloadType=101/AudioStreamMode=8` 和 `TxPayloadType=100/Framerate=60`，
+  共用同一个 `avcMediaStreamOptionClientSessionID`（音频+视频配成一条 Mirror 会话，
+  这一点 p3 也照做了）。
+- 每条的 `status.runDurationSeconds` 依次是 **84, 91, 98, 104, 111, 118, 124, 131, 138,
+  144, 151, 158**——每次 +7，和墙钟严格同步；而 `LocalSSRC`/`RemoteSSRC`/`SourcePort`/
+  `DestPort` **全程一个字节没变**。也就是它 **158 秒里一次都没换过会话**。
+- 每条的 `RTCPTimeoutInterval` 都是 **20.0**、`RTCPTimeoutEnabled=True`、
+  `RTCPSendInterval=1.0`。
+- **会话条目里没有 `timeout` 键，也没有 `type` 键。**
+- 视频那条 `IsltrpEnabled=True`、特性串 `VRAE:0;SW:1;FLS`（p3 是 LTRP 关、`FLS;SW:1`，
+  并且它注释里专门写"VRAE:0 不能进 avc 特性串"——又一处我们和苹果不一样的地方）。
+
+"它不带 `timeout` 键却活了 158 秒"和"我们带 `timeout` 就多少秒死"如果都成立，只剩一种读法：
+**报数=硬租期，不报=用设备那个能被 RTCP 复位的空闲计时器**。这个假设可以直接判——探针加
+`--no-timeout-key`，照苹果那样整个键不发。结果两臂（`none` 和 `rrsrcsd`）都被拒：
+
+```text
+com.apple.coredevice.feature.startmediastream 失败（code 4865）
+  NSDebugDescription: Expected to find key timeout.
+```
+
+**假设否掉了，但它留下的结论比原假设更要紧**：这个键在 feature 层是必填的，而设备又替
+DeviceHub 的会话补上了 `timeout`/`type` 两个键（我们发什么它就回显什么）——所以
+**DeviceHub 那条会话不是从 `com.apple.coredevice.feature.startmediastream` 建的**。它走的是
+`CoreDeviceMediaStreamSupport`/AVC 那一层，也就是本节前面那批符号
+（`streamDidRTCPTimeOut` / `streamDidRecoverFromRTCPTimeOut`）所在的地方。三条推论：
+
+1. "DeviceHub 不断流"**不能**拿来当"存在我们没找到的保活"的反证。两条路的租期机制不是
+   同一个：苹果那一路的 20 秒大概真是空闲计时器（它的接收端会发 RTCP/RCTL 去复位），
+   而我们这一路的 20 秒是 feature 层装的一条硬租期。
+2. 上面那三条"RTCP 不复位计时器"的证据仍然成立，但适用范围要写清：**CoreDevice feature
+   这条路**。产品结论不变，因为我们只有这条路可走（用户态、免 root、可跨平台）。
+3. 设计照旧：报长租期（3600）+ 提前找静止间隙接续。要问的"苹果那一路的租期到底多大、
+   到期怎么恢复"，从 feature 这条路问不到答案，要问就得去观测 AVC 那层（设备侧 pcapd 或
+   lldb 注入）——成本明显高过它现在能改变我们代码的可能性。**#18 到这就关掉**：它要的那个
+   答案已经拿到了，是"苹果根本不通过这个 feature 报 timeout"。
 
 **这批 8 秒实验里有一处没解释的现象，记下来别丢**：修好"发送节奏"之后重跑同样三臂
 （`--hz 1/10/25`），每一臂都在**起流后约 1.1 秒**就视频档和 SR 档一起停掉（344 个视频包、
