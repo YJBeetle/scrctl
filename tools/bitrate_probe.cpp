@@ -98,6 +98,46 @@ Negotiated read_answer(const scrctl::xpc::Value &answer) {
     return n;
 }
 
+/// 把一个 Value 的全部叶子按 "a.b.c = 值" 打出来。`describe()` 会截断字典条目，而找
+/// "设备给了、而我们没读"的键要的就是完整键名，所以这里自己走一遍。
+void walk(const scrctl::xpc::Value &v, const std::string &path) {
+    using scrctl::xpc::Type;
+    switch (v.type) {
+    case Type::Dict:
+        for (const auto &e : v.dict) {
+            walk(e.value, path.empty() ? e.key : path + "." + e.key);
+        }
+        return;
+    case Type::Array:
+        for (std::size_t i = 0; i < v.array.size(); ++i) {
+            walk(v.array[i], path + "[" + std::to_string(i) + "]");
+        }
+        return;
+    case Type::Bool:
+        std::printf("  %-56s = %s\n", path.c_str(), v.boolean ? "true" : "false");
+        return;
+    case Type::Int64:
+        std::printf("  %-56s = %lld\n", path.c_str(), static_cast<long long>(v.int64));
+        return;
+    case Type::UInt64:
+        std::printf("  %-56s = %llu\n", path.c_str(),
+                    static_cast<unsigned long long>(v.uint64));
+        return;
+    case Type::Double:
+        std::printf("  %-56s = %g\n", path.c_str(), v.real);
+        return;
+    case Type::String:
+        std::printf("  %-56s = \"%s\"\n", path.c_str(), v.string.c_str());
+        return;
+    default:
+        // Uuid / Data / Date / FileTransfer：只报长度和类型标记。会话号之类的标识原样
+        // 打进日志没意义，还会让"提交里有没有设备标识"这件事变复杂。
+        std::printf("  %-56s = <%zu 字节, type=0x%x>\n", path.c_str(), v.data.size(),
+                    static_cast<unsigned>(v.type));
+        return;
+    }
+}
+
 struct Measured {
     double fps = 0;
     double packets_per_s = 0;
@@ -150,6 +190,7 @@ int main(int argc, char **argv) {
     std::string avc;
     int seconds = 8;
     bool verbose = false;
+    bool dump_answer = false;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--client-features" && i + 1 < argc) {
@@ -162,6 +203,8 @@ int main(int argc, char **argv) {
             seconds = std::stoi(argv[++i]);
         } else if (a == "-v" || a == "--verbose") {
             verbose = true;
+        } else if (a == "--dump-answer") {
+            dump_answer = true;
         }
     }
 
@@ -170,6 +213,28 @@ int main(int argc, char **argv) {
     if (!dev) {
         std::fprintf(stderr, "建立会话失败: %s\n", err.c_str());
         return 1;
+    }
+    if (dump_answer) {
+        // 把 answer 原文整个交出来。只打自己预先想到的那几个键，就永远发现不了
+        // "设备其实给了一个我们没读的 RTCP 端口/开关"这类事——20 秒租期那条线索
+        // （docs §13）卡就卡在这里：Mac 侧 Apple 自己的实现里有 rtcpRemotePort /
+        // rtcpSendInterval / isRTCPEnabled 这些名字，而我们只知道
+        // RTCPTimeoutInterval 一个。
+        scrctl::media::StreamSession::Request req;
+        auto session = scrctl::media::StreamSession::start(*dev, req, err, verbose);
+        if (!session) {
+            std::fprintf(stderr, "起流失败: %s\n", err.c_str());
+            return 1;
+        }
+        std::printf("answer 原文:\n%s\n",
+                    scrctl::xpc::describe(session->started().answer).c_str());
+        // describe() 会截断字典条目，而这条探针要的恰恰是"到底有哪些条目"——所以自己
+        // 走一遍，一个键都不藏。
+        std::printf("\nanswer 全部键（展开，不截断）:\n");
+        walk(session->started().answer, "");
+        std::string serr;
+        session->stop(*dev, serr, verbose);
+        return 0;
     }
     std::printf("设备：%s / iOS %s；每档起一条流测 %d 秒\n\n",
                 dev->property("ProductType").c_str(), dev->property("OSVersion").c_str(),

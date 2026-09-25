@@ -500,9 +500,67 @@ UUID 一比就知道这条还在不在。实测静止主屏上它会从"在"变�
 | 每 2 秒 / 每 5 秒查一次会话表 | 静止 | 无（只是查状态） | 20.0s |
 
 **所以：喂画面不续命，回 RTCP 也不续命，查状态也不续命。** 数字正好等于协商参数里的
-`RTCPTimeoutInterval: 20`，因此它大概率仍是"没收到接收端被认可的 RTCP"的超时，只是
-我们还不知道它认哪一种（下一步该试的方向：接收端 SSRC 是否要在协商时就申报，以及
-`MediaOffer` 里那几个语义未明的 protobuf 字段 f7/f8/f10/f12）。
+`RTCPTimeoutInterval: 20`，因此它大概率仍是"没收到接收端被认可的 RTCP"的超时，只是我们
+还不知道它认哪一种。
+
+### answer 里到底写了什么（`bitrate_probe --dump-answer`）
+
+只打自己预先想到的那几个键，就永远发现不了"设备其实给了一个我们没读的键"。把 answer 的
+`connection.streamConfig` 一个不落地展开之后，RTCP 这件事的完整合同是：
+
+```text
+RTCPEnabled            = true        RTCPTimeoutEnabled       = true
+RTCPTimeoutInterval    = 20          RTCPSendInterval         = 1
+RTCPRemotePort         = <我们的收流端口>      DestPort = 同一个数
+LocalSSRC              = <设备自己那条流的 SSRC>   RemoteSSRC = <设备给我们这端分配的>
+SourcePort             = <设备的发送端口>          SourceIP / DestIp（隧道内 v6）
+RTPTimeoutEnabled      = false       RTPTimeoutInterval       = 0
+SRTPCipherSuite        = 0（不加密） SRTCPCipherSuite         = 0
+KeyFrameInterval       = 0           RateAdaptationEnabled    = true
+TXMaxBitrate           = 6000000     TXMinBitrate             = 333000
+CustomWidth/Height     = 1136/2448   Framerate                = 60
+TxCodecFeatureListString = "FLS;SW:1" ...
+connection.timeout     = 20
+```
+
+**`LocalSSRC` / `RemoteSSRC` 这两个名字是从设备的视角起的**，这一点是探针一比就露出来的：
+RTP 头里设备自己那个 SSRC 等于 answer 的 `LocalSSRC`，所以 `RemoteSSRC` 才是"设备替我们
+编好的发送者 SSRC"。以前所有 RTCP 实验都在自己编 SSRC（`0x35c0ffee`）或者拿设备那个当
+发送者，也就是说**从来没有填对过发送者**。
+
+### 把发送者填对之后仍然续不上命
+
+`tools/rr_keepalive_probe` 加了按 answer 分配的 SSRC 来发的三臂，每臂 30 秒观察窗：
+
+| 臂 | 发送者 SSRC | 报告块指认 | 包型 | 目的端口 | 结果 |
+| --- | --- | --- | --- | --- | --- |
+| none | — | — | — | — | 20.0s 死 |
+| rrmine | answer 的 `RemoteSSRC`（=设备给我们分配的） | `LocalSSRC` | RR | 设备发送端口 | 20.0s 死 |
+| rrminep1 | 同上 | 同上 | RR | 发送端口 +1 | 20.0s 死 |
+| rrminesr | 同上 | 同上 | SR(RC=0) | 设备发送端口 | 20.0s 死 |
+| rrneg / rrnegp1 / rrnegsr | `LocalSSRC`（填错人的那一版，留着当对照） | `RemoteSSRC` | RR / SR | 两种端口 | 20.0s 死 |
+
+连同前面那五种写法，现在排除掉的是：**自己编的 SSRC、设备的 SSRC、设备分配给我们的那个
+SSRC × {RR, RR+SDES(CNAME), SR} × {媒体端口, 端口+1} × {复合, 拆开}，外加查状态、喂画面**。
+
+### 为什么仍然认为"存在一种能续命的写法"
+
+Mac 侧承载这条流的框架里，Apple 自己的接收端实现是**双向**计时器：
+`/Library/Developer/PrivateFrameworks/CoreDevice.framework/.../CoreDeviceMediaStreamSupport`
+里能读到这些名字——
+
+```text
+isRTCPEnabled  isRTCPTimeOutEnabled  isRTPTimeOutEnabled
+rtcpRemotePort  rtcpSendInterval  rtcpTimeOutInterval  rtpTimeOutInterval
+stream:didReceiveRTCPPackets:  streamDidRTCPTimeOut  streamDidRecoverFromRTCPTimeOut
+"Got event: %%. Stream hit RTCP timeout. Treating as an error."
+底层是 AVConference.framework 的 AVCMediaStreamConfig / AVCMediaStreamNegotiator
+```
+
+也就是说"20 秒没收到对端 RTCP"在 Apple 的实现里是一个**会触发错误、并且能恢复**的事件，
+而不是一堵墙。它的客户端不断流，只能是它发了我们没发对的东西。剩下的候选方向：
+`TxCodecFeatureListString`（`"FLS;SW:1"`）里那位 `allowRTCPFB` 之类的能力位、`MediaOffer`
+protobuf 里语义未明的 f7/f8/f10/f12，以及"RTCP 是否要在协商时申报接收端 SSRC"。
 
 **顺带记一个工具级的教训：`lifetime_probe` 之前把 `next_press`/`next_second` 初始化成
 了绝对时刻（`t0 + 1000`），而比较用的是相对秒表 `t = now_ms() - t0`，于是 `t >= 那个
@@ -585,7 +643,8 @@ SSRC 那条尤其要看：它排除了"第二条只是把同一条流镜像了�
 NACK 16 字节 `81cd0003`+PID/BLP、RR 32 字节 `81c90007`+20 字节报告块；SSRC 用媒体
 SSRC，目的端口用设备的发送端口），真静止画面上 6 秒观察窗里**四种全是 0 个视频包、
 0 个 IRAP**。加上早先"RR 发到视频端口会让投递几乎停"的观测，结论是：
-**这条流没有可用的 RTCP 通道**，那 20 秒的租期拦不住，只能"在到点之前挑个静止间隙自己
+**这条流上没有能用的"请设备给一帧"的 RTCP 通道**（注意这只说**请求**；"我们发出去的 RTCP
+能不能给自己续命"是另一个问题，测法与结果见上面两节），那 20 秒的租期拦不住，只能"在到点之前挑个静止间隙自己
 接续 + 用户一动就立刻催一次"。
 
 **重起本身很便宜，贵的是"发现"。** `tools/restart_gap_probe` 量了三种情形各 3 次：

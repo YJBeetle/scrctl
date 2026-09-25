@@ -86,6 +86,44 @@ bool is_rtcp_sr(std::span<const uint8_t> p) {
     return p.size() >= 28 && p[0] == 0x81 && p[1] == 0xc8;
 }
 
+/// SR（RFC 3550 §6.4.1）：RC=0 的那一档，28 字节。为什么也要试它——设备在 answer 里
+/// 给我们分配了一个 `LocalSSRC`，也就是说它心里有一个"发送方=你"的位置；某些实现只认
+/// 发送者报告（它按 SSRC 配对，收到一个从没收过包的源发来的 RR 会被当成对不上号）。
+std::vector<uint8_t> build_sr(uint32_t our_ssrc, uint32_t packets, uint32_t octets) {
+    std::vector<uint8_t> v;
+    v.push_back(0x80);  // V=2, RC=0
+    v.push_back(200);   // PT = SR
+    put32(v, 6);        // 头之后还有 6 个字
+    put32(v, our_ssrc);
+    put32(v, 0);        // NTP 时间戳高位：不假装算过
+    put32(v, 0);        // NTP 低位
+    put32(v, 0);        // RTP 时间戳
+    put32(v, packets);
+    put32(v, octets);
+    return v;
+}
+
+/// 从 answer 的 `connection.streamConfig` 里取一个数。取不到返回 false。
+bool stream_config_u32(const scrctl::xpc::Value &answer, const char *key, uint32_t &out) {
+    const auto *conn = answer.find("connection");
+    const auto *cfg = conn != nullptr ? conn->find("streamConfig") : nullptr;
+    const auto *wrapped = cfg != nullptr ? cfg->find(key) : nullptr;
+    if (wrapped == nullptr) {
+        return false;
+    }
+    const auto *inner = wrapped->find("int");
+    const scrctl::xpc::Value &v = inner != nullptr ? *inner : *wrapped;
+    if (v.type == scrctl::xpc::Type::Int64) {
+        out = static_cast<uint32_t>(v.int64);
+        return true;
+    }
+    if (v.type == scrctl::xpc::Type::UInt64) {
+        out = static_cast<uint32_t>(v.uint64);
+        return true;
+    }
+    return false;
+}
+
 /// SDES（PT=202）带一个 CNAME。设备的 SR 就是 SR+SDES 的复合包，所以它大概也要求
 /// 我们回的是复合包——单独的 RR 可能被当成"不是合法复合包"而丢掉。
 std::vector<uint8_t> build_sdes(uint32_t our_ssrc, std::string_view cname) {
@@ -140,7 +178,7 @@ int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     int seconds = 30;
     int attempts = 2;
-    std::string what = "none,rrsame,rrsdes,rrp1,rrall";
+    std::string what = "none,rrmine,rrminep1,rrminesr";
     bool verbose = false;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -189,10 +227,25 @@ int main(int argc, char **argv) {
             //   rrsdes  RR + SDES(CNAME) 复合包（设备的 SR 就是 SR+SDES 复合来的）
             //   rrp1    裸 RR 发到 媒体端口+1（RFC 3550 的 RTCP 端口惯例）
             //   rrall   复合包 + 媒体 SSRC + 端口+1，全都给
+            //   rrneg   发送者 SSRC = answer 的 `LocalSSRC`，报告块 = `RemoteSSRC`
+            //   rrnegp1 rrneg 但发到 媒体端口+1
+            //   rrnegsr rrneg 但发 SR 而不是 RR
+            //   rrmine  **反过来**：发送者 = `RemoteSSRC`，报告块 = `LocalSSRC`
+            //   rrminep1/rrminesr 同上两件事的端口/SR 变体
+            //
+            // rrmine 这一组才是本轮的重点。上一轮跑出来才发现 answer 里的 `LocalSSRC`
+            // 就是 RTP 头里设备自己那个 SSRC（探针把报告块与实际包头一比就露馅了），也就
+            // 是说这两个名字是**从设备的视角**起的：Local = 设备自己发的那条流，Remote =
+            // 设备给我们这一端分配的 SSRC。那么"RTCP 发送者该填谁"根本不是我们能编的——
+            // 它已经替我们编好了。前面所有臂（包括 rrneg）都填错了人。
             const bool send_rr = w.rfind("rr", 0) == 0;
             const bool sdes = w == "rrsdes" || w == "rrall";
             const bool same_ssrc = w == "rrsame" || w == "rrall";
-            const bool port_plus_one = w == "rrp1" || w == "rrall";
+            const bool neg_ssrc = w == "rrneg" || w == "rrnegp1" || w == "rrnegsr";
+            const bool mine_ssrc = w == "rrmine" || w == "rrminep1" || w == "rrminesr";
+            const bool send_sr = w == "rrnegsr" || w == "rrminesr";
+            const bool port_plus_one =
+                w == "rrp1" || w == "rrall" || w == "rrnegp1" || w == "rrminep1";
             std::string start_err;
             scrctl::media::StreamSession::Request req;
             auto session = scrctl::media::StreamSession::start(*dev, req, start_err, verbose);
@@ -210,6 +263,7 @@ int main(int argc, char **argv) {
             std::vector<uint8_t> packet;
             uint16_t peer = 0;
             uint32_t media_ssrc = 0;
+            bool ssrc_role_printed = false;
             uint16_t highest_seq = 0;
             uint64_t last_video = 0;
             uint64_t next_rr = t0;
@@ -217,6 +271,19 @@ int main(int argc, char **argv) {
             // 我们自己的 SSRC：不能拿设备那个当发送者，否则设备按 SSRC 配对时会认为
             // 这是它自己的报告而丢掉（也可能更糟：把两条流的报告当成同一条）。
             const uint32_t our_ssrc = 0x35c0ffeeu;
+            // 设备在 answer 里**已经给我们分配过一个 SSRC**（`LocalSSRC`），并且写明了
+            // 它那条流的 `RemoteSSRC`。上面那句注释的推理没错，但结论应该是"用设备分配的
+            // 那个"，而不是"自己编一个"。这两个数是 `bitrate_probe --dump-answer` 露出来的。
+            uint32_t neg_local_ssrc = 0, neg_remote_ssrc = 0, neg_rtcp_port = 0;
+            const bool has_local =
+                stream_config_u32(session->started().answer, "LocalSSRC", neg_local_ssrc);
+            const bool has_remote =
+                stream_config_u32(session->started().answer, "RemoteSSRC", neg_remote_ssrc);
+            stream_config_u32(session->started().answer, "RTCPRemotePort", neg_rtcp_port);
+            std::printf("  answer: LocalSSRC=%s RemoteSSRC=%s RTCPRemotePort=%u 设备发送端口=%u\n",
+                        has_local ? std::to_string(neg_local_ssrc).c_str() : "(没有)",
+                        has_remote ? std::to_string(neg_remote_ssrc).c_str() : "(没有)",
+                        neg_rtcp_port, session->started().sender_port);
 
             const uint64_t until = t0 + static_cast<uint64_t>(seconds) * 1000;
             while (now_ms() < until) {
@@ -240,14 +307,44 @@ int main(int argc, char **argv) {
                 if (send_rr && media_ssrc != 0 && now_ms() >= next_rr) {
                     next_rr += 1000;
                     std::string serr;
-                    auto rr = build_rr(same_ssrc ? media_ssrc : our_ssrc, media_ssrc,
-                                       highest_seq);
-                    if (sdes) {
-                        const auto sd = build_sdes(same_ssrc ? media_ssrc : our_ssrc, "scr1");
-                        rr.insert(rr.end(), sd.begin(), sd.end());
+                    // 发送者 SSRC：
+                    //   mine 臂用 answer 的 `RemoteSSRC`（设备给我们这端分配的）
+                    //   neg  臂用 `LocalSSRC`（上一轮证明那其实是设备自己的流，所以这臂
+                    //          是"填错人"的那一版，留着当对照）
+                    //   same 臂故意用设备的媒体 SSRC；其余用自己编的
+                    const uint32_t sender_ssrc =
+                        mine_ssrc && has_remote ? neg_remote_ssrc
+                        : neg_ssrc && has_local ? neg_local_ssrc
+                        : same_ssrc             ? media_ssrc
+                                                : our_ssrc;
+                    // 报告块里指认的流：mine 臂指设备自己那条流（`LocalSSRC`），其余指实际
+                    // 收到的 RTP 头里那个。
+                    const uint32_t report_ssrc =
+                        mine_ssrc && has_local ? neg_local_ssrc
+                        : neg_ssrc && has_remote ? neg_remote_ssrc
+                                                 : media_ssrc;
+                    std::vector<uint8_t> rr;
+                    if (send_sr) {
+                        rr = build_sr(sender_ssrc, 0, 0);  // 我们一个 RTP 都没发，如实报 0
+                    } else {
+                        rr = build_rr(sender_ssrc, report_ssrc, highest_seq);
+                        if (sdes) {
+                            const auto sd = build_sdes(sender_ssrc, "scr1");
+                            rr.insert(rr.end(), sd.begin(), sd.end());
+                        }
                     }
-                    const uint16_t to_port = session->started().sender_port +
-                        (port_plus_one ? 1 : 0);
+                    // 命名口径的证据就打在第一次发包时：设备的 RTP 头 SSRC 到底等于
+                    // answer 里的哪一个。这一行决定了上面两种填法哪个才是"填对自己"。
+                    if (!ssrc_role_printed) {
+                        ssrc_role_printed = true;
+                        std::printf("  RTP 头里的 SSRC %u == answer 的 %s（%s）\n", media_ssrc,
+                                    media_ssrc == neg_local_ssrc ? "LocalSSRC" : "RemoteSSRC",
+                                    media_ssrc == neg_local_ssrc ? "所以 Local 是设备自己那条流"
+                                                                 : "所以 Remote 是设备自己那条流");
+                    }
+                    const uint16_t to_port =
+                        static_cast<uint16_t>(session->started().sender_port +
+                                              (port_plus_one ? 1 : 0));
                     if (!session->send_rtp(rr, to_port, serr)) {
                         arm.note = "RTCP 发送失败: " + serr;
                     }
