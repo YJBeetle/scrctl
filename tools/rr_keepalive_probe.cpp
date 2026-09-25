@@ -38,6 +38,7 @@
 #include <cstdio>
 #include <map>
 #include <optional>
+#include <random>
 #include <set>
 #include <span>
 #include <string>
@@ -157,6 +158,18 @@ bool stream_config_u32(const scrctl::xpc::Value &answer, const char *key, uint32
     default:
         return false;
     }
+}
+
+/// 同上，取字符串项（`TxCodecFeatureListString` 这种）。
+bool stream_config_str(const scrctl::xpc::Value &answer, const char *key, std::string &out) {
+    const auto *conn = answer.find("connection");
+    const auto *cfg = conn != nullptr ? conn->find("streamConfig") : nullptr;
+    const auto *v = cfg != nullptr ? cfg->find(key) : nullptr;
+    if (v == nullptr || v->type != scrctl::xpc::Type::String) {
+        return false;
+    }
+    out = v->string;
+    return true;
 }
 
 /// SDES（PT=202）带一个**实义 CNAME**。留着是为了把"空 CNAME 才有效"这个假设也测一遍
@@ -310,6 +323,48 @@ void print_arm(const Arm &a, uint64_t t0) {
 
 }  // namespace
 
+/// 把设备会话表里每一条的**身份**打出来：是我们的还是别人的。
+///
+/// 为什么非要有这一段：一台设备只容一条媒体流，而"会话没了"有两种完全不同的原因——
+/// 租期到点被设备摘掉，和**别的客户端（Xcode DeviceHub、另一个探针）发了它自己的
+/// startmediastream 把我们的顶掉**。只看"我们收不到包了"这两种一模一样，而它们的结论
+/// 完全相反：前者说明租期模型成立，后者说明这一轮数据根本不作数。
+///
+/// 身份怎么认：设备会把客户端请求里的键回显到会话条目上，所以
+/// `type` / `timeout` 在不在、PT 是 100 还是 101、`clientSessionID` 等不等我们的，
+/// 三条一起看就能认出这条是谁建的。
+void dump_sessions(scrctl::remote::Device &dev, const std::vector<uint8_t> &our_uuid,
+                   const char *tag) {
+    std::string qerr;
+    const auto st = scrctl::media::StreamSession::status(dev, qerr, false);
+    const auto *ss = st.find("sessions");
+    const std::size_t n = ss == nullptr ? 0 : ss->array.size();
+    std::printf("  [%s] 设备表里 %zu 条会话\n", tag, n);
+    if (ss == nullptr) {
+        return;
+    }
+    for (std::size_t i = 0; i < ss->array.size(); ++i) {
+        const auto &s = ss->array[i];
+        const auto *conn = s.find("connection");
+        const auto *cfg = conn == nullptr ? nullptr : conn->find("streamConfig");
+        const auto *pt = cfg == nullptr ? nullptr : cfg->find("TxPayloadType");
+        const auto *type = s.find("type");
+        const auto *timeout = s.find("timeout");
+        const auto *opt = conn == nullptr ? nullptr : conn->find("options");
+        const auto *sid = opt == nullptr ? nullptr : opt->find("avcMediaStreamOptionClientSessionID");
+        const auto *u = sid == nullptr ? nullptr : sid->find("uuid");
+        const bool mine = u != nullptr && u->data == our_uuid;
+        const auto *stat = s.find("status");
+        const auto *run = stat == nullptr ? nullptr : stat->find("runDurationSeconds");
+        std::printf("    [%zu] %s PT=%llu type=%s timeout键=%s 活了=%llus\n", i,
+                    mine ? "我们的" : "别人的",
+                    pt == nullptr ? 0ULL : static_cast<unsigned long long>(pt->uint64),
+                    type == nullptr ? "(没有→不是这个 feature 建的)" : type->string.c_str(),
+                    timeout == nullptr ? "无" : "有",
+                    run == nullptr ? 0ULL : static_cast<unsigned long long>(run->uint64));
+    }
+}
+
 int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     int seconds = 30;
@@ -333,6 +388,15 @@ int main(int argc, char **argv) {
     // 所以 DeviceHub 那条会话根本不是从这个 feature 建的，它的"不断流"不能拿来当
     // "存在我们没找到的保活"的证据。这一臂留着，是为了让这条推理链随时可以重跑。
     bool no_timeout_key = false;
+    // 在请求里带上 `sessionEventChannel`（一个 XPC UUID）。这是抓包对齐出来的、我们和
+    // Xcode DeviceHub 的请求之间唯一差的一个键——苹果的 `timeout` 也是 20，却活了 715 秒。
+    // 这一臂就是判"是不是这个键让租期失效"。
+    bool event_channel = false;
+    // AVC 那条形串。抓包对齐到的最后一处可见差别：苹果发 `FLS;VRAE:0;SW:1;`，我们和 p3
+    // 都发 `FLS;SW:1;`（p3 还专门注释说 VRAE:0 不能进）。设备会把它回显成
+    // `TxCodecFeatureListString`，所以这条改动是可以在 answer 里验证"它收没收下"的——
+    // 不然"发了个被设备默默丢掉的字符串"和"这个字符串真的进了协商"就分不清了。
+    std::string avc_features = "FLS;SW:1;";
     // RTCP 的发送频率（每秒几个）。默认 1 是照参考实现的口径（"One RR/s keeps it
     // alive"）。为什么要能改：如果设备那个计时器真的"收到 RTCP 就复位"，那 1/s 在
     // `--timeout 6` 下必然活过 6 秒；反过来，1/s 不够而 5/s 够，说明它要的是"在
@@ -354,6 +418,10 @@ int main(int argc, char **argv) {
             timeout_seconds = static_cast<uint32_t>(std::stoul(argv[++i]));
         } else if (a == "--no-timeout-key") {
             no_timeout_key = true;
+        } else if (a == "--event-channel") {
+            event_channel = true;
+        } else if (a == "--avc-features" && i + 1 < argc) {
+            avc_features = argv[++i];
         } else if (a == "--attempts" && i + 1 < argc) {
             attempts = std::stoi(argv[++i]);
         } else if (a == "--what" && i + 1 < argc) {
@@ -368,6 +436,26 @@ int main(int argc, char **argv) {
         no_timeout_key ? std::optional<uint32_t>{} : std::optional<uint32_t>{timeout_seconds};
     const std::string lease_text =
         no_timeout_key ? "不发 timeout 键" : std::to_string(timeout_seconds) + "s";
+
+    // 事件通道号：现编一个 v4 UUID 带上。为什么要自己填版本/变体位：设备侧是 Swift
+    // Codable 的 UUID，形状不对时它会用一句很干脆的拒绝把整条请求挡掉（我们已经在
+    // `avcMediaStreamOptionClientSessionID` 上撞过一次 "Expected to decode UUID but
+    // found a OS_xpc_string instead"），别把那种拒绝误读成"这个键不被接受"。
+    std::optional<std::vector<uint8_t>> event_channel_uuid;
+    if (event_channel) {
+        std::vector<uint8_t> u(16);
+        std::random_device rd;
+        for (auto &b : u) b = static_cast<uint8_t>(rd());
+        u[6] = static_cast<uint8_t>((u[6] & 0x0f) | 0x40);
+        u[8] = static_cast<uint8_t>((u[8] & 0x3f) | 0x80);
+        char hex[37];
+        std::snprintf(hex, sizeof(hex),
+                      "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+                      u[0], u[1], u[2], u[3], u[4], u[5], u[6], u[7], u[8], u[9], u[10], u[11],
+                      u[12], u[13], u[14], u[15]);
+        std::printf("带 sessionEventChannel = %s\n", hex);
+        event_channel_uuid = u;
+    }
 
     // 自检：这条探针的全部结论都建立在"我发出去的包是合法的"上面，而它已经两次栽在
     // 长度字段写成 32 位上（docs §13）。所以先把三种包的字节数和头里的 length 域打出来
@@ -475,7 +563,9 @@ int main(int argc, char **argv) {
             scrctl::media::StreamSession::Request req;
             req.offer.allow_rtcp_fb = fb;
             req.offer.ltrp_enabled = ltrp;
+            req.offer.avc_features = avc_features;
             req.timeout_seconds = lease;
+            req.session_event_channel = event_channel_uuid;
             auto session = scrctl::media::StreamSession::start(*dev, req, start_err, verbose);
             if (!session) {
                 std::fprintf(stderr, "[%s] 起流失败: %s\n", w.c_str(), start_err.c_str());
@@ -551,6 +641,13 @@ int main(int argc, char **argv) {
             }
             if (has_source_port && neg_source_port != session->started().sender_port) {
                 std::printf("  两个端口不同：rrsrc* 那几臂发到 streamConfig.SourcePort\n");
+            }
+            // 我们发出去的特性串到底进没进协商，看设备回显的那一条。没有这一行的话，
+            // "设备收下了 VRAE:0"和"设备把它丢了"在结果上完全一样。
+            std::string echoed;
+            if (stream_config_str(session->started().answer, "TxCodecFeatureListString", echoed)) {
+                std::printf("  我们发 %s -> 设备回显 TxCodecFeatureListString=%s\n",
+                            avc_features.c_str(), echoed.c_str());
             }
 
             const uint64_t until = t0 + static_cast<uint64_t>(seconds) * 1000;
@@ -730,6 +827,10 @@ int main(int argc, char **argv) {
                     }
                 }
             }
+            // 收不到包的那一刻就先看表，不要等到最后。这一条是给"到底是到点死还是被顶掉"
+            // 留的证据——那一轮里 +16.99s 的死法和 20 秒租期对不上，事后才发现后台开着
+            // DeviceHub，而当时的输出没有任何一位能证明不是被抢的。
+            dump_sessions(*dev, session->started().session_uuid, "刚停");
             if (dump_status) {
                 std::printf("  观察窗结束时的设备状态原文：\n");
                 std::string qerr;

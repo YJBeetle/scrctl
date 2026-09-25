@@ -42,7 +42,8 @@ xpc::Value build_start_request(const std::string &receiver_ip, uint16_t receiver
                                const std::string &sender_ip,
                                const std::vector<uint8_t> &offer_bplist, uint32_t display_id,
                                std::optional<uint32_t> timeout_seconds,
-                               uint64_t client_supported_features) {
+                               uint64_t client_supported_features,
+                               const std::vector<uint8_t> &event_channel_uuid) {
     auto d = xpc::make_dict();
     xpc::dict_set(d, "clientSupportedFeatures", xpc::make_uint64(client_supported_features));
     xpc::dict_set(d, "direction", xpc::make_string("output"));
@@ -77,6 +78,11 @@ xpc::Value build_start_request(const std::string &receiver_ip, uint16_t receiver
         xpc::dict_set(d, "timeout", xpc::make_uint64(*timeout_seconds));
     }
     xpc::dict_set(d, "type", xpc::make_string("video"));
+    // 苹果有、我们没有的唯一一个键（抓包对齐出来的）。空 vector = 不发。
+    if (!event_channel_uuid.empty()) {
+        xpc::dict_set(d, "sessionEventChannel",
+                      xpc::make_uuid(std::span<const uint8_t>(event_channel_uuid)));
+    }
     return d;
 }
 
@@ -104,10 +110,12 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
     const auto blob = build_negotiator_offer(offer);
 
     const auto &tunnel_params = device.tunnel_params();
+    const std::vector<uint8_t> event_channel =
+        request.session_event_channel.value_or(std::vector<uint8_t>{});
     auto input = build_start_request(tunnel_params.client_address, port,
                                      tunnel_params.server_address, blob, request.display_id,
                                      request.timeout_seconds,
-                                     request.client_supported_features);
+                                     request.client_supported_features, event_channel);
     xpc::Value output;
     if (!device.feature("com.apple.coredevice.displayservice",
                         "com.apple.coredevice.feature.startmediastream",

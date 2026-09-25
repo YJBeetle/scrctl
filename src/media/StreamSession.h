@@ -50,6 +50,18 @@ public:
         /// （CoreDevice feature），不适用于苹果自己那条路。别拿"DeviceHub 不断流"去反推
         /// "所以一定有保活、是我们没找到"——两条路的租期机制不是同一个。
         std::optional<uint32_t> timeout_seconds = 3600;
+        /// 发往设备的 `sessionEventChannel` 键：**一个 XPC UUID**，不是端点句柄。
+        ///
+        /// 这是从设备侧抓包（utun7 上隧道已解封装，请求原文是明文）里挖出来的**我们和
+        /// Xcode DeviceHub 之间唯一差的那个键**：苹果的 `startmediastream` 请求里
+        /// `timeout` 也是 20（`0x14`）、`type` 也是 audio/video，键集合和我们一样，
+        /// 只多了这个。而它的会话在 `RTCPTimeoutInterval=20` 下活了 715 秒没换过。
+        ///
+        /// 所以这一位是"为什么苹果不断流"的头号嫌疑：设备可能把"带事件通道的会话"按
+        /// 另一种方式处置（Mac 侧对应符号是 `streamDidRTCPTimeOut` /
+        /// `streamDidRecoverFromRTCPTimeOut`——到期是**发事件**而不是直接摘会话）。
+        /// 注意 UUID 在整份抓包里只出现在请求中，客户端没有第二条连接去登记它。
+        std::optional<std::vector<uint8_t>> session_event_channel;
         /// 申报给设备的主机能力位掩码。观测值是 140，而设备自己回
         /// `supportedFeatures: 972`——差着的位里可能藏着更高档的编码器配置，
         /// 所以这个数要能改，别焊死在常量上。
@@ -142,6 +154,7 @@ private:
                                                      const std::vector<uint8_t> &offer_bplist,
                                                      uint32_t display_id,
                                                      std::optional<uint32_t> timeout_seconds,
-                                                     uint64_t client_supported_features);
+                                                     uint64_t client_supported_features,
+                                                     const std::vector<uint8_t> &event_channel_uuid);
 
 }  // namespace scrctl::media
