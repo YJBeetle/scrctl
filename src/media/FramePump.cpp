@@ -30,32 +30,39 @@ constexpr int kMaxOversizedRestarts = 3;
 /// 到顶之后的重试间隔。不是彻底停手：用户把画面弄简单了（关掉看板、回到主屏）之后
 /// 这条流还得能自己活回来，所以偶尔还得试一次。解出一帧之后计数清零，回到正常节奏。
 constexpr uint64_t kOversizedRetryMs = 60000;
-/// 一条媒体会话的**租期**：实测设备在起流后约 20 秒整把它结束掉，而且这件事和画面
-/// 有没有在变、我们回不回 RTCP 都无关（`tools/lifetime_probe --feed-until 25` 全程喂
-/// 画面变化，1465 个视频包、最后一个在死前 58ms，会话仍在 20.05 秒消失；
-/// `tools/rr_keepalive_probe` 五种 RTCP 写法——裸 RR、发送者 SSRC 用设备的、加
-/// SDES(CNAME) 复合、发到端口+1、全都叠上——每一臂都是 20.0 秒整）。
-/// 数字正好等于协商参数里的 `RTCPTimeoutInterval: 20`，所以它大概率就是"没收到接收端
-/// 认可的 RTCP"的超时，只是我们还不知道它认哪一种。
+/// 一条媒体会话的租期有多长。**这个数是我们自己在 startmediastream 请求里报的**（那个
+/// 键就叫 `timeout`），设备把它原样抄进 answer 的 `RTCPTimeoutInterval`，然后从起流那一
+/// 刻开始倒数，到点就把这条会话从设备表里摘掉。
 ///
-/// 既然续不上，就**别去续**：在它到点之前自己重起。留 2 秒余量是给 RPC 抖动的
-/// （停+起实测 37~90ms，但两条 RPC 偶尔慢到近一秒）。主动重起的代价是换会话那约
-/// 300ms 里没有新帧，而被动等死的代价是 1.2 秒起步的盲区外加"交回一张旧画面"——
-/// 每 20 秒都会来一次，就是用户说的"有时候会断"。
+/// 为什么是 3600 而不是报到顶（实测报到 4294967295 设备也照收）：租期越长，**进程被
+/// SIGKILL 或崩掉时**留在设备侧的那条僵尸会话就占住设备越久——一台设备一次只容一条流，
+/// Xcode 的 DeviceHub 也共用这一格。正常退出路径（`~FramePump` 与 SIGINT/SIGTERM）我们会
+/// 主动把会话停掉，所以这个数就是"镜像一小时之内不用付接续的钱"和"最坏情况占住设备一小
+/// 时"之间的折中。
 ///
-/// 这 300ms 躲不掉（`tools/two_session_probe`：第二次 startmediastream 会把第一条
-/// 会话直接从设备表里顶掉，两条不能并存，所以"先起新的、拿到 IDR 再切"这种无缝交接
-/// 不成立），但**时刻可以挑**：租期强制我们每 20 秒付一次这笔钱，而付在静止画面上
-/// 是免费的——显示的那一帧本来就停在那里，新会话回来的第一帧跟它一模一样。所以到点
-/// 之后不急着重起，先在剩下的余量里等一个"画面静止"的间隙。
-constexpr uint64_t kSessionLeaseMs = 18000;
-/// 接续这一刻起流、到拿到新 IDR 为止的耗时（`tools/two_session_probe` 实测：起流
-/// RPC 84ms，RPC 返回后 100ms 收到第一个视频包，306ms 收到第一个 IDR）。硬截止要
-/// 在它之后、设备的 20.0 秒之前落下来。
-constexpr uint64_t kSessionLeaseHardMs = 19400;
-/// 等不到静止间隙也得分手了。过了设备的 20 秒这条会话必然已经不在，这时候再去问一句
-/// 设备"它还活着吗"（100~300ms）纯属白等——直接重起更快，也更准。
-constexpr uint64_t kSessionLeaseDeadMs = 20000;
+/// 这一行同时推翻了过去一整节的结论形态。此前这里的注释写着"实测设备在起流后约 20 秒整
+/// 把它结束掉，而且和画面有没有在变、我们回不回 RTCP 都无关"——那句话**观测上全对**，错在
+/// 把它读成"设备有一条 20 秒的硬租期"，于是所有力气都花在"找出它认哪一种 RTCP"上：裸 RR、
+/// RR+SDES、SR、发到端口+1、按 answer 分配的 SSRC 填发送者、以及 Apple 自己那两种 PT=204
+/// 的 AVConference 反馈包（RCTL 20/s + 每帧一个），每一臂都在 20.0 秒整死。那个 20 就是我
+/// 们自己请求里写的 20（照抄抓包观测值来的，从没动过）。改这一个整数，死亡时刻就跟着走
+/// （`tools/rr_keepalive_probe --timeout N --what none`，什么都不回）：
+///
+/// | 请求 `timeout` | answer `RTCPTimeoutInterval` | 结果 |
+/// | --- | --- | --- |
+/// | 6 | 6 | 最后一个包在 +5.99s |
+/// | 20（旧默认） | 20 | +19.99s~+20.05s，前后二十多臂全落在这 |
+/// | 30 | 30 | +30.00s |
+/// | 3600 | 3600 | 150 秒观察窗跑满（53520 个视频包、150 个 SR 心跳），会话表里还在 |
+/// | 4294967295 | 4294967295 | 40 秒窗跑满，会话表里还在 |
+constexpr uint32_t kSessionLeaseSeconds = 3600;
+constexpr uint64_t kSessionLeaseMs = static_cast<uint64_t>(kSessionLeaseSeconds) * 1000;
+/// 到点之前主动接续一次（"换会话"约 300ms 没有新帧）要提前多少开始找静止的间隙，以及
+/// 等不到间隙时的硬截止余量。旧值是一串按 20 秒租期手算的数（18000 / 19400 / 20000）；
+/// 租期变成一小时之后改成按**固定余量**留，理由：接续从"每 20 秒一次"变成"连续镜像一小时
+/// 才一次"，按比例留 10%（6 分钟）纯属铺张，而两条 RPC 的抖动量级并没有跟着租期变长。
+constexpr uint64_t kRenewLeadMs = 120000;
+constexpr uint64_t kRenewHardLeadMs = 30000;
 /// 接续之前要等的那段"画面静止"有多久才算数。设备在静止画面上一个视频包都不发（只有
 /// 每秒那个 SR），所以 1 秒没有视频包就意味着屏幕上这一帧已经是最终的那一张。
 /// 注意量的是**视频包**不是"任何数据报"：后者被 SR 心跳喂着，静止画面上它永远不超过
@@ -65,11 +72,11 @@ constexpr uint64_t kRenewQuietMs = 1000;
 /// 其实已经死了 1.3 秒，任何大于 1.3 秒的阈值都会漏）。所以催流那条路在可疑区间
 /// 必须去问设备，而不是把阈值调大——调大只会把盲区推到别处。
 ///
-/// 也别把它调回 7.5 秒：那个数来自"最后一个视频包之后 6.9 秒拆流"，而 6.9 秒后来
-/// 被证明是一个样本读出来的假象（会话其实是起流后 20 秒的硬租期，见 kSessionLeaseMs）。
-/// 退一步说，就算它是对的，拿"视频包静默"当"数据报静默"的阈值也是把两把不同的尺当成
-/// 一把：中间隔着设备那每秒一个的 SR，结果是拆完之后有好几秒我们以为流还活着——用户
-/// 的手感就是"点了没反应，愣一下画面才跳"。
+/// 也别把它调回 7.5 秒：那个数来自"最后一个视频包之后 6.9 秒拆流"，而 6.9 秒是拿一个
+/// 样本读出来的假象（那次视频包 7.07 秒停、会话在起流后 20.0 秒消失，两个时刻本来没有
+/// 因果关系）。退一步说，就算它是对的，拿"视频包静默"当"数据报静默"的阈值也是把两把
+/// 不同的尺当成一把：中间隔着设备那每秒一个的 SR，结果是拆完之后有好几秒我们以为流还
+/// 活着——用户的手感就是"点了没反应，愣一下画面才跳"。
 
 uint64_t now_ms() {
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -172,6 +179,10 @@ bool FramePump::restart(std::string &err) {
     StreamSession::Request request;
     request.display_id = options_.display_id;
     request.offer = options_.offer;
+    // 显式写出来，不要让"我们要申请多长的租期"和"下面那套接续时刻按多长租期算"分家：
+    // 前者是设备侧真正执行的那个数，后者必须与它一致，否则接续要么早得没必要，要么
+    // 晚到会话已经没了。
+    request.timeout_seconds = kSessionLeaseSeconds;
     session_ = StreamSession::start(device_, request, err, verbose_);
     if (session_ == nullptr) {
         reviving_ = false;  // 没救起来，别让取帧方一直多等
@@ -451,8 +462,11 @@ void FramePump::loop() {
     /// 催流（wake()）和静默自催共用它：同一件事不该因为发现的人是"用户的手"还是
     /// "定时器"就有不同的容忍度。以前静默自催是单独一套——盲等 silence_restart_ms
     /// （3 秒）才问一句，于是画面从设备最后一包到我们重起好要冻 3 秒多。现在这三档
-    /// 只是**兜底**：正常节拍由 kSessionLeaseMs 到点主动接续负责，因为一条会话是起流
-    /// 后 20 秒的硬租期，喂画面、回 RTCP、查状态都续不上（docs §13 有那张对照表）。
+    /// 只是**兜底**：正常节拍由"租期将到主动接续"那条分支负责。以前那条分支每 20 秒
+    /// 就走一次（当时以为设备有一条 20 秒硬租期，喂画面、回 RTCP、查状态都续不上，
+    /// docs §13 有那张对照表），后来发现那 20 秒就是我们自己在请求里报的数，报成一小时
+    /// 之后它一小时才走一次——所以这三档判活的兜底反而变回了主要手段：流不是因为租期
+    /// 停的，是因为设备侧真的停了（见 kSessionLeaseSeconds 上面那张表）。
     ///
     /// `blind_at`：催流用两个心跳（2.5s，用户正在等，不值得再花一条 RPC 去确认一个
     /// 本来就打算处理的事实），静默自催用 silence_restart_ms。
@@ -481,14 +495,18 @@ void FramePump::loop() {
         // 中间那一档不能省——光靠时间戳永远有"刚死但还没到阈值"的盲区（实测静置 20 秒
         // 去截图时会话已经死了 1.3 秒），而把阈值调大只会把盲区推到别处。
         if (wake_requested_.exchange(false)) {
-            // 过了设备那 20 秒这条会话已经不存在了：这一帧必然是旧的，先去问一句设备
-            // （100~300ms）纯属白等，直接重起（约 300ms 拿到新 IDR）更快也更准。
-            // 18~20 秒那一段**还活着**，不能因为"快到租期了"就把手上这一帧扔了——用
-            // 户这一下要的就是它；接续自有下面那条按静止时刻挑的分支去安排。
-            if (now_ms() - session_start_ms_ > kSessionLeaseDeadMs) {
-                std::printf("收到操作：会话已起流 %llums，过了设备那 %llu 秒租期，直接重起接续\n",
+            // 过了我们申请的那条租期，这条会话在设备侧必然已经不存在了：手上这一帧
+            // 必然是旧的，再去问一句设备"它还活着吗"（100~300ms）纯属白等，直接重起
+            // （约 300ms 拿到新 IDR）更快也更准。租期内**还活着**，不能因为"快到点了"
+            // 就把手上这一帧扔了——用户这一下要的就是它；接续自有下面那条按静止时刻
+            // 挑的分支去安排。
+            //
+            // 这一档在租期改成一小时之后基本不会再命中（那正是目的），留着是因为它
+            // 仍然对：租期是我们报的数，报多久它就成立多久。
+            if (now_ms() - session_start_ms_ > kSessionLeaseMs) {
+                std::printf("收到操作：会话已起流 %llums，过了申请的那 %llu 秒租期，直接重起接续\n",
                             static_cast<unsigned long long>(now_ms() - session_start_ms_),
-                            static_cast<unsigned long long>(kSessionLeaseDeadMs / 1000));
+                            static_cast<unsigned long long>(kSessionLeaseMs / 1000));
                 restart_now();
             } else {
                 judge_quiet(now_ms() - last_packet_ms_, kQuietCertainMs, 0, "收到操作");
@@ -496,29 +514,31 @@ void FramePump::loop() {
             continue;
         }
         // 没人催流、但有人在收帧（镜像那条路）：租期将到就自己接续。这条受
-        // silence_restart_ms 管，因为拉模型（控制单元）没有持续收帧的人，让它每 18 秒
-        // 重起一次纯属白烧设备。
+        // silence_restart_ms 管，因为拉模型（控制单元）没有持续收帧的人，让它按时接续
+        // 纯属白烧设备。
         //
-        // 到点之后**不马上**重起：剩下那 1.4 秒拿来挑一个静止的间隙。画面在动的时候
-        // 接续是看得见的一次顿挫，画面静止的时候接续是免费的（显示的那一帧不动，新
-        // 会话回来的第一帧和它一样），而设备不管你挑不挑都在 20 秒拆流——所以这一笔
-        // 钱非付不可，能选的只有什么时候付。
+        // 到点之前**不马上**重起：剩下那 kRenewLeadMs 用来挑一个静止的间隙。画面在动的
+        // 时候接续是看得见的一次顿挫，画面静止时接续是免费的（显示的那一帧不动，新会话
+        // 回来的第一帧和它一样）。租期一小时意味着这笔钱通常一整小时都不用付一次；付的
+        // 那一刻也优先挑在看不见的时刻。
         if (options_.silence_restart_ms > 0) {
             const uint64_t age = now_ms() - session_start_ms_;
-            if (age > kSessionLeaseMs) {
+            if (age + kRenewLeadMs >= kSessionLeaseMs) {
                 const uint64_t quiet_video = now_ms() - last_video_ms_;
                 if (quiet_video >= kRenewQuietMs) {
-                    std::printf("会话到租期（起流已 %llums），画面已静止 %llums（数据报静默 "
+                    std::printf("会话还剩 %llus 到租期（起流已 %llums），画面已静止 %llums（数据报静默 "
                                 "%llums），趁这一会儿重起接续（用户看不见这次换会话）\n",
+                                static_cast<unsigned long long>((kSessionLeaseMs - age) / 1000),
                                 static_cast<unsigned long long>(age),
                                 static_cast<unsigned long long>(quiet_video),
                                 static_cast<unsigned long long>(now_ms() - last_packet_ms_));
                     restart_now();
                     continue;
                 }
-                if (age >= kSessionLeaseHardMs) {
-                    std::printf("会话到租期（起流已 %llums），等不到静止的间隙（视频包只静默了 "
+                if (age + kRenewHardLeadMs >= kSessionLeaseMs) {
+                    std::printf("会话还剩 %llus 到租期（起流已 %llums），等不到静止的间隙（视频包只静默了 "
                                 "%llums，数据报 %llums），硬接续（约 300ms 没有新帧）\n",
+                                static_cast<unsigned long long>((kSessionLeaseMs - age) / 1000),
                                 static_cast<unsigned long long>(age),
                                 static_cast<unsigned long long>(quiet_video),
                                 static_cast<unsigned long long>(now_ms() - last_packet_ms_));

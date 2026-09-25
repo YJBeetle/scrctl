@@ -21,7 +21,16 @@ public:
     struct Request {
         uint16_t receiver_port = 0;  ///< 0 = 随机挑一个
         uint32_t display_id = 1;
-        uint32_t timeout_seconds = 20;
+        /// 发往设备的 `timeout` 键：**这条会话的租期长度（秒）**，不是"等 answer 的超时"。
+        ///
+        /// 设备把它原样抄进 answer 的 `RTCPTimeoutInterval`，然后从起流那一刻开始倒数，
+        /// 到点就把这条会话从设备表里摘掉——中途不看我们发了什么：喂画面、回各种形状的
+        /// RTCP、查状态都改不了那个时刻。数字证据在 FramePump.cpp 的 kSessionLeaseSeconds
+        /// 上面那张表（6→+5.99s、20→+20.0s、30→+30.0s、3600→150 秒窗跑满仍在表里）。
+        ///
+        /// 之所以默认值不是抓包观测到的那个 20：那是 Apple 客户端自己报的数，不是设备的
+        /// 脾气。报 20 的代价是每 20 秒换一次会话，也就是用户看到的"有时候会断"。
+        uint32_t timeout_seconds = 3600;
         /// 申报给设备的主机能力位掩码。观测值是 140，而设备自己回
         /// `supportedFeatures: 972`——差着的位里可能藏着更高档的编码器配置，
         /// 所以这个数要能改，别焊死在常量上。
