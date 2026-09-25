@@ -30,14 +30,28 @@ constexpr int kMaxOversizedRestarts = 3;
 /// 到顶之后的重试间隔。不是彻底停手：用户把画面弄简单了（关掉看板、回到主屏）之后
 /// 这条流还得能自己活回来，所以偶尔还得试一次。解出一帧之后计数清零，回到正常节奏。
 constexpr uint64_t kOversizedRetryMs = 60000;
+/// 一条媒体会话的**租期**：实测设备在起流后约 20 秒整把它结束掉，而且这件事和画面
+/// 有没有在变、我们回不回 RTCP 都无关（`tools/lifetime_probe --feed-until 25` 全程喂
+/// 画面变化，1465 个视频包、最后一个在死前 58ms，会话仍在 20.05 秒消失；
+/// `tools/rr_keepalive_probe` 五种 RTCP 写法——裸 RR、发送者 SSRC 用设备的、加
+/// SDES(CNAME) 复合、发到端口+1、全都叠上——每一臂都是 20.0 秒整）。
+/// 数字正好等于协商参数里的 `RTCPTimeoutInterval: 20`，所以它大概率就是"没收到接收端
+/// 认可的 RTCP"的超时，只是我们还不知道它认哪一种。
+///
+/// 既然续不上，就**别去续**：在它到点之前自己重起。留 2 秒余量是给 RPC 抖动的
+/// （停+起实测 37~90ms，但两条 RPC 偶尔慢到近一秒）。主动重起的代价是换会话那
+/// ~200ms 里没有新帧，而被动等死的代价是 1.2 秒起步的盲区外加"交回一张旧画面"——
+/// 每 20 秒都会来一次，就是用户说的"有时候会断"。
+constexpr uint64_t kSessionLeaseMs = 18000;
 /// 光靠时间戳永远有一段"刚死但还没到阈值"的盲区（实测：静置 20 秒去截图时，会话
 /// 其实已经死了 1.3 秒，任何大于 1.3 秒的阈值都会漏）。所以催流那条路在可疑区间
 /// 必须去问设备，而不是把阈值调大——调大只会把盲区推到别处。
 ///
-/// 也别把它调回 7.5 秒：那是"最后一个视频包之后 6.9 秒"这个实测拆流时长，量的是
-/// 视频包而不是数据报，拿它当数据报静默的阈值等于把两把不同的尺当成一把，结果是
-/// 拆完流之后有 5 秒多的窗口里我们以为流还活着——用户的手感就是"点了没反应，愣
-/// 一下画面才跳"。
+/// 也别把它调回 7.5 秒：那个数来自"最后一个视频包之后 6.9 秒拆流"，而 6.9 秒后来
+/// 被证明是一个样本读出来的假象（会话其实是起流后 20 秒的硬租期，见 kSessionLeaseMs）。
+/// 退一步说，就算它是对的，拿"视频包静默"当"数据报静默"的阈值也是把两把不同的尺当成
+/// 一把：中间隔着设备那每秒一个的 SR，结果是拆完之后有好几秒我们以为流还活着——用户
+/// 的手感就是"点了没反应，愣一下画面才跳"。
 
 uint64_t now_ms() {
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -400,8 +414,9 @@ void FramePump::loop() {
     ///
     /// 催流（wake()）和静默自催共用它：同一件事不该因为发现的人是"用户的手"还是
     /// "定时器"就有不同的容忍度。以前静默自催是单独一套——盲等 silence_restart_ms
-    /// （3 秒）才问一句，于是画面从设备最后一包到我们重起好要冻 3 秒多；而设备实测
-    /// 6.9 秒就把流结束掉了，那 3 秒里屏幕只要有任何变化，用户看到的就是"有时候会断"。
+    /// （3 秒）才问一句，于是画面从设备最后一包到我们重起好要冻 3 秒多。现在这三档
+    /// 只是**兜底**：正常节拍由 kSessionLeaseMs 到点主动接续负责，因为一条会话是起流
+    /// 后 20 秒的硬租期，喂画面、回 RTCP、查状态都续不上（docs §13 有那张对照表）。
     ///
     /// `blind_at`：催流用两个心跳（2.5s，用户正在等，不值得再花一条 RPC 去确认一个
     /// 本来就打算处理的事实），静默自催用 silence_restart_ms。
@@ -430,7 +445,25 @@ void FramePump::loop() {
         // 中间那一档不能省——光靠时间戳永远有"刚死但还没到阈值"的盲区（实测静置 20 秒
         // 去截图时会话已经死了 1.3 秒），而把阈值调大只会把盲区推到别处。
         if (wake_requested_.exchange(false)) {
-            judge_quiet(now_ms() - last_packet_ms_, kQuietCertainMs, 0, "收到操作");
+            // 租期过了就别再判"静默够不够久"：这条会话已经不存在了，任何一帧都必然是
+            // 旧的。直接重起（37~90ms）比先花 100~300ms 问一句设备更省，也更准。
+            if (now_ms() - session_start_ms_ > kSessionLeaseMs) {
+                std::printf("收到操作：会话已起流 %llums，过了 %llu 秒租期，直接重起接续\n",
+                            static_cast<unsigned long long>(now_ms() - session_start_ms_),
+                            static_cast<unsigned long long>(kSessionLeaseMs / 1000));
+                restart_now();
+            } else {
+                judge_quiet(now_ms() - last_packet_ms_, kQuietCertainMs, 0, "收到操作");
+            }
+            continue;
+        }
+        // 没人催流、但有人在收帧（镜像那条路）：租期将到就自己接续。这条受
+        // silence_restart_ms 管，因为拉模型（控制单元）没有持续收帧的人，让它每 18 秒
+        // 重起一次纯属白烧设备。
+        if (options_.silence_restart_ms > 0 && now_ms() - session_start_ms_ > kSessionLeaseMs) {
+            std::printf("会话到租期（起流已 %llums），主动重起接续\n",
+                        static_cast<unsigned long long>(now_ms() - session_start_ms_));
+            restart_now();
             continue;
         }
         // "该重起了"这个判断必须每轮都做，不能只挂在"读包超时"那条分支上。快速动
