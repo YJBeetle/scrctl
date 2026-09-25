@@ -65,13 +65,23 @@ void put32(std::vector<uint8_t> &v, uint32_t x) {
     v.push_back(static_cast<uint8_t>(x));
 }
 
-/// RR（RFC 3550 §6.4.1）：V=2、RC=1、PT=201、长度 7 个字，加发送者 SSRC 与一个 20
-/// 字节报告块，一共 28 字节。
+/// RTCP 公共头里的长度是**16 位**（RFC 3550 §6.1：V/RC 1 字节 + PT 1 字节 + length 2
+/// 字节）。这个坑在本文件里踩过一次、docs §13 还专门记着"拿自己组装的包去证明设备不理
+/// 之前，先核对它的字节数"，结果今天又用 `put32(v, 7)` 写了一遍：整包从第 3 字节起错位
+/// 两字节，于是"设备不理我们"这个结论的证据基础又是一个畸形包。
+void put16(std::vector<uint8_t> &v, uint16_t x) {
+    v.push_back(static_cast<uint8_t>(x >> 8));
+    v.push_back(static_cast<uint8_t>(x));
+}
+
+/// RR（RFC 3550 §6.4.2）：V=2、RC=1、PT=201、长度 7（= 头之后还有 7 个字），加发送者
+/// SSRC 与一个 24 字节报告块，一共 32 字节。报告块里第一个字是"媒体 SSRC"，第二个字是
+/// 分数丢包 1 字节 + 累计丢包 3 字节。
 std::vector<uint8_t> build_rr(uint32_t our_ssrc, uint32_t media_ssrc, uint32_t ext_high) {
     std::vector<uint8_t> v;
     v.push_back(0x81);  // V=2, RC=1
     v.push_back(201);   // PT = RR
-    put32(v, 7);        // 长度以 4 字节为单位，不含这 4 字节头
+    put16(v, 7);        // 长度以 4 字节为单位，不含第一个字
     put32(v, our_ssrc);
     put32(v, media_ssrc);
     put32(v, 0);              // 分数丢包 1 + 累积丢包 3：这条流我们不重传，报 0
@@ -93,7 +103,7 @@ std::vector<uint8_t> build_sr(uint32_t our_ssrc, uint32_t packets, uint32_t octe
     std::vector<uint8_t> v;
     v.push_back(0x80);  // V=2, RC=0
     v.push_back(200);   // PT = SR
-    put32(v, 6);        // 头之后还有 6 个字
+    put16(v, 6);        // 头之后还有 6 个字
     put32(v, our_ssrc);
     put32(v, 0);        // NTP 时间戳高位：不假装算过
     put32(v, 0);        // NTP 低位
@@ -103,30 +113,54 @@ std::vector<uint8_t> build_sr(uint32_t our_ssrc, uint32_t packets, uint32_t octe
     return v;
 }
 
+/// SDES（PT=202）带一个**空 CNAME**——12 字节，正是 Xcode 那种复合包的后半段
+/// （pymobiledevice3 的注释：'Minimal SDES with an empty CNAME (matches Xcode's
+/// compound RR+SDES)'）。早先我们给它塞了个 "scr1" 的 CNAME，长度字段跟着变 1 个字，
+/// 于是"设备不理复合包"这条结论测的其实是另一种包。
+std::vector<uint8_t> build_sdes(uint32_t our_ssrc) {
+    std::vector<uint8_t> v;
+    v.push_back(0x81);  // V=2, SC=1
+    v.push_back(202);
+    put16(v, 2);        // SSRC 1 字 + CNAME 块 1 字
+    put32(v, our_ssrc);
+    v.push_back(1);     // CNAME
+    v.push_back(0);     // 长度 0
+    v.push_back(0);     // 补到 4 字节边界
+    v.push_back(0);
+    return v;
+}
+
 /// 从 answer 的 `connection.streamConfig` 里取一个数。取不到返回 false。
+/// 布尔也按数读：`RTCPTimeoutEnabled` 这种键在线上就是 XPC 的 Bool 类型，只按
+/// Int64/UInt64 找会当成"没有这个键"。
 bool stream_config_u32(const scrctl::xpc::Value &answer, const char *key, uint32_t &out) {
     const auto *conn = answer.find("connection");
     const auto *cfg = conn != nullptr ? conn->find("streamConfig") : nullptr;
-    const auto *wrapped = cfg != nullptr ? cfg->find(key) : nullptr;
-    if (wrapped == nullptr) {
+    const auto *v = cfg != nullptr ? cfg->find(key) : nullptr;
+    if (v == nullptr) {
         return false;
     }
-    const auto *inner = wrapped->find("int");
-    const scrctl::xpc::Value &v = inner != nullptr ? *inner : *wrapped;
-    if (v.type == scrctl::xpc::Type::Int64) {
-        out = static_cast<uint32_t>(v.int64);
+    switch (v->type) {
+    case scrctl::xpc::Type::Bool:
+        out = v->boolean ? 1u : 0u;
         return true;
-    }
-    if (v.type == scrctl::xpc::Type::UInt64) {
-        out = static_cast<uint32_t>(v.uint64);
+    case scrctl::xpc::Type::Int64:
+        out = static_cast<uint32_t>(v->int64);
         return true;
+    case scrctl::xpc::Type::UInt64:
+        out = static_cast<uint32_t>(v->uint64);
+        return true;
+    case scrctl::xpc::Type::Double:
+        out = static_cast<uint32_t>(v->real);
+        return true;
+    default:
+        return false;
     }
-    return false;
 }
 
-/// SDES（PT=202）带一个 CNAME。设备的 SR 就是 SR+SDES 的复合包，所以它大概也要求
-/// 我们回的是复合包——单独的 RR 可能被当成"不是合法复合包"而丢掉。
-std::vector<uint8_t> build_sdes(uint32_t our_ssrc, std::string_view cname) {
+/// SDES（PT=202）带一个**实义 CNAME**。留着是为了把"空 CNAME 才有效"这个假设也测一遍
+/// （rrminecname 那一臂），而不是因为我们有理由相信它管用。
+std::vector<uint8_t> build_sdes_cname(uint32_t our_ssrc, std::string_view cname) {
     std::vector<uint8_t> body;
     put32(body, our_ssrc);
     body.push_back(1);  // CNAME
@@ -139,8 +173,62 @@ std::vector<uint8_t> build_sdes(uint32_t our_ssrc, std::string_view cname) {
     std::vector<uint8_t> v;
     v.push_back(0x81);  // V=2, SC=1
     v.push_back(202);
-    put32(v, static_cast<uint32_t>(body.size() / 4));  // 长度（字）
+    put16(v, static_cast<uint16_t>(body.size() / 4));  // 长度（字）
     v.insert(v.end(), body.begin(), body.end());
+    return v;
+}
+
+/// AVConference 的接收端反馈包：RTCP APP（PT=204），名字 "RCTL"，32 字节。
+///
+/// 这是本轮改主意的来源。参考实现的抓包记着（原文注释）："tag 0x85000004 然后 8 个
+/// u16：[0]=收到的 RTP 时间戳>>8，[1..2]=0，[3]=抖动/丢包(0)，[4]=1024Hz 接收端墙钟，
+/// [5]=接收质量，[6]=帧数，[7]=接受的最高码率(kbps)"，并且**约 20 个/秒**；同一条流上
+/// 还并行一种 name=5、16 字节的伴随包，节奏约 35 个/秒（每帧一个），内容是**收到的那个
+/// RTP 时间戳**。两句要照抄的话：
+///   "Echoing the *received* RTP timestamp is what makes the device act on the feedback
+///    (a synthetic clock was ignored). Xcode sends this and no PLIs."
+/// 也就是说 Apple 的客户端在视频端口上灌的不是 RR 也不是 PLI，而是这种厂商私有 APP 包。
+/// 我们此前把所有变体的 RR/SDES/SR 都对齐了字节还是 20.0 秒死——那么"设备认的那种 RTCP"
+/// 很可能根本不是 RFC 3550 里那几种，而是这个。
+std::vector<uint8_t> build_rctl(uint32_t our_ssrc, uint32_t last_rtp_ts, uint32_t last_frame_pkts,
+                                uint32_t packets_received) {
+    // w2 = (RTP 时间戳 >> 8) << 16；w3 = 上一帧的包数；
+    // w4 = (到达墙钟毫秒 << 16) | 到达间隔抖动；w5 = (累计包数 << 16) | 0xEA61 定值。
+    //
+    // w4 那个"墙钟"要按**和 RTP 时间戳同一个时基**算：参考实现试过用"自起流以来的毫秒"
+    // 填，设备据此算出一个 14–50ms 的假单程时延（VCRC 里看得见），当成拥塞就开始砍帧率。
+    // 视频流的 RTP 时间戳是 24kHz，所以到达时刻取 ts/24 ——本地隧道里"到达≈发出"，
+    // 于是单程时延≈0，这是诚实值而不是糊弄。抖动报 0 同理。
+    const uint32_t ts = last_rtp_ts;
+    const uint32_t w2 = ((ts >> 8) & 0xFFFF) << 16;
+    const uint32_t w3 = last_frame_pkts & 0xFFFFFFFF;
+    const uint32_t arrival_ms = (ts / 24) & 0xFFFF;
+    const uint32_t w4 = (arrival_ms << 16) | 0;
+    const uint32_t w5 = ((packets_received & 0xFFFF) << 16) | 0xEA61;
+    std::vector<uint8_t> v;
+    v.push_back(0x80);  // V=2, subtype=0
+    v.push_back(204);   // PT = APP
+    put16(v, 7);        // 头之后 7 个字（共 32 字节）
+    put32(v, our_ssrc);
+    v.insert(v.end(), {'R', 'C', 'T', 'L'});
+    put32(v, 0x85000004u);
+    put32(v, w2);
+    put32(v, w3);
+    put32(v, w4);
+    put32(v, w5);
+    return v;
+}
+
+/// RCTL 的伴随包：同一种 APP（PT=204），但 name 换成整数 5，只带一个字——
+/// 收到的那个 RTP 时间戳。16 字节。抓包里的节奏是**每帧一个**。
+std::vector<uint8_t> build_rctl_companion(uint32_t our_ssrc, uint32_t last_rtp_ts) {
+    std::vector<uint8_t> v;
+    v.push_back(0x80);
+    v.push_back(204);
+    put16(v, 3);  // 头之后 3 个字（共 16 字节）
+    put32(v, our_ssrc);
+    put32(v, 5);
+    put32(v, last_rtp_ts);
     return v;
 }
 
@@ -178,18 +266,50 @@ int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     int seconds = 30;
     int attempts = 2;
-    std::string what = "none,rrmine,rrminep1,rrminesr";
+    // 我们自己在 startmediastream 请求里发出去的那个 `timeout`。默认 20 —— 和设备的
+    // `RTCPTimeoutInterval: 20`、以及实测那条 20.0 秒租期**是同一个数**。
+    //
+    // 这件事到此为止一直没人怀疑过，而所有"保活"实验都是在 it=20 下跑的：如果租期长度
+    // 根本就是我们报的这个数（pymobiledevice3 把它注释成"negotiation timeout"，也就是
+    // 当成客户端等回复的超时），那么回多少种 RTCP 都不可能把流留住超过 20 秒——因为
+    // 那个 20 是我们自己写的。改这一个整数就能判掉这个假设，比造包便宜两个数量级。
+    uint32_t timeout_seconds = 20;
+    std::string what = "none,rrsrc,rrsrcsd";
     bool verbose = false;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--seconds" && i + 1 < argc) {
             seconds = std::stoi(argv[++i]);
+        } else if (a == "--timeout" && i + 1 < argc) {
+            timeout_seconds = static_cast<uint32_t>(std::stoul(argv[++i]));
         } else if (a == "--attempts" && i + 1 < argc) {
             attempts = std::stoi(argv[++i]);
         } else if (a == "--what" && i + 1 < argc) {
             what = argv[++i];
         } else if (a == "-v" || a == "--verbose") {
             verbose = true;
+        }
+    }
+
+    // 自检：这条探针的全部结论都建立在"我发出去的包是合法的"上面，而它已经两次栽在
+    // 长度字段写成 32 位上（docs §13）。所以先把三种包的字节数和头里的 length 域打出来
+    // 核对，对不上就直接不作数——宁可这一轮白跑，也不要再拿畸形包去证明"设备不理"。
+    {
+        const auto rr = build_rr(0x11111111u, 0x22222222u, 3);
+        const auto sd = build_sdes(0x11111111u);
+        const auto sr = build_sr(0x11111111u, 0, 0);
+        const auto rctl = build_rctl(0x11111111u, 0x22222222u, 10, 100);
+        const auto comp = build_rctl_companion(0x11111111u, 0x22222222u);
+        const int rr_len_field = (rr[2] << 8) | rr[3];
+        std::printf("包自检：RR %zu 字节（头里 length=%d）  RR+SDES 复合 %zu 字节  SR %zu 字节  "
+                    "RCTL %zu 字节  伴随 %zu 字节\n",
+                    rr.size(), rr_len_field, rr.size() + sd.size(), sr.size(), rctl.size(),
+                    comp.size());
+        if (rr.size() != 32 || rr_len_field != 7 || sd.size() != 12 || sr.size() != 28 ||
+            rctl.size() != 32 || comp.size() != 16) {
+            std::fprintf(stderr, "包形状不对（应为 RR 32 / SDES 12 / SR 28 / RCTL 32 / 伴随 16，"
+                                 "RR length 7），这一轮不作数\n");
+            return 2;
         }
     }
 
@@ -217,7 +337,16 @@ int main(int argc, char **argv) {
 
     for (int round = 0; round < attempts; ++round) {
         for (const std::string &w : arms_to_run) {
-            const int poll_every_ms = w == "poll" ? 2000 : (w == "poll5" ? 5000 : 0);
+            // 臂名形如 `<包变体>[+<offer 开关>[+...]]'，比如 `rrsrcsd+fb'、`rctl+fb+ltrp'。
+            // 用 + 拆而不是把开关焊进变体名里：开关有 2 个、包变体有一串，全组合展开成
+            // 三十多个名字，每个组合都得重写一遍判断条件。
+            const auto plus = w.find('+');
+            const std::string base = plus == std::string::npos ? w : w.substr(0, plus);
+            const std::string flags = plus == std::string::npos ? "" : w.substr(plus + 1);
+            const bool fb = flags.find("fb") != std::string::npos;
+            const bool ltrp = flags.find("ltrp") != std::string::npos;
+
+            const int poll_every_ms = base == "poll" ? 2000 : (base == "poll5" ? 5000 : 0);
             // RTCP 变体。寿命实验已经钉死"会话是起流后 20 秒的硬租期，喂画面也救不了"，
             // 而协商参数里就写着 `RTCPTimeoutInterval: 20`——也就是说这 20 秒是"没收到
             // 接收端 RTCP"的超时。我们发裸 RR 它照死，所以问题不是"要不要回 RTCP"，
@@ -232,30 +361,50 @@ int main(int argc, char **argv) {
             //   rrnegsr rrneg 但发 SR 而不是 RR
             //   rrmine  **反过来**：发送者 = `RemoteSSRC`，报告块 = `LocalSSRC`
             //   rrminep1/rrminesr 同上两件事的端口/SR 变体
+            //   rrsrc / rrsrcsd 同上，但目的端口换成 streamConfig.SourcePort
+            //   rctl    AVConference 的 RTCP APP "RCTL"（20/s）+ 每帧一个 name=5 伴随包
+            //   rctlrr  RCTL 那一套 + 每秒一个 RR+SDES 复合包
             //
-            // rrmine 这一组才是本轮的重点。上一轮跑出来才发现 answer 里的 `LocalSSRC`
+            // rrmine 这一组才是上一轮的重点。上一轮跑出来才发现 answer 里的 `LocalSSRC`
             // 就是 RTP 头里设备自己那个 SSRC（探针把报告块与实际包头一比就露馅了），也就
             // 是说这两个名字是**从设备的视角**起的：Local = 设备自己发的那条流，Remote =
             // 设备给我们这一端分配的 SSRC。那么"RTCP 发送者该填谁"根本不是我们能编的——
             // 它已经替我们编好了。前面所有臂（包括 rrneg）都填错了人。
-            const bool send_rr = w.rfind("rr", 0) == 0;
-            const bool sdes = w == "rrsdes" || w == "rrall";
-            const bool same_ssrc = w == "rrsame" || w == "rrall";
-            const bool neg_ssrc = w == "rrneg" || w == "rrnegp1" || w == "rrnegsr";
-            const bool mine_ssrc = w == "rrmine" || w == "rrminep1" || w == "rrminesr";
-            const bool send_sr = w == "rrnegsr" || w == "rrminesr";
+            //
+            // rctl 这一组是本轮的重点，理由见 build_rctl 上面那段：把 RFC 3550 那几种包
+            // 的字节、SSRC、端口全对上了仍然 20.0 秒死，而 Apple 客户端在视频端口上灌的
+            // 是这种 PT=204 的厂商 APP 包，"Xcode sends this and no PLIs"。
+            const bool send_rr = base.rfind("rr", 0) == 0;
+            const bool send_rctl = base.rfind("rctl", 0) == 0;
+            const bool sdes = base == "rrsdes" || base == "rrall" || base == "rrminesd" ||
+                              base == "rrsrcsd" || base == "rctlrr";
+            const bool same_ssrc = base == "rrsame" || base == "rrall";
+            const bool neg_ssrc = base == "rrneg" || base == "rrnegp1" || base == "rrnegsr";
+            const bool mine_ssrc =
+                base == "rrmine" || base == "rrminep1" || base == "rrminesr" ||
+                base == "rrminesd" || base == "rrminecname" || base == "rrsrc" ||
+                base == "rrsrcsd" || base == "rctl" || base == "rctlrr";
+            // 发到 streamConfig.SourcePort（pymobiledevice3 用的就是它），而不是
+            // connection.sender.port。RCTL 那两臂没有别的选项——按抓包它就是这个目的。
+            const bool to_source_port =
+                base == "rrsrc" || base == "rrsrcsd" || base == "rctl" || base == "rctlrr";
+            const bool send_sr = base == "rrnegsr" || base == "rrminesr";
             const bool port_plus_one =
-                w == "rrp1" || w == "rrall" || w == "rrnegp1" || w == "rrminep1";
+                base == "rrp1" || base == "rrall" || base == "rrnegp1" || base == "rrminep1";
             std::string start_err;
             scrctl::media::StreamSession::Request req;
+            req.offer.allow_rtcp_fb = fb;
+            req.offer.ltrp_enabled = ltrp;
+            req.timeout_seconds = timeout_seconds;
             auto session = scrctl::media::StreamSession::start(*dev, req, start_err, verbose);
             if (!session) {
                 std::fprintf(stderr, "[%s] 起流失败: %s\n", w.c_str(), start_err.c_str());
                 std::this_thread::sleep_for(2s);
                 continue;
             }
-            std::printf("第 %d 轮 [%s]：流已起，观察 %d 秒（不去碰设备，让画面自己静止）\n", round,
-                        w.c_str(), seconds);
+            std::printf("第 %d 轮 [%s]：流已起，观察 %d 秒（不去碰设备，让画面自己静止）"
+                        "offer: allowRTCPFB=%d ltrpEnabled=%d\n",
+                        round, w.c_str(), seconds, fb ? 1 : 0, ltrp ? 1 : 0);
 
             Arm arm;
             arm.what = w;
@@ -268,6 +417,13 @@ int main(int argc, char **argv) {
             uint64_t last_video = 0;
             uint64_t next_rr = t0;
             uint64_t next_poll = t0;
+            // RCTL 那两臂要报的是**真实收到的**东西，所以收包时得记三样：最后一个视频包
+            // 的 RTP 时间戳、累计视频包数、以及"上一帧有多少个包"（marker 那一下结算）。
+            uint32_t rtp_last_ts = 0;
+            uint32_t rtp_packets = 0;
+            uint32_t cur_frame_pkts = 0;
+            uint32_t last_frame_pkts = 0;
+            uint64_t next_rctl = t0;
             // 我们自己的 SSRC：不能拿设备那个当发送者，否则设备按 SSRC 配对时会认为
             // 这是它自己的报告而丢掉（也可能更糟：把两条流的报告当成同一条）。
             const uint32_t our_ssrc = 0x35c0ffeeu;
@@ -275,19 +431,64 @@ int main(int argc, char **argv) {
             // 它那条流的 `RemoteSSRC`。上面那句注释的推理没错，但结论应该是"用设备分配的
             // 那个"，而不是"自己编一个"。这两个数是 `bitrate_probe --dump-answer` 露出来的。
             uint32_t neg_local_ssrc = 0, neg_remote_ssrc = 0, neg_rtcp_port = 0;
+            uint32_t neg_source_port = 0;
             const bool has_local =
                 stream_config_u32(session->started().answer, "LocalSSRC", neg_local_ssrc);
             const bool has_remote =
                 stream_config_u32(session->started().answer, "RemoteSSRC", neg_remote_ssrc);
             stream_config_u32(session->started().answer, "RTCPRemotePort", neg_rtcp_port);
-            std::printf("  answer: LocalSSRC=%s RemoteSSRC=%s RTCPRemotePort=%u 设备发送端口=%u\n",
+            // **answer 里有两个"设备那边的端口"**：`connection.sender.port`（scrctl 一直
+            // 拿它当 sender_port，也就是我们所有 RTCP 实验的目的端口）和
+            // `streamConfig.SourcePort`。实测这两个数不一样（一次跑出来是 54351 与 61422）。
+            // pymobiledevice3 发 RTCP/PLI 用的是后者。如果设备的 RTCP 监听在 SourcePort 上，
+            // 那我们前面所有"设备不理 RTCP"的结论都是发到了一个没人收的端口上得到的。
+            const bool has_source_port =
+                stream_config_u32(session->started().answer, "SourcePort", neg_source_port);
+            // 那两个 RTCP 超时键是这一节全部推理的起点，所以要每臂都打出来看**它跟着谁变**：
+            // 如果 `RTCPTimeoutInterval` 跟着我们请求里的 `timeout` 走，那这条租期就不是
+            // 设备定的，是我们自己报的。
+            uint32_t rtcp_interval = 0, rtcp_enabled = 0;
+            const bool has_interval =
+                stream_config_u32(session->started().answer, "RTCPTimeoutInterval", rtcp_interval);
+            stream_config_u32(session->started().answer, "RTCPTimeoutEnabled", rtcp_enabled);
+            std::printf("  answer: LocalSSRC=%s RemoteSSRC=%s RTCPRemotePort=%u "
+                        "connection.sender.port=%u streamConfig.SourcePort=%u\n",
                         has_local ? std::to_string(neg_local_ssrc).c_str() : "(没有)",
                         has_remote ? std::to_string(neg_remote_ssrc).c_str() : "(没有)",
-                        neg_rtcp_port, session->started().sender_port);
+                        neg_rtcp_port, session->started().sender_port, neg_source_port);
+            std::printf("  请求 timeout=%u -> answer RTCPTimeoutInterval=%s RTCPTimeoutEnabled=%s\n",
+                        timeout_seconds,
+                        has_interval ? std::to_string(rtcp_interval).c_str() : "(没有)",
+                        rtcp_enabled == 1 ? "真" : (rtcp_enabled == 0 ? "假/没读到" : "其它"));
+            if (has_interval && rtcp_interval != timeout_seconds) {
+                std::printf("  两者不等：设备没有照抄我们报的那个数\n");
+            }
+            if (has_source_port && neg_source_port != session->started().sender_port) {
+                std::printf("  两个端口不同：rrsrc* 那几臂发到 streamConfig.SourcePort\n");
+            }
 
             const uint64_t until = t0 + static_cast<uint64_t>(seconds) * 1000;
+            // 每 10 秒打一行进度。长观察窗（分钟级）没有这一行的话，探针看起来像卡死，
+            // 而"它其实还在收包"正是本轮要报的答案——探针要能证明自己做了事。
+            uint64_t next_tick = t0 + 10000;
+            uint64_t video_seen = 0;
+            uint64_t sr_seen = 0;
+            // 目的端口：RCTL 与 rrsrc* 那几臂发到 streamConfig.SourcePort，其余发到
+            // answer 里 connection.sender.port（scrctl 一直用的那个）。
+            const uint16_t dest_port = static_cast<uint16_t>(
+                to_source_port && has_source_port
+                    ? neg_source_port
+                    : session->started().sender_port + (port_plus_one ? 1 : 0));
             while (now_ms() < until) {
                 while (session->next_packet(packet, peer, 30, err)) {
+                    // 出包循环里也要看时刻。**这一条是长租期暴露出来的 bug**：租期只有
+                    // 20 秒时，流一死 next_packet 就开始超时返回 false，内层循环必然退出，
+                    // 于是"内层循环会因为流一直活着而永不退出"这件事从来没暴露过。
+                    // 把 timeout 提到 3600 之后，探针在 150 秒的观察窗之后仍然卡在这一层
+                    // 收包——那一刻它其实已经给出了本轮最重要的答案：流还活着。
+                    if (now_ms() >= until) {
+                        break;
+                    }
                     const uint64_t now = now_ms();
                     scrctl::rt::PacketInfo info {};
                     if (scrctl::rt::parse_rtp_header(packet, info) &&
@@ -297,11 +498,38 @@ int main(int argc, char **argv) {
                         last_video = now;
                         arm.last_video_ms = now;
                         arm.got_idr = true;
+                        ++video_seen;
+                        ++rtp_packets;
+                        rtp_last_ts = info.timestamp;
+                        ++cur_frame_pkts;
+                        // 抓包里的伴随包（name=5）是**每帧一个**，跟着 marker 位走。
+                        if (info.marker && send_rctl) {
+                            last_frame_pkts = cur_frame_pkts;
+                            cur_frame_pkts = 0;
+                            std::string serr;
+                            const auto comp = build_rctl_companion(
+                                mine_ssrc && has_remote ? neg_remote_ssrc : our_ssrc,
+                                rtp_last_ts);
+                            if (!session->send_rtp(comp, dest_port, serr)) {
+                                arm.note = "RCTL 伴随包发送失败: " + serr;
+                            }
+                        }
                     } else if (is_rtcp_sr(packet)) {
+                        ++sr_seen;
                         arm.last_sr_ms = now;
                         if (last_video != 0 && now - last_video > 1500) {
                             ++arm.srs_after_video;
                         }
+                    }
+                }
+                if (send_rctl && rtp_packets != 0 && now_ms() >= next_rctl) {
+                    next_rctl += 50;  // 抓包里的节奏：约 20 个/秒
+                    std::string serr;
+                    const auto rctl =
+                        build_rctl(mine_ssrc && has_remote ? neg_remote_ssrc : our_ssrc,
+                                   rtp_last_ts, last_frame_pkts, rtp_packets);
+                    if (!session->send_rtp(rctl, dest_port, serr)) {
+                        arm.note = "RCTL 发送失败: " + serr;
                     }
                 }
                 if (send_rr && media_ssrc != 0 && now_ms() >= next_rr) {
@@ -328,8 +556,11 @@ int main(int argc, char **argv) {
                         rr = build_sr(sender_ssrc, 0, 0);  // 我们一个 RTP 都没发，如实报 0
                     } else {
                         rr = build_rr(sender_ssrc, report_ssrc, highest_seq);
-                        if (sdes) {
-                            const auto sd = build_sdes(sender_ssrc, "scr1");
+                        if (base == "rrminecname") {
+                            const auto sd = build_sdes_cname(sender_ssrc, "scrctl");
+                            rr.insert(rr.end(), sd.begin(), sd.end());
+                        } else if (sdes) {
+                            const auto sd = build_sdes(sender_ssrc);
                             rr.insert(rr.end(), sd.begin(), sd.end());
                         }
                     }
@@ -342,10 +573,7 @@ int main(int argc, char **argv) {
                                     media_ssrc == neg_local_ssrc ? "所以 Local 是设备自己那条流"
                                                                  : "所以 Remote 是设备自己那条流");
                     }
-                    const uint16_t to_port =
-                        static_cast<uint16_t>(session->started().sender_port +
-                                              (port_plus_one ? 1 : 0));
-                    if (!session->send_rtp(rr, to_port, serr)) {
+                    if (!session->send_rtp(rr, dest_port, serr)) {
                         arm.note = "RTCP 发送失败: " + serr;
                     }
                 }
@@ -359,8 +587,14 @@ int main(int argc, char **argv) {
                         arm.last_alive_ms = now_ms();
                     }
                 }
+                if (now_ms() >= next_tick) {
+                    next_tick += 10000;
+                    std::printf("  +%3llus 视频包 %6llu SR 心跳 %4llu（租期 %us）\n",
+                                static_cast<unsigned long long>((now_ms() - t0) / 1000),
+                                static_cast<unsigned long long>(video_seen),
+                                static_cast<unsigned long long>(sr_seen), timeout_seconds);
+                }
             }
-
             std::string perr;
             arm.alive_at_end = scrctl::media::StreamSession::probe(
                                    *dev, session->started().session_uuid, perr, verbose) ==
