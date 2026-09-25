@@ -42,6 +42,11 @@ int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     int rounds = 3;
     int max_seconds = 70;
+    /// 喂画面变化喂到第几秒就停（-1 = 喂满整个观察窗）。加这个开关是为了把"20 秒
+    /// 那一刻有没有媒体在发"和"之后静止多久"这两件事分开量：先喂过 20 秒这道门，
+    /// 再停手看它什么时候死——死在"停止喂之后若干秒"就是空闲计时器，活得过很久就
+    /// 说明那道门是一次性的。
+    int feed_until = -1;
     bool quiet = false;
     bool verbose = false;
     for (int i = 1; i < argc; ++i) {
@@ -50,6 +55,8 @@ int main(int argc, char **argv) {
             rounds = std::stoi(argv[++i]);
         } else if (a == "--max-seconds" && i + 1 < argc) {
             max_seconds = std::stoi(argv[++i]);
+        } else if (a == "--feed-until" && i + 1 < argc) {
+            feed_until = std::stoi(argv[++i]);
         } else if (a == "--quiet") {
             quiet = true;
         } else if (a == "-v" || a == "--verbose") {
@@ -88,7 +95,13 @@ int main(int argc, char **argv) {
 
         std::vector<uint8_t> packet;
         uint16_t peer = 0;
-        uint64_t next_second = t0 + 1000, next_press = t0, last_video = t0;
+        // 下面这几个都是**相对起流时刻**的秒表读数（`t = now_ms() - t0`），不是绝对
+        // 时刻。以前写成 `= t0 + 1000` / `= t0`，于是 `t >= next_press` 和
+        // `t >= next_second` 永远不成立：这个工具既不按键喂画面、也不打每秒那一列，
+        // 而它交回来的"活了 45 秒"是被当成"证明不是固定 20 秒租期"的证据写进 docs §13
+        // 的。一个静默什么都不做的探针，给出的恰恰是对照组数据。
+        uint64_t next_second = 1000, next_press = 0, last_video = 0;
+        bool was_feeding = true;
         uint64_t video = 0;
         bool up = true;
         double life = -1;
@@ -98,11 +111,17 @@ int main(int argc, char **argv) {
                 if (scrctl::rt::parse_rtp_header(packet, info) &&
                     info.payload_type == session->started().payload_type) {
                     ++video;
-                    last_video = now_ms();
+                    // 和 next_press / next_second 同一个基准：相对起流的秒表。
+                    last_video = now_ms() - t0;
                 }
             }
             const uint64_t t = now_ms() - t0;
-            if (t >= next_press) {
+            const bool feeding = feed_until < 0 || t < static_cast<uint64_t>(feed_until) * 1000;
+            if (!feeding && was_feeding && !quiet) {
+                std::printf("  %5llu ms 停止喂画面变化，从这里开始看它多久死\n", t);
+            }
+            was_feeding = feeding;
+            if (feeding && t >= next_press) {
                 next_press = t + 400;
                 std::string perr;
                 buttons->press(scrctl::hid::button::kUsagePageConsumer,
@@ -120,7 +139,7 @@ int main(int argc, char **argv) {
                 if (!quiet) {
                     std::printf("  %5llu ms 视频包累计 %6llu 距最后视频包 %4llu ms 会话 %s\n", t,
                                 static_cast<unsigned long long>(video),
-                                static_cast<unsigned long long>(now_ms() - last_video),
+                                static_cast<unsigned long long>(t - last_video),
                                 alive ? "在" : (st == scrctl::media::StreamSession::ServerState::Ended
                                                     ? "不在"
                                                     : "问不到"));
@@ -138,7 +157,7 @@ int main(int argc, char **argv) {
             std::printf("[轮 %d] 会话在 %5.0f ms 消失，视频包共 %llu 个，距最后一个视频包 "
                         "%.0f ms\n",
                         round, life, static_cast<unsigned long long>(video),
-                        life - static_cast<double>(last_video - t0));
+                        life - static_cast<double>(last_video));
             lifetimes.push_back(life);
             frames.push_back(video);
         }

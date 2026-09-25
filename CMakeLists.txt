@@ -156,6 +156,9 @@ target_link_libraries(feature_probe PRIVATE scrctl_core)
 add_executable(screenshot_probe tools/screenshot_probe.cpp)
 target_link_libraries(screenshot_probe PRIVATE scrctl_core)
 
+add_executable(rr_keepalive_probe tools/rr_keepalive_probe.cpp)
+target_link_libraries(rr_keepalive_probe PRIVATE scrctl_core)
+
 add_executable(stream_probe tools/stream_probe.cpp)
 target_link_libraries(stream_probe PRIVATE scrctl_core)
 
