@@ -20,7 +20,9 @@
 // 对照组 `none` 什么都不发。两臂**交替**各跑若干轮：单次对照不算对照（docs §13）。
 //
 // 用法：rr_keepalive_probe [--seconds N] [--attempts N] [--what none,rr,poll,poll5]
-//                          [--timeout N] [--hold] [--event-channel] [--avc-features STR] [--verbose]
+//                          [--timeout N] [--hold] [--event-channel] [--avc-features STR]
+//                          [--audio-leg] [--audio-rr] [--display-subscribe] [--hid-attach]
+//                          [--offer FILE] [--dump-packets] [--dump-status] [--verbose]
 //
 // 第二轮加的 `poll` 臂是因为第一批数据把"空闲超时"这个模型打掉了：四臂里最后一个视频
 // 包分别落在 +11.1s / +7.1s / +7.1s / +7.1s，而**每一臂都是 +20.0s 整**停止收 SR 并在
@@ -48,6 +50,7 @@
 #include <thread>
 #include <vector>
 
+#include "hid/Hid.h"
 #include "media/StreamSession.h"
 #include "remote/Device.h"
 #include "rt/RtpHevc.h"
@@ -173,6 +176,31 @@ bool stream_config_str(const scrctl::xpc::Value &answer, const char *key, std::s
     }
     out = v->string;
     return true;
+}
+
+/// 打出 answer 里那对**同步令牌**，以及 `IsltrpEnabled`。
+///
+/// 为什么单看这三个数：苹果视频腿 answer 里
+/// `SyncStreamToken = VideoSynchronizationSourceStreamToken = 1183494201`（非零），
+/// 而它音频腿的两个都是 0——也就是说**设备自己**在 answer 里标明了"这条视频腿挂在
+/// 那条音频腿的时间轴上"。我们两条腿共用一个 ClientSessionID，请求里也没有别的键
+/// 能表达这层关系（抓包里苹果的请求就是少我们一个 `CoreDeviceVideoDisplayMode`，
+/// 别的完全一样），所以配对成没成，只有设备回的这两个数能证明。
+///
+/// 这件事直接决定了"音频腿"这一臂到底测过没有：如果我们的视频腿令牌仍是 0，那
+/// 设备从没把两条腿看成一组，之前那次"带了音频腿照样 20 秒死"就**没有否证**
+/// "分组才免租期"这个假设——它测的是一条没配对的音频腿。
+void print_sync_tokens(std::string_view tag, const scrctl::xpc::Value &answer) {
+    uint32_t sync = 0, vsync = 0, isltrp = 0;
+    const bool has_sync = stream_config_u32(answer, "SyncStreamToken", sync);
+    const bool has_vsync =
+        stream_config_u32(answer, "VideoSynchronizationSourceStreamToken", vsync);
+    stream_config_u32(answer, "IsltrpEnabled", isltrp);
+    std::printf("    [%s] SyncStreamToken=%s VideoSynchronizationSourceStreamToken=%s "
+                "IsltrpEnabled=%u\n",
+                std::string(tag).c_str(),
+                has_sync ? std::to_string(sync).c_str() : "(没有)",
+                has_vsync ? std::to_string(vsync).c_str() : "(没有)", isltrp);
 }
 
 /// SDES（PT=202）带一个**实义 CNAME**。留着是为了把"空 CNAME 才有效"这个假设也测一遍
@@ -393,6 +421,9 @@ int main(int argc, char **argv) {
     // 所以 DeviceHub 那条会话根本不是从这个 feature 建的，它的"不断流"不能拿来当
     // "存在我们没找到的保活"的证据。这一臂留着，是为了让这条推理链随时可以重跑。
     bool no_timeout_key = false;
+    /// 只把自己构造出的那几种 RTCP 打成十六进制然后退出（不碰设备）。
+    /// 给"和苹果抓包里的包并排比对"用。
+    bool dump_packets = false;
     // 在请求里带上 `sessionEventChannel`（一个 XPC UUID）。这是抓包对齐出来的、我们和
     // Xcode DeviceHub 的请求之间唯一差的一个键——苹果的 `timeout` 也是 20，却活了 715 秒。
     // 这一臂就是判"是不是这个键让租期失效"。
@@ -416,14 +447,16 @@ int main(int argc, char **argv) {
     bool hold_no_poll = false;
     /// 起一条**音频腿**，和视频腿共用同一个 `avcMediaStreamOptionClientSessionID`。
     ///
-    /// 这是最后一个还没控住的结构性差异。苹果那份 95.8 秒抓包里的形状是：先 `type:"audio"`
-    /// 再 `type:"video"`，两次 `ClientSessionID` 都是同一个 UUID，而那条精确 1.000Hz、
-    /// 整场从不空档的 `RR+SDES` 发在**音频腿**上（客户端 52800 -> 设备 54228，74 个，
-    /// 间隔 1.000±0.001s）；**视频腿上几乎没有 RR**（整场只有 46 个，间隔 1~4 秒地跳）。
-    /// 如果设备的计时器挂在"这条 ClientSessionID"而不是"这条腿"上，那喂住它的就是音频腿，
-    /// 而我们从来只有视频腿独活——这能同时解释"我们报多少秒死多少秒"和"苹果报了 20 却
-    /// 永远不到点"。p3 也有 `start_audio_stream`，但它自己的会话表里跑起来只剩视频一条
-    /// （`+40s sessions=1`），所以"p3 也断"**不能**否掉这条假设。
+    /// 起因：抓包里苹果先 `type:"audio"` 再 `type:"video"`、两条共用一个 ClientSessionID，
+    /// 而那条精确 1.000Hz 的 `RR+SDES` 发在音频腿上。当时的假设是"设备按 ClientSessionID
+    /// 分组记计时器，喂住它的是音频腿"。
+    ///
+    /// **这一臂现在能给出判决性的证据了，而且答案是"已经否证"**：配对到底成没成不用猜，
+    /// 设备自己在 answer 里写了——`SyncStreamToken` / `VideoSynchronizationSourceStreamToken`
+    /// 非零就是"视频腿挂在音频腿的时间轴上"。苹果视频腿=1183494201、音频腿=0；
+    /// 我们带音频腿跑的那一轮（`--audio-leg --audio-rr --what rctl --timeout 20`）视频腿
+    /// 拿到了 **1183494365**、音频腿 0，形状与苹果逐字一致——**配对成功了**，
+    /// 视频腿照样死在 **+20003ms**。所以"分组免租期"这个解释是错的，不是没做出来。
     bool audio_leg = false;
     /// 在音频腿上按 1Hz 发 RR+SDES（苹果就是这么做的）。和 `--audio-leg` 分开是必要的：
     /// 只起腿 = 验"设备是不是按 ClientSessionID 分组来免租期"；起腿 + 发 RR = 验
@@ -445,7 +478,38 @@ int main(int argc, char **argv) {
     /// `deviceinfo` 的列表里：`com.apple.coredevice.feature.displayinfoupdates`。
     /// 如果"有人在订阅显示变化"就是设备判定这个显示采集有人在用的依据，那它就能同时解释
     /// 苹果 74 秒不断、我们 20 秒必死、以及我们的音频腿为什么不受影响。
+    /// 被回收的不是"会话"而是"视频那条"——我们自己的音频腿活过了 20 秒（+30s 已收 1878
+    /// 包、+40s 1999 包），而视频腿精确死在 19997ms。什么会让设备的视频采集会话变成孤儿？
+    ///
+    /// 抓包里苹果在**抓包开始之前**就挂着一条 `com.apple.coredevice.deviceinfo`（设备端口
+    /// 54583）上的长连接，整场只推了一次
+    /// `CoreDevice.XPCMessageKey.sideChannelStatus{pushing:[方向 / primary LCD 1080x2340 /
+    /// 6 个 wireless 显示器 / backlightState:activeOn]}`，而那次推送的时刻是 **+20.71s——
+    /// 视频起流（+20.69s）之后 0.02 秒**。这个 feature 就挂在 `deviceinfo` 的列表里：
+    /// `com.apple.coredevice.feature.displayinfoupdates`。
+    ///
+    /// 如果"有人在订阅显示变化"就是设备判定这次显示采集有人在用的依据，那它能同时解释
+    /// 三件事：苹果 74 秒不断、我们 20 秒必死、以及我们的音频腿不受影响。所以这一臂只做
+    /// 一件事：把这条订阅挂上，别的全不动（租期仍然 20、不发任何 RTCP）。
     bool display_subscribe = false;
+    /// 在起流**之前**连上 `universalhidservice`（HID 注入那条），整窗握着不放。
+    ///
+    /// 这是最后一个"客户端侧还挂着一条什么连接"的变量，也是之前每一次否证都没控住的
+    /// 那一个。抓包里的形状：DeviceHub 在 +20.90s（视频起流 +20.69s 之后 0.2 秒）连上
+    /// 设备端口 54572 = `com.apple.coredevice.feature.remote.universalhidservice`，
+    /// 先发一个 `connectedServices` 查询、再建了 3 个虚拟服务（键盘 512、trackpad
+    /// 4294969677、键盘事件面 4294969634）、发了两个 HID 报告、`resetGestureState` 四次，
+    /// 然后**那条连接整场没关**（+22.82s 之后再无字节，但 SYN 之后无 FIN 无 RST）。
+    ///
+    /// 为什么它值得单独测：它和"显示"是同一套栈的（dtuhidd 注册的面里就有
+    /// `CoreDevice touchscreen` 那个 digitizer），如果设备判定"这次显示采集有人在用"
+    /// 的依据是"有一个 HID 客户端附着着"，那它能同时解释苹果 74 秒不断、我们 20 秒必死。
+    ///
+    /// **为什么产品的 75 秒实测没有把它测掉**：`src/app/main.cpp` 里 HID 是**首次输入
+    /// 事件时才 `Service::open`** 的（懒连），那轮 `scrctl --stats` 全程没人动键盘鼠标，
+    /// 所以那条连接压根不存在。这一臂就是把"附着"这一个变量单独立出来，
+    /// 其他一律不动（租期仍 20、一个 RTCP 也不发、不发任何输入以免画面变化）。
+    bool hid_attach = false;
     // AVC 那条形串。抓包对齐到的最后一处可见差别：苹果发 `FLS;VRAE:0;SW:1;`，我们和 p3
     // 都发 `FLS;SW:1;`（p3 还专门注释说 VRAE:0 不能进）。设备会把它回显成
     // `TxCodecFeatureListString`，所以这条改动是可以在 answer 里验证"它收没收下"的——
@@ -472,6 +536,10 @@ int main(int argc, char **argv) {
             timeout_seconds = static_cast<uint32_t>(std::stoul(argv[++i]));
         } else if (a == "--no-timeout-key") {
             no_timeout_key = true;
+        } else if (a == "--dump-packets") {
+            dump_packets = true;
+        } else if (a == "--hid-attach") {
+            hid_attach = true;
         } else if (a == "--event-channel") {
             event_channel = true;
         } else if (a == "--hold") {
@@ -487,6 +555,8 @@ int main(int argc, char **argv) {
             audio_rr = true;
         } else if (a == "--offer" && i + 1 < argc) {
             raw_offer_path = argv[++i];
+        } else if (a == "--display-subscribe") {
+            display_subscribe = true;
         } else if (a == "--avc-features" && i + 1 < argc) {
             avc_features = argv[++i];
         } else if (a == "--attempts" && i + 1 < argc) {
@@ -543,6 +613,31 @@ int main(int argc, char **argv) {
             std::fprintf(stderr, "包形状不对（应为 RR 32 / SDES 12 / SR 28 / RCTL 32 / 伴随 16，"
                                  "RR length 7），这一轮不作数\n");
             return 2;
+        }
+        // 只量长度等于没量：RCTL 那七个字的语义是拿苹果的包反推出来的，而"我们的第 4
+        // 个字是不是那个含 1024Hz 时钟的字段"这种问题，只有把两边并排看十六进制才答得出来。
+        // 设备抓不到我们自己的包（用户态隧道，见 docs §13），所以只能反过来把我们的包打出来。
+        if (dump_packets) {
+            const auto hex = [](const std::vector<uint8_t> &b) {
+                std::string s;
+                static constexpr char kDigits[] = "0123456789abcdef";
+                for (std::size_t i = 0; i < b.size(); ++i) {
+                    if (i % 4 == 0) {
+                        s += i == 0 ? "" : " ";
+                    }
+                    s += kDigits[b[i] >> 4];
+                    s += kDigits[b[i] & 0xF];
+                }
+                return s;
+            };
+            std::printf("RR        %s\n", hex(rr).c_str());
+            auto compound = rr;
+            compound.insert(compound.end(), sd.begin(), sd.end());
+            std::printf("RR+SDES   %s\n", hex(compound).c_str());
+            std::printf("SR        %s\n", hex(sr).c_str());
+            std::printf("RCTL      %s\n", hex(rctl).c_str());
+            std::printf("伴随      %s\n", hex(comp).c_str());
+            return 0;
         }
     }
 
@@ -710,6 +805,22 @@ int main(int argc, char **argv) {
 
             // 苹果是**先起音频再起视频**，两条腿共用同一个 ClientSessionID。这里照那个
             // 顺序来：先生成/复用这 16 字节，起音频腿，再用同一个 UUID 起视频腿。
+            std::unique_ptr<scrctl::hid::Service> hid_held;
+            if (hid_attach) {
+                std::string herr;
+                hid_held = scrctl::hid::Service::open(*dev, herr, verbose);
+                if (hid_held == nullptr) {
+                    std::fprintf(stderr, "[%s] HID 连接失败: %s（这一臂不作数）\n", w.c_str(),
+                                 herr.c_str());
+                    std::this_thread::sleep_for(2s);
+                    continue;
+                }
+                std::vector<scrctl::hid::Service::Surface> faces;
+                std::string serr;
+                const bool listed = hid_held->surfaces(faces, serr);
+                std::printf("  HID 已附着，整窗握着不发输入（connectedServices 查询%s，%zu 个面）\n",
+                            listed ? "成功" : "失败", listed ? faces.size() : 0);
+            }
             std::vector<uint8_t> shared_session;
             std::unique_ptr<scrctl::media::StreamSession> audio;
             uint32_t audio_sender_ssrc = 0, audio_report_ssrc = 0;
@@ -748,9 +859,78 @@ int main(int argc, char **argv) {
                 std::printf("  音频腿已起：收流端口=%u 设备发送端口=%u PT=%u "
                             "RemoteSSRC=%u LocalSSRC=%u\n",
                             audio->receiver_port(), audio_dest_port, audio_pt, a_remote, a_local);
+                print_sync_tokens("音频腿", audio->started().answer);
                 req.client_session_uuid = shared_session;
             }
 
+            // displayinfoupdates 订阅臂：照抓包里苹果那条挂着的长连接，在
+            // `com.apple.coredevice.deviceinfo` 上开一条流式订阅并**持续收**它的推送。
+            // 形状用现成的 stream()（当年为 streamapplist 写的）：请求把参数裹在
+            // `CoreDevice.input.actualInput` 下、再给一个 `streamProxy.sideChannel` =
+            // 客户端自己生成的 UUID，回信一串 `sideChannelStatus{pushing:...}`。
+            // 订阅必须在**起视频流之前**就挂上，否则测的就不是"起流时有没有人在看显示"。
+            std::atomic<bool> sub_done { false };
+            std::atomic<int> sub_elements { 0 };
+            std::atomic<bool> sub_failed { false };
+            std::thread sub_thread;
+            if (display_subscribe) {
+                std::string cerr2;
+                auto sub = dev->connect("com.apple.coredevice.deviceinfo", cerr2, verbose);
+                if (sub == nullptr) {
+                    std::fprintf(stderr, "[%s] 连 deviceinfo 失败: %s\n", w.c_str(),
+                                 cerr2.c_str());
+                    sub_failed.store(true);
+                } else {
+                    std::vector<uint8_t> side(16);
+                    for (auto &b : side) {
+                        b = static_cast<uint8_t>(std::random_device {} ());
+                    }
+                    auto proxy = scrctl::xpc::make_dict();
+                    scrctl::xpc::dict_set(proxy, "sideChannel",
+                                          scrctl::xpc::make_uuid(std::span<const uint8_t>(side)));
+                    auto sinput = scrctl::xpc::make_dict();
+                    scrctl::xpc::dict_set(sinput, "actualInput", scrctl::xpc::make_dict());
+                    scrctl::xpc::dict_set(sinput, "streamProxy", std::move(proxy));
+                    const uint64_t sub_t0 = now_ms();
+                    // 单次 stream() 的等待上限：给到比观察窗还长，免得订阅在 deadline 之前
+                    // 自己先退（第一版就是这么漏掉的）。
+                    const int hold_ms = (seconds + 30) * 1000;
+                    sub_thread = std::thread(
+                        [in = std::move(sinput), conn = std::move(sub), &sub_done, &sub_elements,
+                         &sub_failed, sub_t0, hold_ms, dev_ptr = &*dev, verbose]() mutable {
+                            // **订阅必须跨过那个 deadline**。第一版这里写死了 15 秒接收超时，
+                            // 结果设备 90ms 推完两次之后就静默，15 秒一到 stream() 自己退出，
+                            // 到 20 秒时订阅早就不在了——那一臂等于什么都没测。现在把单次
+                            // 超时给到"比观察窗还长"，并且一断就重开一条连接重新订阅，
+                            // 中间不留空窗。
+                            std::string e2;
+                            while (!sub_done.load()) {
+                                const auto r = conn->stream(
+                                    "com.apple.coredevice.feature.displayinfoupdates", "", in,
+                                    [&](const scrctl::xpc::Value &one) {
+                                        ++sub_elements;
+                                        std::printf("    [sub] +%lldms 收到显示推送（%zu 个键）\n",
+                                                    static_cast<long long>(now_ms() - sub_t0),
+                                                    one.is_dict() ? one.dict.size() : 0);
+                                        return !sub_done.load();
+                                    },
+                                    hold_ms, e2);
+                                if (sub_done.load() || r == scrctl::remote::CallResult::Ok) {
+                                    return;  // 设备自己发了 finishStreaming，不用再挂
+                                }
+                                std::printf("    [sub] +%lldms 订阅断了，重开一条连接重订: %s\n",
+                                            static_cast<long long>(now_ms() - sub_t0), e2.c_str());
+                                conn = dev_ptr->connect("com.apple.coredevice.deviceinfo", e2,
+                                                        verbose);
+                                if (conn == nullptr) {
+                                    std::printf("    [sub] 重连失败: %s\n", e2.c_str());
+                                    sub_failed.store(true);
+                                    return;
+                                }
+                            }
+                        });
+                }
+            }
             // 握着连接那一臂：自己开一条 displayservice 连接，用它来起流，然后**不放**，
             // 另起一个线程只管 service()——空转时替这条连接读一眼，好让设备的 PING 有人
             // 应答。查状态也走这同一条连接：这样"连接还活着"和"会话还在表里"是同一时刻
@@ -857,11 +1037,17 @@ int main(int argc, char **argv) {
             const bool has_remote =
                 stream_config_u32(session->started().answer, "RemoteSSRC", neg_remote_ssrc);
             stream_config_u32(session->started().answer, "RTCPRemotePort", neg_rtcp_port);
-            // **answer 里有两个"设备那边的端口"**：`connection.sender.port`（scrctl 一直
-            // 拿它当 sender_port，也就是我们所有 RTCP 实验的目的端口）和
-            // `streamConfig.SourcePort`。实测这两个数不一样（一次跑出来是 54351 与 61422）。
-            // pymobiledevice3 发 RTCP/PLI 用的是后者。如果设备的 RTCP 监听在 SourcePort 上，
-            // 那我们前面所有"设备不理 RTCP"的结论都是发到了一个没人收的端口上得到的。
+            // **这里曾经写着一句假话**："answer 里有两个设备那边的端口，实测不一样（一次
+            // 跑出来是 54351 与 61422）"，并由此推出"rrsrc* 那几臂发到 SourcePort 是在换
+            // 目的端口"。把 /tmp/p3test 里 21 次跑的记录拉出来对：`connection.sender.port`
+            // 与 `streamConfig.SourcePort` **21/21 全部相等**，而那两个数在任何一份日志里
+            // 都不存在。所以 `rrsrc` 那几臂从来没换过端口，它们和 `rr` 臂是同一件事。
+            //
+            // 真正"不一样的第三个端口"是 `RTCPRemotePort`，而它**不是设备那边的端口，是我们
+            // 自己的收流端口**：苹果的视频腿 answer 里 RTCPRemotePort=49637=DestPort=
+            // receiver.port，而它的客户端把 RTCP 发到 56179=SourcePort=sender.port。我们
+            // 这边同样 DestPort=RTCPRemotePort、RTCP 发到 sender.port。**两边一模一样**，
+            // "设备是不是在另一个端口听 RTCP"这个怀疑就此了结——它不是答案。
             const bool has_source_port =
                 stream_config_u32(session->started().answer, "SourcePort", neg_source_port);
             // 那两个 RTCP 超时键是这一节全部推理的起点，所以要每臂都打出来看**它跟着谁变**：
@@ -876,6 +1062,7 @@ int main(int argc, char **argv) {
                         has_local ? std::to_string(neg_local_ssrc).c_str() : "(没有)",
                         has_remote ? std::to_string(neg_remote_ssrc).c_str() : "(没有)",
                         neg_rtcp_port, session->started().sender_port, neg_source_port);
+            print_sync_tokens("视频腿", session->started().answer);
             std::printf("  请求 timeout=%s -> answer RTCPTimeoutInterval=%s RTCPTimeoutEnabled=%s\n",
                         lease_text.c_str(),
                         has_interval ? std::to_string(rtcp_interval).c_str() : "(没有)",
@@ -1144,6 +1331,12 @@ int main(int argc, char **argv) {
                 if (!arm.alive_at_end) {
                     ++tally[w].second;
                 }
+            }
+            if (sub_thread.joinable()) {
+                sub_done.store(true);
+                sub_thread.join();
+                std::printf("  [sub] 显示订阅累计收到 %d 次推送%s\n", sub_elements.load(),
+                            sub_failed.load() ? "（订阅中途失败过）" : "");
             }
             if (hold_thread.joinable()) {
                 hold_done.store(true);
