@@ -66,7 +66,20 @@ public:
         /// `supportedFeatures: 972`——差着的位里可能藏着更高档的编码器配置，
         /// 所以这个数要能改，别焊死在常量上。
         uint64_t client_supported_features = 140;
+        /// 起**音频腿**：`type:"audio"`、options 里不带那两个显示键、offer 走 mode 6。
+        bool audio = false;
+        /// 共享的 `avcMediaStreamOptionClientSessionID`（16 字节 XPC UUID 原文）。
+        /// 空 = 本腿自己生成一个。苹果是两条腿用同一个，所以要做那组实验必须能传进来。
+        std::vector<uint8_t> client_session_uuid;
         Offer offer;
+        /// 非空时**原样**当作 `negotiatorOffer` 的字节发出去，绕开 `build_negotiator_offer`。
+        ///
+        /// 为什么要有：offer 是"bplist 套 zlib 套 protobuf"三层、几十个字段，而"逐字段
+        /// 比对我们的和苹果的"这件事一直做不干净——每次都有人说"这一位大概无所谓"。
+        /// 手里正好有苹果当场发出去的那 482 字节原文（抓包解出来的），最省事的判据就是
+        /// 把它**一个字节都不改地**发一遍：设备如果对 offer 里的某一位有反应，这样一定
+        /// 会反应出来；如果这样仍然 20 秒死，那 offer 这一整层就可以判掉，不用再猜字段。
+        std::vector<uint8_t> raw_offer;
     };
 
     struct Started {
@@ -170,6 +183,8 @@ private:
                                                      uint32_t display_id,
                                                      std::optional<uint32_t> timeout_seconds,
                                                      uint64_t client_supported_features,
-                                                     const std::vector<uint8_t> &event_channel_uuid);
+                                                     const std::vector<uint8_t> &event_channel_uuid,
+                                                     bool audio = false,
+                                                     const std::vector<uint8_t> &shared_client_session_uuid = {});
 
 }  // namespace scrctl::media

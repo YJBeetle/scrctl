@@ -13,10 +13,30 @@ namespace scrctl::media {
 /// 都写成带注释的常量而不是编一个名字糊过去——猜错语义会表现为"流起不来"，
 /// 而留着观测值至少能保证起得来。
 struct Offer {
-    /// 会话号，出现在 blob 内部；每次起流换一个即可。
+    /// 本腿在 offer 里声明的 SSRC（视频放 `VideoSettings.f1`、音频放 f3.f1）。
+    ///
+    /// 名字里的 "session" 是历史遗留，语义后来查清了：设备会把它原样回成 answer 里的
+    /// `RemoteSSRC`，而我们发 RTCP 时的发送者 SSRC 用的就是 `RemoteSSRC`——三处对得上，
+    /// 所以这不是一个随手换的追踪号，而是**本腿自己的 SSRC**。两条腿必须各用一个
+    /// （苹果那份抓包里视频 6667224、音频 1640585081，互不相同）。
     uint32_t session_id = 0;
     /// avcMediaStreamOptionCallID，一次调用的追踪号。
     std::string call_id;
+
+    /// 这条 offer 是给**音频腿**的还是视频腿的。
+    ///
+    /// 为什么要有：Xcode DeviceHub 的抓包里它是**先起音频再起视频**，两条腿共用同一个
+    /// `avcMediaStreamOptionClientSessionID`，而那条精确 1.000Hz、整场从不空档的
+    /// `RR+SDES` 发在**音频腿**上（视频腿上整场几乎没有 RR）。如果设备的超时计时器挂在
+    /// "这条 ClientSessionID 的会话"而不是"这条腿"上，那视频能活 74 秒靠的就是音频腿在喂它
+    /// ——这是最后一个还没控住的结构性差异，所以要能把音频腿单独起起来。
+    ///
+    /// 两条腿在 offer 里的差别只有三处（逐字节对比过苹果那两份）：容器里
+    /// `avcMediaStreamNegotiatorMode` 音频 6 / 视频 5；设置消息视频放 f5
+    /// （`VideoSettings`）、音频放 f3（小得多，`{f1=本腿 SSRC, f4=24191}`）；
+    /// `avcMediaStreamOptionCallID` 每条腿各一个。码率阶梯 `f9`、`f6='Viceroy 1.7.0'`、
+    /// `f8/f13/f14/f16/f18` 两份**完全一致**，所以这里复用同一个构造器而不是复制一份。
+    bool is_audio = false;
 
     /// 申报的主机身份。设备会按这个挑编码器参数：实测换一个主机型号后编码器
     /// 停顿频率明显不同，所以这不是可以随手填的字段。
@@ -56,7 +76,6 @@ struct Offer {
     ///
     /// 这三个变体是为了验一件事而加的，答案是"别动这张表"，见下面那段。
     int rate_variant = 0;
-
     /// **这张表既不能调高、也不能删档**（tools/bitrate_probe 实测，docs §11 有表）：
     /// 把 f2=6000000 那档改成 60000000，answer 里依旧回 `TXMaxBitrate: 6000000`，
     /// 所以那个 6 Mbps 不是从我们表里挑的；而把这一档删掉，设备会退到表里

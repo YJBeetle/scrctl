@@ -153,11 +153,34 @@ std::vector<uint8_t> rate_table(const Offer &offer) {
     return out;
 }
 
+/// 音频腿的设置消息，放在 f3（视频用的是 f5 `VideoSettings`，两条腿在这个容器里
+/// 走的不是同一个字段号）。
+///
+/// 形状来自 Xcode DeviceHub 的抓包（那 433 字节的音频 negotiatorOffer，解开后 169 字节）：
+/// `f1` 就是客户端为自己这条腿声明的 SSRC——设备会在 answer 里把它原样回成 `RemoteSSRC`，
+/// 而我们后来发 RTCP 时的发送者 SSRC 用的正是这个数，三处能对上，所以 f1 不是随手填的号。
+/// `f4=24191` 语义未查（音频那条流的 streamConfig 里 `AudioStreamMode=8`、`RxPayloadType=101`），
+/// 照抄观测值；`f2/f3/f5/f6` 苹果发的是 0，就不编名字糊过去。
+std::vector<uint8_t> audio_settings_blob(const Offer &offer) {
+    std::vector<uint8_t> out;
+    put_field_varint(out, 1, offer.session_id);
+    put_field_varint(out, 2, 0);
+    put_field_varint(out, 3, 0);
+    put_field_varint(out, 4, 24191);
+    put_field_varint(out, 5, 0);
+    put_field_varint(out, 6, 0);
+    return out;
+}
+
 std::vector<uint8_t> media_blob(const Offer &offer) {
     std::vector<uint8_t> out;
     put_field_varint(out, 1, 1);
     put_field_varint(out, 2, 1);
-    put_field_bytes(out, 5, session_blob(offer));
+    if (offer.is_audio) {
+        put_field_bytes(out, 3, audio_settings_blob(offer));
+    } else {
+        put_field_bytes(out, 5, session_blob(offer));
+    }
     put_field_string(out, 6, "Viceroy 1.7.0");
     put_field_varint(out, 8, 0);
     auto rates = rate_table(offer);
@@ -187,7 +210,7 @@ std::vector<uint8_t> build_negotiator_offer(const Offer &offer) {
     auto d = plist::Value::Dict();
     d.set("avcMediaStreamNegotiatorMediaBlob",
           plist::Value::OfData(util::zlib_store(media_blob(offer))));
-    d.set("avcMediaStreamNegotiatorMode", plist::Value::Int(5));
+    d.set("avcMediaStreamNegotiatorMode", plist::Value::Int(offer.is_audio ? 6 : 5));
     d.set("avcMediaStreamOptionCallID", plist::Value::Str(offer.call_id));
     d.set("avcMediaStreamOptionRemoteEndpointInfo",
           plist::Value::OfData(remote_endpoint_info(offer)));

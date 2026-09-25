@@ -43,7 +43,8 @@ xpc::Value build_start_request(const std::string &receiver_ip, uint16_t receiver
                                const std::vector<uint8_t> &offer_bplist, uint32_t display_id,
                                std::optional<uint32_t> timeout_seconds,
                                uint64_t client_supported_features,
-                               const std::vector<uint8_t> &event_channel_uuid) {
+                               const std::vector<uint8_t> &event_channel_uuid, bool audio,
+                               const std::vector<uint8_t> &shared_client_session_uuid) {
     auto d = xpc::make_dict();
     xpc::dict_set(d, "clientSupportedFeatures", xpc::make_uint64(client_supported_features));
     xpc::dict_set(d, "direction", xpc::make_string("output"));
@@ -54,15 +55,29 @@ xpc::Value build_start_request(const std::string &receiver_ip, uint16_t receiver
                   typed("int", xpc::make_int64(kAccessNetworkType)));
     xpc::dict_set(options, "AVCMediaStreamNegotiatorTransportProtocolType",
                   typed("int", xpc::make_int64(kTransportProtocolType)));
-    xpc::dict_set(options, "CoreDeviceVideoDisplayMode",
-                  typed("string", xpc::make_string("DisplayByID")));
-    xpc::dict_set(options, "VideoStreamForDisplayID",
-                  typed("int", xpc::make_int64(display_id)));
+    // 这两位是视频专用的：苹果那份抓包里，音频腿的 options 只有 AccessNetworkType /
+    // TransportProtocolType / ClientSessionID 三个键，而视频腿多了这两个。带上它们设备
+    // 会把这条流按"某个显示号的视频"处理，音频腿要的 `source: {audioSystemOutput: {}}`
+    // 就拿不到了。
+    if (!audio) {
+        xpc::dict_set(options, "CoreDeviceVideoDisplayMode",
+                      typed("string", xpc::make_string("DisplayByID")));
+        xpc::dict_set(options, "VideoStreamForDisplayID",
+                      typed("int", xpc::make_int64(display_id)));
+    }
     // 会话号：一次起流一个，设备用它关联这条会话。
     // 必须是真正的 XPC UUID 对象（16 字节），不能是 UUID 文本——设备侧是
     // Swift Codable，类型对不上直接拒："Expected to decode UUID but found a
     // OS_xpc_string instead"（code 4864）。
-    const auto session_id = random_uuid_bytes();
+    //
+    // `shared_client_session_uuid` 非空时用它：苹果是**先起音频再起视频、两条腿共用同一个
+    // ClientSessionID**（抓包里两次 start 的都是 6afeae6c-…），所以"这个会话有几条腿"是
+    // 靠这一个 UUID 关联的。留空 = 本腿自己生成一个（单腿客户端的旧行为）。
+    std::vector<uint8_t> session_id = shared_client_session_uuid;
+    if (session_id.empty()) {
+        const auto fresh = random_uuid_bytes();
+        session_id.assign(fresh.begin(), fresh.end());
+    }
     xpc::dict_set(options, "avcMediaStreamOptionClientSessionID",
                   typed("uuid", xpc::make_uuid(std::span<const uint8_t>(session_id))));
     xpc::dict_set(d, "options", std::move(options));
@@ -70,14 +85,15 @@ xpc::Value build_start_request(const std::string &receiver_ip, uint16_t receiver
     xpc::dict_set(d, "receiverIP", xpc::make_string(receiver_ip));
     xpc::dict_set(d, "receiverPort", xpc::make_uint64(receiver_port));
     xpc::dict_set(d, "senderIP", xpc::make_string(sender_ip));
-    // 这个键**可以整个不发**，且不发不等于发 0：设备侧是两条不同的机制。带着键就是一条
-    // 硬性租期（到点摘会话，不看我们发过什么）；不带键时 answer 里 `RTCPTimeoutInterval`
-    // 仍是默认的 20.0，但那是它自己的 RTCP 空闲计时器——Apple 客户端（Xcode DeviceHub）
-    // 就是不带这个键，而它的会话在 158 秒里一次没换过。判据见 StreamSession.h 里那段。
+    // 这个键在 CoreDevice 的 feature 层是**必填**的：不发就直接被拒
+    // （`code 4865 / Expected to find key timeout.`，两臂实测）。
+    //
+    // 曾经在这里写过"苹果不发这个键、所以它不到期"，那是**错的**：抓它的请求原文，
+    // `timeout` 明明白白是 20。当时误读的来源是把设备会话表的回显当成了请求原文。
     if (timeout_seconds.has_value()) {
         xpc::dict_set(d, "timeout", xpc::make_uint64(*timeout_seconds));
     }
-    xpc::dict_set(d, "type", xpc::make_string("video"));
+    xpc::dict_set(d, "type", xpc::make_string(audio ? "audio" : "video"));
     // 苹果有、我们没有的唯一一个键（抓包对齐出来的）。空 vector = 不发。
     if (!event_channel_uuid.empty()) {
         xpc::dict_set(d, "sessionEventChannel",
@@ -106,9 +122,16 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
     }
 
     Offer offer = request.offer;
+    offer.is_audio = request.audio;
     offer.session_id = static_cast<uint32_t>(std::random_device{}());
     offer.call_id = remote::random_uuid_text();
-    const auto blob = build_negotiator_offer(offer);
+    // `raw_offer` 非空时**整个跳过**我们自己的构造器，原样发这份字节。为什么要这个口子：
+    // 逐字段"对齐到苹果"是有损的——对齐的人只会挑自己想到要对的字段。把苹果当场发出去的那
+    // 482 字节原封不动发一遍，才是"请求侧差异"这个变量的**上界**：如果连这个都不改变租期，
+    // 那差异就一定不在 offer 里，可以直接把整条 offer 假设关掉。
+    // 注意它带着苹果那次的 SSRC/CallID，所以这一臂**不要**再发 RTCP（SSRC 对不上人）。
+    std::vector<uint8_t> blob =
+        request.raw_offer.empty() ? build_negotiator_offer(offer) : request.raw_offer;
 
     const auto &tunnel_params = device.tunnel_params();
     const std::vector<uint8_t> event_channel =
@@ -116,7 +139,8 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
     auto input = build_start_request(tunnel_params.client_address, port,
                                      tunnel_params.server_address, blob, request.display_id,
                                      request.timeout_seconds,
-                                     request.client_supported_features, event_channel);
+                                     request.client_supported_features, event_channel,
+                                     request.audio, request.client_session_uuid);
     xpc::Value output;
     if (on_conn != nullptr) {
         // 在调用方持有的那条连接上起流。注意 invoke 的返回值有三态，这里只关心

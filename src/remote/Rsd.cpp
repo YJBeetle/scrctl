@@ -2,8 +2,12 @@
 
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <random>
 #include <sstream>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace scrctl::remote {
 namespace {
@@ -60,15 +64,85 @@ xpc::Value core_device_request(std::string_view feature_identifier,
 
     auto version = xpc::make_dict();
     auto components = xpc::make_array();
-    for (const auto part : {629ULL, 3ULL}) {
+    // 版本号原则上是写死的 629.3（这是我们工具链里 CoreDevice 框架的版本），但留一个
+    // 环境变量口子是有原因的：苹果自己的客户端在抓包里申报的是 **642.16**，而它的会话
+    // 报着同样的 `timeout:20` 却从不到期。这一位在很长一份"假设清单"里被判过"不是它"，
+    // 但那条判据是推断（"p3 也发 629.3 且也死"）——p3 发 629.3 会死只能说明 629.3 不被
+    // 豁免，**说明不了 642.16 会怎样**。设备按客户端申报的版本号来决定要不要回收会话，
+    // 对苹果这种兼容性策略来说是完全正常的做法，所以必须真发一次 642.16 才算判掉。
+    //
+    // `SCRCTL_COREDEVICE_VERSION="major.minor[.patch...]"`，逗号分隔也行；不设就是 629.3。
+    std::vector<uint64_t> parts {629, 3};
+    const char *override = std::getenv("SCRCTL_COREDEVICE_VERSION");
+    if (override != nullptr && override [0] != '\0') {
+        std::vector<uint64_t> parsed;
+        std::string_view sv(override);
+        std::size_t pos = 0;
+        while (pos < sv.size()) {
+            const auto sep = sv.find_first_of(". ", pos);
+            // sep==npos 时要取"到串尾"，不是取长度 0——写成 `std::size_t{}` 会让最后一段
+            // 变成空串，于是整份申报被当成非法而退回 629.3，而表面上实验是"跑了"的。
+            // （第一版就是这个错，导致 642.16 那一臂其实发的还是 629.3。）
+            const auto token = sep == std::string_view::npos ? sv.substr(pos)
+                                                             : sv.substr(pos, sep - pos);
+            bool bad = token.empty();
+            uint64_t value = 0;
+            for (char c : token) {
+                if (c < '0' || c > '9') {
+                    bad = true;
+                    break;
+                }
+                value = value * 10 + static_cast<uint64_t>(c - '0');
+            }
+            if (bad) {
+                std::fprintf(stderr, "SCRCTL_COREDEVICE_VERSION 里有非数字段: %s（按 629.3 走）\n",
+                             override);
+                parsed.clear();
+                break;
+            }
+            parsed.push_back(value);
+            if (sep == std::string_view::npos) {
+                break;
+            }
+            pos = sep + 1;
+        }
+        if (!parsed.empty()) {
+            parts = std::move(parsed);
+            std::fprintf(stderr, "  [注] coreDeviceVersion 按环境变量的申报改成了 %s（默认 629.3）\n",
+                         override);
+        }
+    }
+    for (const uint64_t part : parts) {
         xpc::array_push(components, xpc::make_uint64(part));
     }
     xpc::dict_set(version, "components", std::move(components));
-    xpc::dict_set(version, "originalComponentsCount", xpc::make_int64(2));
-    xpc::dict_set(version, "stringValue", xpc::make_string(kCoreDeviceVersionString));
+    xpc::dict_set(version, "originalComponentsCount",
+                  xpc::make_int64(static_cast<int64_t>(parts.size())));
+    // stringValue 必须和 components 一起改：只换 components 而文本还写着 629.3，等于给
+    // 设备两条互相矛盾的申报，测出来的结果没法归因到"版本号"这一位上。
+    std::string version_text = kCoreDeviceVersionString;
+    if (override != nullptr && override [0] != '\0') {
+        version_text = override;
+        for (auto &c : version_text) {
+            if (c == ' ') {
+                c = '.';
+            }
+        }
+    }
+    xpc::dict_set(version, "stringValue", xpc::make_string(version_text));
     xpc::dict_set(d, "CoreDevice.coreDeviceVersion", std::move(version));
 
-    xpc::dict_set(d, "CoreDevice.deviceIdentifier", xpc::make_string(random_uuid_text()));
+    // `CoreDevice.deviceIdentifier`：抓包里苹果两次请求用的是**同一个** UUID
+    // （0E81B5E0-…，即这台设备在 CoreDevice 里的稳定标识），而我们一直每次调用换一个随机数。
+    // 这个字段的语义是"我在跟哪台设备说话"，随手换等于每次自称是新设备——设备完全可能
+    // 因此按"陌生来客"的策略处置这条会话（比如套上那个到点回收的租期）。
+    //
+    // 留一个环境变量口子 `SCRCTL_DEVICE_IDENTIFIER` 把它钉住，是为了能单独判这一位；
+    // 没设就还是原来的每次随机（不拿一个未验证的假设直接改掉产品行为）。
+    const char *pinned = std::getenv("SCRCTL_DEVICE_IDENTIFIER");
+    const std::string device_id =
+        pinned != nullptr && pinned [0] != '\0' ? std::string(pinned) : random_uuid_text();
+    xpc::dict_set(d, "CoreDevice.deviceIdentifier", xpc::make_string(device_id));
     xpc::dict_set(d, "CoreDevice.input", input);
     xpc::dict_set(d, "CoreDevice.invocationIdentifier", xpc::make_string(random_uuid_text()));
     if (!feature_identifier.empty()) {

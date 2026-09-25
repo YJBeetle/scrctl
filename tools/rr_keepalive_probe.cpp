@@ -208,19 +208,21 @@ std::vector<uint8_t> build_sdes_cname(uint32_t our_ssrc, std::string_view cname)
 /// 我们此前把所有变体的 RR/SDES/SR 都对齐了字节还是 20.0 秒死——那么"设备认的那种 RTCP"
 /// 很可能根本不是 RFC 3550 里那几种，而是这个。
 std::vector<uint8_t> build_rctl(uint32_t our_ssrc, uint32_t last_rtp_ts, uint32_t last_frame_pkts,
-                                uint32_t packets_received) {
+                                uint32_t packets_received, uint32_t clock_1024) {
     // w2 = (RTP 时间戳 >> 8) << 16；w3 = 上一帧的包数；
-    // w4 = (到达墙钟毫秒 << 16) | 到达间隔抖动；w5 = (累计包数 << 16) | 0xEA61 定值。
+    // w4 = (1024Hz 墙钟 << 16) | 抖动；w5 = (累计包数 << 16) | 60001。
     //
-    // w4 那个"墙钟"要按**和 RTP 时间戳同一个时基**算：参考实现试过用"自起流以来的毫秒"
-    // 填，设备据此算出一个 14–50ms 的假单程时延（VCRC 里看得见），当成拥塞就开始砍帧率。
-    // 视频流的 RTP 时间戳是 24kHz，所以到达时刻取 ts/24 ——本地隧道里"到达≈发出"，
-    // 于是单程时延≈0，这是诚实值而不是糊弄。抖动报 0 同理。
+    // w4 这个钟要按 **1024Hz 的本地单调时间**填，不是按 RTP 时间戳推。这是把苹果那 1469 个
+    // RCTL 和它当时的收包状态逐个对齐量出来的：w4 高 16 位的全场斜率是 **1024.0/s**（16 位
+    // 会回绕），而 RTP 时间戳是 24kHz、`ts/24` 只有 1000/s——按 ts 推会在 20 秒里差出约
+    // 480ms，设备据此算出的单程时延就会一路漂。参考实现早期那句"用自起流以来的毫秒"就是
+    // 踩在这个 2.4% 上。
+    // w5 低 16 位固定 60001 也是同一批测量的结果：苹果全场分布是 {60001: 1075, 60000: 355,
+    // 0: 39}，主值就是它（我一度只看前 12 个样本以为苹果发 0，查完全场才发现是我们对）。
     const uint32_t ts = last_rtp_ts;
     const uint32_t w2 = ((ts >> 8) & 0xFFFF) << 16;
     const uint32_t w3 = last_frame_pkts & 0xFFFFFFFF;
-    const uint32_t arrival_ms = (ts / 24) & 0xFFFF;
-    const uint32_t w4 = (arrival_ms << 16) | 0;
+    const uint32_t w4 = ((clock_1024 & 0xFFFF) << 16) | 0;
     const uint32_t w5 = ((packets_received & 0xFFFF) << 16) | 0xEA61;
     std::vector<uint8_t> v;
     v.push_back(0x80);  // V=2, subtype=0
@@ -412,6 +414,38 @@ int main(int argc, char **argv) {
     /// 请求"这件事完全可能是把会话搞死的原因——不去掉它，就分不清"设备自己关的"和
     /// "被我们第二次调用搞关的"。
     bool hold_no_poll = false;
+    /// 起一条**音频腿**，和视频腿共用同一个 `avcMediaStreamOptionClientSessionID`。
+    ///
+    /// 这是最后一个还没控住的结构性差异。苹果那份 95.8 秒抓包里的形状是：先 `type:"audio"`
+    /// 再 `type:"video"`，两次 `ClientSessionID` 都是同一个 UUID，而那条精确 1.000Hz、
+    /// 整场从不空档的 `RR+SDES` 发在**音频腿**上（客户端 52800 -> 设备 54228，74 个，
+    /// 间隔 1.000±0.001s）；**视频腿上几乎没有 RR**（整场只有 46 个，间隔 1~4 秒地跳）。
+    /// 如果设备的计时器挂在"这条 ClientSessionID"而不是"这条腿"上，那喂住它的就是音频腿，
+    /// 而我们从来只有视频腿独活——这能同时解释"我们报多少秒死多少秒"和"苹果报了 20 却
+    /// 永远不到点"。p3 也有 `start_audio_stream`，但它自己的会话表里跑起来只剩视频一条
+    /// （`+40s sessions=1`），所以"p3 也断"**不能**否掉这条假设。
+    bool audio_leg = false;
+    /// 在音频腿上按 1Hz 发 RR+SDES（苹果就是这么做的）。和 `--audio-leg` 分开是必要的：
+    /// 只起腿 = 验"设备是不是按 ClientSessionID 分组来免租期"；起腿 + 发 RR = 验
+    /// "喂住计时器的是音频腿的 RTCP"。两个解释的修法完全不同，不能一次混着测。
+    bool audio_rr = false;
+    /// 把这份文件里的字节**原样**当 negotiatorOffer 发（绕开我们自己的构造器）。
+    /// 给的是 Xcode DeviceHub 抓包里那次起流当场发出的 482 字节原文。
+    std::string raw_offer_path;
+    std::vector<uint8_t> raw_offer;
+    /// 在 `com.apple.coredevice.deviceinfo` 上挂一条 **displayinfoupdates** 流式订阅。
+    ///
+    /// 这是今晚从"我们自己的日志"里翻出来的不对称逼出来的方向：同一份请求、同样报
+    /// `timeout=20`，我们的**音频腿活过了 20 秒**（+30s 已收 1878 包、+40s 1999 包），
+    /// 而视频腿精确死在 19997ms。也就是说被回收的不是"会话"，是**视频**那条。
+    /// 什么会让设备的视频采集会话变成孤儿？抓包里苹果在 `deviceinfo`（设备端口 54583）上
+    /// 有一条**抓包开始之前就已建立**的长连接，整场只推了一次
+    /// `sideChannelStatus{pushing:[方向 / primary LCD / 6 个 wireless 显示器 / 背光]}`，
+    /// 而那次推送的时刻是 **+20.71s——视频起流（+20.69s）之后 0.02 秒**。这个 feature 就挂在
+    /// `deviceinfo` 的列表里：`com.apple.coredevice.feature.displayinfoupdates`。
+    /// 如果"有人在订阅显示变化"就是设备判定这个显示采集有人在用的依据，那它就能同时解释
+    /// 苹果 74 秒不断、我们 20 秒必死、以及我们的音频腿为什么不受影响。
+    bool display_subscribe = false;
     // AVC 那条形串。抓包对齐到的最后一处可见差别：苹果发 `FLS;VRAE:0;SW:1;`，我们和 p3
     // 都发 `FLS;SW:1;`（p3 还专门注释说 VRAE:0 不能进）。设备会把它回显成
     // `TxCodecFeatureListString`，所以这条改动是可以在 answer 里验证"它收没收下"的——
@@ -446,6 +480,13 @@ int main(int argc, char **argv) {
             hold_idle = true;
         } else if (a == "--hold-no-poll") {
             hold_no_poll = true;
+        } else if (a == "--audio-leg") {
+            audio_leg = true;
+        } else if (a == "--audio-rr") {
+            audio_leg = true;
+            audio_rr = true;
+        } else if (a == "--offer" && i + 1 < argc) {
+            raw_offer_path = argv[++i];
         } else if (a == "--avc-features" && i + 1 < argc) {
             avc_features = argv[++i];
         } else if (a == "--attempts" && i + 1 < argc) {
@@ -490,7 +531,7 @@ int main(int argc, char **argv) {
         const auto rr = build_rr(0x11111111u, 0x22222222u, 3);
         const auto sd = build_sdes(0x11111111u);
         const auto sr = build_sr(0x11111111u, 0, 0);
-        const auto rctl = build_rctl(0x11111111u, 0x22222222u, 10, 100);
+        const auto rctl = build_rctl(0x11111111u, 0x22222222u, 10, 100, 0);
         const auto comp = build_rctl_companion(0x11111111u, 0x22222222u);
         const int rr_len_field = (rr[2] << 8) | rr[3];
         std::printf("包自检：RR %zu 字节（头里 length=%d）  RR+SDES 复合 %zu 字节  SR %zu 字节  "
@@ -503,6 +544,22 @@ int main(int argc, char **argv) {
                                  "RR length 7），这一轮不作数\n");
             return 2;
         }
+    }
+
+    if (!raw_offer_path.empty()) {
+        FILE *f = std::fopen(raw_offer_path.c_str(), "rb");
+        if (f == nullptr) {
+            std::fprintf(stderr, "打不开 offer 文件 %s\n", raw_offer_path.c_str());
+            return 1;
+        }
+        uint8_t buf[4096];
+        std::size_t n = 0;
+        while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) {
+            raw_offer.insert(raw_offer.end(), buf, buf + n);
+        }
+        std::fclose(f);
+        std::printf("用 %s 的原文当 negotiatorOffer（%zu 字节，不走我们自己的构造器）\n",
+                    raw_offer_path.c_str(), raw_offer.size());
     }
 
     std::string err;
@@ -649,6 +706,50 @@ int main(int argc, char **argv) {
             req.offer.avc_features = avc_features;
             req.timeout_seconds = lease;
             req.session_event_channel = event_channel_uuid;
+            req.raw_offer = raw_offer;
+
+            // 苹果是**先起音频再起视频**，两条腿共用同一个 ClientSessionID。这里照那个
+            // 顺序来：先生成/复用这 16 字节，起音频腿，再用同一个 UUID 起视频腿。
+            std::vector<uint8_t> shared_session;
+            std::unique_ptr<scrctl::media::StreamSession> audio;
+            uint32_t audio_sender_ssrc = 0, audio_report_ssrc = 0;
+            uint16_t audio_dest_port = 0;
+            uint64_t audio_seen = 0;
+            uint32_t audio_highest_seq = 0;
+            if (audio_leg) {
+                std::random_device rd;
+                shared_session.resize(16);
+                for (auto &b : shared_session) {
+                    b = static_cast<uint8_t>(rd() & 0xFF);
+                }
+                scrctl::media::StreamSession::Request areq;
+                areq.audio = true;
+                areq.client_session_uuid = shared_session;
+                areq.timeout_seconds = lease;
+                areq.offer = req.offer;
+                std::string aerr;
+                audio = scrctl::media::StreamSession::start(*dev, areq, aerr, verbose);
+                if (!audio) {
+                    std::fprintf(stderr, "[%s] 音频腿起流失败: %s（这一臂不作数）\n", w.c_str(),
+                                 aerr.c_str());
+                    std::this_thread::sleep_for(2s);
+                    continue;
+                }
+                // 设备在音频 answer 里给的三个数，就是我们在音频腿上发 RTCP 要用的三个数
+                // （发送者 = 它给我们分配的 RemoteSSRC，报告块 = 它自己的 LocalSSRC，
+                // 目的端口 = 它的 sender.port）。取不到就停在这一臂上，别拿编的数发包。
+                uint32_t a_remote = 0, a_local = 0;
+                stream_config_u32(audio->started().answer, "RemoteSSRC", a_remote);
+                stream_config_u32(audio->started().answer, "LocalSSRC", a_local);
+                audio_sender_ssrc = a_remote;
+                audio_report_ssrc = a_local;
+                audio_dest_port = audio->started().sender_port;
+                uint32_t audio_pt = audio->started().payload_type;
+                std::printf("  音频腿已起：收流端口=%u 设备发送端口=%u PT=%u "
+                            "RemoteSSRC=%u LocalSSRC=%u\n",
+                            audio->receiver_port(), audio_dest_port, audio_pt, a_remote, a_local);
+                req.client_session_uuid = shared_session;
+            }
 
             // 握着连接那一臂：自己开一条 displayservice 连接，用它来起流，然后**不放**，
             // 另起一个线程只管 service()——空转时替这条连接读一眼，好让设备的 PING 有人
@@ -794,6 +895,9 @@ int main(int argc, char **argv) {
             }
 
             const uint64_t until = t0 + static_cast<uint64_t>(seconds) * 1000;
+            // 音频腿上每秒一个 RR+SDES 的节奏起点，和它自己收到的包/发出去的计数。
+            uint64_t next_audio_rr = t0;
+            uint64_t audio_rr_sent = 0;
             // 每 10 秒打一行进度。长观察窗（分钟级）没有这一行的话，探针看起来像卡死，
             // 而"它其实还在收包"正是本轮要报的答案——探针要能证明自己做了事。
             uint64_t next_tick = t0 + 10000;
@@ -861,9 +965,12 @@ int main(int argc, char **argv) {
                 if (send_rctl && rtp_packets != 0 && now_ms() >= next_rctl) {
                     next_rctl += 50;  // 抓包里的节奏：约 20 个/秒
                     std::string serr;
+                    // 1024Hz 本地单调钟，从本轮起流那一刻算（苹果那个也是回绕的 16 位）。
+                    const uint32_t clock_1024 =
+                        static_cast<uint32_t>((now_ms() - t0) * 1024 / 1000);
                     const auto rctl =
                         build_rctl(mine_ssrc && has_remote ? neg_remote_ssrc : our_ssrc,
-                                   rtp_last_ts, last_frame_pkts, rtp_packets);
+                                   rtp_last_ts, last_frame_pkts, rtp_packets, clock_1024);
                     if (!session->send_rtp(rctl, dest_port, serr)) {
                         arm.note = "RCTL 发送失败: " + serr;
                     } else {
@@ -917,6 +1024,38 @@ int main(int argc, char **argv) {
                         ++rtcp_sent;
                     }
                 }
+                // 音频腿这一段做两件事，顺序不能反：先把它**实际收到**的包记下来（这是
+                // "设备到底替不替我们建这条腿"的唯一一手证据——answer 回了不代表在推流），
+                // 再按苹果那个节奏每秒发一个 RR+SDES。
+                if (audio) {
+                    std::vector<uint8_t> ap;
+                    uint16_t apeer = 0;
+                    std::string aerr;
+                    for (int drained = 0; drained < 8; ++drained) {
+                        if (!audio->next_packet(ap, apeer, 1, aerr)) {
+                            break;
+                        }
+                        scrctl::rt::PacketInfo ai {};
+                        if (scrctl::rt::parse_rtp_header(ap, ai) &&
+                            ai.payload_type == audio->started().payload_type) {
+                            ++audio_seen;
+                            audio_highest_seq = ai.sequence;
+                        }
+                    }
+                    if (audio_rr && audio_sender_ssrc != 0 && now_ms() >= next_audio_rr) {
+                        next_audio_rr += 1000;
+                        auto arr = build_rr(audio_sender_ssrc, audio_report_ssrc,
+                                            static_cast<uint32_t>(audio_highest_seq));
+                        const auto asd = build_sdes(audio_sender_ssrc);
+                        arr.insert(arr.end(), asd.begin(), asd.end());
+                        std::string serr;
+                        if (!audio->send_rtp(arr, audio_dest_port, serr)) {
+                            arm.note = "音频腿 RR 发送失败: " + serr;
+                        } else {
+                            ++audio_rr_sent;
+                        }
+                    }
+                }
                 if (poll_every_ms != 0 && now_ms() >= next_poll) {
                     next_poll += static_cast<uint64_t>(poll_every_ms);
                     std::string qerr;
@@ -929,11 +1068,23 @@ int main(int argc, char **argv) {
                 }
                 if (now_ms() >= next_tick) {
                     next_tick += 10000;
-                    std::printf("  +%3llus 视频包 %6llu SR 心跳 %4llu 发出 RTCP %5llu（租期 %s）\n",
-                                static_cast<unsigned long long>((now_ms() - t0) / 1000),
-                                static_cast<unsigned long long>(video_seen),
-                                static_cast<unsigned long long>(sr_seen),
-                                static_cast<unsigned long long>(rtcp_sent), lease_text.c_str());
+                    if (audio) {
+                        std::printf(
+                            "  +%3llus 视频包 %6llu SR 心跳 %4llu 发出 RTCP %5llu"
+                            " 音频包 %6llu 音频 RR %3llu（租期 %s）\n",
+                            static_cast<unsigned long long>((now_ms() - t0) / 1000),
+                            static_cast<unsigned long long>(video_seen),
+                            static_cast<unsigned long long>(sr_seen),
+                            static_cast<unsigned long long>(rtcp_sent),
+                            static_cast<unsigned long long>(audio_seen),
+                            static_cast<unsigned long long>(audio_rr_sent), lease_text.c_str());
+                    } else {
+                        std::printf("  +%3llus 视频包 %6llu SR 心跳 %4llu 发出 RTCP %5llu（租期 %s）\n",
+                                    static_cast<unsigned long long>((now_ms() - t0) / 1000),
+                                    static_cast<unsigned long long>(video_seen),
+                                    static_cast<unsigned long long>(sr_seen),
+                                    static_cast<unsigned long long>(rtcp_sent), lease_text.c_str());
+                    }
                     if (dump_status) {
                         std::string qerr;
                         const auto st = scrctl::media::StreamSession::status(*dev, qerr, verbose);
