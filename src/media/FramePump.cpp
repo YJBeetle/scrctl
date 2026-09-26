@@ -536,6 +536,29 @@ void FramePump::loop() {
     };
 
     for (;;) {
+        // **没有会话就绝不往下走**。下面每一段都要解引用 `session_`（最顶上那个保活 RR、
+        // 收包、以及问设备状态的 `revive_if_dead`），而 `restart()` 失败时它是空的——
+        // `restart()` 第一件事就是把旧会话 `stop()` + `reset()`，新会话起不来就返回 false，
+        // 于是 `session_ == nullptr`。以前三个失败分支各自的处理只是"打一行 + 睡一秒 +
+        // continue"，下一圈正正撞在空指针上：镜像进程当场崩掉，而设备侧那条流还留着，
+        // 要等租期到点才腾出那一格（一台设备只容一条流，下一次连接就连不上了）。
+        //
+        // 现在由这一处统一兜：按 1 秒退避重试，而这 1 秒要睡得能立刻响应停止请求
+        // （Ctrl-C 之后还硬睡一秒，用户看到的就是"按了没反应"），所以睡在条件变量上。
+        if (session_ == nullptr) {
+            std::string rerr;
+            if (restart(rerr)) {
+                new_session_state();
+                continue;
+            }
+            std::fprintf(stderr, "重起媒体会话失败: %s（1 秒后再试）\n", rerr.c_str());
+            std::unique_lock<std::mutex> lock(mutex_);
+            cv_.wait_for(lock, std::chrono::seconds(1), [this] { return stopping_; });
+            if (stopping_) {
+                return;
+            }
+            continue;
+        }
         // **续命包**：每秒一个 RR。这一位不是可选的礼貌——设备那个 `RTCPTimeoutInterval`
         // 是"距离上次收到我们 RTCP 多久"的空闲计时器（推导与实测表见 kSessionLeaseSeconds
         // 上面），租期报 20 秒而不回 RTCP，会话就必然在 +19.97s 被设备摘掉。
@@ -591,13 +614,10 @@ void FramePump::loop() {
         if (oversized_restart_) {
             oversized_restart_ = false;
             std::printf("有 NAL 超过平台后端的长度前缀上限，重起媒体会话拿新关键帧\n");
-            std::string restart_err;
-            if (!restart(restart_err)) {
-                std::fprintf(stderr, "重起媒体会话失败: %s\n", restart_err.c_str());
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-            } else {
-                new_session_state();
-            }
+            // 失败不在这里睡、也不在这里重试：`restart_now()` 打日志，循环顶端那个
+            // "没有会话就绝不往下走"的兜底负责 1 秒退避。以前这里自己睡 1 秒再
+            // continue，而 continue 之后的第一句就是解引用空的 `session_`。
+            restart_now();
             continue;
         }
         if (!session_->next_packet(datagram, 50, err)) {
@@ -616,13 +636,7 @@ void FramePump::loop() {
                 session_start_ms_ = now_ms();
                 std::printf("起流 %d 秒仍未解出关键帧（开头 IDR 可能被丢），重起媒体会话 (%d/3)\n",
                             5, nokey_restarts_);
-                std::string restart_err;
-                if (!restart(restart_err)) {
-                    std::fprintf(stderr, "重起媒体会话失败: %s\n", restart_err.c_str());
-                    std::this_thread::sleep_for(std::chrono::seconds(1));
-                    continue;
-                }
-                new_session_state();
+                restart_now();
                 continue;
             }
             if (options_.silence_restart_ms > 0) {
@@ -711,13 +725,7 @@ void FramePump::loop() {
                 }
             }
             if (stalled) {
-                std::string restart_err;
-                if (!restart(restart_err)) {
-                    std::fprintf(stderr, "重起媒体会话失败: %s\n", restart_err.c_str());
-                    std::this_thread::sleep_for(std::chrono::seconds(1));
-                    continue;
-                }
-                new_session_state();
+                restart_now();  // 失败由循环顶端的空会话兜底接手退避重试
             }
         }
     }
