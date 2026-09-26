@@ -30,8 +30,10 @@
 #include "app/RenderPanel.h"
 #include "app/ViewGeom.h"
 #include "bitstream/AnnexB.h"
+#include "decode/AudioDecoder.h"
 #include "decode/Decoder.h"
 #include "hid/Hid.h"
+#include "media/AudioPump.h"
 #include "media/FramePump.h"
 #include "media/StreamSession.h"
 #include "remote/Device.h"
@@ -76,6 +78,13 @@ struct Options {
     /// 用平台硬件解码后端（VideoToolbox），而不是默认的软件解码。
     /// 见 FramePump::Options::use_hardware——默认软解的原因是硬解吃不下超过 65535 字节的帧。
     bool hw_decode = false;
+    /// scrcpy 的 --no-audio：连音频腿都不起（不占设备上那条会话、不解码）。
+    bool no_audio = false;
+    /// scrcpy 的 --no-audio-playback：收流与解码照跑，只是不在电脑上出声。
+    /// 录制或排障要"有音频数据但安静"时用它——本机夜里跑真机回归也靠它。
+    bool no_audio_playback = false;
+    /// scrcpy 的 --audio-buffer=ms（默认同为 50）：攒够这么多毫秒才开始放。
+    int audio_buffer_ms = 50;
 };
 
 /// Ctrl-C 与 `kill` 应当让进程走正常退出路径（停流、关会话），而不是只能被 SIGKILL。
@@ -99,6 +108,13 @@ void usage(const char *argv0) {
         "  --play FILE          改播已录制的 Annex-B HEVC 文件\n"
         "  -r, --record FILE    把实时流另存为 Annex-B\n"
         "  -n, --no-control     只显示不注入输入（默认下鼠标左键即触摸）\n"
+        "  --no-audio           不起音频腿（默认起：设备系统输出转 AAC-ELD，本地解成\n"
+        "                     48kHz 立体声）。设备只给这一种编码，所以 scrcpy 的\n"
+        "                     --audio-codec / --audio-source / --audio-bit-rate 在这里\n"
+        "                     没有对应项——编码档位是设备定的\n"
+        "  --no-audio-playback  收流与解码照跑，只是不在电脑上出声（夜里跑真机回归用）\n"
+        "  --audio-buffer=MS    攒够 MS 毫秒才开口放，默认 50。调小延迟更低但更容易\n"
+        "                     欠载（表现为断续）\n"
         "  --no-window          不起窗口只收流（脚本/自动化用）\n"
         "  --window-title TEXT  窗口标题（--title 同义）\n"
         "  --window-width N / --window-height N  显式窗口尺寸，默认按屏幕自动缩\n"
@@ -162,6 +178,12 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.list_devices = true;
         } else if (a == "-n" || a == "--no-control") {
             o.no_control = true;
+        } else if (a == "--no-audio") {
+            o.no_audio = true;
+        } else if (a == "--no-audio-playback") {
+            o.no_audio_playback = true;
+        } else if (a == "--audio-buffer") {
+            o.audio_buffer_ms = std::atoi(next("--audio-buffer"));
         } else if (a == "--no-window") {
             o.no_window = true;
         } else if (a == "--window-title" || a == "--title") {
@@ -687,6 +709,100 @@ private:
     bool done_ = false;
 };
 
+/// 音频的 SDL 出口：按系统要的节拍从 AudioPump 里取 PCM。
+///
+/// 为什么这一层在 app 而不在 media：拿到 PCM 之后怎么放（声卡 / 写文件 / 丢掉的）是
+/// 客户端的事，而"起流、解码、攒缓冲、回 RR"对任何客户端都一样——控制单元那条路就
+/// 只要泵不要声卡。
+class AudioOut {
+public:
+    AudioOut() = default;
+    AudioOut(const AudioOut &) = delete;
+    AudioOut &operator=(const AudioOut &) = delete;
+    ~AudioOut() { close(); }
+
+    /// 打开默认输出设备。`preroll_frames` = 攒够这么多帧才真取（`--audio-buffer`）。
+    ///
+    /// 为什么要 preroll：一开口就取，第一个回调必然赶上"缓冲里才两三个包"的时刻，
+    /// 于是起始十几毫秒全是补静音的接缝，听感是一声咔。攒 50ms 再放就把它压成
+    /// 起始延迟——这也是 scrcpy 那个默认值存在的原因。
+    bool open(scrctl::media::AudioPump &pump, std::size_t preroll_frames, std::string &err) {
+        pump_ = &pump;
+        channels_ = pump.channels() > 0 ? pump.channels() : 2;
+        preroll_ = preroll_frames;
+        SDL_AudioSpec want {};
+        want.freq = static_cast<int>(pump.sample_rate());
+        want.format = AUDIO_S16SYS;
+        want.channels = static_cast<Uint8>(channels_);
+        // 一次回调 1024 帧 ≈ 48kHz 下 21ms。更小会被系统追不上（xrun），更大只是
+        // 把延迟搬到设备侧的缓冲里。SDL 允许就近挑，实际值在 have 里。
+        want.samples = 1024;
+        want.callback = &AudioOut::fill;
+        want.userdata = this;
+        SDL_AudioSpec have {};
+        dev_ = SDL_OpenAudioDevice(nullptr, 0, &want, &have, sizeof(have));
+        if (dev_ == 0) {
+            pump_ = nullptr;
+            err = SDL_GetError();
+            return false;
+        }
+        SDL_PauseAudioDevice(dev_, 0);
+        std::printf("音频出口已开：%d Hz / %d 声道，后端 %s\n", have.freq, have.channels,
+                    SDL_GetCurrentAudioDriver());
+        return true;
+    }
+
+    /// 关设备。**必须在 SDL_Quit 之前**调到——之后音频子系统已经拆了，
+    /// 再 SDL_CloseAudioDevice 就是对着已释放的上下文操作。
+    void close() {
+        if (dev_ != 0) {
+            SDL_CloseAudioDevice(dev_);
+            dev_ = 0;
+        }
+        pump_ = nullptr;
+    }
+
+    [[nodiscard]] bool dev_open() const { return dev_ != 0; }
+    [[nodiscard]] uint64_t delivered() const { return delivered_.load(); }
+    [[nodiscard]] uint64_t silence() const { return silence_.load(); }
+
+private:
+    static void fill(void *userdata, Uint8 *stream, int len) {
+        auto *self = static_cast<AudioOut *>(userdata);
+        const std::size_t frame_bytes = sizeof(int16_t) * static_cast<std::size_t>(self->channels_);
+        const std::size_t frames = frame_bytes == 0 ? 0 : static_cast<std::size_t>(len) / frame_bytes;
+        auto *dst = reinterpret_cast<int16_t *>(stream);
+        if (self->pump_ == nullptr || frames == 0) {
+            std::memset(dst, 0, static_cast<std::size_t>(len));
+            return;
+        }
+        // 只在这个"还没开口"的判据上用缓冲水位；一旦开口就不再重新攒——中途发现
+        // 欠载就补静音继续，比停下来重新攒 50ms 更接近"实时"，代价是最坏情况下
+        // 一段接缝的咔声，而那正好是 silence 这一位要报出来的东西。
+        if (!self->started_.load(std::memory_order_relaxed) &&
+            self->pump_->buffered_frames() < self->preroll_) {
+            std::memset(dst, 0, frames * frame_bytes);
+            self->silence_.fetch_add(frames, std::memory_order_relaxed);
+            return;
+        }
+        self->started_.store(true, std::memory_order_relaxed);
+        const std::size_t got = self->pump_->read(dst, frames);
+        if (got < frames) {
+            std::memset(dst + got * self->channels_, 0, (frames - got) * frame_bytes);
+            self->silence_.fetch_add(frames - got, std::memory_order_relaxed);
+        }
+        self->delivered_.fetch_add(got, std::memory_order_relaxed);
+    }
+
+    scrctl::media::AudioPump *pump_ = nullptr;
+    SDL_AudioDeviceID dev_ = 0;
+    int channels_ = 2;
+    std::size_t preroll_ = 0;
+    std::atomic<bool> started_ { false };
+    std::atomic<uint64_t> delivered_ { 0 };
+    std::atomic<uint64_t> silence_ { 0 };
+};
+
 /// 真机实时流。收包、拆 AU、解码、以及"画面坏了就重起会话"全在 FramePump 里，
 /// 这里只管起流、取帧、以及把窗口的输入投回设备。
 class LiveSource final : public FrameSource {
@@ -696,8 +812,17 @@ public:
     /// `watch_display`：挂一条常驻订阅跟着转屏改朝向。不起窗口就别挂——那条
     /// 订阅要独占一个连接、还有一个每 250ms 醒一次的线程，而没有窗口就没人
     /// 消费朝向，纯开销。
+    ///
+    /// `want_audio`：起不起音频腿。它是**另一条设备侧会话**，起不来或者这个构建
+    /// 根本没有音频后端都不致命——没有声音的镜像仍然是可用的镜像，所以这里只打一行。
     bool start(const std::string &serial, const std::string &record_path, bool hw_decode,
-               bool watch_display, std::string &err);
+               bool watch_display, bool want_audio, std::string &err);
+
+    /// 打开声卡。要和 `start()` 分开的唯一原因：`start()` 跑在 `SDL_Init` 之前
+    /// （窗口还没建就得先有源），而 SDL 的音频子系统在那之后才有。
+    bool start_playback(int preroll_ms, std::string &err);
+
+    void stop_playback() { audio_out_.close(); }
 
     /// 起流前向设备要来的可见区尺寸（问不到是 0/0，见 `resolve_crop` 的顺序）。
     void display_size(int &width, int &height) const override {
@@ -734,6 +859,8 @@ public:
         serial_ = got;
         return true;
     }
+
+    [[nodiscard]] bool has_audio() const { return audio_ != nullptr; }
 
     /// 把窗口里的一次触摸投到设备上。
     ///
@@ -839,6 +966,31 @@ public:
                     static_cast<unsigned long long>(st.sr_packets),
                     static_cast<unsigned long long>(st.rtcp_sent),
                     static_cast<unsigned long long>(st.pli_sent));
+        if (audio_ != nullptr) {
+            const auto as = audio_->stats();
+            // 和上面同一把尺：速率除以这次打印窗口，累计数标"全程"。音频腿的分母
+            // 天生比视频稳——设备在没有声音的时候**照发**包（实测 100 包/秒、20 秒
+            // 一秒不多），所以这一行的"包"是平的，一旦它掉到 0 就是流死了。
+            std::printf("  音频: 包 %6.0f/s 解出 %6.0f/s 交付 %6.0f 帧/s（出口=%s）\n",
+                        rate(as.packets, last_audio_packets_),
+                        rate(as.decoded, last_audio_decoded_),
+                        rate(audio_out_.delivered(), last_audio_delivered_),
+                        audio_out_.dev_open() ? SDL_GetCurrentAudioDriver() : "未开");
+            std::printf("      全程 解败 %llu 真丢 %llu 迟到 %llu 丢旧 %llu 补静音 %llu "
+                        "RR %llu/%llu 重起 %llu 缓冲 %zu 帧\n",
+                        static_cast<unsigned long long>(as.decode_failed),
+                        static_cast<unsigned long long>(as.seq_lost),
+                        static_cast<unsigned long long>(as.out_of_order),
+                        static_cast<unsigned long long>(as.dropped_stale),
+                        static_cast<unsigned long long>(audio_out_.silence()),
+                        static_cast<unsigned long long>(as.rtcp_sent),
+                        static_cast<unsigned long long>(as.rtcp_failed),
+                        static_cast<unsigned long long>(as.restarts),
+                        audio_->buffered_frames());
+            last_audio_packets_ = as.packets;
+            last_audio_decoded_ = as.decoded;
+            last_audio_delivered_ = audio_out_.delivered();
+        }
         last_packets_ = st.packets;
         if (st.dev_sent_packets != last_dev_packets_) {
             last_dev_rate_ = dev_rate;
@@ -854,6 +1006,10 @@ public:
 private:
     std::unique_ptr<scrctl::remote::Device> device_;
     std::unique_ptr<scrctl::media::FramePump> pump_;
+    /// 音频腿与声卡出口。它们都引用 `Device&` / `AudioPump`，所以**必须声明在
+    /// device_ 之后**（成员反序析构：泵要先停、线程要先 join，才能拆 Device）。
+    std::unique_ptr<scrctl::media::AudioPump> audio_;
+    AudioOut audio_out_;
     uint64_t last_packets_ = 0;
     uint64_t last_dev_packets_ = 0;
     uint64_t last_dev_change_ms_ = 0;
@@ -863,6 +1019,9 @@ private:
     uint64_t last_dev_span_ms_ = 0;
     uint64_t last_aus_ = 0;
     uint64_t last_decoded_ = 0;
+    uint64_t last_audio_packets_ = 0;
+    uint64_t last_audio_decoded_ = 0;
+    uint64_t last_audio_delivered_ = 0;
     uint64_t last_stats_ms_ = 0;
     /// 起流之前向设备要来的**可见区**尺寸（0/0 = 没问到）。见 `display_size()`。
     int display_w_ = 0;
@@ -889,7 +1048,7 @@ private:
 LiveSource::~LiveSource() = default;
 
 bool LiveSource::start(const std::string &serial, const std::string &record_path, bool hw_decode,
-                       bool watch_display, std::string &err) {
+                       bool watch_display, bool want_audio, std::string &err) {
     auto dev = scrctl::remote::Device::establish(serial, err);
     if (!dev) {
         return false;
@@ -967,7 +1126,41 @@ bool LiveSource::start(const std::string &serial, const std::string &record_path
     if (!record_path.empty()) {
         std::printf("录制到 %s\n", record_path.c_str());
     }
+
+    // 音频腿排在视频腿之后：它要一个 RPC 来回（实测 80~100ms），而窗口的第一帧不该
+    // 为声音等这一下。苹果是反过来先起音频的，但那条路为什么不断已经查到别处了
+    // （是我们的 UDP 拼装错了，docs §13），顺序在这件事上没有作用。
+    //
+    // 起不来只打一行、不改返回值：`--no-audio` 之外的失败（设备拒了、非 Apple 平台
+    // 没有后端）都不该让整个镜像退出。
+    if (want_audio) {
+        if (!scrctl::kHaveAudioDecoder) {
+            std::fprintf(stderr, "%s\n", scrctl::kNoAudioDecoderMessage);
+        } else {
+            scrctl::media::AudioPump::Options ao;
+            std::string aerr;
+            audio_ = scrctl::media::AudioPump::start(*device_, ao, aerr);
+            if (audio_ == nullptr) {
+                std::fprintf(stderr, "音频腿起不来: %s（画面照常，只是没有声音）\n",
+                             aerr.c_str());
+            } else {
+                std::printf("音频腿已建立：收流端口=%u PT=%u 后端=%s\n",
+                            audio_->receiver_port(), audio_->payload_type(),
+                            audio_->backend_name());
+            }
+        }
+    }
     return true;
+}
+
+bool LiveSource::start_playback(int preroll_ms, std::string &err) {
+    if (audio_ == nullptr) {
+        err = "没有音频腿可放（--no-audio、起流失败，或这个构建没有音频后端）";
+        return false;
+    }
+    const std::size_t frames = static_cast<std::size_t>(
+        preroll_ms > 0 ? preroll_ms : 0) * static_cast<std::size_t>(audio_->sample_rate()) / 1000;
+    return audio_out_.open(*audio_, frames, err);
 }
 
 bool LiveSource::control(double x, double y, bool down, std::string &err) {
@@ -1083,7 +1276,7 @@ int main(int argc, char **argv) {
         auto made = std::make_unique<LiveSource>();
         std::string err;
         if (!made->start(o.serial, o.record, o.hw_decode, !o.no_window && o.orientation < 0,
-                         err)) {
+                         !o.no_audio, err)) {
             std::fprintf(stderr, "起流失败: %s\n", err.c_str());
             // 设备在通话中会直接拒绝起流（code 9022）。实测这时它的会话表是空的
             // （getmediastreamserverstatus 回 sessions: []），所以不是"有条旧流占着"，
@@ -1103,6 +1296,19 @@ int main(int argc, char **argv) {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
         std::fprintf(stderr, "SDL 初始化失败: %s\n", SDL_GetError());
         return 1;
+    }
+    // 音频子系统**单独**初始化并且容许失败：一台没有声卡的机器（CI、无 PulseAudio 的
+    // Linux、被拔掉的接口设备）上把 SDL_INIT_AUDIO 塞进主 SDL_Init 会让整个镜像起不来，
+    // 而"没有声音"从来不是不能镜像的理由。
+    if (live != nullptr && !o.no_audio && !o.no_audio_playback &&
+        SDL_InitSubSystem(SDL_INIT_AUDIO) == 0) {
+        std::string aerr;
+        if (!live->start_playback(o.audio_buffer_ms, aerr)) {
+            std::fprintf(stderr, "打不开音频出口: %s（音频腿照收，只是不出声）\n",
+                         aerr.c_str());
+        }
+    } else if (live != nullptr && live->has_audio() && o.no_audio_playback) {
+        std::printf("--no-audio-playback：音频腿在收与解，只是不在本机放\n");
     }
     // 必须在 SDL_Init **之后**：signal() 是抢椅子，谁最后装谁说了算，先装会被它盖掉
     // （而 sdl2-compat 没有提供 SDL_HINT_NO_SIGNALS 可以让它别接）。
@@ -1302,6 +1508,11 @@ int main(int argc, char **argv) {
 
     std::printf("完成：渲染 %d 帧\n", rendered);
     presenter.reset();
+    // 关声卡必须在 SDL_Quit 之前：Quit 把音频子系统拆了之后再去
+    // SDL_CloseAudioDevice，操作的就是一个已经不存在的上下文。
+    if (live != nullptr) {
+        live->stop_playback();
+    }
     SDL_Quit();
     return 0;
 }

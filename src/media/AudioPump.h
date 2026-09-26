@@ -87,6 +87,10 @@ public:
     /// 崩在 malloc 里"（探针就这么栽过一次）。
     std::size_t read(int16_t *dst, std::size_t frames);
 
+    /// 协商/解码用的采样率与声道数。出口（声卡、文件）要按这两个数开设备。
+    [[nodiscard]] int sample_rate() const { return options_.sample_rate; }
+    [[nodiscard]] int channels() const { return options_.channels; }
+
     /// 缓冲里现在攒了多少帧。回调用它决定"先攒够再开始放"，否则起播的头几百毫秒
     /// 会一直在欠载与补静音之间跳。
     [[nodiscard]] std::size_t buffered_frames() const;
