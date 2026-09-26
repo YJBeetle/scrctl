@@ -1663,6 +1663,12 @@ ADTS；libavcodec 的 `aac` 解码器带 extradata 就能解 ELD。静音时设�
 顺带把 ffmpeg 自己的话也记下来：`-c:a aac -profile:a aac_eld` 直接回
 **"Profile not supported"**——它的原生编码器都不产 ELD，解码器更不是。
 
+（2026-09-27 在 ffmpeg 9.0.2 上复验过一次，结论没变但报错内容更具体：`-decoders` 里
+只有 `aac / aac_fixed / aac_at / aac_latm`，**没有任何 ELD 解码器**；把 1014 个 PT=101
+的裸载荷按顺序拼成一个文件喂 `-c:a aac`，回的是 "Number of bands (43) exceeds limit
+(27)"、"channel element 1.1 is not allocated"，解码错误率 0.990099 后直接判死。前一条
+正是 ELD 的带宽扩展结构与 LC 的表不一致的形状，不是字节错位。）
+
 **AudioConverter 不需要 magic cookie。** 这一点值得单独记，因为它和"规范怎么说"相反：
 `AudioConverterSetProperty(conv, 'dmgc', ...)` 在这台 macOS 上无论塞规范拼的 ASC 还是
 塞苹果那份 cookie 都回 `!dat`（0x21646174），**而不塞照样全解出来**。ELD 的档位信息
@@ -1773,6 +1779,30 @@ ADTS；libavcodec 的 `aac` 解码器带 extradata 就能解 ELD。静音时设�
 绝对时刻（`sleep_until`）之后才发现真正的问题是**按住消费方这件事根本没发生**——
 那个"什么时候开始放"的时刻是在建立设备会话**之前**取的，等到循环开始时早就过了。
 两个版本共同的教训和 §13 那条一样：拿"水位不动"当结论之前，先确认那把尺自己是不是直的。
+
+**⑦ 产品这一侧的出口用 disk 驱动量，不需要让机器出声。**
+
+上面六臂量的都是 `AudioPump`，而产品还多一段：`AudioOut` 的 SDL 回调、预滚闸门、以及
+它到底有没有把解出来的东西送进设备。`SDL_AUDIO_DRIVER=disk` 会把回调产出的每个样本
+原样写进当前目录的 `sdlaudio.raw`（48kHz/2ch/s16），于是这一段也能**无显示器、不出声**
+地判对错——在夜里这是唯一可接受的自检形式。
+
+```
+SDL_VIDEODRIVER=dummy SDL_AUDIO_DRIVER=disk ./build-cmake/scrctl --no-window --exit-after 3000
+```
+
+读数（3000 帧视频、72.1 秒音频 = 3460096 帧）：峰值 25109、RMS 4509、按 10ms 窗口切
+7208 段里只有 4 段全零。送到设备口子上的是**连续、在量程之内**的真实波形（不是零，也
+不是顶满刻度那种失控值）。至于"波形形状对不对"这一层，disk 驱动给不出判据——它只能
+证明有东西连续地流到了回调出口，音质仍要人耳。
+
+两个坑记在这里：disk 驱动**只写文件、不等时**，所以它消费得比标称慢约 7%，恰好构成
+⑥ 里那种"生产者持续超速"的场景——这既是它的用处也是它的局限，别拿它的耗时当实时性
+判据；另一个是它把 `sdlaudio.raw` 落在**当前工作目录**，在仓库里跑完记得删，否则
+`git status` 会被一个 13MB 的无主文件污染。
+
+仍然没验过的只有一件事：**Mac 喇叭里出来的声音听着对不对**（延迟、有没有爆音）。它
+需要人耳，而量到 CoreAudio 门口的一切都已经量了。
 
 ## 18. 非 Apple 平台：静态查得出来的都查了，剩下的只能等 CI
 
