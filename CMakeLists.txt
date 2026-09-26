@@ -157,6 +157,8 @@ endif()
 add_executable(scrctl src/app/main.cpp)
 target_link_libraries(scrctl PRIVATE scrctl_core Scrctl::SDL2)
 target_compile_options(scrctl PRIVATE -Wall -Wextra)
+# `--version` 印的那个数只能有一个来源：上面 `project(... VERSION)`。
+target_compile_definitions(scrctl PRIVATE SCRCTL_VERSION_STRING="${PROJECT_VERSION}")
 
 # 需要真机在线的手工探针，不进 ctest。
 add_executable(usbmux_probe tools/usbmux_probe.cpp)

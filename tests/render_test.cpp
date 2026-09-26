@@ -243,6 +243,72 @@ bool render_once(int degrees, std::vector<Uint32> &out, int &ow, int &oh) {
     return true;
 }
 
+/// 等比留边那两条边的颜色，以及"回读到底覆盖了整块输出没有"。
+///
+/// 两条各自独立、都栽过的判据：
+///   * `SDL_RenderClear` 清的是**当前视口**，而设了 logical size 之后视口就是等比
+///     缩放后那块内容区——两条边在视口外面，清不到。所以清之前要把 logical size
+///     摘掉、清完再挂回来。
+///   * `SDL_RenderReadPixels` 的矩形在挂着 logical size 时是按**逻辑**坐标解释的，
+///     传整块输出的尺寸读回来的是一个偏移过的局部（内容区之外的坐标直接失败）。
+///     读之前同样要摘掉。
+/// 这两条都要用"窗口比例 != 画面比例"的场景才看得见，而默认窗口是按画面比例算的，
+/// 所以产品自检里必须显式造一个不等的。
+bool letterbox_and_readback() {
+    static constexpr int kOutW = 800, kOutH = 400;
+    SDL_Window *window = SDL_CreateWindow("letterbox", 0, 0, kOutW, kOutH, SDL_WINDOW_RESIZABLE);
+    if (window == nullptr) {
+        std::printf("  建窗口失败: %s\n", SDL_GetError());
+        return false;
+    }
+    SDL_Renderer *r = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+    SDL_Texture *tex = SDL_CreateTexture(r, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
+                                         1136, 2464);
+    std::vector<Uint32> pixels(1136u * 2464u, 0xFFFFFFFFu);  // 整帧纯白
+    SDL_UpdateTexture(tex, nullptr, pixels.data(), 1136 * 4);
+
+    SDL_RenderSetLogicalSize(r, 1125, 2436);
+    SDL_RenderSetLogicalSize(r, 0, 0);
+    SDL_SetRenderDrawColor(r, 18, 52, 86, 255);  // #123456
+    SDL_RenderClear(r);
+    SDL_RenderSetLogicalSize(r, 1125, 2436);
+    SDL_RenderCopy(r, tex, nullptr, nullptr);
+    SDL_RenderSetLogicalSize(r, 0, 0);
+
+    SDL_Surface *s = SDL_CreateRGBSurfaceWithFormat(0, kOutW, kOutH, 32, SDL_PIXELFORMAT_ARGB8888);
+    const SDL_Rect full {0, 0, kOutW, kOutH};
+    const bool read_ok =
+        SDL_RenderReadPixels(r, &full, SDL_PIXELFORMAT_ARGB8888, s->pixels, s->pitch) == 0;
+    bool pass = read_ok;
+    if (read_ok) {
+        SDL_LockSurface(s);
+        auto at = [&](int x, int y) {
+            const auto *p = static_cast<const Uint8 *>(s->pixels) + y * s->pitch + x * 4;
+            return Rgb {p[2], p[1], p[0]};
+        };
+        // 1125x2436 放进 800x400：缩放 0.1642，内容宽 185，居中 => 左边 307..308 是边
+        pass = close(at(0, kOutH / 2), Rgb {18, 52, 86}) &&
+               close(at(300, kOutH / 2), Rgb {18, 52, 86}) &&
+               close(at(kOutW - 1, kOutH / 2), Rgb {18, 52, 86}) &&
+               close(at(kOutW / 2, kOutH / 2), Rgb {255, 255, 255}) &&
+               close(at(320, kOutH / 2), Rgb {255, 255, 255}) &&
+               close(at(480, kOutH / 2), Rgb {255, 255, 255});
+        if (!pass) {
+            std::printf("  边上/内容颜色不对：边=(%u,%u,%u) 内容=(%u,%u,%u)\n",
+                        at(0, 200).r, at(0, 200).g, at(0, 200).b, at(400, 200).r, at(400, 200).g,
+                        at(400, 200).b);
+        }
+        SDL_UnlockSurface(s);
+    } else {
+        std::printf("  回读整块输出失败: %s\n", SDL_GetError());
+    }
+    SDL_FreeSurface(s);
+    SDL_DestroyTexture(tex);
+    SDL_DestroyRenderer(r);
+    SDL_DestroyWindow(window);
+    return pass;
+}
+
 }  // namespace
 
 int main() {
@@ -285,6 +351,8 @@ int main() {
             std::printf("  ^ %d° 这一档错了：SDL 的角度方向或 dst 尺寸与约定不符\n", degrees);
         }
     }
+
+    check(letterbox_and_readback(), "等比留边的边上涂的是 --background-color，且回读覆盖整块输出");
 
     SDL_Quit();
     if (failures != 0) {

@@ -80,6 +80,18 @@ struct Options {
     bool hw_decode = false;
     /// scrcpy 的 --no-audio：连音频腿都不起（不占设备上那条会话、不解码）。
     bool no_audio = false;
+    /// --- 下面这批是窗口与运行控制的 scrcpy 同名项，逐个都是"照抄名字"级别的活 ---
+    bool always_on_top = false;   ///< --always-on-top
+    bool borderless = false;      ///< --window-borderless
+    bool fullscreen = false;      ///< -f / --fullscreen（桌面全屏）
+    int win_x = SDL_WINDOWPOS_CENTERED;  ///< --window-x
+    int win_y = SDL_WINDOWPOS_CENTERED;  ///< --window-y
+    /// --background-color=#RRGGBB：等比留边那两条边的颜色。默认黑。
+    uint8_t bg[3] = {0, 0, 0};
+    std::string render_driver;    ///< --render-driver（metal / software / ...）
+    bool disable_screensaver = false;  ///< --disable-screensaver
+    int time_limit = 0;           ///< --time-limit=秒，到点正常退出（会停流）
+    bool show_version = false;    ///< --version
     /// scrcpy 的 --no-audio-playback：收流与解码照跑，只是不在电脑上出声。
     /// 录制或排障要"有音频数据但安静"时用它——本机夜里跑真机回归也靠它。
     bool no_audio_playback = false;
@@ -121,6 +133,15 @@ void usage(const char *argv0) {
         "                     水位：囤到两倍就悄悄排回去，所以这个数同时决定\n"
         "                     起始延迟与音画对齐的稳态。调小延迟更低但更容易欠载（断续）\n"
         "  --no-window          不起窗口只收流（脚本/自动化用）\n"
+        "  -f, --fullscreen     桌面全屏（无边框，跟随显示器）\n"
+        "  --always-on-top      窗口置顶\n"
+        "  --window-borderless  无边框窗口\n"
+        "  --window-x N / --window-y N  窗口位置（默认居中）\n"
+        "  --background-color=#RRGGBB   等比留边那两条边的颜色，默认黑\n"
+        "  --render-driver=NAME 指定 SDL 的渲染驱动（metal / software / ...）\n"
+        "  --disable-screensaver 运行期间不让本机息屏\n"
+        "  --time-limit=SEC     到点正常退出（走停流与关会话那条路，不是 kill）\n"
+        "  --version            打印版本后退出\n"
         "  --window-title TEXT  窗口标题（--title 同义）\n"
         "  --window-width N / --window-height N  显式窗口尺寸，默认按屏幕自动缩\n"
         "  --debug-input        打印每次鼠标的原始坐标与换算结果（定坐标问题时用）\n"
@@ -183,6 +204,34 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.list_devices = true;
         } else if (a == "-n" || a == "--no-control") {
             o.no_control = true;
+        } else if (a == "--version") {
+            o.show_version = true;
+        } else if (a == "-f" || a == "--fullscreen") {
+            o.fullscreen = true;
+        } else if (a == "--always-on-top") {
+            o.always_on_top = true;
+        } else if (a == "--window-borderless") {
+            o.borderless = true;
+        } else if (a == "--window-x" && i + 1 < args.size()) {
+            o.win_x = std::atoi(next("--window-x"));
+        } else if (a == "--window-y" && i + 1 < args.size()) {
+            o.win_y = std::atoi(next("--window-y"));
+        } else if (a == "--background-color") {
+            unsigned r = 0, g = 0, b = 0;
+            const std::string v = next("--background-color");
+            if (std::sscanf(v.c_str(), "#%2x%2x%2x", &r, &g, &b) != 3) {
+                std::fprintf(stderr, "--background-color 要的是 #RRGGBB，收到 %s\n", v.c_str());
+                return false;
+            }
+            o.bg[0] = static_cast<uint8_t>(r);
+            o.bg[1] = static_cast<uint8_t>(g);
+            o.bg[2] = static_cast<uint8_t>(b);
+        } else if (a == "--render-driver") {
+            o.render_driver = next("--render-driver");
+        } else if (a == "--disable-screensaver") {
+            o.disable_screensaver = true;
+        } else if (a == "--time-limit") {
+            o.time_limit = std::atoi(next("--time-limit"));
         } else if (a == "--no-audio") {
             o.no_audio = true;
         } else if (a == "--no-audio-playback") {
@@ -263,14 +312,41 @@ bool parse_args(int argc, char **argv, Options &o) {
 /// 裁剪框与坐标换算的几何在 ViewGeom.h，那里可以离线自检。
 using scrctl::app::Crop;
 
+/// 建窗口的那批参数。为什么要打包成一个结构而不是继续往 `open()` 后面加形参：
+/// 它已经带 9 个参数，其中三个是相邻的 bool——再加位置与全屏，调用点上就没有人
+/// 能靠读那一行判断第 7 个参数是什么了（而转屏重建那条路必须和首开那条**完全**
+/// 用同一组窗口设置，否则转一次屏，置顶/无边框就悄悄丢了）。
+struct WindowSpec {
+    std::string title = "scrctl";
+    int want_w = 0;
+    int want_h = 0;
+    int x = SDL_WINDOWPOS_CENTERED;
+    int y = SDL_WINDOWPOS_CENTERED;
+    bool always_on_top = false;
+    bool borderless = false;
+    bool fullscreen = false;
+    bool want_readback = false;
+};
+
 class Presenter {
 public:
+    /// 等比留边那两条边的颜色（`--background-color`）。要在 `open()` 之前设好：
+    /// 首帧之前就有一次 clear，之后每次 draw 用它。
+    void set_background(uint8_t r, uint8_t g, uint8_t b) {
+        bg_[0] = r;
+        bg_[1] = g;
+        bg_[2] = b;
+    }
+
     /// `degrees` 是设备报的界面旋转（"要顺时针转多少才正立"）。它同时决定三件事：
     /// 窗口与 logical size 的**朝向**、渲染时的旋转、以及鼠标坐标的逆映射。
     /// 三者必须用同一个数，否则就是"画面转正了但点击还是歪的"。
     bool open(int frame_w, int frame_h, const Crop &crop, int degrees, double scale,
-              bool scale_given, const std::string &title, bool want_readback, int want_w = 0,
-              int want_h = 0) {
+              bool scale_given, const WindowSpec &spec) {
+        const std::string &title = spec.title;
+        const bool want_readback = spec.want_readback;
+        const int want_w = spec.want_w;
+        const int want_h = spec.want_h;
         src_ = crop;
         degrees_ = degrees;
         scrctl::app::viewport_size(crop, degrees_, view_w_, view_h_);
@@ -292,11 +368,26 @@ public:
             }
         }
 
-        window_ = SDL_CreateWindow(title.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                                   win_w_, win_h_, SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
+        Uint32 win_flags = SDL_WINDOW_ALLOW_HIGHDPI;
+        // 全屏与无边框是**建的时候**给的 flag，不是建完再改：先建带边框的窗口再切
+        // 桌面全屏，SDL 会把窗口尺寸留在旧的约束里，转屏重建时就成了"全屏但画面
+        // 只占中间一块"。
+        if (!spec.fullscreen) {
+            win_flags |= SDL_WINDOW_RESIZABLE;
+        }
+        if (spec.borderless) {
+            win_flags |= SDL_WINDOW_BORDERLESS;
+        }
+        if (spec.fullscreen) {
+            win_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+        }
+        window_ = SDL_CreateWindow(title.c_str(), spec.x, spec.y, win_w_, win_h_, win_flags);
         if (window_ == nullptr) {
             std::fprintf(stderr, "建窗口失败: %s\n", SDL_GetError());
             return false;
+        }
+        if (spec.always_on_top) {
+            SDL_SetWindowAlwaysOnTop(window_, SDL_TRUE);
         }
         // SDL2 的 Metal 后端不支持 SDL_RenderReadPixels——需要回读验证时
         // 直接建软件渲染器，否则 Present 后读回会无声 abort。
@@ -341,7 +432,10 @@ public:
     }
 
     void draw(const scrctl::Frame &f, const char *readback_path = nullptr) {
-        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
+        // `SDL_RenderClear` 清的是整块目标（不受 logical size 那块等比留边限制），
+        // 所以背景色直接就把两条边涂上了。这一点是量出来的：本来以为要像回读那样
+        // 先把 logical size 摘掉，去掉之后回读像素证明边上仍然是背景色。
+        SDL_SetRenderDrawColor(renderer_, bg_[0], bg_[1], bg_[2], 255);
         SDL_RenderClear(renderer_);
         if (SDL_UpdateTexture(texture_, nullptr, f.pixels.data(), static_cast<int>(f.row_pitch)) !=
             0) {
@@ -383,10 +477,20 @@ public:
             SDL_FreeSurface(s);
             return false;
         }
+        // 读之前必须把 logical size 摘掉。挂着它的时候 `SDL_RenderReadPixels` 的矩形
+        // 是按**逻辑**坐标解释的：(0,0,out_w,out_h) 不再是整块输出，而是从内容区左上角
+        // 起的另一块设备矩形——窗口比例与画面比例不一致时（有等比留边）读回来的就是
+        // 一个偏移过的局部，边上那些像素根本不在读到的范围里（微测：内容区之外的
+        // 1x1 读直接失败，内容区之内读到的是错位的东西）。
+        //
+        // 这个 bug 只在窗口比例与画面比例不同时才显形，而默认窗口是按画面比例算的，
+        // 所以之前所有 `--verify` 的结论都恰好没被它影响。
+        SDL_RenderSetLogicalSize(renderer_, 0, 0);
         // 显式给矩形：SDL2 的 software 驱动在 rect=NULL 时会段错误（实测）。
         const SDL_Rect full{0, 0, out_w, out_h};
         const int rc = SDL_RenderReadPixels(renderer_, &full, SDL_PIXELFORMAT_ARGB8888, s->pixels,
                                             s->pitch);
+        SDL_RenderSetLogicalSize(renderer_, view_w_, view_h_);
         SDL_UnlockSurface(s);
         if (rc != 0) {
             std::fprintf(stderr, "回读失败: %s\n", SDL_GetError());
@@ -508,6 +612,7 @@ private:
         scrctl::app::viewport_fraction_to_panel(raw_x, raw_y, src_, degrees_, fx, fy);
     }
 
+    uint8_t bg_[3] = {0, 0, 0};
     SDL_Window *window_ = nullptr;
     SDL_Renderer *renderer_ = nullptr;
     SDL_Texture *texture_ = nullptr;
@@ -1227,6 +1332,13 @@ int main(int argc, char **argv) {
         return 2;
     }
 
+    if (o.show_version) {
+        // 版本号只有一个来源：CMake 里那个 `project(... VERSION)`。写第二处迟早会对不上，
+        // 而"发的二进制里印的版本"是用户报问题时唯一能引用的东西。
+        std::printf("scrctl %s\n", SCRCTL_VERSION_STRING);
+        return 0;
+    }
+
     if (o.list_devices) {
         std::string err;
         auto devices = scrctl::remote::Device::list(err);
@@ -1301,6 +1413,10 @@ int main(int argc, char **argv) {
     }
     const bool control_enabled = live != nullptr && !o.no_control;
 
+    if (!o.render_driver.empty()) {
+        // 必须在 SDL_CreateRenderer 之前设；设晚了没有任何提示，只是驱动还是默认那个。
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, o.render_driver.c_str());
+    }
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
         std::fprintf(stderr, "SDL 初始化失败: %s\n", SDL_GetError());
         return 1;
@@ -1322,6 +1438,9 @@ int main(int argc, char **argv) {
     // （而 sdl2-compat 没有提供 SDL_HINT_NO_SIGNALS 可以让它别接）。
     std::signal(SIGINT, on_stop_signal);
     std::signal(SIGTERM, on_stop_signal);
+    if (o.disable_screensaver) {
+        SDL_DisableScreenSaver();
+    }
 
     // 输入通路的无头自检：注入一条直线就退出。用直线而不是点一下，是因为
     // "画布被拖走一段"在截图上可判定，而一次点击在多数应用里没有可见后果。
@@ -1417,6 +1536,11 @@ int main(int argc, char **argv) {
     scrctl::Frame f;
     int last_rendered = 0;
     while (!quit) {
+        if (o.time_limit > 0 && SDL_GetTicks64() - start >=
+                                   static_cast<Uint64>(o.time_limit) * 1000) {
+            std::printf("达到 --time-limit %d 秒\n", o.time_limit);
+            break;
+        }
         if (g_stop_requested.load()) {
             std::printf("收到退出信号，走正常退出路径（要把设备侧那条流停掉）\n");
             break;
@@ -1482,9 +1606,20 @@ int main(int argc, char **argv) {
             presenter.reset();
             presenter = std::make_unique<Presenter>();
             presenter->set_debug_input(o.debug_input);
+            WindowSpec spec;
+            spec.title = o.title;
+            spec.want_w = o.win_w;
+            spec.want_h = o.win_h;
+            spec.x = o.win_x;
+            spec.y = o.win_y;
+            spec.always_on_top = o.always_on_top;
+            spec.borderless = o.borderless;
+            spec.fullscreen = o.fullscreen;
+            spec.want_readback = o.verify_at > 0;
+            presenter->set_background(o.bg[0], o.bg[1], o.bg[2]);
             if (!presenter->open(static_cast<int>(f.width), static_cast<int>(f.height),
                                  resolve_crop(o, f, *source), degrees, o.scale, o.scale_given,
-                                 o.title, o.verify_at > 0, o.win_w, o.win_h)) {
+                                 spec)) {
                 return 1;
             }
             if (first_window) {
