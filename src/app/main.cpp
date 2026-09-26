@@ -708,11 +708,12 @@ public:
         // 才是设备把流结束掉了。
         // 后面那一档是**我们往外发**的续命 RR：设备的会话计时器只在收到它的时候复位，
         // 所以"流为什么断了"先看这三个数的哪一档停了。
-        std::printf("      全程 视频数据报 %llu SR 心跳 %llu 发出 RR %llu（视频档停=画面静止，"
+        std::printf("      全程 视频数据报 %llu SR 心跳 %llu 发出 RR %llu PLI %llu（视频档停=画面静止，"
                     "SR 也停=流死了，RR 不涨=我们没在续命）\n",
                     static_cast<unsigned long long>(st.video_packets),
                     static_cast<unsigned long long>(st.sr_packets),
-                    static_cast<unsigned long long>(st.rtcp_sent));
+                    static_cast<unsigned long long>(st.rtcp_sent),
+                    static_cast<unsigned long long>(st.pli_sent));
         last_packets_ = st.packets;
         if (st.dev_sent_packets != last_dev_packets_) {
             last_dev_rate_ = dev_rate;

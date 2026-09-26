@@ -113,6 +113,9 @@ public:
         /// rtcp_sent 不涨才是泵停了。
         uint64_t rtcp_sent = 0;
         uint64_t rtcp_failed = 0;
+        /// 发出去的 PLI（关键帧请求）个数。它和 `dropped_awaiting_keyframe` 一起讲完
+        /// 一次"丢帧 -> 要 IDR -> 恢复"的故事：只涨前者不涨后者的话，PLI 就没起作用。
+        uint64_t pli_sent = 0;
         /// 本会话开始时 `packets` 的快照，用来把我们的累计数搬到设备那条数轴上。
         /// 设备 SR 里的累计包数**每条会话从零重数**，而 packets 跨会话连着涨：不扣
         /// 基线的话重起一次之后就是"设备 143 / 我 5866"，看着像丢了五千包。
@@ -227,6 +230,11 @@ private:
     /// 设备的 `RTCPTimeoutInterval` 是"距离上次收到我们 RTCP 多久"，不是起流后的固定
     /// 到期——所以这一位是这条流能活过 20 秒的原因，不是锦上添花。
     uint64_t next_rtcp_ms_ = 0;
+    /// 最早什么时候可以再发一个 PLI（0 = 立刻可发）。见 FramePump.cpp 的 request_keyframe。
+    uint64_t next_pli_ms_ = 0;
+    /// 上一次发 PLI 的时刻。卡住重起那条判据要它：**没问过设备就不许重起**，问了且
+    /// 等满 stall_restart_ms 还没关键帧才重起（推导见 FramePump.cpp 的 stalled 那段）。
+    uint64_t last_pli_ms_ = 0;
     /// 有超大 NAL 被丢、需要重起会话。由 AU 回调置位，收包线程消费。
     std::atomic<bool> oversized_restart_ { false };
     /// 用户刚刚动过（见 wake()）。由收包线程取走并做一次"流还活着吗"的检查。

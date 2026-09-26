@@ -75,6 +75,9 @@ constexpr uint32_t kSessionLeaseSeconds = 20;
 /// 也是上一表里那根"41 个包活过 40 秒"的实测频率。设备只要求"到期前收到过一个"，所以
 /// 这一位不需要精准——留出的是 20 倍余量。
 constexpr uint64_t kRtcpPeriodMs = 1000;
+/// 参考链断掉之后重发 PLI 的间隔。设备实测 20~35ms 就回 IDR，所以这一位纯粹是
+/// "别把对端刷屏"的下限；真等不到 IDR 时（>2 秒）由 stall_restart_ms 那条重起接手。
+constexpr uint64_t kPliPeriodMs = 1000;
 /// 光靠时间戳永远有一段"刚死但还没到阈值"的盲区（实测：静置 20 秒去截图时，会话
 /// 其实已经死了 1.3 秒，任何大于 1.3 秒的阈值都会漏）。所以催流那条路在可疑区间
 /// 必须去问设备，而不是把阈值调大——调大只会把盲区推到别处。
@@ -230,6 +233,35 @@ void FramePump::loop() {
     bool configured = false;
     std::unique_ptr<scrctl::rt::HevcRtpDepacketizer> depacketizer;
 
+    /// 参考链断了就花 12 字节求一个 IDR。
+    ///
+    /// 为什么是这里、为什么不是重起会话：实测设备收到 PLI 之后 **20~35ms** 就回一个
+    /// IDR（29 次请求换 28~29 个 IDR，一对一），而重起会话要 37~90ms 建会话 + 到第一个
+    /// 关键帧才能出图，中间一帧都没有。所以"丢了帧要干净画面"这条路现在是：发 PLI →
+    /// 等 IDR → 接着解；`stall_restart_ms` 那条重起逻辑降为**PLI 不管用时的后备**。
+    ///
+    /// 一句反面教训：**别顺手发 FIR**。参考实现的笔记说"设备不理 PLI、理 FIR"，实测
+    /// 正好相反——PLI 有效；FIR 不但换不来 IDR，还会把租期续命整个废掉（设备侧 socket
+    /// `pkts in: 40` 说明包到了，但 `Last RTCP packet receive time:nan`，20.13 秒准时死；
+    /// 同臂同频同 SSRC，唯一变量就是那个 FIR）。见 docs §13。
+    auto request_keyframe = [&] {
+        if (now_ms() < next_pli_ms_) {
+            return;  // 正在等 IDR，别刷屏
+        }
+        next_pli_ms_ = now_ms() + kPliPeriodMs;
+        last_pli_ms_ = now_ms();
+        const auto pli = scrctl::rt::build_pli(session_->started().remote_ssrc,
+                                               session_->started().local_ssrc);
+        std::string serr;
+        if (session_->send_rtp(pli, session_->started().sender_port, serr)) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            ++stats_.pli_sent;
+        } else {
+            // 发不出去一般是会话已经没了；心跳判据一两秒内会重起，这里不抢它的活。
+            std::fprintf(stderr, "PLI 发送失败: %s\n", serr.c_str());
+        }
+    };
+
     // 每个会话一套解析器：重起流意味着 AU 边界要从头算，留着半截 NAL 会把新
     // 会话的开头拼进旧会话的尾巴里。
     auto make_parser = [&]() {
@@ -333,6 +365,8 @@ void FramePump::loop() {
             loss_seen_ = loss_now;
             if (need_keyframe_) {
                 if (!keyframe || lost_since_prev) {
+                    // 正在等干净关键帧：先去要一个，再决定是否丢弃这个 AU。
+                    request_keyframe();
                     std::lock_guard<std::mutex> lock(mutex_);
                     ++stats_.dropped_awaiting_keyframe;
                     return;
@@ -393,6 +427,10 @@ void FramePump::loop() {
         // 新会话一起就马上补一个续命包：设备那个计时器是从"上次收到我们 RTCP"开始倒数的，
         // 第一秒就送到，租期才完整可用（等第一个心跳周期再发等于白送掉一秒）。
         next_rtcp_ms_ = session_start_ms_;
+        // 新会话开头自带一个干净 IDR，所以这里不是"等着要关键帧"的状态：清零让第一次
+        // 真的断链时能立刻发出 PLI，而不是等上一轮的节流。
+        next_pli_ms_ = 0;
+        last_pli_ms_ = 0;
         ever_keyframe_ = false;
         need_keyframe_ = false;
         loss_seen_ = 0;
@@ -649,7 +687,20 @@ void FramePump::loop() {
             bool stalled = false;
             {
                 std::lock_guard<std::mutex> lock(mutex_);
-                stalled = gaps > gaps_at_last_check_ &&
+                // 现在这条判据要**三条**同时成立，第三条是新加的：
+                // 1) 出现了新的序号缺口；
+                // 2) 距上一个关键帧超过 stall_restart_ms；
+                // 3) **我们已经发过 PLI、而且等了它这么久**。
+                //
+                // 第 3 条为什么必需：这条流的 IDR 有多稀疏？实测基线 30 秒只有 1 个
+                // （起流那一下），所以第 2 条几乎是恒真的——任何一个缺口都会立刻重起。
+                // 修好 UDP 之后 PLI 20~35ms 就能换来 IDR，重起（~300ms 且中间无帧）
+                // 应该退到"PLI 不管用时"才发生。不加第 3 条，PLI 那条路根本走不到：
+                // 临时注入一个真实丢包的实验里，缺口出现同一次循环里就重起了，
+                // IDR 虽然在 35ms 后到、却已经用不上。
+                stalled = gaps > gaps_at_last_check_ && last_pli_ms_ != 0 &&
+                          now_ms() - last_pli_ms_ >=
+                              static_cast<uint64_t>(options_.stall_restart_ms) &&
                           now_ms() - last_keyframe_ms_ >
                               static_cast<uint64_t>(options_.stall_restart_ms);
                 gaps_at_last_check_ = gaps;
