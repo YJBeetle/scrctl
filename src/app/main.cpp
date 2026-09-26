@@ -15,6 +15,7 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <cctype>
 #include <cstring>
 #include <deque>
 #include <fstream>
@@ -36,6 +37,7 @@
 #include "media/AudioPump.h"
 #include "media/FramePump.h"
 #include "media/StreamSession.h"
+#include "remote/App.h"
 #include "remote/Device.h"
 #include "remote/DisplayInfo.h"
 #include "remote/Pasteboard.h"
@@ -68,6 +70,11 @@ struct Options {
     std::string test_button;
     /// 起流后往设备敲一段 ASCII（要有文本框正获得焦点）。
     std::string test_type;
+    /// scrcpy 的 --start-app=name：起流之后把某个 App 拉到前台。名字里可以带两个
+    /// 前缀，语义照 scrcpy：`+` = 先杀掉在跑的实例再冷启动，`?` = 按 App 名字前缀
+    /// 匹配（大小写不敏感）而不是按 bundle id 精确匹配。
+    std::string start_app;
+    bool list_apps = false;  ///< --list-apps：列出设备上装的 App 后退出
     std::string copy_text;   ///< --copy TEXT：写进设备剪贴板后退出
     bool paste = false;      ///< --paste：读设备剪贴板打印后退出
     bool no_window = false;  ///< --no-window：不起窗口，只收流（脚本/自动化用）
@@ -165,6 +172,10 @@ void usage(const char *argv0) {
         "  --test-button NAME 起流后按一次硬件按键（home/lock/volup/voldn/mute），\n"
         "                     再照常镜像，配 --verify 才能看见瞬时效果\n"
         "  --test-type TEXT   起流后往设备敲一段 ASCII（需要已聚焦的文本框）\n"
+        "  --list-apps        列出设备上安装的 App（bundle id 与名字）后退出\n"
+        "  --start-app=NAME   起流后把某个 App 拉到前台。NAME 是 bundle id；\n"
+        "                     前缀 ? 改成按 App 名字前缀匹配（大小写不敏感），\n"
+        "                     前缀 + 表示先杀掉在跑的实例（两个可叠用，顺序 ? 在前）\n"
         "  --copy TEXT        把文本写进设备剪贴板后退出（中文走这条路）\n"
         "  --paste            读设备剪贴板并打印后退出；与 --copy 同用时写完读回\n",
         argv0);
@@ -204,6 +215,10 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.list_devices = true;
         } else if (a == "-n" || a == "--no-control") {
             o.no_control = true;
+        } else if (a == "--list-apps") {
+            o.list_apps = true;
+        } else if (a == "--start-app") {
+            o.start_app = next("--start-app");
         } else if (a == "--version") {
             o.show_version = true;
         } else if (a == "-f" || a == "--fullscreen") {
@@ -974,6 +989,10 @@ public:
 
     [[nodiscard]] bool has_audio() const { return audio_ != nullptr; }
 
+    /// 给"起流之后还要对设备做点别的"那些项用（--start-app）。它故意返回引用而不是
+    /// 让每个功能自己存一份：一个会话只有一个 Device，多副本只会多一处要同步的寿命。
+    [[nodiscard]] scrctl::remote::Device &device() { return *device_; }
+
     /// 把窗口里的一次触摸投到设备上。
     ///
     /// HID 服务**第一次用到时才连**：连接要一个来回，没必要把它算进起流路径；
@@ -1360,6 +1379,25 @@ int main(int argc, char **argv) {
     // `--copy` 与 `--paste` 同时给时是"写完立刻读回"，这不是顺手：dtpasteboardd 对
     // 形状不对的内容会**回一个 SET_REPLY 表示收下、然后把内容丢掉**（types 为空就是
     // 这种情况），只发不读的话这种失败在本地完全看不出来。
+    if (o.list_apps) {
+        std::string err;
+        auto dev = scrctl::remote::Device::establish(o.serial, err);
+        if (!dev) {
+            std::fprintf(stderr, "建立会话失败: %s\n", err.c_str());
+            return 1;
+        }
+        std::vector<scrctl::remote::App::Entry> apps;
+        if (!scrctl::remote::App::list(*dev, apps, err)) {
+            std::fprintf(stderr, "列 App 失败: %s\n", err.c_str());
+            return 1;
+        }
+        for (const auto &e : apps) {
+            std::printf("%s\t%s\n", e.bundle_id.c_str(), e.name.c_str());
+        }
+        std::printf("共 %zu 个\n", apps.size());
+        return 0;
+    }
+
     if (!o.copy_text.empty() || o.paste) {
         std::string err;
         auto dev = scrctl::remote::Device::establish(o.serial, err);
@@ -1411,6 +1449,67 @@ int main(int argc, char **argv) {
         live = made.get();
         source = std::move(made);
     }
+    if (live == nullptr && !o.start_app.empty()) {
+        std::fprintf(stderr, "--start-app 只对真机实时流有意义（--play 的时候没有设备可启动），已忽略\n");
+    }
+    if (live != nullptr && !o.start_app.empty()) {
+        std::string spec = o.start_app;
+        bool by_name = false;
+        bool terminate = false;
+        // 前缀顺序照 scrcpy：`?` 在前、`+` 在后（它的文档就是按这个顺序写的）。
+        while (!spec.empty()) {
+            if (spec.front() == '?') {
+                by_name = true;
+            } else if (spec.front() == '+') {
+                terminate = true;
+            } else {
+                break;
+            }
+            spec.erase(spec.begin());
+        }
+        if (spec.empty()) {
+            std::fprintf(stderr, "--start-app 的名字是空的\n");
+            return 2;
+        }
+        std::string target = spec;
+        if (by_name) {
+            // 按名字找要先把整张表拉回来——那是一份几 MB 的回复，所以这一步比按
+            // bundle id 慢一个数量级，scrcpy 的文档里也明说了这件事。
+            std::string lerr;
+            std::vector<scrctl::remote::App::Entry> apps;
+            if (!scrctl::remote::App::list(live->device(), apps, lerr)) {
+                std::fprintf(stderr, "按名字找 App 失败: %s\n", lerr.c_str());
+                return 1;
+            }
+            auto lower = [](std::string v) {
+                for (char &c : v) {
+                    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                }
+                return v;
+            };
+            const std::string want = lower(spec);
+            const scrctl::remote::App::Entry *hit = nullptr;
+            for (const auto &e : apps) {
+                if (lower(e.name).rfind(want, 0) == 0) {
+                    hit = &e;
+                    break;
+                }
+            }
+            if (hit == nullptr) {
+                std::fprintf(stderr, "没有名字以 %s 开头的 App\n", spec.c_str());
+                return 1;
+            }
+            target = hit->bundle_id;
+            std::printf("--start-app=?%s -> %s\n", spec.c_str(), target.c_str());
+        }
+        std::string lerr;
+        if (!scrctl::remote::App::launch(live->device(), target, lerr, terminate)) {
+            std::fprintf(stderr, "启动 %s 失败: %s\n", target.c_str(), lerr.c_str());
+            return 1;
+        }
+        std::printf("已启动 %s%s\n", target.c_str(), terminate ? "（先杀掉了在跑的实例）" : "");
+    }
+
     const bool control_enabled = live != nullptr && !o.no_control;
 
     if (!o.render_driver.empty()) {
