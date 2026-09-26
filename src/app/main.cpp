@@ -1280,7 +1280,7 @@ bool LiveSource::start(const std::string &serial, const std::string &record_path
             } else {
                 std::printf("音频腿已建立：收流端口=%u PT=%u 后端=%s\n",
                             audio_->receiver_port(), audio_->payload_type(),
-                            audio_->backend_name());
+                            audio_->backend_name().c_str());
             }
         }
     }

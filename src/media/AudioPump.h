@@ -116,14 +116,16 @@ public:
     [[nodiscard]] std::size_t preroll_frames() const { return target_frames_; }
 
     [[nodiscard]] Stats stats() const;
+
+    /// 这几个数描述的是"当前这条会话"，而会话归工作线程所有、会被它随时换掉。所以
+    /// 读的人拿到的是一份快照（`live_`），不是那条 `StreamSession` 本身——直接 deref
+    /// 一个别的线程正在 reset 的 unique_ptr，读到的是已经自由掉的内存。
     [[nodiscard]] std::uint16_t receiver_port() const;
     [[nodiscard]] std::uint8_t payload_type() const;
 
     /// 实际在用的解码后端名。为什么要在意外面看得见它：这条路上"没声"的原因至少有
     /// 三个（没起流、后端不认这份参数、缓冲一直被取空），而三者症状一模一样。
-    [[nodiscard]] const char *backend_name() const {
-        return decoder_ != nullptr ? decoder_->backend_name() : "none";
-    }
+    [[nodiscard]] std::string backend_name() const;
 
     /// 停线程并停掉设备侧那条会话。析构也会做，但显式调一次能让"先停流再退进程"
     /// 这件事发生在调用点，而不是等到栈展开。
@@ -138,7 +140,18 @@ private:
                          static_cast<std::size_t>(options_.sample_rate) / 1000;
     }
 
+    /// 一条会话的、**别的线程需要看的**那几个数。全是标量，复制出去就是快照。
+    struct Live {
+        std::uint16_t receiver_port = 0;
+        std::uint8_t payload_type = 0;
+        std::uint16_t sender_port = 0;
+        std::uint32_t remote_ssrc = 0;
+        std::uint32_t local_ssrc = 0;
+    };
+
     bool start_session(std::string &err);
+    void publish_live();
+    void clear_live();
     void loop();
     void push(const std::vector<int16_t> &pcm);
 
@@ -146,9 +159,16 @@ private:
     Options options_;
     bool verbose_ = false;
     std::unique_ptr<AudioDecoder> decoder_;
+    /// **只有工作线程（和 join 之后的 `stop()`）碰得到它。**要往外传的东西一律走
+    /// `live_`，不要把这只指针交给别的线程——它每一次重起都会被 reset 再赋值。
     std::unique_ptr<StreamSession> session_;
     std::thread worker_;
     std::atomic<bool> stopping_ { false };
+
+    mutable std::mutex live_mutex_;
+    Live live_;
+    /// 后端名在建解码器时就有了，此后不变（重起路径只在解码器已存在时才走到）。
+    std::string backend_name_;
 
     mutable std::mutex mutex_;
     std::vector<int16_t> ring_;

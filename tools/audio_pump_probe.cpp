@@ -141,7 +141,7 @@ int main(int argc, char **argv) {
         return 1;
     }
     std::printf("① 音频腿已起（独立 ClientSessionID）：收流端口=%u PT=%u 后端=%s\n",
-                audio->receiver_port(), audio->payload_type(), audio->backend_name());
+                audio->receiver_port(), audio->payload_type(), audio->backend_name().c_str());
 
     std::unique_ptr<scrctl::media::FramePump> video;
     if (with_video) {

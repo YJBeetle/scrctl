@@ -97,7 +97,34 @@ bool AudioPump::start_session(std::string &err) {
                      started.remote_ssrc, started.local_ssrc);
     }
     session_ = std::move(session);
+    publish_live();
     return true;
+}
+
+/// 把当前会话的那几个标量抄成一份对外可见的快照。只在会话换了之后调。
+///
+/// 锁放在**最上面**而不是只包住最后那次赋值：`backend_name_` 也是这份快照的一部分，
+/// 它在锁外写就等于给 `backend_name()` 留了一个"读到半条字符串"的窗口。
+void AudioPump::publish_live() {
+    std::lock_guard<std::mutex> lock(live_mutex_);
+    Live live;
+    if (session_ != nullptr) {
+        const auto &started = session_->started();
+        live.receiver_port = session_->receiver_port();
+        live.payload_type = started.payload_type;
+        live.sender_port = started.sender_port;
+        live.remote_ssrc = started.remote_ssrc;
+        live.local_ssrc = started.local_ssrc;
+    }
+    if (decoder_ != nullptr) {
+        backend_name_ = decoder_->backend_name();
+    }
+    live_ = live;
+}
+
+void AudioPump::clear_live() {
+    std::lock_guard<std::mutex> lock(live_mutex_);
+    live_ = {};
 }
 
 void AudioPump::stop() {
@@ -112,6 +139,7 @@ void AudioPump::stop() {
     // "只有音频腿"的用法时，这条会话最多活到它自己报的 20 秒租期——代价是电与一个端口，
     // 比误杀视频流便宜。
     session_.reset();
+    clear_live();
 }
 
 void AudioPump::push(const std::vector<int16_t> &pcm) {
@@ -126,20 +154,30 @@ void AudioPump::push(const std::vector<int16_t> &pcm) {
         ring_.assign(kRingCapacityFrames * channels, 0);
     }
     // 满了丢**最旧**的：这是实时流，攒着的旧声音放出来只会越来越对不上画面。
-    if (used_ + frames > kRingCapacityFrames) {
+    std::size_t from = 0;
+    if (frames >= kRingCapacityFrames) {
+        // 一次喂进来的比整个环还大（正常走不到：ELD 一帧 480）。这一支存在的理由是
+        // 守住"used_ 不超过容量"这条不变式——不单独处理的话下面那句 `used_ += `
+        // 会把它推成一个大于容量的数，之后每次 read 都在一个假水位上算取多少，
+        // 症状是"没声"而不是"这一帧丢了"。
+        stats_.dropped_stale += used_ + frames - kRingCapacityFrames;
+        used_ = 0;
+        read_ = write_;
+        from = frames - kRingCapacityFrames;
+    } else if (used_ + frames > kRingCapacityFrames) {
         const std::size_t drop = used_ + frames - kRingCapacityFrames;
         read_ = (read_ + drop) % kRingCapacityFrames;
         used_ -= drop;
         stats_.dropped_stale += drop;
     }
-    for (std::size_t f = 0; f < frames; ++f) {
-        const std::size_t slot = ((write_ + f) % kRingCapacityFrames) * channels;
+    for (std::size_t f = from; f < frames; ++f) {
+        const std::size_t slot = ((write_ + (f - from)) % kRingCapacityFrames) * channels;
         for (std::size_t c = 0; c < channels; ++c) {
             ring_[slot + c] = pcm[f * channels + c];
         }
     }
-    write_ = (write_ + frames) % kRingCapacityFrames;
-    used_ += frames;
+    write_ = (write_ + (frames - from)) % kRingCapacityFrames;
+    used_ += frames - from;
 }
 
 std::size_t AudioPump::read(int16_t *dst, std::size_t frames) {
@@ -195,11 +233,18 @@ AudioPump::Stats AudioPump::stats() const {
 }
 
 std::uint16_t AudioPump::receiver_port() const {
-    return session_ != nullptr ? session_->receiver_port() : 0;
+    std::lock_guard<std::mutex> lock(live_mutex_);
+    return live_.receiver_port;
 }
 
 std::uint8_t AudioPump::payload_type() const {
-    return session_ != nullptr ? session_->started().payload_type : 0;
+    std::lock_guard<std::mutex> lock(live_mutex_);
+    return live_.payload_type;
+}
+
+std::string AudioPump::backend_name() const {
+    std::lock_guard<std::mutex> lock(live_mutex_);
+    return backend_name_.empty() ? std::string("none") : backend_name_;
 }
 
 void AudioPump::loop() {
@@ -271,6 +316,7 @@ void AudioPump::loop() {
                     std::fprintf(stderr, "音频：设备已结束这条会话（静默 %llu ms），重起\n",
                                  static_cast<unsigned long long>(quiet));
                     session_.reset();
+                    clear_live();
                 }
             }
             continue;
