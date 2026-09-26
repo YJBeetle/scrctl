@@ -52,6 +52,7 @@
 
 #include "hid/Hid.h"
 #include "media/StreamSession.h"
+#include "net/UdpSocket.h"
 #include "remote/Device.h"
 #include "rt/RtpHevc.h"
 
@@ -512,7 +513,21 @@ int main(int argc, char **argv) {
     bool hid_attach = false;
     /// 往设备一个确定没人监听的端口打三个 UDP 数据报，看设备的内核答不答话
     /// （ICMPv6 端口不可达由 `net::Stack` 打进 stderr）。用途见使用处的说明。
+    /// **实测**：修好 `build_udp_datagram` 之前 3 条全哑；修好之后 3 条全收到
+    /// `type=1 code=4（端口不可达）`，内层四元组就是发包那对——同一段代码、同一个
+    /// 靶、只改数据报拼装，这是整件事最干净的前后对照。
     bool udp_canary = false;
+    /// 起流之前先对设备隧道地址发 5 个 ICMPv6 回音请求，看设备答不答话。
+    /// **实测**：5/5 有应答（修前修后都一样）。它把"隧道不投递我们的非 TCP 包"
+    /// 和"我们自己的包是坏的"这两种解释分开，而答案是后者。
+    bool ping6 = false;
+    /// 向设备的 5353 发单播 DNS 查询，问"客户端->设备的 UDP 落不落地"。
+    /// **实测**：修好后仍无回信。这一臂**不能定案**（mDNSResponder 大概率不答隧道
+    /// 上的单播查询，阴性本来就不作数），留着只因为它顺手能证明"发得出"这条路没坏。
+    bool udp_mdns = false;
+    /// 给出站包打一个非零 IPv6 流标签（苹果客户端实测是 0xd0d00 这种随机值，我们是 0）。
+    /// **已判掉**：非零标签下设备侧依旧 `pkts in: 0`、照旧 20 秒死。
+    bool flow_label = false;
     uint16_t canary_port = 47891;
     // AVC 那条形串。抓包对齐到的最后一处可见差别：苹果发 `FLS;VRAE:0;SW:1;`，我们和 p3
     // 都发 `FLS;SW:1;`（p3 还专门注释说 VRAE:0 不能进）。设备会把它回显成
@@ -544,6 +559,12 @@ int main(int argc, char **argv) {
             dump_packets = true;
         } else if (a == "--hid-attach") {
             hid_attach = true;
+        } else if (a == "--ping6") {
+            ping6 = true;
+        } else if (a == "--udp-mdns") {
+            udp_mdns = true;
+        } else if (a == "--flow-label") {
+            flow_label = true;
         } else if (a == "--udp-canary") {
             udp_canary = true;
             if (i + 1 < argc && argv[i + 1][0] != '-') {
@@ -671,6 +692,105 @@ int main(int argc, char **argv) {
     if (!dev) {
         std::fprintf(stderr, "建立会话失败: %s\n", err.c_str());
         return 1;
+    }
+
+    // **ICMPv6 回音**：这一步完全不碰媒体会话，只问"这条用户态隧道到底投不投递
+    // 非 TCP 的流量"。它是金丝雀的前置条件：往关闭的 UDP 端口发包拿不到"端口不可达"
+    // 是二义的——可能我们的包没进内核，也可能设备压根不在这条隧道上生成 ICMP。
+    // 回音请求由设备**内核**直接回答，不需要任何 App 配合，所以它能把那两种分开。
+    // **实测 5/5 有应答**（修前修后都一样）：隧道确实投递我们手搓的非 TCP 包，
+    // 而设备认我们的 IPv6 头、伪头和校验和——因为它要是不认，连 ICMP 都不会回。
+    if (flow_label) {
+        std::random_device rd;
+        const uint32_t label = rd() & 0xFFFFFu;
+        dev->rsd().stack().set_flow_label(label);
+        std::printf("  出站包的 IPv6 流标签改成 0x%05x（默认是 0；苹果客户端实测非零）\n", label);
+    }
+    if (ping6) {
+        auto &st = dev->rsd().stack();
+        for (int i = 0; i < 5; ++i) {
+            std::string perr;
+            const bool ok = st.send_echo_request(0x5343, static_cast<uint16_t>(i + 1), perr);
+            if (!ok) {
+                std::printf("  ping6 #%d 写入失败: %s\n", i + 1, perr.c_str());
+            }
+            std::this_thread::sleep_for(400ms);
+        }
+        std::this_thread::sleep_for(1500ms);
+        std::printf("  ping6 -> %s：ICMP 共收到 %llu 个，其中回音应答 %llu 个%s\n",
+                    dev->rsd().stack().peer_text().c_str(),
+                    static_cast<unsigned long long>(st.icmp_seen()),
+                    static_cast<unsigned long long>(st.echo_replies()),
+                    st.echo_replies() > 0 ? "（隧道会投递非 TCP 流量）"
+                                          : "（设备没答 ICMP —— 金丝雀的阴性不作数）");
+        if (!st.icmp_last().empty()) {
+            std::printf("    最后一条：%s\n", st.icmp_last().c_str());
+        }
+    }
+
+    // **客户端->设备的 UDP 到底落不落地**：拿设备上必然在听 UDP 的那个进程
+    // （mDNSResponder:5353）当探测靶，发一个单播 DNS 查询，看回不回。
+    //
+    // 为什么这一步当时看起来必须做：上面那一 ping 已经证明"我们手搓的 IPv6 包设备
+    // 内核收得下、也答得回来"，而媒体 socket 那边却是 `pkts in: 0`，于是读成
+    // "两者唯一的差别就是 17 还是 58"——像是设备/隧道在入方向按协议丢 UDP。
+    // **这个读法是错的，而这一臂正是把它证伪的那一步**：差别从来不在协议号，
+    // 在两个包是谁拼的。ICMP 那一条走 `Stack::send_echo_request()`（拼装是对的），
+    // UDP 那一条走 `UdpSocket::send()`（长度字段与校验和都算错了范围）。
+    // 所以"ping 通而 UDP 不通"当时看起来像协议过滤器，实际是同一个函数族里
+    // 只有一条路径被测过。教训：**别拿两条不同代码路径的观测去推断网络行为**。
+    //   有回信 ⇒ 客户端->设备的 UDP 通
+    //   无回信 ⇒ 定不了案（mDNSResponder 大概率不答隧道上的单播查询）
+    if (udp_mdns) {
+        auto &st = dev->rsd().stack();
+        std::unique_ptr<scrctl::net::UdpSocket> sock;
+        for (uint16_t p = 39001; p < 39011 && !sock; ++p) {
+            auto candidate = std::make_unique<scrctl::net::UdpSocket>(st, p);
+            std::string berr;
+            if (candidate->bind(berr)) {
+                sock = std::move(candidate);
+            }
+        }
+        if (!sock) {
+            std::fprintf(stderr, "  udp-mdns：绑不到本地端口\n");
+        } else {
+            // DNS 查询头：ID / flags=0 / QDCOUNT=1，其余计数 0；
+            // QNAME = _mdns._udp.local，QTYPE=PTR(12)，CLASS=IN(1)。
+            const std::vector<uint8_t> qname = {
+                5, '_', 'm', 'd', 'n', 's', 4, 'u', 'd', 'p', 5, 'l', 'o', 'c', 'a', 'l', 0};
+            std::vector<uint8_t> q;
+            const auto put16 = [&q](uint16_t v) {
+                q.push_back(static_cast<uint8_t>(v >> 8));
+                q.push_back(static_cast<uint8_t>(v));
+            };
+            put16(0x5c5c);
+            put16(0);  // flags：标准查询
+            put16(1);  // QDCOUNT
+            put16(0);
+            put16(0);
+            put16(0);
+            q.insert(q.end(), qname.begin(), qname.end());
+            put16(12);  // PTR
+            put16(1);   // IN
+            std::string serr;
+            int sent = 0;
+            for (int i = 0; i < 5; ++i) {
+                if (sock->send(q, 5353, serr)) {
+                    ++sent;
+                }
+                std::this_thread::sleep_for(300ms);
+            }
+            std::vector<uint8_t> reply;
+            uint16_t from_port = 0;
+            std::string rerr;
+            const bool got = sock->recv(reply, from_port, 2500, rerr);
+            const std::string verdict =
+                got ? ("**收到回信 " + std::to_string(reply.size()) + " 字节，来自端口 " +
+                       std::to_string(from_port) + " ⇒ 客户端->设备的 UDP 是通的**")
+                    : ("无回信（" + rerr + "）");
+            std::printf("  udp-mdns：从端口 %u 发出 %d 个查询，%s\n",
+                        static_cast<unsigned>(sock->local_port()), sent, verdict.c_str());
+        }
     }
 
     // `--hold-idle`：不开媒体会话，只开一条 displayservice 连接、调一次 getsupportinfo，
@@ -1095,13 +1215,17 @@ int main(int argc, char **argv) {
             // 为什么要有它：设备的 `lastReceivedPacketTime` 是 nan，而"我们的包没被
             // 隧道投递出去"和"投出去了但那个端口没人收"这两种成因，在媒体面上看到的
             // 结果一模一样。唯一能把它们分开的是设备的内核会不会答话——打给一个确定
-            // 关闭的端口，它该回 ICMPv6 `type=1 code=3`（端口不可达），这条由
-            // `net::Stack` 直接打到 stderr。于是三种结果各有含义：
+            // 关闭的端口，它该回 ICMPv6 `type=1 code=4`（端口不可达），这条由
+            // `net::Stack` 直接打到 stderr。三种结果各有含义：
             //   金丝雀有回信 + RTCP 无回信  → 隧道 UDP 通，媒体端口才是问题
             //   金丝雀有回信 + RTCP 也有     → 我们发的那个端口上根本没人收（发错端口）
-            //   两种都没有回信              → 客户端→设备的 UDP 整条路不通（但这一条
-            //                                 不能单独成立：设备也可能就是不在隧道里
-            //                                 生成 ICMP，所以它是"弱证据"不是"否证"）
+            //   两种都没有回信              → 当时以为只剩"包没进内核"，**其实还有第四种，
+            //                                 而它才是答案：包自己是坏的**。校验和错的
+            //                                 UDP 包在进 UDP 层之前就被丢，走不到"没人听"
+            //                                 那一步，所以连 ICMP 都不发。
+            // **实测**：拼装修好之前 3 条全哑，修好之后 3 条全收到 `type=1 code=4`
+            // 且回带的内层四元组就是我们的发包（`58250->47891`）。同一段发包代码、同一个
+            // 靶、只改了 `build_udp_datagram`——这就是整件事的前后对照。
             if (udp_canary) {
                 for (int i = 0; i < 3; ++i) {
                     std::string cerr;

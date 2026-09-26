@@ -111,13 +111,18 @@ bool Stack::send(const std::vector<uint8_t> &ipv6_packet, std::string &err) {
 std::vector<uint8_t> Stack::wrap(const std::vector<uint8_t> &l4, uint8_t next_header) const {
     std::vector<uint8_t> out(kIpv6HeaderLen + l4.size());
     uint8_t *p = out.data();
-    p[0] = 0x60;  // version 6，TC 与流标签全零
+    // version 6 + TC(0) + 20 位流标签。标签默认 0，见 set_flow_label() 的说明。
+    const uint32_t vtcflow = 0x60000000u | (flow_label_ & 0xFFFFFu);
+    p[0] = static_cast<uint8_t>(vtcflow >> 24);
+    p[1] = static_cast<uint8_t>(vtcflow >> 16);
+    p[2] = static_cast<uint8_t>(vtcflow >> 8);
+    p[3] = static_cast<uint8_t>(vtcflow);
     const uint16_t payload = static_cast<uint16_t>(l4.size());
     p[4] = static_cast<uint8_t>(payload >> 8);
     p[5] = static_cast<uint8_t>(payload);
     p[6] = next_header;
     p[7] = 64;  // hop limit
-    std::memcpy(p + 8, local_addr_.data(), 16);
+    std::memcpy(p + 8, local_addr_.data(), 16);  // 上面 4 字节已写完 version/TC/标签
     std::memcpy(p + 24, peer_addr_.data(), 16);
     std::memcpy(p + kIpv6HeaderLen, l4.data(), l4.size());
     return out;
@@ -200,6 +205,21 @@ std::string Stack::icmp_last() const {
     return icmp_last_;
 }
 
+bool Stack::send_echo_request(uint16_t ident, uint16_t seq, std::string &err) {
+    // ICMPv6 的报文格式：type / code / 校验和(2)，回音请求再跟 id / seq / 数据。
+    // 算校验和时该字段置 0，伪头用 next header = 58。
+    std::vector<uint8_t> msg = {128, 0, 0, 0,
+                                static_cast<uint8_t>(ident >> 8), static_cast<uint8_t>(ident),
+                                static_cast<uint8_t>(seq >> 8), static_cast<uint8_t>(seq)};
+    const std::string tag = "scrctl-canary";
+    msg.insert(msg.end(), tag.begin(), tag.end());
+    const uint16_t sum =
+        l4_checksum(local_addr_.data(), peer_addr_.data(), msg.data(), msg.size(), 58);
+    msg[2] = static_cast<uint8_t>(sum >> 8);
+    msg[3] = static_cast<uint8_t>(sum);
+    return send(wrap(msg, 58), err);
+}
+
 /// 把 ICMPv6 头部（以及错误消息里带的那个内层 IPv6 包头）记下来。
 ///
 /// 不校验它的 L4 校验和：上面那段只对 next=6/17 验和，而这一位是"设备有没有答话"的
@@ -210,11 +230,13 @@ void Stack::observe_icmpv6(const uint8_t *icmp, std::size_t len) {
     }
     const uint8_t type = icmp[0];
     const uint8_t code = icmp[1];
+    // ICMPv6 的 type=1 码表和 ICMPv4 的**不一样**，别照抄：v4 的"端口不可达"是 code 3，
+    // v6 的是 code 4（照 v4 抄会把金丝雀那条读成"地址不可达"，意思整个反了）。
     static constexpr const char *kCodes[] = {
-        "没有路由/目的网不可达", "目的主机不可达", "协议不可达", "端口不可达",
-        "目的地址不可达", "源地址被策略禁止"};
+        "没有路由到目的", "与管理策略禁止通信", "超出源地址的范围", "地址不可达",
+        "端口不可达", "源地址被入/出站策略禁止", "到目的的路由被拒绝"};
     std::string line = "ICMPv6 type=" + std::to_string(type) + " code=" + std::to_string(code);
-    if (type == 1 && code <= 5) {
+    if (type == 1 && code < std::size(kCodes)) {
         line += std::string("（") + kCodes[code] + "）";
     } else if (type == 2) {
         line += "（包太大）";
@@ -246,6 +268,9 @@ void Stack::observe_icmpv6(const uint8_t *icmp, std::size_t len) {
     {
         std::lock_guard<std::mutex> lock(icmp_mu_);
         ++icmp_seen_;
+        if (type == 129) {
+            ++echo_replies_;
+        }
         icmp_last_ = line;
     }
     std::fprintf(stderr, "    <- %s\n", line.c_str());
