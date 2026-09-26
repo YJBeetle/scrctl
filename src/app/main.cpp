@@ -69,6 +69,9 @@ struct Options {
     std::string copy_text;   ///< --copy TEXT：写进设备剪贴板后退出
     bool paste = false;      ///< --paste：读设备剪贴板打印后退出
     bool no_window = false;  ///< --no-window：不起窗口，只收流（脚本/自动化用）
+    /// --display-orientation：画面顺时针转这么多度。-1 = auto，跟着设备报的
+    /// `currentOrientation` 走。
+    int orientation = -1;
     int win_w = 0, win_h = 0;  ///< --window-width/height：显式窗口尺寸，0=自动
     /// 用平台硬件解码后端（VideoToolbox），而不是默认的软件解码。
     /// 见 FramePump::Options::use_hardware——默认软解的原因是硬解吃不下超过 65535 字节的帧。
@@ -101,6 +104,12 @@ void usage(const char *argv0) {
         "  --window-width N / --window-height N  显式窗口尺寸，默认按屏幕自动缩\n"
         "  --debug-input        打印每次鼠标的原始坐标与换算结果（定坐标问题时用）\n"
         "  --crop WxH+X+Y       裁剪区域（也吃 scrcpy 的 W:H:X:Y；默认自动裁 CTU 填充）\n"
+        "  --display-orientation=auto|0|90|180|270\n"
+        "                       画面顺时针转多少度（--orientation 同义）。默认 auto：\n"
+        "                       跟着设备报的界面旋转走，转屏时窗口自己换向。度数是顺时针，\n"
+        "                       与 scrcpy 同义；两处偏差——scrcpy 还认 flip*（先水平翻转\n"
+        "                       再转）我们没做，而 scrcpy 的 --orientation 会连带设录制\n"
+        "                       方向，我们录的就是设备发来的原始码流，没有这一项\n"
         "  --scale F            窗口缩放系数，默认 1.0\n"
         "  --hw-decode          改用平台硬件解码（VideoToolbox）。默认是软件解码：\n"
         "                     硬解只吃 2 字节 NAL 长度前缀，而这条流单帧能到\n"
@@ -120,14 +129,28 @@ void usage(const char *argv0) {
 }
 
 bool parse_args(int argc, char **argv, Options &o) {
+    // scrcpy 的选项两种写法都收：`--scale 0.5` 与 `--scale=0.5`。在这里一次性拆成
+    // 前者，而不是每个选项各自处理一遍等号——漏一个的表现为"未知参数"，而用户抄的
+    // 正是 scrcpy 的用法。只按第一个等号切，值里再带等号（--title=a=b）不受影响。
+    std::vector<std::string> args;
     for (int i = 1; i < argc; ++i) {
-        const std::string a = argv[i];
+        std::string a = argv[i];
+        const auto eq = a.find('=');
+        if (a.rfind("--", 0) == 0 && eq != std::string::npos && eq + 1 < a.size()) {
+            args.push_back(a.substr(0, eq));
+            args.push_back(a.substr(eq + 1));
+        } else {
+            args.push_back(std::move(a));
+        }
+    }
+    for (std::size_t i = 0; i < args.size(); ++i) {
+        const std::string &a = args[i];
         auto next = [&](const char *what) -> const char * {
-            if (i + 1 >= argc) {
+            if (i + 1 >= args.size()) {
                 std::fprintf(stderr, "%s 缺少参数值\n", what);
                 std::exit(2);
             }
-            return argv[++i];
+            return args[++i].c_str();
         };
         if (a == "--play") {
             o.path = next("--play");
@@ -143,9 +166,9 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.no_window = true;
         } else if (a == "--window-title" || a == "--title") {
             o.title = next("--window-title");
-        } else if (a == "--window-width" && i + 1 < argc) {
+        } else if (a == "--window-width" && i + 1 < args.size()) {
             o.win_w = std::atoi(next("--window-width"));
-        } else if (a == "--window-height" && i + 1 < argc) {
+        } else if (a == "--window-height" && i + 1 < args.size()) {
             o.win_h = std::atoi(next("--window-height"));
         } else if (a == "--hw-decode") {
             o.hw_decode = true;
@@ -171,7 +194,23 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.copy_text = next("--copy");
         } else if (a == "--paste") {
             o.paste = true;
-
+        } else if (a == "--display-orientation" || a == "--orientation") {
+            // scrcpy 4.1 的 --orientation 是 --display-orientation + --record-orientation
+            // 的合写。我们没有"录制方向"这件事（录的就是设备发来的原始码流），
+            // 所以两个拼写都收、都只改显示——但 help 里要写清这一条偏差。
+            const std::string v = next(a.c_str());
+            if (v == "auto") {
+                o.orientation = -1;
+            } else if (v == "0" || v == "90" || v == "180" || v == "270") {
+                o.orientation = std::atoi(v.c_str());
+            } else {
+                std::fprintf(stderr,
+                             "--%s 只认 auto/0/90/180/270，收到 %s（scrcpy 还支持 flip*，"
+                             "我们没做水平翻转）\n",
+                             a.c_str() + 2, v.c_str());
+                return false;
+            }
+        } else if (a == "--crop") {
             const char *v = next("--crop");
             if (std::sscanf(v, "%dx%d+%d+%d", &o.crop_w, &o.crop_h, &o.crop_x, &o.crop_y) != 4 &&
                 std::sscanf(v, "%d:%d:%d:%d", &o.crop_w, &o.crop_h, &o.crop_x, &o.crop_y) != 4) {
@@ -1043,7 +1082,8 @@ int main(int argc, char **argv) {
     } else {
         auto made = std::make_unique<LiveSource>();
         std::string err;
-        if (!made->start(o.serial, o.record, o.hw_decode, !o.no_window, err)) {
+        if (!made->start(o.serial, o.record, o.hw_decode, !o.no_window && o.orientation < 0,
+                         err)) {
             std::fprintf(stderr, "起流失败: %s\n", err.c_str());
             // 设备在通话中会直接拒绝起流（code 9022）。实测这时它的会话表是空的
             // （getmediastreamserverstatus 回 sessions: []），所以不是"有条旧流占着"，
@@ -1222,7 +1262,7 @@ int main(int argc, char **argv) {
         // logical size 等比留边，画面缩在窗口一角，那正是我们要修的 bug 的新版本。
         // 重建走的是启动时那条已经验过的路，代价只是窗口闪一下（转屏本来就是一个
         // 动作，不是每帧的事）。
-        const int degrees = source->orientation_degrees();
+        const int degrees = o.orientation >= 0 ? o.orientation : source->orientation_degrees();
         if (degrees != applied_degrees) {
             applied_degrees = degrees;
             presenter.reset();
