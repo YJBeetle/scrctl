@@ -1,0 +1,296 @@
+// 转屏渲染的离线自检：拿一张四角染色的假面板帧，在无头驱动下画一遍，读回来对角落。
+//
+// 为什么必须自己画一遍而不是只看数学：`SDL_RenderCopyEx` 的角度是顺时针还是逆时针，
+// 是这条路径唯一一个"错了就整幅歪 180°"的外部约定，而真机上验它要开窗口（用户在场
+// 时才合适），画面内容又一直在动、不好判定。dummy 驱动 + 软件渲染器 + 回读把这三件事
+// 都绕开了：不需要显示器，像素是我们自己填的，判据是四个角的颜色落点。
+//
+// 这个测试确实抓到了两条只有画一遍才看得见的错：一是 dst 给成视口尺寸时 90/270 会
+// 画成"中间一条、四角全黑"（SDL 是绕 dst 中心转、图像溢出 dst 的），二是 dummy 驱动下
+// `SDL_SetWindowSize` 不带动绘制面尺寸。两种症状在真机窗口里都只是"画面不对"，
+// 谁也推不回原因。
+#include <SDL.h>
+
+#include <cstdio>
+#include <vector>
+
+#include "app/RenderPanel.h"
+
+namespace {
+
+int failures = 0;
+
+void check(bool ok, const char *what) {
+    if (!ok) {
+        std::printf("  FAIL %s\n", what);
+        ++failures;
+    } else {
+        std::printf("  PASS %s\n", what);
+    }
+}
+
+/// 面板尺寸与角块。取 40x60 是为了让"角块中心"离边缘有 6px，采样时不会被
+/// 纹理边缘的插值尾巴影响；取整宽高是为了 1:1 画进视口、完全不经过缩放滤波。
+constexpr int kPanelW = 40;
+constexpr int kPanelH = 60;
+constexpr int kBlock = 12;
+
+struct Rgb {
+    Uint8 r, g, b;
+};
+
+/// 四个角块的颜色。刻意选得互相差很远，任何一档转错都会立刻对不上。
+constexpr Rgb kTopLeft {220, 20, 20};      // 红
+constexpr Rgb kTopRight {20, 200, 20};     // 绿
+constexpr Rgb kBottomRight {30, 60, 230};  // 蓝
+constexpr Rgb kBottomLeft {240, 240, 240}; // 白
+constexpr Rgb kBackground {10, 10, 10};
+
+Uint32 pack(Rgb c) {
+    return (Uint32(255) << 24) | (Uint32(c.r) << 16) | (Uint32(c.g) << 8) | c.b;
+}
+
+/// 面板上的角块中心（与下面算视口落点时用同一套坐标）。
+struct Point {
+    int x, y;
+};
+
+Point panel_corner(int which) {
+    switch (which) {
+        case 0: return {kBlock / 2, kBlock / 2};
+        case 1: return {kPanelW - kBlock / 2, kBlock / 2};
+        case 2: return {kPanelW - kBlock / 2, kPanelH - kBlock / 2};
+        default: return {kBlock / 2, kPanelH - kBlock / 2};
+    }
+}
+
+/// "视口 = 面板顺时针转 degrees"这个约定下，面板上的点落在视口的哪里。
+///
+/// 这里独立地按定义算一遍（先归一化，再按顺时针旋转的坐标变换），为的是让判据
+/// 不是从被测代码里抄来的：被测的是 SDL 的角度方向与 dst 尺寸，判据必须来自
+/// 我们对"顺时针"的理解。
+Point viewport_corner(int which, int degrees) {
+    const Point p = panel_corner(which);
+    const double u = static_cast<double>(p.x) / kPanelW;  // 面板横向 0..1
+    const double v = static_cast<double>(p.y) / kPanelH;  // 面板纵向 0..1，向下
+    double tu = u, tv = v;
+    switch (degrees) {
+        case 90: tu = 1.0 - v; tv = u; break;
+        case 180: tu = 1.0 - u; tv = 1.0 - v; break;
+        case 270: tu = v; tv = 1.0 - u; break;
+        default: break;
+    }
+    int vw = kPanelW, vh = kPanelH;
+    if (degrees == 90 || degrees == 270) {
+        vw = kPanelH;
+        vh = kPanelW;
+    }
+    return {static_cast<int>(tu * vw + 0.5), static_cast<int>(tv * vh + 0.5)};
+}
+
+Rgb at(const Uint32 *pixels, int w, int x, int y) {
+    const Uint32 p = pixels[y * w + x];
+    return {static_cast<Uint8>((p >> 16) & 0xFF), static_cast<Uint8>((p >> 8) & 0xFF),
+            static_cast<Uint8>(p & 0xFF)};
+}
+
+bool close(Rgb a, Rgb b) {
+    const auto d = [](Uint8 x, Uint8 y) { return x > y ? x - y : y - x; };
+    return d(a.r, b.r) < 24 && d(a.g, b.g) < 24 && d(a.b, b.b) < 24;
+}
+
+/// 一档一次性的窗口 + 渲染器。
+///
+/// 为什么每档新建、又为什么上 RAII：想改成 `SDL_SetWindowSize` 复用，实测 dummy 驱动下
+/// 绘制面并不跟着变（视口 40x60 仍报 60x60），于是回读读到的是留边后的局部，四个角
+/// 全对不上——症状和"旋转方向搞反"一模一样，很难查。而手写 destroy 的出口有五个，
+/// 漏掉一个就是下一档读到上一档的残留。
+struct Canvas {
+    SDL_Window *window = nullptr;
+    SDL_Renderer *renderer = nullptr;
+    ~Canvas() {
+        if (renderer != nullptr) {
+            SDL_DestroyRenderer(renderer);
+        }
+        if (window != nullptr) {
+            SDL_DestroyWindow(window);
+        }
+    }
+    Canvas() = default;
+    Canvas(const Canvas &) = delete;
+    Canvas &operator=(const Canvas &) = delete;
+
+    bool open(int w, int h) {
+        window = SDL_CreateWindow("render_test", 0, 0, w, h, SDL_WINDOW_HIDDEN);
+        if (window == nullptr) {
+            std::printf("  FAIL 建窗口: %s\n", SDL_GetError());
+            return false;
+        }
+        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+        if (renderer == nullptr) {
+            std::printf("  FAIL 建软件渲染器: %s\n", SDL_GetError());
+            return false;
+        }
+        return true;
+    }
+};
+
+struct Texture {
+    SDL_Texture *tex = nullptr;
+    ~Texture() {
+        if (tex != nullptr) {
+            SDL_DestroyTexture(tex);
+        }
+    }
+    Texture() = default;
+    Texture(const Texture &) = delete;
+    Texture &operator=(const Texture &) = delete;
+};
+
+/// 画一次并回读。返回 false 表示这一档根本没画成（建纹理/回读失败）。
+bool render_once(int degrees, std::vector<Uint32> &out, int &ow, int &oh) {
+    scrctl::app::Crop crop {};
+    crop.x = 0;
+    crop.y = 0;
+    crop.w = kPanelW;
+    crop.h = kPanelH;
+    crop.display_w = kPanelW;
+    crop.display_h = kPanelH;
+    int vw = 0, vh = 0;
+    scrctl::app::viewport_size(crop, degrees, vw, vh);
+    ow = vw;
+    oh = vh;
+
+    Canvas canvas;
+    if (!canvas.open(vw, vh)) {
+        return false;
+    }
+    // 窗口点数必须与 logical size 一致。不一致时 SDL 会按等比留边把画面居中，
+    // 于是"读回 0..vw x 0..vh"读到的是一块带偏移的局部，判据就全错了——所以在这里
+    // 先把它断掉，而不是等到角落颜色对不上才发现。
+    int out_w = 0, out_h = 0;
+    SDL_GetRendererOutputSize(canvas.renderer, &out_w, &out_h);
+    if (out_w != vw || out_h != vh) {
+        std::printf("  FAIL 绘制面 %dx%d 与视口 %dx%d 不符，回读会读到留边后的局部\n", out_w, out_h,
+                    vw, vh);
+        return false;
+    }
+    if (SDL_RenderSetLogicalSize(canvas.renderer, vw, vh) != 0) {
+        std::printf("  FAIL 设 logical size: %s\n", SDL_GetError());
+        return false;
+    }
+    Texture holder;
+    // STREAMING 而不是 STATIC：软件渲染器只允许锁 STREAMING 纹理，
+    // 用 STATIC 会在 SDL_LockTexture 里报 "texture must be streaming"。
+    holder.tex = SDL_CreateTexture(canvas.renderer, SDL_PIXELFORMAT_ARGB8888,
+                                   SDL_TEXTUREACCESS_STREAMING, kPanelW, kPanelH);
+    if (holder.tex == nullptr) {
+        std::printf("  FAIL 建纹理: %s\n", SDL_GetError());
+        return false;
+    }
+    void *pixels = nullptr;
+    int pitch = 0;
+    if (SDL_LockTexture(holder.tex, nullptr, &pixels, &pitch) != 0) {
+        std::printf("  FAIL 锁纹理: %s\n", SDL_GetError());
+        return false;
+    }
+    for (int y = 0; y < kPanelH; ++y) {
+        auto *row = reinterpret_cast<Uint32 *>(
+            static_cast<Uint8 *>(pixels) + static_cast<std::size_t>(y) * pitch);
+        for (int x = 0; x < kPanelW; ++x) {
+            Rgb c = kBackground;
+            if (x < kBlock && y < kBlock) {
+                c = kTopLeft;
+            } else if (x >= kPanelW - kBlock && y < kBlock) {
+                c = kTopRight;
+            } else if (x >= kPanelW - kBlock && y >= kPanelH - kBlock) {
+                c = kBottomRight;
+            } else if (x < kBlock && y >= kPanelH - kBlock) {
+                c = kBottomLeft;
+            }
+            row[x] = pack(c);
+        }
+    }
+    SDL_UnlockTexture(holder.tex);
+
+    SDL_SetRenderDrawColor(canvas.renderer, 0, 0, 0, 255);
+    SDL_RenderClear(canvas.renderer);
+    scrctl::app::draw_rotated(canvas.renderer, holder.tex, crop, degrees);
+
+    SDL_Surface *s = SDL_CreateRGBSurfaceWithFormat(0, vw, vh, 32, SDL_PIXELFORMAT_ARGB8888);
+    if (s == nullptr) {
+        std::printf("  FAIL 建回读面: %s\n", SDL_GetError());
+        return false;
+    }
+    const SDL_Rect full {0, 0, vw, vh};
+    const int rc = SDL_RenderReadPixels(canvas.renderer, &full, SDL_PIXELFORMAT_ARGB8888, s->pixels,
+                                        s->pitch);
+    if (rc != 0) {
+        std::printf("  FAIL 回读: %s\n", SDL_GetError());
+        SDL_FreeSurface(s);
+        return false;
+    }
+    out.assign(static_cast<std::size_t>(vw) * vh, 0);
+    // 逐行搬：surface 的 pitch 可能比 vw*4 大，整块 copy 会把行间距当成像素读进来。
+    for (int y = 0; y < vh; ++y) {
+        const auto *src_row = reinterpret_cast<const Uint32 *>(
+            static_cast<const Uint8 *>(s->pixels) + static_cast<std::size_t>(y) * s->pitch);
+        for (int x = 0; x < vw; ++x) {
+            out[static_cast<std::size_t>(y) * vw + x] = src_row[x];
+        }
+    }
+    SDL_FreeSurface(s);
+    return true;
+}
+
+}  // namespace
+
+int main() {
+    // 必须在 SDL_Init 之前设：dummy 驱动不需要显示器，CI 与 SSH 会话里也能跑。
+    SDL_SetHint(SDL_HINT_VIDEODRIVER, "dummy");
+    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+        std::fprintf(stderr, "SDL_Init 失败: %s\n", SDL_GetError());
+        return 1;
+    }
+    static constexpr const char *kNames[4] = {"面板左上(红)", "面板右上(绿)", "面板右下(蓝)",
+                                              "面板左下(白)"};
+    static constexpr Rgb kColors[4] = {kTopLeft, kTopRight, kBottomRight, kBottomLeft};
+
+    for (const int degrees : {0, 90, 180, 270}) {
+        std::printf("== 顺时针转正 %d° ==\n", degrees);
+        std::vector<Uint32> px;
+        int ow = 0, oh = 0;
+        const int before = failures;
+        if (!render_once(degrees, px, ow, oh)) {
+            ++failures;
+            continue;
+        }
+        // 视口尺寸本身是一条判据：转 90/270 必须宽高对调，否则窗口比例就是错的。
+        const int want_w = (degrees == 90 || degrees == 270) ? kPanelH : kPanelW;
+        const int want_h = (degrees == 90 || degrees == 270) ? kPanelW : kPanelH;
+        check(ow == want_w && oh == want_h, "视口尺寸按旋转对调");
+        for (int i = 0; i < 4; ++i) {
+            const Point want = viewport_corner(i, degrees);
+            const Rgb got = at(px.data(), ow, want.x, want.y);
+            char note[128];
+            std::snprintf(note, sizeof note, "%s 落在视口 (%d,%d) 且颜色对得上", kNames[i], want.x,
+                          want.y);
+            const bool ok = close(got, kColors[i]);
+            check(ok, note);
+            if (!ok) {
+                std::printf("     实际 rgb(%u,%u,%u)\n", got.r, got.g, got.b);
+            }
+        }
+        if (failures != before) {
+            std::printf("  ^ %d° 这一档错了：SDL 的角度方向或 dst 尺寸与约定不符\n", degrees);
+        }
+    }
+
+    SDL_Quit();
+    if (failures != 0) {
+        std::printf("render_test: %d 项失败\n", failures);
+        return 1;
+    }
+    std::printf("render_test: 全部通过\n");
+    return 0;
+}

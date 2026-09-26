@@ -27,6 +27,7 @@
 #include <utility>
 #include <vector>
 
+#include "app/RenderPanel.h"
 #include "app/ViewGeom.h"
 #include "bitstream/AnnexB.h"
 #include "decode/Decoder.h"
@@ -198,9 +199,15 @@ using scrctl::app::Crop;
 
 class Presenter {
 public:
-    bool open(int frame_w, int frame_h, const Crop &crop, double scale, bool scale_given,
-              const std::string &title, bool want_readback, int want_w = 0, int want_h = 0) {
+    /// `degrees` 是设备报的界面旋转（"要顺时针转多少才正立"）。它同时决定三件事：
+    /// 窗口与 logical size 的**朝向**、渲染时的旋转、以及鼠标坐标的逆映射。
+    /// 三者必须用同一个数，否则就是"画面转正了但点击还是歪的"。
+    bool open(int frame_w, int frame_h, const Crop &crop, int degrees, double scale,
+              bool scale_given, const std::string &title, bool want_readback, int want_w = 0,
+              int want_h = 0) {
         src_ = crop;
+        degrees_ = degrees;
+        scrctl::app::viewport_size(crop, degrees_, view_w_, view_h_);
         if (want_w > 0 && want_h > 0) {
             win_w_ = want_w;
             win_h_ = want_h;
@@ -211,8 +218,9 @@ public:
             desk.h = win_h_fallback;
         }
         // 留一条标题栏的余量，别让窗口刚好顶满屏幕。
-        scrctl::app::fit_window(crop.w, crop.h, desk.w, desk.h - 60, scale, scale_given, win_w_, win_h_);
-            if (!scale_given && win_w_ < crop.w) {
+        scrctl::app::fit_window(view_w_, view_h_, desk.w, desk.h - 60, scale, scale_given, win_w_,
+                                win_h_);
+            if (!scale_given && win_w_ < view_w_) {
                 std::printf("屏幕只有 %dx%d 点，窗口缩到 %dx%d（--scale 可覆盖）\n", desk.w,
                             desk.h, win_w_, win_h_);
             }
@@ -243,7 +251,10 @@ public:
         // 不设 logical size 的话，渲染器坐标就是**像素**尺寸，而 ALLOW_HIGHDPI 下
         // 像素是窗口的两倍——按窗口点数画过去，内容就只占左上四分之一。设了它，
         // SDL 自己处理 Retina 缩放与窗口拉伸后的等比留边。
-        SDL_RenderSetLogicalSize(renderer_, crop.w, crop.h);
+        //
+        // 这里要用**视口**尺寸（转 90/270 时宽高对调），不能用裁剪框尺寸：logical size
+        // 一设，鼠标事件的坐标就落进这个空间，用它当分母的触摸换算才对得上画面。
+        SDL_RenderSetLogicalSize(renderer_, view_w_, view_h_);
         int out_w = 0, out_h = 0;
         SDL_GetRendererOutputSize(renderer_, &out_w, &out_h);
         // 纹理必须是**源帧尺寸**——整帧上传进按裁剪尺寸建的纹理会因尺寸不符
@@ -256,9 +267,10 @@ public:
             return false;
         }
         SDL_SetTextureScaleMode(texture_, SDL_ScaleModeBest);
-        std::printf("窗口 %dx%d 点 / 绘制面 %dx%d 像素 / 逻辑 %dx%d（源帧 %dx%d，裁剪 %dx%d+%d+%d）\n",
-                    win_w_, win_h_, out_w, out_h, crop.w, crop.h, frame_w, frame_h, crop.w, crop.h,
-                    crop.x, crop.y);
+        std::printf("窗口 %dx%d 点 / 绘制面 %dx%d 像素 / 视口 %dx%d（源帧 %dx%d，裁剪 %dx%d+%d+%d，"
+                    "转正顺时针 %d°）\n",
+                    win_w_, win_h_, out_w, out_h, view_w_, view_h_, frame_w, frame_h, crop.w, crop.h,
+                    crop.x, crop.y, degrees_);
         return true;
     }
 
@@ -269,11 +281,10 @@ public:
             0) {
             std::fprintf(stderr, "上传纹理失败: %s\n", SDL_GetError());
         }
-        const SDL_Rect src{src_.x, src_.y, src_.w, src_.h};
         // 设了 logical size 之后渲染器坐标就是逻辑坐标，画满整个逻辑区域即可；
-        // Retina 缩放和窗口拉伸后的等比留边由 SDL 负责。
-        const SDL_Rect dst{0, 0, src_.w, src_.h};
-        SDL_RenderCopy(renderer_, texture_, &src, &dst);
+        // Retina 缩放和窗口拉伸后的等比留边由 SDL 负责。旋转在 draw_rotated 里做，
+        // 那条路径与离线自检共用同一个函数。
+        scrctl::app::draw_rotated(renderer_, texture_, src_, degrees_);
         // 必须在 Present 之前读：Present 之后后缓冲已交换，SDL_RenderReadPixels
         // 会读到失效内容并段错误。
         if (readback_path != nullptr) {
@@ -341,8 +352,9 @@ public:
         SDL_GetWindowSize(window_, &pw, &ph);
         SDL_GetRendererOutputSize(renderer_, &ow, &oh);
         std::fprintf(stderr,
-                     "[input] %s 原始(%d,%d) 逻辑%d x%d / 窗口%d x%d / 绘制面%d x%d -> (%.3f, %.3f)\n",
-                     tag, raw_x, raw_y, src_.w, src_.h, pw, ph, ow, oh, fx, fy);
+                     "[input] %s 原始(%d,%d) 视口%d x%d（转%d°）/ 窗口%d x%d / 绘制面%d x%d -> (%.3f, "
+                     "%.3f)\n",
+                     tag, raw_x, raw_y, view_w_, view_h_, degrees_, pw, ph, ow, oh, fx, fy);
     }
 
     bool pump(const std::function<void(double, double, bool)> &on_touch) {
@@ -421,18 +433,22 @@ private:
     /// **原始值就是逻辑坐标**：设了 SDL_RenderSetLogicalSize 之后，SDL2 会把鼠标
     /// 事件换算到逻辑空间再交给我们（实测：窗口 457 点 / 绘制面 914 像素，而右下角
     /// 的原始坐标是 1121 x 2431 —— 正好是逻辑尺寸 1125x2436）。所以这里只剩
-    /// "加裁剪偏移、除以显示尺寸"。
+    /// "按旋转映回面板轴、加裁剪偏移、除以整块屏的尺寸"，那三件事全在
+    /// `viewport_fraction_to_panel` 里，那边可以离线自检。
     ///
     /// 这里连续错过两次，都是擅自假设原始值活在点或像素空间再去除一遍，结果整体
     /// 差 2.46 倍。留一条运行期核对：万一某个 SDL 版本行为不同，越界会立刻显形。
     void to_display(int raw_x, int raw_y, double &fx, double &fy) const {
-        display_fraction_from_logical(raw_x, raw_y, src_, fx, fy);
+        scrctl::app::viewport_fraction_to_panel(raw_x, raw_y, src_, degrees_, fx, fy);
     }
 
     SDL_Window *window_ = nullptr;
     SDL_Renderer *renderer_ = nullptr;
     SDL_Texture *texture_ = nullptr;
     Crop src_{};
+    /// 顺时针转正角度，以及由它决定的视口尺寸（90/270 时宽高对调）。
+    int degrees_ = 0;
+    int view_w_ = 0, view_h_ = 0;
     int win_w_ = 0, win_h_ = 0;
     /// 拿不到显示器边界时的兜底：按原始尺寸处理，等于不缩。
     static constexpr int win_w_fallback = 1 << 20;
@@ -471,6 +487,16 @@ public:
         width = 0;
         height = 0;
     }
+
+    /// 画面要**顺时针**转多少度才正立。0 = 竖屏，或问不到。
+    ///
+    /// 为什么必须由源来报而不是由窗口自己看：编码帧**永远不转**（这台设备上横竖屏
+    /// 都是 1136x2464），转屏只体现在设备报的 `currentOrientation` 上。所以窗口里
+    /// 没有任何线索可推——不问就是横屏 App 躺倒。
+    ///
+    /// 注意它**不影响可见区尺寸**：实测界面转到 rot270 时 `currentMode.size` 仍是
+    /// 1125x2436，只有朝向字段变了。所以裁剪框不用跟着换向（docs §16）。
+    virtual int orientation_degrees() const { return 0; }
 };
 
 /// 首帧到手后定下"看哪一块"。
@@ -637,6 +663,10 @@ public:
         height = display_h_;
     }
 
+    /// 起流前问到的那一档界面旋转。设备转屏后这里不会自己变，得等下一次起流——
+    /// 跟着转屏实时改是 `DisplayWatcher` 的事。
+    [[nodiscard]] int orientation_degrees() const override { return degrees_; }
+
     bool next(scrctl::Frame &out, int timeout_ms) override {
         if (pump_ == nullptr) {
             return false;
@@ -781,6 +811,9 @@ private:
     /// 起流之前向设备要来的**可见区**尺寸（0/0 = 没问到）。见 `display_size()`。
     int display_w_ = 0;
     int display_h_ = 0;
+    /// 同一问带回来的界面旋转（顺时针度数）。0 也是有效值（竖屏），所以它不像尺寸
+    /// 那样用"零"表示没问到——没问到就是 0，正立竖屏也是 0，两者行为本来就该一样。
+    int degrees_ = 0;
     /// 尺寸是从哪块屏拿的，只为把日志那行说全（多屏设备上这不是废话：主屏与
     /// 无线屏的尺寸实测就不一样）。
     uint64_t display_id_ = 0;
@@ -831,6 +864,7 @@ bool LiveSource::start(const std::string &serial, const std::string &record_path
             display_h_ = d->height;
             display_id_ = d->id;
             display_name_ = d->name;
+            degrees_ = scrctl::app::orientation_degrees(d->orientation);
         } else {
             std::fprintf(stderr, "向设备问显示几何失败: %s（退回按机型硬编码的裁剪表）\n",
                          derr.empty() ? "推送里没有可用的尺寸" : derr.c_str());
@@ -852,9 +886,9 @@ bool LiveSource::start(const std::string &serial, const std::string &record_path
     // 打在这里而不是打在 `resolve_crop` 里，是因为控制单元那条路根本没有窗口：
     // "几何到底是设备报的还是那张兜底表"必须是**任何**跑法都能一眼看到的读数。
     if (display_w_ > 0) {
-        std::printf("显示几何：设备报可见区 %dx%d（displayId=%llu %s），码流 %ux%u\n", display_w_,
-                    display_h_, static_cast<unsigned long long>(display_id_), display_name_.c_str(),
-                    first.width, first.height);
+        std::printf("显示几何：设备报可见区 %dx%d（displayId=%llu %s），界面旋转顺时针 %d°，码流 %ux%u\n",
+                    display_w_, display_h_, static_cast<unsigned long long>(display_id_),
+                    display_name_.c_str(), degrees_, first.width, first.height);
     }
     if (!record_path.empty()) {
         std::printf("录制到 %s\n", record_path.c_str());
@@ -1145,8 +1179,8 @@ int main(int argc, char **argv) {
             presenter = std::make_unique<Presenter>();
             presenter->set_debug_input(o.debug_input);
             if (!presenter->open(static_cast<int>(f.width), static_cast<int>(f.height),
-                                 resolve_crop(o, f, *source), o.scale, o.scale_given, o.title,
-                                 o.verify_at > 0, o.win_w, o.win_h)) {
+                                 resolve_crop(o, f, *source), source->orientation_degrees(), o.scale,
+                                 o.scale_given, o.title, o.verify_at > 0, o.win_w, o.win_h)) {
                 return 1;
             }
         }

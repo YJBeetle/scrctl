@@ -242,6 +242,12 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(viewgeom_test PRIVATE scrctl_core)
     add_test(NAME viewgeom COMMAND viewgeom_test)
 
+    # 转屏渲染要真的画一遍才知道 SDL 的角度方向对不对，所以这个测试要链 SDL。
+    # 它自己把视频驱动设成 dummy，因此无显示器（CI、SSH）也能跑。
+    add_executable(render_test tests/render_test.cpp)
+    target_link_libraries(render_test PRIVATE scrctl_core Scrctl::SDL2)
+    add_test(NAME render COMMAND render_test)
+
     add_executable(net_test tests/net_test.cpp)
     target_link_libraries(net_test PRIVATE scrctl_core)
     add_test(NAME net COMMAND net_test)
