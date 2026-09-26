@@ -69,6 +69,8 @@ using scrctl::rt::build_sdes;
 using scrctl::rt::build_sdes_cname;
 using scrctl::rt::build_sr;
 using scrctl::rt::is_rtcp_sr;
+using scrctl::rt::build_fir;
+using scrctl::rt::build_pli;
 
 uint64_t now_ms() {
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -260,9 +262,46 @@ void walk(const scrctl::xpc::Value &v, const std::string &path, int depth) {
     }
 }
 
+/// 一段 Annex-B 里有没有 IDR（HEVC 的 NAL type 19=IDR_W_RADL / 20=IDR_N_LP）。
+///
+/// 为什么不能只看"收到视频包"：这条流在画面动的时候每秒发六百个包，绝大多数是 P 帧；
+/// 把"收到包"当成"收到关键帧"会让任何一次误触发都读成成功。
+///
+/// 为什么不在 RTP 层判：这一版曾经在 RTP 载荷的头两字节直接读 NAL type（含 RFC 7798 的
+/// 分片包 FU=62），结果是 30 秒 18000 个包里"IDR 0 个"——连起流那一下必然存在的第一个
+/// 关键帧都没认出来。真实原因是这条流的载荷类型和 RFC 7798 不一样（这条流的值：聚合包
+/// 48、分片包 **49**，不是 62），而 `HevcRtpDepacketizer` 里已经带着这份实测知识。
+/// 所以这里改成**复用拆包器**：把它吐出来的 Annex-B 扫一遍。判据于是和产品解码用的是
+/// 同一个，不会再出现"仪器说没关键帧、解码器却解出了帧"。
+bool annexb_has_idr(const std::vector<uint8_t> &b) {
+    for (std::size_t i = 0; i + 4 < b.size(); ++i) {
+        if (b[i] != 0 || b[i + 1] != 0 || b[i + 2] != 0 || b[i + 3] != 1) {
+            continue;
+        }
+        const unsigned type = (b[i + 4] >> 1) & 0x3Fu;
+        if (type == 19 || type == 20) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// 静止多久才开始发关键帧请求。画面在动的时候设备本来就在发 IDR 之外的帧，那时候发请
+/// 求换不来可归因的信号；静止满这个秒数之后再发，"突然来了一帧 IDR"才是请求的结果。
+constexpr uint64_t kPliQuietMs = 2500;
+
 struct Arm {
     std::string what;
+    /// 收到过**任何**视频包。注意这个名字是误标（历史原因留着）：它判不出关键帧，
+    /// 判 PLI/FIR 有没有换来 IDR 要看 `idr_after_request_ms`。
     bool got_idr = false;
+    /// 第一次"静止之后发出关键帧请求"的时刻（相对起流），以及那之后第一个 IDR 的延迟。
+    uint64_t first_request_ms = 0;
+    /// 这一轮里收到的真 IDR 个数。**所有臂都记**：画面在动的时候"请求之后来了 IDR"这件事
+    /// 需要一条基线才知道是不是碰巧——`rrsrc` 那一臂就是这条基线（它一个请求都不发）。
+    uint64_t idr_packets = 0;
+    uint64_t idr_after_request_ms = 0;
+    uint64_t requests_sent = 0;
     uint64_t last_video_ms = 0;   // 相对起流的时刻
     uint64_t last_sr_ms = 0;      // 同上
     uint64_t srs_after_video = 0;  // 最后一个视频包之后还收到多少个 SR
@@ -273,13 +312,24 @@ struct Arm {
 };
 
 void print_arm(const Arm &a, uint64_t t0) {
-    std::printf("  [%s] IDR=%s 最后视频包 +%llums 最后 SR +%llums 之后 SR 共 %llu 个 "
-                "结束时会话表=%s",
+    std::printf("  [%s] 收到过视频包=%s 真 IDR %llu 个 最后视频包 +%llums 最后 SR +%llums "
+                "之后 SR 共 %llu 个 结束时会话表=%s",
                 a.what.c_str(), a.got_idr ? "有" : "无",
+                static_cast<unsigned long long>(a.idr_packets),
                 static_cast<unsigned long long>(a.last_video_ms > t0 ? a.last_video_ms - t0 : 0),
                 static_cast<unsigned long long>(a.last_sr_ms > t0 ? a.last_sr_ms - t0 : 0),
                 static_cast<unsigned long long>(a.srs_after_video),
                 a.alive_at_end ? "还在" : "已没了");
+    if (a.requests_sent != 0) {
+        std::printf(" 关键帧请求 %llu 次，第一次在 +%llums，之后 IDR ",
+                    static_cast<unsigned long long>(a.requests_sent),
+                    static_cast<unsigned long long>(a.first_request_ms > t0
+                                                        ? a.first_request_ms - t0
+                                                        : 0));
+        std::printf(a.idr_after_request_ms == 0
+                        ? "没来"
+                        : ("+" + std::to_string(a.idr_after_request_ms) + "ms 到").c_str());
+    }
     if (a.polls_alive != 0) {
         std::printf(" 查会话表 %llu 次答还在，最后一次 +%llums",
                     static_cast<unsigned long long>(a.polls_alive),
@@ -461,6 +511,10 @@ int main(int argc, char **argv) {
     /// 给出站包打一个非零 IPv6 流标签（苹果客户端实测是 0xd0d00 这种随机值，我们是 0）。
     /// **已判掉**：非零标签下设备侧依旧 `pkts in: 0`、照旧 20 秒死。
     bool flow_label = false;
+    /// `pli` / `fir` 两臂的开关：默认只在画面静止满 2.5 秒之后才发关键帧请求（那才是能
+    /// 归因的时刻）。这一位改成"画面在动也照发"，用的是另一种判据：**和 `rrsrc` 基线比
+    /// IDR 的个数**——静止时机等不到时（设备一直在发新帧）只能这么量。
+    bool request_always = false;
     uint16_t canary_port = 47891;
     // AVC 那条形串。抓包对齐到的最后一处可见差别：苹果发 `FLS;VRAE:0;SW:1;`，我们和 p3
     // 都发 `FLS;SW:1;`（p3 还专门注释说 VRAE:0 不能进）。设备会把它回显成
@@ -498,6 +552,8 @@ int main(int argc, char **argv) {
             udp_mdns = true;
         } else if (a == "--flow-label") {
             flow_label = true;
+        } else if (a == "--request-always") {
+            request_always = true;
         } else if (a == "--udp-canary") {
             udp_canary = true;
             if (i + 1 < argc && argv[i + 1][0] != '-') {
@@ -839,7 +895,12 @@ int main(int argc, char **argv) {
             // rctl 这一组是本轮的重点，理由见 build_rctl 上面那段：把 RFC 3550 那几种包
             // 的字节、SSRC、端口全对上了仍然 20.0 秒死，而 Apple 客户端在视频端口上灌的
             // 是这种 PT=204 的厂商 APP 包，"Xcode sends this and no PLIs"。
-            const bool send_rr = base.rfind("rr", 0) == 0;
+            // pli / fir 两臂：关键帧请求。它们在**租期已经能续上**的前提下才有意义
+            // （否则 20 秒整会话就没了，"没等到 IDR"分不清是请求无效还是流已死），
+            // 所以这两个臂同时按 `--hz` 发着 RR——它们是在产品那条基线上加一个变量。
+            const bool send_pli = base == "pli";
+            const bool send_fir = base == "fir";
+            const bool send_rr = base.rfind("rr", 0) == 0 || send_pli || send_fir;
             const bool send_rctl = base.rfind("rctl", 0) == 0;
             const bool sdes = base == "rrsdes" || base == "rrall" || base == "rrminesd" ||
                               base == "rrsrcsd" || base == "rctlrr";
@@ -1071,7 +1132,14 @@ int main(int argc, char **argv) {
             bool ssrc_role_printed = false;
             uint16_t highest_seq = 0;
             uint64_t last_video = 0;
+            // 静止判据的起点没有收到过包，所以按"起流时刻"起算；留 0 的话第一个包之前
+            // 每一轮都算"静止了几万毫秒"，请求会在流还没稳的时候就发出去。
+            
+            // 只用来数 IDR 的第二个拆包器：和收流并行跑一份，不参与任何判断路径。
+            scrctl::rt::HevcRtpDepacketizer idr_scan(session->started().payload_type);
             uint64_t next_rr = t0;
+            uint64_t next_req = t0;
+            uint8_t fir_seq = 0;
             const uint64_t rr_period_ms = hz > 0.0 ? std::max(1LL, (long long)(1000.0 / hz)) : 1000;
             uint64_t next_poll = t0;
             // RCTL 那两臂要报的是**真实收到的**东西，所以收包时得记三样：最后一个视频包
@@ -1213,6 +1281,20 @@ int main(int argc, char **argv) {
                         last_video = now;
                         arm.last_video_ms = now;
                         arm.got_idr = true;
+                        std::vector<uint8_t> au_bytes;
+                        std::string derr;
+                        const bool pushed =
+                            idr_scan.push(packet, au_bytes, derr) && !au_bytes.empty();
+                        const bool this_has_idr = pushed && annexb_has_idr(au_bytes);
+                        if (this_has_idr) {
+                            ++arm.idr_packets;
+                        }
+                        if (this_has_idr && arm.first_request_ms != 0 &&
+                            arm.idr_after_request_ms == 0) {
+                            // 只认"请求之后到的第一个 IDR"：起流那一下本来就有 IDR，
+                            // 把它记成请求的功劳就是自欺。
+                            arm.idr_after_request_ms = now - arm.first_request_ms;
+                        }
                         ++video_seen;
                         ++rtp_packets;
                         rtp_last_ts = info.timestamp;
@@ -1299,6 +1381,49 @@ int main(int argc, char **argv) {
                         arm.note = "RTCP 发送失败: " + serr;
                     } else {
                         ++rtcp_sent;
+                    }
+                }
+                // **关键帧请求**：画面已经静止（或一个视频包都没来）满 kPliQuietMs 之后，
+                // 每秒发一次 PLI 或 FIR，看设备会不会补一个 IDR 过来。
+                //
+                // 为什么静止才算：这条流在画面动的时候每秒发几百个包，那时"后面出现一个
+                // IDR"根本归不到请求头上。只有静默里凭空冒出来的 IDR 才是答案。
+                // 参考实现的抓包笔记说过两句互相冲突的话——"the device ignores RTCP PLI for
+                // refresh" 和 "it honors **FIR (PT=206 FMT=4, requires allowRTCPFB)**"，而
+                // 那两句话所依据的实验发出去的 UDP 一个都没到设备（docs §13 的那个拼装 bug），
+                // 所以两句都还没被真正测过。今天才是第一次。
+                if ((send_pli || send_fir) && media_ssrc != 0) {
+                    const uint64_t n = now_ms();
+                    const uint64_t quiet = last_video != 0 ? n - last_video : n - t0;
+                    if ((quiet >= kPliQuietMs || request_always) && n >= next_req) {
+                        next_req = n + rr_period_ms;
+                        std::vector<uint8_t> req_packet;
+                        if (send_fir) {
+                            req_packet = build_fir(neg_remote_ssrc, fir_seq++,
+                                                   neg_local_ssrc != 0 ? neg_local_ssrc
+                                                                       : media_ssrc);
+                        } else {
+                            req_packet = build_pli(neg_remote_ssrc,
+                                                   neg_local_ssrc != 0 ? neg_local_ssrc
+                                                                       : media_ssrc);
+                        }
+                        std::string serr;
+                        if (!session->send_rtp(req_packet, dest_port, serr)) {
+                            arm.note = "关键帧请求发送失败: " + serr;
+                        } else {
+                            ++arm.requests_sent;
+                            // 起流后 3 秒之内的请求不参与"请求->IDR 延迟"的计时：那条流
+                            // 开头必然有一个 IDR，撞上它就把会话自己的第一个关键帧记成
+                            // 请求的功劳（实测第二次跑就给出了"+1ms"这种不可能的数）。
+                            // 判 PLI 有没有用主要看**IDR 个数**（29 次请求 -> 28 个 IDR），
+                            // 这个延迟只是补充。
+                            if (arm.first_request_ms == 0 && n - t0 >= 3000) {
+                                arm.first_request_ms = n;
+                                std::printf("  %s 第一次发出（画面已静止 %llums，之后每秒一次）\n",
+                                            send_fir ? "FIR" : "PLI",
+                                            static_cast<unsigned long long>(quiet));
+                            }
+                        }
                     }
                 }
                 // 音频腿这一段做两件事，顺序不能反：先把它**实际收到**的包记下来（这是

@@ -48,6 +48,17 @@ namespace scrctl::rt {
 [[nodiscard]] std::vector<uint8_t> build_sdes_cname(uint32_t sender_ssrc,
                                                     std::string_view cname);
 
+/// PLI（RFC 4585 §6.3.1，PT=206 / FMT=1）：12 字节，头 + 发送者 SSRC + 被指认的媒体 SSRC。
+/// 作用是"我丢了参考帧，请发一个新的 IDR"。
+[[nodiscard]] std::vector<uint8_t> build_pli(uint32_t sender_ssrc, uint32_t media_ssrc);
+
+/// FIR（RFC 5104 §4.6，PT=206 / FMT=4）：24 字节。`fir_seq` 是这一路的**序号**（每次请求
+/// 加一，同一序号重复发不会让接收端再产一个 IDR——这是它和 PLI 的实际分工）；
+/// `target_ssrc` 要重新强制同步的那条流。后面 8 字节的 FCI 序号我们一个 RTP 都没发过，
+/// 按规范如实留 0。
+[[nodiscard]] std::vector<uint8_t> build_fir(uint32_t sender_ssrc, uint8_t fir_seq,
+                                             uint32_t target_ssrc);
+
 /// 一个 UDP 数据报是不是**设备发来的那条 RTCP SR 心跳**。
 ///
 /// 认的是设备那一条：它的 SR 带 RC=1（首字节 `0x81`），而 `build_sr()` 发出去的是 RC=0

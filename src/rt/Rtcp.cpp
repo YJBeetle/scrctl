@@ -75,4 +75,27 @@ bool is_rtcp_sr(std::span<const uint8_t> datagram) {
     return datagram.size() >= 28 && datagram[0] == 0x81 && datagram[1] == 0xc8;
 }
 
+std::vector<uint8_t> build_pli(uint32_t sender_ssrc, uint32_t media_ssrc) {
+    std::vector<uint8_t> v;
+    v.push_back(0x81);  // V=2, FMT=1（Generic NACK 之外，PLI 用的就是 1）
+    v.push_back(206);   // PT = RTPFB
+    put16(v, 2);        // 头之后两个字：发送者 SSRC + 媒体 SSRC
+    put32(v, sender_ssrc);
+    put32(v, media_ssrc);
+    return v;
+}
+
+std::vector<uint8_t> build_fir(uint32_t sender_ssrc, uint8_t fir_seq, uint32_t target_ssrc) {
+    std::vector<uint8_t> v;
+    v.push_back(0x84);  // V=2, FMT=4（TFFB 里的 FIR）
+    v.push_back(206);   // PT = RTPFB
+    put16(v, 5);        // 发送者 SSRC + FIR 序号 + FCI(4+8 字节 = 3 个字)
+    put32(v, sender_ssrc);
+    put32(v, fir_seq);  // 只有低字节有效，高 24 位按 RFC 5104 留 0
+    put32(v, target_ssrc);
+    put32(v, 0);  // FCI 的"已发 RTP 包序号"：我们一个都没发过
+    put32(v, 0);
+    return v;
+}
+
 }  // namespace scrctl::rt
