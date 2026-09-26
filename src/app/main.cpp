@@ -849,6 +849,9 @@ public:
     /// 打开默认输出设备。水位由泵自己定（`AudioPump::preroll_frames()`），这里不再
     /// 从外面传毫秒数——否则"攒多久"这件事会有两处换算，而它们会分家。
     ///
+    /// 协商是**逐项对死**的（见下面的判据）：这一层没有重采样器，所以只有"系统给的
+    /// 就是我们送的"这一种情况能开口放。
+    ///
     /// 为什么要 preroll：一开口就取，第一个回调必然赶上"缓冲里才两三个包"的时刻，
     /// 于是起始十几毫秒全是补静音的接缝，听感是一声咔。攒 50ms 再放就把它压成
     /// 起始延迟——这也是 scrcpy 那个默认值存在的原因。
@@ -866,10 +869,28 @@ public:
         want.callback = &AudioOut::fill;
         want.userdata = this;
         SDL_AudioSpec have {};
-        dev_ = SDL_OpenAudioDevice(nullptr, 0, &want, &have, sizeof(have));
+        // 不传 SDL_AUDIO_ALLOW_FREQUENCY_CHANGE：我们要送的是 48kHz 的样本，而这里没有
+        // 重采样器。让系统把设备开成 44.1kHz 只意味着同样的样本以 0.92 倍速放出去，
+        // 现场表现是**音调低半档**——一个没人会往"出口协商"上想的症状。宁可开不了设备
+        // 并说人话（调用方会退回"只收不放"）。声道数与采样格式同理不能迁就。
+        dev_ = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0);
         if (dev_ == 0) {
             pump_ = nullptr;
             err = SDL_GetError();
+            return false;
+        }
+        if (have.freq != want.freq || have.channels != want.channels ||
+            have.format != want.format) {
+            SDL_CloseAudioDevice(dev_);
+            dev_ = 0;
+            pump_ = nullptr;
+            char buf[192];
+            std::snprintf(buf, sizeof(buf),
+                          "声卡只肯给 %d Hz / %d 声道 / 格式 0x%x，而这条流是 %d Hz / "
+                          "%d 声道 / 0x%x——这里没有重采样器",
+                          have.freq, have.channels, static_cast<unsigned>(have.format),
+                          want.freq, want.channels, static_cast<unsigned>(want.format));
+            err = buf;
             return false;
         }
         SDL_PauseAudioDevice(dev_, 0);
