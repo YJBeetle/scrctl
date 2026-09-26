@@ -139,6 +139,80 @@ void test_manual_crop_keeps_the_display_denominator() {
     check(clamped.display_w == 1125 && clamped.display_h == 2436, "夹取不动分母");
 }
 
+
+/// 界面旋转：视口 -> 面板这条映射。
+///
+/// 判据全部来自一次真机对照，不是推的：设备报 `currentOrientation: rot270` 时，
+/// 把面板那一帧顺时针转 270° 得到正立画面（拿截图服务给的同一屏图对过）。
+/// 于是"视口 = 面板顺时针转 degrees"，触摸要的是它的反变换。
+void test_viewport_rotation() {
+    std::printf("\n== 界面旋转下的触摸映射 ==\n");
+    using scrctl::app::orientation_degrees;
+    using scrctl::app::viewport_fraction_to_panel;
+    using scrctl::app::viewport_size;
+
+    check(orientation_degrees("rot0") == 0 && orientation_degrees("rot90") == 90 &&
+              orientation_degrees("rot180") == 180 && orientation_degrees("rot270") == 270,
+          "rotN -> N 度");
+    // 认不出来当 0：转歪比不转更糟（不转时触摸与画面仍是一致的）。
+    check(orientation_degrees("") == 0 && orientation_degrees("upside-down") == 0,
+          "不认识的值当 0，不猜");
+
+    // 面板 1125x2436、整幅可见（真机那一档）。
+    const Crop panel {0, 0, 1125, 2436, 1125, 2436};
+    int vw = 0, vh = 0;
+    viewport_size(panel, 270, vw, vh);
+    check(vw == 2436 && vh == 1125, "转 270 之后视口是 2436x1125（宽高对调）");
+    viewport_size(panel, 0, vw, vh);
+    check(vw == 1125 && vh == 2436, "不转时视口就是裁剪框");
+
+    double fx = 0, fy = 0;
+    // 中心在四种旋转下都是不动点——它能挡住"整个映射平移了"这种错。
+    for (int deg : {0, 90, 180, 270}) {
+        viewport_size(panel, deg, vw, vh);
+        viewport_fraction_to_panel(vw / 2.0, vh / 2.0, panel, deg, fx, fy);
+        check(near(fx, 0.5, 0.002) && near(fy, 0.5, 0.002),
+              "deg=" + std::to_string(deg) + " 视口中心 -> 面板中心");
+    }
+
+    // 真机那一条：横屏视频里进度条上的播放头在视口 (0.17, 0.79)，
+    // 面板原图里那个红点在**左边靠上** (0.21, 0.17)。
+    viewport_fraction_to_panel(0.17 * 2436.0, 0.79 * 1125.0, panel, 270, fx, fy);
+    check(near(fx, 0.21, 0.01) && near(fy, 0.17, 0.01),
+          "rot270 时视口左下 -> 面板左上（红点那一档）");
+
+    // 四角必须一一映射到四角，且四种角度互不相同——挡住"忘了某个分支"和"两个角度写重"。
+    for (int deg : {0, 90, 180, 270}) {
+        viewport_size(panel, deg, vw, vh);
+        viewport_fraction_to_panel(0.0, 0.0, panel, deg, fx, fy);
+        const int corner = (fx > 0.5 ? 1 : 0) * 2 + (fy > 0.5 ? 1 : 0);
+        std::printf("      deg=%3d 视口左上 -> 面板角 %d (%.2f,%.2f)\n", deg, corner, fx, fy);
+        check(fx >= 0.0 && fx <= 1.0 && fy >= 0.0 && fy <= 1.0,
+              "deg=" + std::to_string(deg) + " 视口角点落在面板角点上");
+    }
+    // 具体到 rot270：视口左上角 = 面板右上角（真机截图里标题就横在面板右边缘）。
+    viewport_fraction_to_panel(0.0, 0.0, panel, 270, fx, fy);
+    check(near(fx, 1.0, 0.002) && near(fy, 0.0, 0.002), "rot270 视口左上 -> 面板右上");
+    viewport_fraction_to_panel(0.0, 0.0, panel, 90, fx, fy);
+    check(near(fx, 0.0, 0.002) && near(fy, 1.0, 0.002), "rot90 视口左上 -> 面板左下");
+    viewport_fraction_to_panel(0.0, 0.0, panel, 180, fx, fy);
+    check(near(fx, 1.0, 0.002) && near(fy, 1.0, 0.002), "rot180 视口左上 -> 面板右下");
+
+    // 旋转 + 裁剪偏移同时存在：偏移在面板轴上，必须先转回面板轴再加偏移。
+    const Crop part {600, 1800, 500, 500, 1125, 2436};
+    viewport_fraction_to_panel(0.0, 0.0, part, 270, fx, fy);
+    check(near(fx, 1100.0 / 1125, 0.002) && near(fy, 1800.0 / 2436, 0.002),
+          "rot270 + 偏移框：视口左上 -> 面板 (1100, 1800)");
+
+    // 与不旋转那条旧路必须逐点一致（防止新函数把 deg=0 也带偏）。
+    for (double y = 0; y <= 2436.0; y += 609.0) {
+        double a = 0, b = 0, c2 = 0, d2 = 0;
+        viewport_fraction_to_panel(300, y, panel, 0, a, b);
+        scrctl::app::display_fraction_from_logical(300, y, panel, c2, d2);
+        check(near(a, c2, 1e-9) && near(b, d2, 1e-9), "deg=0 与旧函数一致 y=" + std::to_string(int(y)));
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -147,6 +221,7 @@ int main() {
     test_ctu_padding_not_in_the_denominator();
     test_cropped_viewport();
     test_manual_crop_keeps_the_display_denominator();
+    test_viewport_rotation();
     test_degenerate();
     test_fit_window();
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);

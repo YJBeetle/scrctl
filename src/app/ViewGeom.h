@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <string_view>
 
 namespace scrctl::app {
 
@@ -38,16 +39,75 @@ inline Crop make_crop(bool crop_given, int x, int y, int w, int h, int coded_w, 
     return c;
 }
 
-/// 鼠标原始坐标 -> 整块屏幕的 0..1。**触摸对不对全靠这一条**。
+/// 设备给的界面旋转（`displays[].currentOrientation`）-> **顺时针**角度。
 ///
-/// 传进来的必须已经是**逻辑坐标**（单位 = 裁剪框像素）。SDL2 在设了
-/// `SDL_RenderSetLogicalSize` 之后，鼠标事件给的就是逻辑坐标 —— 实测右下角
-/// 原始值 (1121,2431) 对上逻辑尺寸 1125x2436，全程 y 铺满 0..2434。
-/// 这里曾经多除了一次"窗口点数/绘制面像素"，结果整体差 2.46 倍。
+/// 规则是拿真机对出来的，不是推的：设备报 `rot270` 时，把面板那一帧**顺时针转 270°**
+/// 得到的就是正立画面（对照过截图服务给的同一屏图，它给的是已经转正的 2436x1125）。
+/// 所以这个数就是"要转正需要顺时针转多少"。
+///
+/// 认不出来的值一律当 0：**宁可不转，也不能把画面转歪**——转歪之后触摸与画面全都错，
+/// 而不转只是画面躺着、触摸仍与画面一致。
+[[nodiscard]] inline int orientation_degrees(std::string_view orientation) {
+    if (orientation == "rot90") {
+        return 90;
+    }
+    if (orientation == "rot180") {
+        return 180;
+    }
+    if (orientation == "rot270") {
+        return 270;
+    }
+    return 0;
+}
+
+/// 视口（画面上看到的那一块，可能已经被转正过）里的逻辑像素 -> 整块屏幕的 0..1。
+///
+/// **触摸对不对全靠这一条**，而它要同时处理三件事：
+///
+/// 1. `lx/ly` 必须是**逻辑坐标**（SDL2 在设了 `SDL_RenderSetLogicalSize` 之后给的就是）。
+///    这里曾经多除一次"窗口点数/绘制面像素"，结果整体差 2.46 倍。
+/// 2. 视口尺寸随旋转而换向：`degrees` 是 90/270 时视口是"宽高对调"的，
+///    所以除数用 `c.h`/`c.w` 而不是 `c.w`/`c.h`。
+/// 3. 裁剪框的偏移在**面板轴**上，因此必须先把视口归一化坐标按旋转映射回面板轴，
+///    再加 `c.x/c.y`、再除以整块屏的尺寸。顺序反了就会在横屏 App 上点偏一整条边。
+///
+/// 映射表来自"视口 = 面板顺时针转 degrees"这一条实测，取它的反变换：
+/// `0:(u,v) 90:(v,1-u) 180:(1-u,1-v) 270:(1-v,u)`。
+inline void viewport_fraction_to_panel(double lx, double ly, const Crop &c, int degrees,
+                                       double &fx, double &fy) {
+    const bool swapped = degrees == 90 || degrees == 270;
+    // 转 90/270 之后视口是"宽高对调"的：面板 1125x2436 -> 视口 2436x1125。
+    const double vw = swapped ? static_cast<double>(c.h) : static_cast<double>(c.w);
+    const double vh = swapped ? static_cast<double>(c.w) : static_cast<double>(c.h);
+    const double u = lx / (vw > 0 ? vw : 1);
+    const double v = ly / (vh > 0 ? vh : 1);
+    double pu = u, pv = v;  // 裁剪框内、面板轴上的归一化坐标
+    switch (degrees) {
+        case 90: pu = v; pv = 1.0 - u; break;
+        case 180: pu = 1.0 - u; pv = 1.0 - v; break;
+        case 270: pu = 1.0 - v; pv = u; break;
+        default: break;
+    }
+    fx = (c.x + pu * c.w) / (c.display_w > 0 ? c.display_w : 1);
+    fy = (c.y + pv * c.h) / (c.display_h > 0 ? c.display_h : 1);
+}
+
+/// 没旋转时的那条路（`degrees = 0`）。留着是因为它有自己的历史与测试，
+/// 而文件回放那条路根本没有旋转可言。
 inline void display_fraction_from_logical(double lx, double ly, const Crop &c, double &fx,
                                           double &fy) {
-    fx = (c.x + lx) / (c.display_w > 0 ? c.display_w : 1);
-    fy = (c.y + ly) / (c.display_h > 0 ? c.display_h : 1);
+    viewport_fraction_to_panel(lx, ly, c, 0, fx, fy);
+}
+
+/// 视口尺寸（窗口与 logical size 要用它，旋转 90/270 时宽高对调）。
+inline void viewport_size(const Crop &c, int degrees, int &width, int &height) {
+    if (degrees == 90 || degrees == 270) {
+        width = c.h;
+        height = c.w;
+    } else {
+        width = c.w;
+        height = c.h;
+    }
 }
 
 /// 窗口尺寸：按 scale 缩放裁剪框，但**不许超过屏幕**。
