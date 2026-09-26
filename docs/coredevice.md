@@ -1596,7 +1596,6 @@ launched application could not be determined. It may have already terminated."�
 `nativeSize`（这台设备 1080x2340），两者不是一回事。另外 §6 那条写的是"`get-display-info`
 报 1125x2436"——那是立项早期从 lockdown 那侧问的，与我们现在这条 CoreDevice feature
 **是两个不同的服务给了同一个数**，所以这一档的 1125x2436 有两处独立来源。
-
 ## 17. 音频腿的编码鉴定（实测，iPhone14,4 / iOS 27.0 / USB）
 
 **结论：`PT=101` 上跑的是裸 AAC-ELD（Apple 的 `'aace'`），48kHz 立体声，每帧 480 采样
@@ -1643,3 +1642,38 @@ avconferenced{AVConference}: VCAudioStream setupPayloads:786
 （AOT 39 = AAC-ELD v2，48kHz，2ch，frameLengthFlag=1 即 480），因为包里没有 AU 头也没有
 ADTS；libavcodec 的 `aac` 解码器带 extradata 就能解 ELD。静音时设备**照样 100 包/秒地发**
 （`isDTXEnabled=0`），所以"没声音"不会表现为断流。
+
+## 17.1 音频解码后端只能选 AudioToolbox（实测，同一份 dump 四路对照）
+
+编码定下来是 AAC-ELD 之后，下一个问题不是"怎么接"而是"**有没有东西能解它**"。
+判据是同一份真机 dump（1406 个 PT=101 的包，246~400 字节一个，14.06 秒）分别喂给
+四个候选：
+
+| 后端 | 结果 |
+| --- | --- |
+| libav 原生 `aac` + 按规范拼的 ASC `F8 E6 28` | **连 `avcodec_open2` 都过不去**："AAC data resilience (flags 4) is not implemented" |
+| libav 原生 `aac` + 苹果自己那份 cookie `F8 E6 40 00` | 打得开，1406 帧只出得来 **109** 帧，每帧 **512** 采样（不是 480），峰值顶满 32768 —— 是解歪了的样子不是解错了几个字节 |
+| libav 的 AudioToolbox 壳 `aac_at` | 同一条 dump 同样只有 **109/1406** |
+| 直接对 AudioToolbox 的 `AudioConverter` | **1406/1406**，每帧正好 480 采样/声道，峰值 20434 |
+
+第四行与参考实现（pymobiledevice3 用 ctypes 直调 AudioToolbox）逐项相同：样本总数
+1349760、时长 14.06 秒、峰值 20434、四段峰值 17715/20434/17499/18250。两条独立实现
+给出同一串数字，才敢说这不是"我们这边凑巧对上"。
+
+顺带把 ffmpeg 自己的话也记下来：`-c:a aac -profile:a aac_eld` 直接回
+**"Profile not supported"**——它的原生编码器都不产 ELD，解码器更不是。
+
+**AudioConverter 不需要 magic cookie。** 这一点值得单独记，因为它和"规范怎么说"相反：
+`AudioConverterSetProperty(conv, 'dmgc', ...)` 在这台 macOS 上无论塞规范拼的 ASC 还是
+塞苹果那份 cookie 都回 `!dat`（0x21646174），**而不塞照样全解出来**。ELD 的档位信息
+其实在 ASBD 里就齐了——`mFormatID='aace'` + `mFramesPerPacket=480`（1024 才是 LC）+
+`mBytesPerPacket=0`（变长）。所以代码里根本不去设那一位：设了只会把一个无关紧要的
+失败变成"看起来像初始化没成功"。
+
+（参考实现那边也没设成功——它同样忽略 `SetProperty` 的返回值。这条只有把返回值打出来
+才看得见，而我们是因为先当成致命错误才去打的。）
+
+**后果要说白：非 Apple 平台没有音频。** 这不是"还没做完"，是这条码流在那些平台上
+没有能解它的自由实现（fdk-aac 能解但许可证不是自由的，不列进来）。所以
+`decode/AudioDecoder.h` 上有一个编译期常量 `kHaveAudioDecoder`，产品路径必须在
+**起流之前**问一句并说人话，而不是等第一帧音频到达时给一个空指针。

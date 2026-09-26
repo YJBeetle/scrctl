@@ -59,7 +59,9 @@ if(APPLE)
             "-framework VideoToolbox"
             "-framework CoreMedia"
             "-framework CoreVideo"
-            "-framework CoreFoundation")
+            "-framework CoreFoundation"
+            "-framework AudioToolbox"
+            "-framework CoreAudio")
 endif()
 
 # ------------------------------------------------------------- OpenSSL ------
@@ -127,9 +129,11 @@ target_compile_options(scrctl_core PRIVATE -Wall -Wextra)
 # 解码后端按平台与依赖挑：平台后端在 Apple 上是 VideoToolbox，别处只能借用软解；
 # 软解后端有 libavcodec 就用，没有就换回返回 nullptr 的占位实现。
 if(APPLE)
-    target_sources(scrctl_core PRIVATE src/decode/VideoToolboxDecoder.cpp)
+    target_sources(scrctl_core PRIVATE src/decode/VideoToolboxDecoder.cpp
+            src/decode/AudioToolboxEldDecoder.cpp)
 else()
-    target_sources(scrctl_core PRIVATE src/decode/PlatformDecoderFallback.cpp)
+    target_sources(scrctl_core PRIVATE src/decode/PlatformDecoderFallback.cpp
+            src/decode/AudioDecoderNone.cpp)
 endif()
 if(SCRCTL_LIBAV_FOUND)
     target_sources(scrctl_core PRIVATE src/decode/FFmpegDecoder.cpp)
@@ -301,3 +305,7 @@ target_link_libraries(pasteboard_probe PRIVATE scrctl_core)
 # 只显示几何订阅，不起媒体会话（理由见文件头）。
 add_executable(display_info_probe tools/display_info_probe.cpp)
 target_link_libraries(display_info_probe PRIVATE scrctl_core)
+
+# 音频解码的离线判据：吃 rr_keepalive_probe --audio-out 那份 dump，吐 WAV。
+add_executable(audio_decode_probe tools/audio_decode_probe.cpp)
+target_link_libraries(audio_decode_probe PRIVATE scrctl_core)
