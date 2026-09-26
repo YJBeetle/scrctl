@@ -34,6 +34,7 @@
 #include "media/FramePump.h"
 #include "media/StreamSession.h"
 #include "remote/Device.h"
+#include "remote/DisplayInfo.h"
 #include "remote/Pasteboard.h"
 #include "rt/RtpHevc.h"
 
@@ -194,20 +195,6 @@ bool parse_args(int argc, char **argv, Options &o) {
 /// 设备编码分辨率比逻辑显示大（HEVC CTU 对齐填充），所以画面要按逻辑尺寸裁；
 /// 裁剪框与坐标换算的几何在 ViewGeom.h，那里可以离线自检。
 using scrctl::app::Crop;
-
-Crop resolve_crop(const Options &o, const scrctl::Frame &f) {
-    const auto auto_crop = scrctl::media::display_crop(static_cast<int>(f.width),
-                                                       static_cast<int>(f.height));
-    if (!o.crop_set &&
-        (static_cast<int>(f.width) != auto_crop.w || static_cast<int>(f.height) != auto_crop.h)) {
-        std::printf("自动裁剪 %ux%u -> %dx%d（CTU 填充）\n", f.width, f.height, auto_crop.w,
-                    auto_crop.h);
-    }
-    // 几何与夹取全在 ViewGeom.h 的 make_crop 里，那边可以离线自检。
-    return scrctl::app::make_crop(o.crop_set, o.crop_x, o.crop_y, o.crop_w, o.crop_h,
-                                  static_cast<int>(f.width), static_cast<int>(f.height),
-                                  auto_crop.w, auto_crop.h);
-}
 
 class Presenter {
 public:
@@ -475,7 +462,45 @@ public:
     [[nodiscard]] virtual bool paces_itself() const { return false; }
     /// 打一段读数。实现方自己按调用间隔算速率，所以调用方只管按秒催。
     virtual void print_stats() {}
+
+    /// 这块画面在设备上真正占多大（**可见区**，不是编码帧）。0/0 = 问不到。
+    ///
+    /// 只有实时源问得到：它是起流之前向设备的 `displayinfoupdates` 要来的。文件回放
+    /// 没有设备可问，退回默认实现给 0，调用方再退回兜底表。
+    virtual void display_size(int &width, int &height) const {
+        width = 0;
+        height = 0;
+    }
 };
+
+/// 首帧到手后定下"看哪一块"。
+///
+/// 可见区尺寸的**来源顺序**是这条路径的重点：
+/// 1. 设备自己报的（`FrameSource::display_size`，起流前向 displayinfoupdates 要的）；
+/// 2. 问不到才退回 `media::display_crop` 那张按机型硬编码的表。
+/// 表里只有我们量过的那一档（1136x2464 -> 1125x2436），别的机型落到表外就是整幅当
+/// 可见区——右边/下边留一条垃圾边，而触摸分母也跟着错。所以第 1 条能走就一定走它。
+Crop resolve_crop(const Options &o, const scrctl::Frame &f, const FrameSource &source) {
+    int display_w = 0, display_h = 0;
+    source.display_size(display_w, display_h);
+    const bool from_device = display_w > 0 && display_h > 0;
+    if (!from_device) {
+        const auto fallback = scrctl::media::display_crop(static_cast<int>(f.width),
+                                                          static_cast<int>(f.height));
+        display_w = fallback.w;
+        display_h = fallback.h;
+    }
+    if (!from_device && !o.crop_set &&
+        (static_cast<int>(f.width) != display_w || static_cast<int>(f.height) != display_h)) {
+        std::printf("可见区 %ux%u -> %dx%d（按机型硬编码的兜底表：问设备没问到）\n", f.width,
+                    f.height, display_w, display_h);
+    }
+    // 几何与夹取全在 ViewGeom.h 的 make_crop 里，那边可以离线自检。
+    return scrctl::app::make_crop(o.crop_set, o.crop_x, o.crop_y, o.crop_w, o.crop_h,
+                                  static_cast<int>(f.width), static_cast<int>(f.height), display_w,
+                                  display_h);
+}
+
 
 /// 已录制的 Annex-B 文件。
 ///
@@ -605,6 +630,12 @@ public:
 
     bool start(const std::string &serial, const std::string &record_path, bool hw_decode,
                std::string &err);
+
+    /// 起流前向设备要来的可见区尺寸（问不到是 0/0，见 `resolve_crop` 的顺序）。
+    void display_size(int &width, int &height) const override {
+        width = display_w_;
+        height = display_h_;
+    }
 
     bool next(scrctl::Frame &out, int timeout_ms) override {
         if (pump_ == nullptr) {
@@ -747,6 +778,13 @@ private:
     uint64_t last_aus_ = 0;
     uint64_t last_decoded_ = 0;
     uint64_t last_stats_ms_ = 0;
+    /// 起流之前向设备要来的**可见区**尺寸（0/0 = 没问到）。见 `display_size()`。
+    int display_w_ = 0;
+    int display_h_ = 0;
+    /// 尺寸是从哪块屏拿的，只为把日志那行说全（多屏设备上这不是废话：主屏与
+    /// 无线屏的尺寸实测就不一样）。
+    uint64_t display_id_ = 0;
+    std::string display_name_;
 
     std::unique_ptr<scrctl::hid::Service> hid_;
     std::unique_ptr<scrctl::hid::Buttons> buttons_;
@@ -767,6 +805,38 @@ bool LiveSource::start(const std::string &serial, const std::string &record_path
     scrctl::media::FramePump::Options options;
     options.record_path = record_path;
     options.use_hardware = hw_decode;
+
+    // 显示几何先问设备，再起流。
+    //
+    // 为什么要问：编码帧的尺寸是"可见区 + HEVC 的 CU 对齐填充"，而这一圈填充多大
+    // 协议里没有。此前我们按机型硬编码一档（1136x2464 -> 1125x2436），表外的机型
+    // 就把整幅编码帧当可见区——后果是右/下一条垃圾边，而**触摸分母跟着错**，
+    // 边缘点不准。`displayinfoupdates` 给的是设备的权威值。
+    //
+    // 为什么排在起流之前：这一问只要一条 deviceinfo 连接，与媒体会话无关，却要一个
+    // 来回；放到起流之后就是让窗口多黑屏一个来回的时间。
+    //
+    // 问不到不致命：`resolve_crop` 会退回那张表，并把"是兜底"一起打出来。
+    {
+        std::string derr;
+        const auto info = scrctl::remote::fetch_display_info(*device_, derr);
+        const scrctl::remote::Display *d =
+            info == std::nullopt ? nullptr : info->find(options.display_id);
+        if (info != std::nullopt && d == nullptr) {
+            // id 对不上时退回主屏：外接屏的 displayId 是设备分配的，不保证连续。
+            d = info->primary();
+        }
+        if (d != nullptr && d->width > 0 && d->height > 0) {
+            display_w_ = d->width;
+            display_h_ = d->height;
+            display_id_ = d->id;
+            display_name_ = d->name;
+        } else {
+            std::fprintf(stderr, "向设备问显示几何失败: %s（退回按机型硬编码的裁剪表）\n",
+                         derr.empty() ? "推送里没有可用的尺寸" : derr.c_str());
+        }
+    }
+
     pump_ = scrctl::media::FramePump::start(*device_, options, err);
     if (pump_ == nullptr) {
         return false;
@@ -779,6 +849,13 @@ bool LiveSource::start(const std::string &serial, const std::string &record_path
     std::printf("流已建立：%s / iOS %s，收流端口=%u PT=%u，首帧 %ux%u\n",
                 device_->property("ProductType").c_str(), device_->property("OSVersion").c_str(),
                 pump_->receiver_port(), pump_->payload_type(), first.width, first.height);
+    // 打在这里而不是打在 `resolve_crop` 里，是因为控制单元那条路根本没有窗口：
+    // "几何到底是设备报的还是那张兜底表"必须是**任何**跑法都能一眼看到的读数。
+    if (display_w_ > 0) {
+        std::printf("显示几何：设备报可见区 %dx%d（displayId=%llu %s），码流 %ux%u\n", display_w_,
+                    display_h_, static_cast<unsigned long long>(display_id_), display_name_.c_str(),
+                    first.width, first.height);
+    }
     if (!record_path.empty()) {
         std::printf("录制到 %s\n", record_path.c_str());
     }
@@ -1068,7 +1145,7 @@ int main(int argc, char **argv) {
             presenter = std::make_unique<Presenter>();
             presenter->set_debug_input(o.debug_input);
             if (!presenter->open(static_cast<int>(f.width), static_cast<int>(f.height),
-                                 resolve_crop(o, f), o.scale, o.scale_given, o.title,
+                                 resolve_crop(o, f, *source), o.scale, o.scale_given, o.title,
                                  o.verify_at > 0, o.win_w, o.win_h)) {
                 return 1;
             }
