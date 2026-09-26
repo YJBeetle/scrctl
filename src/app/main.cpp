@@ -542,6 +542,13 @@ private:
         std::printf("读入 %s (%zu 字节)\n", path_.c_str(), buffer_.size());
 
         decoder_ = scrctl::create_platform_decoder();
+        if (decoder_ == nullptr) {
+            // 没有后端时这里必须断掉而不是往下走：`on_au` 里第一件事就是
+            // `decoder_->configure(...)`，而文件回放这条路上没人替它兜底
+            // （实时流那条在 FramePump 里查了同一件事）。
+            err = scrctl::kNoDecoderMessage;
+            return false;
+        }
         std::printf("解码后端: %s\n", decoder_->backend_name());
         parser_ = std::make_unique<scrctl::AnnexBParser>(
             [this](std::vector<scrctl::Nal> &&au, bool) { this->on_au(std::move(au)); });

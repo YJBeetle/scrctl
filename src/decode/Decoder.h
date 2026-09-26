@@ -56,4 +56,22 @@ std::unique_ptr<Decoder> create_platform_decoder();
 /// 它是"码流超出平台后端能力"时唯一的出路，也是 Linux/Windows 上的主力后端。
 std::unique_ptr<Decoder> create_software_decoder();
 
+/// 这个构建里到底有没有能用的 HEVC 后端。
+///
+/// 为什么要单独问这么一句：两个工厂**都**返回空的组合只有"非 Apple 平台 + 配置构建时
+/// 没找到 libavcodec"一种，而它在编译时就完全定下来了。不早问的现场表现是解到第一帧
+/// 时空指针——平台后端在别处就是软解的一层壳（`decode/PlatformDecoderFallback.cpp`），
+/// 壳里没有东西时它也给不出东西。
+#if defined(__APPLE__) || defined(SCRCTL_HAVE_LIBAV)
+inline constexpr bool kHaveDecoder = true;
+#else
+inline constexpr bool kHaveDecoder = false;
+#endif
+
+/// 一个后端都没有时给用户的那句话。两条取帧的路共用，免得两边各说一半。
+inline constexpr const char *kNoDecoderMessage =
+    "这个构建里没有可用的 HEVC 解码后端：非 Apple 平台只能靠 libavcodec 软解，"
+    "而配置构建时没找到它。装开发包之后重新配置构建（Debian/Ubuntu: "
+    "apt install libavcodec-dev libavutil-dev； Fedora: dnf install ffmpeg-devel）。\n";
+
 }  // namespace scrctl

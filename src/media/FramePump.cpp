@@ -125,6 +125,13 @@ FramePump::FramePump(remote::Device &device, Options options, bool verbose)
 std::unique_ptr<FramePump> FramePump::start(remote::Device &device, const Options &options,
                                             std::string &err, bool verbose) {
     auto pump = std::unique_ptr<FramePump>(new FramePump(device, options, verbose));
+    // 没有后端的构建在这里就断，连设备会话都不起：会话一建立设备就开始编码推流，
+    // 而同一台设备同时只容得下一条流，白占一格对别人是"每 20 秒被顶一次"。
+    // 判据用编译期常量而不是"构造出来看看"——后者在 macOS 上要白建一个解码会话。
+    if (!scrctl::kHaveDecoder) {
+        err = scrctl::kNoDecoderMessage;
+        return nullptr;
+    }
     // `restart()` 只把会话建起来，线程统一由这里最后起：worker 一跑起来就会读
     // `record_`、`last_keyframe_ms_` 这些**没有锁保护**的字段，先 spawn 再写就是数据
     // 竞争（review 的 P2——原来这三处写都在 `restart()` 之后，而那时线程已经在了）。
@@ -235,6 +242,14 @@ void FramePump::loop() {
     }
     if (decoder == nullptr) {
         decoder = create_platform_decoder();
+    }
+    // 两个工厂都给空的那个组合（非 Apple 平台 + 没编进 libav）在这里收工：再往下
+    // 一句就是 `decoder->configure()`。不拦的话现场表现是"崩在解第一帧的路上"，
+    // 而真相只是这台机器上根本没有后端。这里只是兜底——`start()` 已经用编译期常量
+    // 把这条路提前断掉了，所以正常不会有第二处要说话。
+    if (decoder == nullptr) {
+        std::fprintf(stderr, "%s", scrctl::kNoDecoderMessage);
+        return;
     }
     bool configured = false;
     std::unique_ptr<scrctl::rt::HevcRtpDepacketizer> depacketizer;

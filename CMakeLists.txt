@@ -135,6 +135,10 @@ if(SCRCTL_LIBAV_FOUND)
     # 必须是 PUBLIC：解码后端编在静态库里，最终链接由各个可执行文件做，
     # 搜索路径不传下去就是"库找到了、链接找不到"。
     target_link_libraries(scrctl_core PUBLIC PkgConfig::LIBAV)
+    # 同样是 PUBLIC：`decode/Decoder.h` 里的 `kHaveDecoder` 要靠它判断"这个构建有没有
+    # 后端"。只在库里定义、头文件在调用点看不到，就成了"库能解、主程序以为自己不能解"，
+    # 而且两边取值不一样还是 ODR 违规。
+    target_compile_definitions(scrctl_core PUBLIC SCRCTL_HAVE_LIBAV=1)
 else()
     target_sources(scrctl_core PRIVATE src/decode/SoftwareDecoderStub.cpp)
 endif()
