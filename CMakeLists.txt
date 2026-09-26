@@ -105,6 +105,7 @@ add_library(scrctl_core STATIC
         src/media/MediaOffer.cpp
         src/media/StreamSession.cpp
         src/media/FramePump.cpp
+        src/media/AudioPump.cpp
         src/rt/RtpHevc.cpp
         src/rt/Rtcp.cpp
         src/transport/Usbmux.cpp
@@ -309,3 +310,8 @@ target_link_libraries(display_info_probe PRIVATE scrctl_core)
 # 音频解码的离线判据：吃 rr_keepalive_probe --audio-out 那份 dump，吐 WAV。
 add_executable(audio_decode_probe tools/audio_decode_probe.cpp)
 target_link_libraries(audio_decode_probe PRIVATE scrctl_core)
+
+# 音频腿的真机四问（独立会话号 / 静默时发不发包 / RR 能不能续命 / 与视频腿共存）。
+# 不进 ctest：要真机。
+add_executable(audio_pump_probe tools/audio_pump_probe.cpp)
+target_link_libraries(audio_pump_probe PRIVATE scrctl_core)
