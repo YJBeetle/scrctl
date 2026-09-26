@@ -58,7 +58,7 @@ src/app/         C++ + SDL2 —— 原生窗口、鼠标→触摸、按键映射
 brew install sdl2 openssl ffmpeg          # ffmpeg 提供软解后端，见下
 cmake -B build-cmake -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build-cmake -j
-ctest --test-dir build-cmake              # 14 项离线自检，不需要真机
+ctest --test-dir build-cmake              # 离线自检，不需要真机（项数用 `ctest -N` 数）
 ./build-cmake/scrctl --help
 ```
 

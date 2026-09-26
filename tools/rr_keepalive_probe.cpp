@@ -326,9 +326,12 @@ void print_arm(const Arm &a, uint64_t t0) {
                     static_cast<unsigned long long>(a.first_request_ms > t0
                                                         ? a.first_request_ms - t0
                                                         : 0));
-        std::printf(a.idr_after_request_ms == 0
-                        ? "没来"
-                        : ("+" + std::to_string(a.idr_after_request_ms) + "ms 到").c_str());
+        // 走 %s 而不是直接把字符串当格式串：这里拼出来的是运行期的值，
+        // `-Wformat-security` 报的就是"里面的 % 会被当真"。
+        const std::string got = a.idr_after_request_ms == 0
+            ? std::string("没来")
+            : ("+" + std::to_string(a.idr_after_request_ms) + "ms 到");
+        std::printf("%s", got.c_str());
     }
     if (a.polls_alive != 0) {
         std::printf(" 查会话表 %llu 次答还在，最后一次 +%llums",
