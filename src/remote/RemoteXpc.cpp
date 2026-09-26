@@ -613,33 +613,33 @@ bool Channel::take_message(xpc::Value &out,
     return false;
 }
 
-bool Channel::receive(xpc::Value &out, int timeout_ms, std::string &err) {
+Channel::Wait Channel::wait(xpc::Value &out, int timeout_ms, std::string &err) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
     for (;;) {
         if (take_message(out, deadline, err)) {
-            return true;
+            return Wait::Message;
         }
         if (!err.empty()) {
-            return false;  // 畸形消息：字节流已经错位，再等只会更错
+            return Wait::Broken;  // 畸形消息：字节流已经错位，再等只会更错
         }
         const auto left = remaining_ms(deadline);
         if (left == 0) {
             err = "等设备回信超时";
-            return false;
+            return Wait::Timeout;
         }
         if (terminated_) {
             err = "连接已终止";
-            return false;
+            return Wait::Broken;
         }
         if (!pump(static_cast<int>(left), err)) {
             // pump 失败常常只是这一次 socket 读超时，而上一轮处理帧时攒下的完整
             // 消息还在缓冲里。不回头再看一眼，就会把已经收到的回信报成"没回信"——
             // 真机上正是这个次序：回信到齐、读超时、于是报超时。
             if (take_message(out, deadline, err)) {
-                return true;
+                return Wait::Message;
             }
             err = "等设备回信时断开: " + err;
-            return false;
+            return Wait::Broken;
         }
     }
 }

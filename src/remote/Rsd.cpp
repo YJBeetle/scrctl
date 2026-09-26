@@ -265,50 +265,87 @@ CallResult ServiceConnection::invoke(std::string_view feature_identifier,
     return CallResult::DeviceError;
 }
 
+bool ServiceConnection::subscribe(std::string_view feature_identifier,
+                                  std::string_view action_identifier, const xpc::Value &input,
+                                  std::string &err) {
+    if (channel_ == nullptr) {
+        err = "这条服务连接不是 XPC 通道，流式 feature 走不了";
+        return false;
+    }
+    if (!channel_->send_request(
+            core_device_request(feature_identifier, action_identifier, input), true, err)) {
+        return false;
+    }
+    subscribed_feature_ = std::string(feature_identifier);
+    return true;
+}
+
+ServiceConnection::StreamEvent ServiceConnection::next_batch(std::vector<xpc::Value> &elements,
+                                                             int timeout_ms, std::string &err) {
+    elements.clear();
+    if (channel_ == nullptr) {
+        err = "这条服务连接不是 XPC 通道";
+        return StreamEvent::Broken;
+    }
+    xpc::Value reply;
+    const auto w = channel_->wait(reply, timeout_ms, err);
+    if (w == Channel::Wait::Timeout) {
+        return StreamEvent::Idle;
+    }
+    if (w == Channel::Wait::Broken) {
+        return StreamEvent::Broken;
+    }
+    const auto *status = reply.find("CoreDevice.XPCMessageKey.sideChannelStatus");
+    if (status == nullptr) {
+        // 整条流失败时设备发的是一个普通 error 回信，不是 sideChannelStatus。
+        const auto *error = reply.find("CoreDevice.error");
+        if (error != nullptr) {
+            err = device_error_text(subscribed_feature_, *error);
+        } else {
+            err = subscribed_feature_ +
+                  " 的回信里既没有 sideChannelStatus 也没有 error: " +
+                  xpc::describe(reply).substr(0, 300);
+        }
+        return StreamEvent::DeviceError;
+    }
+    if (status->find("receivedError") != nullptr) {
+        err = subscribed_feature_ + " 中途失败：" +
+              xpc::describe(status->at("receivedError")).substr(0, 400);
+        return StreamEvent::DeviceError;
+    }
+    if (status->find("finishStreaming") != nullptr) {
+        return StreamEvent::Finished;
+    }
+    const auto *pushing = status->find("pushing");
+    const auto *batch = pushing == nullptr ? nullptr : pushing->find("elements");
+    if (batch != nullptr) {
+        for (const auto &element : batch->array) {
+            elements.push_back(element);
+        }
+    }
+    return StreamEvent::Batch;
+}
+
 CallResult ServiceConnection::stream(std::string_view feature_identifier,
                                      std::string_view action_identifier, const xpc::Value &input,
                                      const std::function<bool(const xpc::Value &)> &on_element,
                                      int timeout_ms, std::string &err) {
-    if (channel_ == nullptr) {
-        err = "这条服务连接不是 XPC 通道，流式 feature 走不了";
-        return CallResult::TransportError;
-    }
-    const auto request = core_device_request(feature_identifier, action_identifier, input);
-    if (!channel_->send_request(request, true, err)) {
+    if (!subscribe(feature_identifier, action_identifier, input, err)) {
         return CallResult::TransportError;
     }
     for (;;) {
-        xpc::Value reply;
-        if (!channel_->receive(reply, timeout_ms, err)) {
-            return CallResult::TransportError;
+        std::vector<xpc::Value> batch;
+        // 这里的 Idle 与 Broken 都折成 TransportError，语义与分步之前一致：
+        // 一次性调用等不到下一条就是失败，换条连接重来。分步 API 才需要区分它们，
+        // 因为常驻订阅"等不到"是常态。
+        switch (next_batch(batch, timeout_ms, err)) {
+            case StreamEvent::Idle:
+            case StreamEvent::Broken: return CallResult::TransportError;
+            case StreamEvent::DeviceError: return CallResult::DeviceError;
+            case StreamEvent::Finished: return CallResult::Ok;
+            case StreamEvent::Batch: break;
         }
-        const auto *status = reply.find("CoreDevice.XPCMessageKey.sideChannelStatus");
-        if (status == nullptr) {
-            // 整条流失败时设备发的是一个普通 error 回信，不是 sideChannelStatus。
-            const auto *error = reply.find("CoreDevice.error");
-            if (error != nullptr) {
-                err = device_error_text(feature_identifier, *error);
-            } else {
-                err = std::string(feature_identifier) +
-                      " 的回信既没有 sideChannelStatus 也没有 error: " +
-                      xpc::describe(reply).substr(0, 300);
-            }
-            return CallResult::DeviceError;
-        }
-        if (status->find("receivedError") != nullptr) {
-            err = std::string(feature_identifier) + " 中途失败：" +
-                  xpc::describe(status->at("receivedError")).substr(0, 400);
-            return CallResult::DeviceError;
-        }
-        if (status->find("finishStreaming") != nullptr) {
-            return CallResult::Ok;
-        }
-        const auto *pushing = status->find("pushing");
-        const auto *elements = pushing == nullptr ? nullptr : pushing->find("elements");
-        if (elements == nullptr) {
-            continue;  // 空批次
-        }
-        for (const auto &element : elements->array) {
+        for (const auto &element : batch) {
             if (!on_element(element)) {
                 return CallResult::Ok;  // 调用方说够了
             }

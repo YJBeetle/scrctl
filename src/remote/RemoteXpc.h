@@ -59,8 +59,21 @@ public:
     /// 发一个请求。`want_reply` 置起 WANTING_REPLY 标志。
     bool send_request(const xpc::Value &body, bool want_reply, std::string &err);
 
+    /// `receive` 的三种结局。
+    enum class Wait { Message, Timeout, Broken };
+
     /// 取回下一条带字典载荷的消息（心跳、空载荷帧、控制帧会被跳过）。
-    bool receive(xpc::Value &out, int timeout_ms, std::string &err);
+    bool receive(xpc::Value &out, int timeout_ms, std::string &err) {
+        return wait(out, timeout_ms, err) == Wait::Message;
+    }
+
+    /// 与 `receive()` 同一条路，只是把"这一轮没等到"与"等坏了"分开交出来。
+    ///
+    /// 为什么必须分：一次性调用里两者都是失败，换条连接重来就行；而**常驻订阅**
+    /// 等不到消息是常态（`displayinfoupdates` 实测订阅后 21 秒可以一条都不推），
+    /// 只有"坏了"才需要重连。混成一个 bool 的话，要么每次空等都重连一遍
+    /// （每秒一条新连接去敲设备的门），要么真断了还在原地等。
+    Wait wait(xpc::Value &out, int timeout_ms, std::string &err);
 
     /// 一次往返。
     bool call(const xpc::Value &request, xpc::Value &reply, int timeout_ms, std::string &err);

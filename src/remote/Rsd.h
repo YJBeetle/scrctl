@@ -77,6 +77,24 @@ public:
                       const std::function<bool(const xpc::Value &)> &on_element, int timeout_ms,
                       std::string &err);
 
+    /// 流式订阅的分步版本：`subscribe` 订上，`next_batch` 一批一批取。
+    ///
+    /// 与 `stream()` 的区别只有一件事——**能不能中途干净地停**。`stream()` 是阻塞
+    /// 到底的循环，它的 timeout 是"单条消息"的等待上限而不是整轮的预算，所以拿它做
+    /// 常驻订阅的话，收手最快也要等一个 timeout；而"跟着转屏改画面"这类订阅要挂很久、
+    /// 又必须随时能退（Ctrl-C 的响应时间就是它）。分步之后每次只等一小会儿，
+    /// 之间回到调用方的循环顶部看一眼该不该停。
+    bool subscribe(std::string_view feature_identifier, std::string_view action_identifier,
+                   const xpc::Value &input, std::string &err);
+
+    /// 一次取批的结局。Idle 是**常态**（设备只在状态真的变了才推，实测订阅后 21 秒
+    /// 可以一条都不发）；只有 DeviceError/Broken 才意味着这条订阅作废、要重连。
+    enum class StreamEvent { Batch, Finished, Idle, DeviceError, Broken };
+
+    /// 取下一批 element（一条 `pushing` 可以带多个；空批次也会以 Batch 返回，
+    /// 调用方继续等就是）。`elements` 每次先被清空。
+    StreamEvent next_batch(std::vector<xpc::Value> &elements, int timeout_ms, std::string &err);
+
     [[nodiscard]] net::TcpStream &tcp() { return *tcp_; }
     [[nodiscard]] bool is_xpc() const { return channel_ != nullptr; }
 
@@ -87,6 +105,10 @@ public:
 private:
     std::unique_ptr<net::TcpStream> tcp_;
     std::unique_ptr<Channel> channel_;
+    /// 当前那次订阅的 feature 名。只为把错误说全：`next_batch` 拿到的是一条
+    /// 没有请求号的回信（`take_message` 不看消息 id），出了错只有"是哪条订阅在跑"
+    /// 这个线索能把话说明白。
+    std::string subscribed_feature_;
 };
 
 /// 一条隧道 + 它的 RSD 服务目录。
