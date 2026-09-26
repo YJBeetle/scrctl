@@ -34,6 +34,7 @@
 #include "media/FramePump.h"
 #include "media/StreamSession.h"
 #include "remote/Device.h"
+#include "remote/Pasteboard.h"
 #include "rt/RtpHevc.h"
 
 namespace {
@@ -108,11 +109,11 @@ void usage(const char *argv0) {
         "  --verify N FILE      渲染到第 N 帧时把窗口内容回读存为 BMP\n"
         "  --test-touch X0,Y0,X1,Y1\n"
         "                     注入一条直线（归一化坐标）后退出，无需真鼠标\n"
-        "  --test-button NAME 起流后按一次硬件按键（home/lock/volup/voldn/mute）\n"
+        "  --test-button NAME 起流后按一次硬件按键（home/lock/volup/voldn/mute），\n"
+        "                     再照常镜像，配 --verify 才能看见瞬时效果\n"
         "  --test-type TEXT   起流后往设备敲一段 ASCII（需要已聚焦的文本框）\n"
         "  --copy TEXT        把文本写进设备剪贴板后退出（中文走这条路）\n"
-        "  --paste            读设备剪贴板并打印后退出\n"
-        "                     再照常镜像，配 --verify 才能看见瞬时效果\n",
+        "  --paste            读设备剪贴板并打印后退出；与 --copy 同用时写完读回\n",
         argv0);
 }
 
@@ -844,6 +845,42 @@ int main(int argc, char **argv) {
             std::printf("%s  %s\n", d.udid.c_str(), d.connection_type.c_str());
         }
         return 0;
+    }
+
+    // 剪贴板是一条独立的路：不需要视频流、不需要窗口，所以放在起流之前，办完就退。
+    //
+    // 为什么必须有这两条：键盘注入只覆盖 US 布局的 ASCII，中文与 emoji 进不了设备
+    // （见 src/remote/Pasteboard.h 的说明）。
+    //
+    // `--copy` 与 `--paste` 同时给时是"写完立刻读回"，这不是顺手：dtpasteboardd 对
+    // 形状不对的内容会**回一个 SET_REPLY 表示收下、然后把内容丢掉**（types 为空就是
+    // 这种情况），只发不读的话这种失败在本地完全看不出来。
+    if (!o.copy_text.empty() || o.paste) {
+        std::string err;
+        auto dev = scrctl::remote::Device::establish(o.serial, err);
+        if (!dev) {
+            std::fprintf(stderr, "建立会话失败: %s\n", err.c_str());
+            return 1;
+        }
+        int rc = 0;
+        if (!o.copy_text.empty()) {
+            if (scrctl::remote::Pasteboard::set_text(*dev, o.copy_text, err)) {
+                std::printf("已写入设备剪贴板：%zu 字节\n", o.copy_text.size());
+            } else {
+                std::fprintf(stderr, "--copy 写入失败: %s\n", err.c_str());
+                rc = 1;
+            }
+        }
+        if (o.paste) {
+            std::string text;
+            if (scrctl::remote::Pasteboard::get_text(*dev, text, err)) {
+                std::printf("设备剪贴板（%zu 字节）：%s\n", text.size(), text.c_str());
+            } else {
+                std::fprintf(stderr, "--paste 读取失败: %s\n", err.c_str());
+                rc = 1;
+            }
+        }
+        return rc;
     }
 
     std::unique_ptr<FrameSource> source;
