@@ -54,12 +54,21 @@
 #include "media/StreamSession.h"
 #include "net/UdpSocket.h"
 #include "remote/Device.h"
+#include "rt/Rtcp.h"
 #include "rt/RtpHevc.h"
 
 namespace {
 
 using namespace std::chrono_literals;
 using clock = std::chrono::steady_clock;
+// 标准 RTCP 包的拼装住在产品代码里（`src/rt/Rtcp.cpp`）：产品路径现在每秒要发一个 RR
+// 续命，两处各写一份字节格式迟早飘——而这个文件的历史上，"两份不一样"已经让一整批
+// 实验的结论作废过一次（长度字段写成 32 位）。这里只留 AVConference 那种厂商私有包。
+using scrctl::rt::build_rr;
+using scrctl::rt::build_sdes;
+using scrctl::rt::build_sdes_cname;
+using scrctl::rt::build_sr;
+using scrctl::rt::is_rtcp_sr;
 
 uint64_t now_ms() {
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -81,62 +90,6 @@ void put32(std::vector<uint8_t> &v, uint32_t x) {
 void put16(std::vector<uint8_t> &v, uint16_t x) {
     v.push_back(static_cast<uint8_t>(x >> 8));
     v.push_back(static_cast<uint8_t>(x));
-}
-
-/// RR（RFC 3550 §6.4.2）：V=2、RC=1、PT=201、长度 7（= 头之后还有 7 个字），加发送者
-/// SSRC 与一个 24 字节报告块，一共 32 字节。报告块里第一个字是"媒体 SSRC"，第二个字是
-/// 分数丢包 1 字节 + 累计丢包 3 字节。
-std::vector<uint8_t> build_rr(uint32_t our_ssrc, uint32_t media_ssrc, uint32_t ext_high) {
-    std::vector<uint8_t> v;
-    v.push_back(0x81);  // V=2, RC=1
-    v.push_back(201);   // PT = RR
-    put16(v, 7);        // 长度以 4 字节为单位，不含第一个字
-    put32(v, our_ssrc);
-    put32(v, media_ssrc);
-    put32(v, 0);              // 分数丢包 1 + 累积丢包 3：这条流我们不重传，报 0
-    put32(v, ext_high);       // 扩展最高序号
-    put32(v, 0);              // 抖动
-    put32(v, 0);              // LSR / DLSR：老实报 0，不假装算过
-    put32(v, 0);
-    return v;
-}
-
-bool is_rtcp_sr(std::span<const uint8_t> p) {
-    return p.size() >= 28 && p[0] == 0x81 && p[1] == 0xc8;
-}
-
-/// SR（RFC 3550 §6.4.1）：RC=0 的那一档，28 字节。为什么也要试它——设备在 answer 里
-/// 给我们分配了一个 `LocalSSRC`，也就是说它心里有一个"发送方=你"的位置；某些实现只认
-/// 发送者报告（它按 SSRC 配对，收到一个从没收过包的源发来的 RR 会被当成对不上号）。
-std::vector<uint8_t> build_sr(uint32_t our_ssrc, uint32_t packets, uint32_t octets) {
-    std::vector<uint8_t> v;
-    v.push_back(0x80);  // V=2, RC=0
-    v.push_back(200);   // PT = SR
-    put16(v, 6);        // 头之后还有 6 个字
-    put32(v, our_ssrc);
-    put32(v, 0);        // NTP 时间戳高位：不假装算过
-    put32(v, 0);        // NTP 低位
-    put32(v, 0);        // RTP 时间戳
-    put32(v, packets);
-    put32(v, octets);
-    return v;
-}
-
-/// SDES（PT=202）带一个**空 CNAME**——12 字节，正是 Xcode 那种复合包的后半段
-/// （pymobiledevice3 的注释：'Minimal SDES with an empty CNAME (matches Xcode's
-/// compound RR+SDES)'）。早先我们给它塞了个 "scr1" 的 CNAME，长度字段跟着变 1 个字，
-/// 于是"设备不理复合包"这条结论测的其实是另一种包。
-std::vector<uint8_t> build_sdes(uint32_t our_ssrc) {
-    std::vector<uint8_t> v;
-    v.push_back(0x81);  // V=2, SC=1
-    v.push_back(202);
-    put16(v, 2);        // SSRC 1 字 + CNAME 块 1 字
-    put32(v, our_ssrc);
-    v.push_back(1);     // CNAME
-    v.push_back(0);     // 长度 0
-    v.push_back(0);     // 补到 4 字节边界
-    v.push_back(0);
-    return v;
 }
 
 /// 从 answer 的 `connection.streamConfig` 里取一个数。取不到返回 false。
@@ -202,26 +155,6 @@ void print_sync_tokens(std::string_view tag, const scrctl::xpc::Value &answer) {
                 std::string(tag).c_str(),
                 has_sync ? std::to_string(sync).c_str() : "(没有)",
                 has_vsync ? std::to_string(vsync).c_str() : "(没有)", isltrp);
-}
-
-/// SDES（PT=202）带一个**实义 CNAME**。留着是为了把"空 CNAME 才有效"这个假设也测一遍
-/// （rrminecname 那一臂），而不是因为我们有理由相信它管用。
-std::vector<uint8_t> build_sdes_cname(uint32_t our_ssrc, std::string_view cname) {
-    std::vector<uint8_t> body;
-    put32(body, our_ssrc);
-    body.push_back(1);  // CNAME
-    body.push_back(static_cast<uint8_t>(cname.size()));
-    body.insert(body.end(), cname.begin(), cname.end());
-    body.push_back(0);  // END
-    while (body.size() % 4 != 0) {
-        body.push_back(0);
-    }
-    std::vector<uint8_t> v;
-    v.push_back(0x81);  // V=2, SC=1
-    v.push_back(202);
-    put16(v, static_cast<uint16_t>(body.size() / 4));  // 长度（字）
-    v.insert(v.end(), body.begin(), body.end());
-    return v;
 }
 
 /// AVConference 的接收端反馈包：RTCP APP（PT=204），名字 "RCTL"，32 字节。

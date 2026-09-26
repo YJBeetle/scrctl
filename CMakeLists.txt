@@ -104,6 +104,7 @@ add_library(scrctl_core STATIC
         src/media/StreamSession.cpp
         src/media/FramePump.cpp
         src/rt/RtpHevc.cpp
+        src/rt/Rtcp.cpp
         src/transport/Usbmux.cpp
         src/transport/TlsChannel.cpp
         src/transport/Lockdown.cpp

@@ -2,10 +2,12 @@
 // 变成一条明确的失败，而不是"画面有点糊"。
 #include <cstdio>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <vector>
 
 #include "bitstream/AnnexB.h"
+#include "rt/Rtcp.h"
 #include "rt/RtpHevc.h"
 
 namespace {
@@ -315,6 +317,70 @@ void test_feeds_annexb_parser() {
     check(!au_sizes.empty() && au_sizes[0] == 3, "关键帧 AU = VPS + SPS + IDR");
 }
 
+/// RTCP 那几种包的字节形状。
+///
+/// 为什么要钉：产品的会话续命现在依赖每秒发一个 RR（设备的 `RTCPTimeoutInterval` 是
+/// "距离上次收到我们 RTCP 多久"的空闲计时器），而这个文件所在的那条链上，"形状写错"
+/// 有过两次前科：一次把公共头的 16 位长度字段用 `put32` 写成 32 位（整包从第 3 字节起
+/// 错位，于是"设备不理这种包"的结论建立在畸形包上），一次是数据报拼装把载荷留在缓冲区
+/// 尾巴上（长度字段与校验和的范围都不对，设备内核静默丢弃）。两种在发送侧都不报错，
+/// 只有对面能看出来——所以对面不在场时，必须靠这几条测。
+void test_rtcp_shapes() {
+    std::printf("\n== RTCP 包形状 ==\n");
+    const uint32_t our = 0x11223344u;   // 设备分配给我们这一端的 RemoteSSRC
+    const uint32_t media = 0x55667788u;  // 设备自己那条流的 LocalSSRC
+    const uint32_t ext_high = 0x0001c8e0u;
+
+    const auto rr = scrctl::rt::build_rr(our, media, ext_high);
+    check(rr.size() == 32, "RR 一共 32 字节: " + std::to_string(rr.size()));
+    check(rr[0] == 0x81, "RR 首字节 0x81（V=2, RC=1）");
+    check(rr[1] == 201, "RR 的 PT=201");
+    check((rr[2] << 8 | rr[3]) == 7, "RR 长度字段=7（16 位，头之后 7 个字）");
+    check(rr[4] == 0x11 && rr[7] == 0x44, "发送者 SSRC 在偏移 4，填的是设备分配的 RemoteSSRC");
+    check(rr[8] == 0x55 && rr[11] == 0x88, "报告块指认的 SSRC 在偏移 8，填设备的 LocalSSRC");
+    check(rr[16] == 0x00 && rr[17] == 0x01 && rr[18] == 0xc8 && rr[19] == 0xe0,
+          "扩展最高序号在偏移 16");
+    // 头 4 + 发送者 SSRC 4 + 报告块 24 = 32，与长度字段自洽：7 个字 + 首字 = 8 字。
+    check(rr.size() == std::size_t(4 + 7 * 4), "长度字段 7 与真实字节数自洽");
+
+    const auto sr = scrctl::rt::build_sr(our, 0, 0);
+    check(sr.size() == 28, "SR 一共 28 字节: " + std::to_string(sr.size()));
+    check(sr[0] == 0x80 && sr[1] == 200, "SR 首两字节 0x80 PT=200（RC=0）");
+    check((sr[2] << 8 | sr[3]) == 6, "SR 长度字段=6");
+    check(sr.size() == std::size_t(4 + 6 * 4), "SR 长度字段与真实字节数自洽");
+
+    const auto sdes = scrctl::rt::build_sdes(our);
+    check(sdes.size() == 12, "空 CNAME 的 SDES 是 12 字节: " + std::to_string(sdes.size()));
+    check(sdes[0] == 0x81 && sdes[1] == 202, "SDES 首两字节 0x81 PT=202");
+    check((sdes[2] << 8 | sdes[3]) == 2, "SDES 长度字段=2");
+    // RR + 空 CNAME 的复合包正是苹果音频腿实测那一种，44 字节一个不多一个不少。
+    // 这条是"我们对苹果包形状的对齐"里唯一能离线验的部分。
+    std::vector<uint8_t> compound = rr;
+    compound.insert(compound.end(), sdes.begin(), sdes.end());
+    check(compound.size() == 44, "RR+SDES 复合包 = 44 字节（苹果实测的那个形状）");
+
+    const auto named = scrctl::rt::build_sdes_cname(our, "scrctl");
+    check(named.size() % 4 == 0, "带实义 CNAME 的 SDES 补齐到 4 字节边界");
+    check((named[2] << 8 | named[3]) == named.size() / 4 - 1,
+          "它的长度字段按真实字数走（不是空 CNAME 那档的 2）");
+    check(named.size() == 20, "CNAME=\"scrctl\" 时 SDES = 20 字节: " + std::to_string(named.size()));
+
+    // 设备的 SR 和视频共用一个 UDP 端口，靠开头两字节分。判错会把每秒那个心跳记成视频包，
+    // "画面静止"和"流死了"就分不开了。
+    // 注意这一位认的是**设备那条心跳**：它带 RC=1，所以首字节是 0x81；我们自己发的 SR 是
+    // RC=0（首字节 0x80，上面 `build_sr` 的形状）。两者不是同一个字节串，别混用。
+    std::vector<uint8_t> dev_sr(28, 0);
+    dev_sr[0] = 0x81;
+    dev_sr[1] = 0xc8;  // PT=200
+    check(scrctl::rt::is_rtcp_sr(dev_sr), "0x81 0xc8 且 >=28 字节的认成 SR（设备那条心跳）");
+    check(!scrctl::rt::is_rtcp_sr(sr), "我们自己 RC=0 的 SR（0x80 0xc8）不认成设备心跳");
+    const auto pkt = packet(1, 0, true, single(1, {0x01, 0x02}));
+    check(!scrctl::rt::is_rtcp_sr(pkt), "RTP 视频包不认成 SR");
+    check(!scrctl::rt::is_rtcp_sr(std::span<const uint8_t>(rr)), "RR(PT=201) 不认成 SR");
+    const std::vector<uint8_t> tiny = {0x81, 0xc8};
+    check(!scrctl::rt::is_rtcp_sr(tiny), "短于 28 字节的 0x81 0xc8 不认成 SR（不越界读）");
+}
+
 }  // namespace
 
 int main() {
@@ -325,6 +391,7 @@ int main() {
     test_single_and_offsets();
     test_payload_type_filter();
     test_feeds_annexb_parser();
+    test_rtcp_shapes();
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;
 }

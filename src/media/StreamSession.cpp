@@ -178,6 +178,10 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
         if (const auto *sc = connection->find("streamConfig"); sc != nullptr) {
             started.payload_type =
                 static_cast<uint8_t>(sc->at("RxPayloadType").as_int_or(100) & 0x7F);
+            // 两个 SSRC 是回 RTCP 的两张"名字"：Local 指设备自己那条流（报告块里指认的
+            // 那一位），Remote 是它给我们这一端分配的（我们当发送者填的那一位）。
+            started.local_ssrc = static_cast<uint32_t>(sc->at("LocalSSRC").as_int_or(0));
+            started.remote_ssrc = static_cast<uint32_t>(sc->at("RemoteSSRC").as_int_or(0));
         }
         if (const auto *sender = connection->find("sender"); sender != nullptr) {
             // 端口在这套协议里有时是整数、有时是字符串（RSD 目录里就是字符串），

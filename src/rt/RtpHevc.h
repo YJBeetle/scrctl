@@ -63,6 +63,9 @@ public:
     void reset();
 
     [[nodiscard]] const Stats &stats() const { return stats_; }
+    /// 最后一个视频包的 RTP 序号（一个都没收到则 0）。
+    /// 回 RTCP 的 RR 里"扩展最高序号"那一位要它：如实报我们收到到哪，比报 0 有用。
+    [[nodiscard]] uint16_t last_sequence() const { return last_seq_; }
     /// 是否有还没收完的分片。
     [[nodiscard]] bool mid_fragment() const { return !partial_.empty(); }
     [[nodiscard]] uint32_t fragment_timestamp() const { return partial_ts_; }

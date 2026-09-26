@@ -7,6 +7,7 @@
 #include "bitstream/AnnexB.h"
 #include "media/StreamSession.h"
 #include "remote/Device.h"
+#include "rt/Rtcp.h"
 
 namespace scrctl::media {
 namespace {
@@ -31,22 +32,31 @@ constexpr int kMaxOversizedRestarts = 3;
 /// 这条流还得能自己活回来，所以偶尔还得试一次。解出一帧之后计数清零，回到正常节奏。
 constexpr uint64_t kOversizedRetryMs = 60000;
 /// 一条媒体会话的租期有多长。**这个数是我们自己在 startmediastream 请求里报的**（那个
-/// 键就叫 `timeout`），设备把它原样抄进 answer 的 `RTCPTimeoutInterval`，然后从起流那一
-/// 刻开始倒数，到点就把这条会话从设备表里摘掉。
+/// 键就叫 `timeout`），设备把它原样抄进 answer 的 `RTCPTimeoutInterval`，然后从"上次
+/// 收到我们 RTCP"起倒数，到点就把这条会话从设备表里摘掉。
 ///
-/// 为什么是 3600 而不是报到顶（实测报到 4294967295 设备也照收）：租期越长，**进程被
-/// SIGKILL 或崩掉时**留在设备侧的那条僵尸会话就占住设备越久——一台设备一次只容一条流，
-/// Xcode 的 DeviceHub 也共用这一格。正常退出路径（`~FramePump` 与 SIGINT/SIGTERM）我们会
-/// 主动把会话停掉，所以这个数就是"镜像一小时之内不用付接续的钱"和"最坏情况占住设备一小
-/// 时"之间的折中。
+/// **它不是硬到期，是空闲计时器**——这一条是 2026-09-27 才定下来的，之前一整节文档都
+/// 把它当成"起流后 N 秒必死、回 RTCP 也续不上"，那个结论错在**我们发出去的 UDP 数据报
+/// 从来没到过设备**（`build_udp_datagram` 的拼装 bug，见 docs §13）。同一台设备、同一个
+/// 探针、只改数据报拼装，前后对照：
+///
+/// | 我们做什么 | 设备侧 socket `pkts in` | 结果 |
+/// | --- | --- | --- |
+/// | 什么都不发 | 0 | +19.97s / +19.99s 死（两次） |
+/// | 每秒一个 RR | **41** | 40.2s 还在（两次），`streamDidRTCPTimeOut` 一次没触发 |
+///
+/// 为什么报 20 而不是报到顶（实测 4294967295 设备也照收）：报多大，**进程被 SIGKILL 或
+/// 崩掉时**那条僵尸会话就占住设备多久——一台设备一次只容一条流，Xcode 的 DeviceHub 也
+/// 共用这一格。既然续命现在真的管用，短租期就是白拿的安全垫：正常路径永不到点，异常
+/// 路径 20 秒自动腾位置。这也是苹果自己报的数（抓包里它的 `timeout` 就是 20）。
 ///
 /// 这一行同时推翻了过去一整节的结论形态。此前这里的注释写着"实测设备在起流后约 20 秒整
 /// 把它结束掉，而且和画面有没有在变、我们回不回 RTCP 都无关"——那句话**观测上全对**，错在
 /// 把它读成"设备有一条 20 秒的硬租期"，于是所有力气都花在"找出它认哪一种 RTCP"上：裸 RR、
 /// RR+SDES、SR、发到端口+1、按 answer 分配的 SSRC 填发送者、以及 Apple 自己那两种 PT=204
-/// 的 AVConference 反馈包（RCTL 20/s + 每帧一个），每一臂都在 20.0 秒整死。那个 20 就是我
-/// 们自己请求里写的 20（照抄抓包观测值来的，从没动过）。改这一个整数，死亡时刻就跟着走
-/// （`tools/rr_keepalive_probe --timeout N --what none`，什么都不回）：
+/// 的 AVConference 反馈包（RCTL 20/s + 每帧一个），每一臂都在 20.0 秒整死。那些臂**测的不是
+/// "设备认哪种 RTCP"，而是"哪种坏数据报也没到"**——臂与臂之间的差别根本传不到设备。
+/// 改那一个整数、死亡时刻就跟着走这一条观测仍然成立（它是计时器本来的斜率）：
 ///
 /// | 请求 `timeout` | answer `RTCPTimeoutInterval` | 结果 |
 /// | --- | --- | --- |
@@ -55,19 +65,16 @@ constexpr uint64_t kOversizedRetryMs = 60000;
 /// | 30 | 30 | +30.00s |
 /// | 3600 | 3600 | 150 秒观察窗跑满（53520 个视频包、150 个 SR 心跳），会话表里还在 |
 /// | 4294967295 | 4294967295 | 40 秒窗跑满，会话表里还在 |
-constexpr uint32_t kSessionLeaseSeconds = 3600;
-constexpr uint64_t kSessionLeaseMs = static_cast<uint64_t>(kSessionLeaseSeconds) * 1000;
-/// 到点之前主动接续一次（"换会话"约 300ms 没有新帧）要提前多少开始找静止的间隙，以及
-/// 等不到间隙时的硬截止余量。旧值是一串按 20 秒租期手算的数（18000 / 19400 / 20000）；
-/// 租期变成一小时之后改成按**固定余量**留，理由：接续从"每 20 秒一次"变成"连续镜像一小时
-/// 才一次"，按比例留 10%（6 分钟）纯属铺张，而两条 RPC 的抖动量级并没有跟着租期变长。
-constexpr uint64_t kRenewLeadMs = 120000;
-constexpr uint64_t kRenewHardLeadMs = 30000;
-/// 接续之前要等的那段"画面静止"有多久才算数。设备在静止画面上一个视频包都不发（只有
-/// 每秒那个 SR），所以 1 秒没有视频包就意味着屏幕上这一帧已经是最终的那一张。
-/// 注意量的是**视频包**不是"任何数据报"：后者被 SR 心跳喂着，静止画面上它永远不超过
-/// 1 秒，拿它当"画面静止"的判据会一次都等不到。
-constexpr uint64_t kRenewQuietMs = 1000;
+///
+/// 后面两行（3600 / 报到顶）之所以"活得好好的"和续命无关：计时器在数，只是它数的那个
+/// 数比观察窗长得多，而窗跑满时我们一个 RTCP 也没送到过。所以那两行证明的是"租期就是
+/// 我们报的那个数"，不是"长租期能代替 RTCP"。两件事现在由同一个观测分开：短租期 + 每秒
+/// RR 活得比短租期 + 什么都不发久，而 `pkts in` 正是那个被控住的变量。
+constexpr uint32_t kSessionLeaseSeconds = 20;
+/// 我们这边回 RTCP 的节奏。1Hz 是照苹果的视频腿实测值来的（它的音频腿也是精确 1.000Hz），
+/// 也是上一表里那根"41 个包活过 40 秒"的实测频率。设备只要求"到期前收到过一个"，所以
+/// 这一位不需要精准——留出的是 20 倍余量。
+constexpr uint64_t kRtcpPeriodMs = 1000;
 /// 光靠时间戳永远有一段"刚死但还没到阈值"的盲区（实测：静置 20 秒去截图时，会话
 /// 其实已经死了 1.3 秒，任何大于 1.3 秒的阈值都会漏）。所以催流那条路在可疑区间
 /// 必须去问设备，而不是把阈值调大——调大只会把盲区推到别处。
@@ -128,7 +135,6 @@ std::unique_ptr<FramePump> FramePump::start(remote::Device &device, const Option
     // 别在起流的一瞬间就判定"卡住"，那会儿还没有关键帧也正常。
     pump->last_keyframe_ms_ = now_ms();
     pump->last_packet_ms_ = now_ms();
-    pump->last_video_ms_ = now_ms();
     return pump;
 }
 
@@ -189,7 +195,6 @@ bool FramePump::restart(std::string &err) {
         return false;
     }
     last_packet_ms_ = now_ms();
-    last_video_ms_ = last_packet_ms_;
 
     if (!worker_running_) {
         worker_running_ = true;
@@ -385,7 +390,9 @@ void FramePump::loop() {
         parser_ = make_parser();
         session_start_ms_ = now_ms();
         last_packet_ms_ = session_start_ms_;
-        last_video_ms_ = session_start_ms_;
+        // 新会话一起就马上补一个续命包：设备那个计时器是从"上次收到我们 RTCP"开始倒数的，
+        // 第一秒就送到，租期才完整可用（等第一个心跳周期再发等于白送掉一秒）。
+        next_rtcp_ms_ = session_start_ms_;
         ever_keyframe_ = false;
         need_keyframe_ = false;
         loss_seen_ = 0;
@@ -491,63 +498,45 @@ void FramePump::loop() {
     };
 
     for (;;) {
+        // **续命包**：每秒一个 RR。这一位不是可选的礼貌——设备那个 `RTCPTimeoutInterval`
+        // 是"距离上次收到我们 RTCP 多久"的空闲计时器（推导与实测表见 kSessionLeaseSeconds
+        // 上面），租期报 20 秒而不回 RTCP，会话就必然在 +19.97s 被设备摘掉。
+        //
+        // 放在循环最顶端而不是"读包超时"那条分支里：快速动画面下包是连着的，50ms 超时
+        // 永远轮不到，挂在超时上的话保活包在这种时候一个都发不出去。
+        //
+        // 形状是探针里唯一实测有效的那一种（`--what rrsrc --hz 1`：设备侧 socket
+        // `pkts in: 41`、活过 40 秒）：裸 RR 32 字节，发送者 SSRC 填 answer 给我们分配的
+        // `RemoteSSRC`，报告块指认设备的 `LocalSSRC`，目的端口是 `sender.port`
+        // （= `streamConfig.SourcePort`，21/21 次实测这两个数相等）。
+        if (now_ms() >= next_rtcp_ms_) {
+            next_rtcp_ms_ += kRtcpPeriodMs;
+            const auto rr = scrctl::rt::build_rr(session_->started().remote_ssrc,
+                                                 session_->started().local_ssrc,
+                                                 depacketizer ? depacketizer->last_sequence() : 0);
+            std::string serr;
+            const bool ok = session_->send_rtp(rr, session_->started().sender_port, serr);
+            uint64_t failed_after = 0;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (ok) {
+                    ++stats_.rtcp_sent;
+                } else {
+                    failed_after = ++stats_.rtcp_failed;
+                }
+            }
+            if (failed_after == 1) {
+                // 只报第一条：发不出去一般是会话已经没了，而下面那套心跳判据一秒钟内就
+                // 会把它重起掉。每 50ms 刷一条反而盖住真正该看的那行日志。
+                std::fprintf(stderr, "RTCP 保活包发送失败: %s\n", serr.c_str());
+            }
+        }
         // 用户动了手（或者自动化框架来取帧了）：按 judge_quiet 那三档心跳判据处理。
         // 中间那一档不能省——光靠时间戳永远有"刚死但还没到阈值"的盲区（实测静置 20 秒
         // 去截图时会话已经死了 1.3 秒），而把阈值调大只会把盲区推到别处。
         if (wake_requested_.exchange(false)) {
-            // 过了我们申请的那条租期，这条会话在设备侧必然已经不存在了：手上这一帧
-            // 必然是旧的，再去问一句设备"它还活着吗"（100~300ms）纯属白等，直接重起
-            // （约 300ms 拿到新 IDR）更快也更准。租期内**还活着**，不能因为"快到点了"
-            // 就把手上这一帧扔了——用户这一下要的就是它；接续自有下面那条按静止时刻
-            // 挑的分支去安排。
-            //
-            // 这一档在租期改成一小时之后基本不会再命中（那正是目的），留着是因为它
-            // 仍然对：租期是我们报的数，报多久它就成立多久。
-            if (now_ms() - session_start_ms_ > kSessionLeaseMs) {
-                std::printf("收到操作：会话已起流 %llums，过了申请的那 %llu 秒租期，直接重起接续\n",
-                            static_cast<unsigned long long>(now_ms() - session_start_ms_),
-                            static_cast<unsigned long long>(kSessionLeaseMs / 1000));
-                restart_now();
-            } else {
-                judge_quiet(now_ms() - last_packet_ms_, kQuietCertainMs, 0, "收到操作");
-            }
+            judge_quiet(now_ms() - last_packet_ms_, kQuietCertainMs, 0, "收到操作");
             continue;
-        }
-        // 没人催流、但有人在收帧（镜像那条路）：租期将到就自己接续。这条受
-        // silence_restart_ms 管，因为拉模型（控制单元）没有持续收帧的人，让它按时接续
-        // 纯属白烧设备。
-        //
-        // 到点之前**不马上**重起：剩下那 kRenewLeadMs 用来挑一个静止的间隙。画面在动的
-        // 时候接续是看得见的一次顿挫，画面静止时接续是免费的（显示的那一帧不动，新会话
-        // 回来的第一帧和它一样）。租期一小时意味着这笔钱通常一整小时都不用付一次；付的
-        // 那一刻也优先挑在看不见的时刻。
-        if (options_.silence_restart_ms > 0) {
-            const uint64_t age = now_ms() - session_start_ms_;
-            if (age + kRenewLeadMs >= kSessionLeaseMs) {
-                const uint64_t quiet_video = now_ms() - last_video_ms_;
-                if (quiet_video >= kRenewQuietMs) {
-                    std::printf("会话还剩 %llus 到租期（起流已 %llums），画面已静止 %llums（数据报静默 "
-                                "%llums），趁这一会儿重起接续（用户看不见这次换会话）\n",
-                                static_cast<unsigned long long>((kSessionLeaseMs - age) / 1000),
-                                static_cast<unsigned long long>(age),
-                                static_cast<unsigned long long>(quiet_video),
-                                static_cast<unsigned long long>(now_ms() - last_packet_ms_));
-                    restart_now();
-                    continue;
-                }
-                if (age + kRenewHardLeadMs >= kSessionLeaseMs) {
-                    std::printf("会话还剩 %llus 到租期（起流已 %llums），等不到静止的间隙（视频包只静默了 "
-                                "%llums，数据报 %llums），硬接续（约 300ms 没有新帧）\n",
-                                static_cast<unsigned long long>((kSessionLeaseMs - age) / 1000),
-                                static_cast<unsigned long long>(age),
-                                static_cast<unsigned long long>(quiet_video),
-                                static_cast<unsigned long long>(now_ms() - last_packet_ms_));
-                    restart_now();
-                    continue;
-                }
-                // 还在 [18s, 19.4s) 且画面在动：什么都不做，回到循环里继续收这一条流
-                // 的帧（它还有至少 600ms 才到期），下一个静止的间隙再来接。
-            }
         }
         // "该重起了"这个判断必须每轮都做，不能只挂在"读包超时"那条分支上。快速动
         // 画面下包是连续到达的，50ms 超时永远轮不到，于是"丢了帧要去拿新关键帧"这个
@@ -609,10 +598,7 @@ void FramePump::loop() {
         last_packet_ms_ = now_ms();
         // 设备的 SR 是裸 RTCP（开头 0x81 0xc8），混在视频同一个端口上每秒来一个。
         // 它自带的"累计已发视频包数"在偏移 20，是设备侧的权威计数。
-        const bool is_sr = datagram.size() >= 28 && datagram[0] == 0x81 && datagram[1] == 0xc8;
-        if (!is_sr) {
-            last_video_ms_ = now_ms();
-        }
+        const bool is_sr = scrctl::rt::is_rtcp_sr(datagram);
         uint64_t dev_pkts = 0, dev_octets = 0;
         if (is_sr) {
             const auto be32 = [&datagram](std::size_t off) {
