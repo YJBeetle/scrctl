@@ -1538,3 +1538,49 @@ launched application could not be determined. It may have already terminated."�
 报 1125x2436"——那是立项早期从 lockdown 那侧问的，与我们现在这条 CoreDevice feature
 **是两个不同的服务给了同一个数**，所以这一档的 1125x2436 有两处独立来源。
 
+## 17. 音频腿的编码鉴定（实测，iPhone14,4 / iOS 27.0 / USB）
+
+**结论：`PT=101` 上跑的是裸 AAC-ELD（Apple 的 `'aace'`），48kHz 立体声，每帧 480 采样
+（10ms），一包一帧，没有 RFC 3640 的 AU 头。** 两条独立证据：
+
+1. 设备自己的音频日志（`pymobiledevice3 syslog live` 免 root 抓到，边收音频腿边录）：
+
+```text
+avconferenced{AudioCodecs}: ACMP4AACBaseEncoder.cpp:314
+    Output format: 2 ch, 48000 Hz, aace (0x00000000) 0 bits/channel, 0 bytes/packet,
+                   480 frames/packet, 0 bytes/frame
+avconferenced{AudioCodecs}: ACMP4AACBaseEncoder.cpp:733
+    @@@@ 'aace' encoder configuration: srIn = 48000, srOut = 48000, chans = 2,
+                                       bitRateFormat = 1, bitrate = 128000
+avconferenced{AVConference}: VCAudioStream setupPayloads:786
+    currentAudioPayload={ <VCAudioPayload> config=VCAudioPayloadConfig payload=101
+      blockSize=480 codecSampleRate=48000 codecSamplesPerFrame=480
+      inputSampleRate=48000 inputSamplesPerFrame=480 isDTXEnabled=0 octedAligned=1
+      useSBR=0 internalBundleFactor=1 initialBitrate=32000 maxBundleFactor=1 ... }
+```
+
+   `payload=101 / blockSize=480 / codecSampleRate=48000` 与我们收到的完全一致，
+   `maxBundleFactor=1` 就是"一包一帧"，`useSBR=0` 说明是 ELD 而不是 ELD-SBR。
+   四字符码 `aace` 在 Apple 的 AudioFormat 定义里就是 `kAudioFormatMPEG4AAC_ELD`
+   （带 SBR 的是 `aacf`）。
+
+2. 字节结构自己也能对上：ELD 帧的第一个比特是 `raw_data_block_flag`，为 0 表示
+   "这帧没有数据"。实测静音时**每个包都是 4 字节且首字节 0x00**（flag=0），出声时
+   首字节变成 0x88/0x89/0x8A（flag=1）——静音/有声的分界恰好落在这一个比特上。
+
+配套的线上读数（`rr_keepalive_probe --audio-leg --audio-out`）：
+
+| 状态 | 包数/秒 | 载荷 | 时间戳步长 |
+| --- | --- | --- | --- |
+| 设备静音 | ~101 | 恒定 4 字节 `00 68 34 00` | 480 |
+| 放视频（有声） | ~68（受探针排水上限影响，非设备速率） | 243–400 字节，中位 369 | 480 |
+
+**这一节推翻上一版探针 commit（49d28f8）里那句"还认不出编码"**：那时手上只有静音包，
+而静音包对 AAC-ELD 和 Opus 两种假设都自洽（我甚至按 Opus 的 TOC 位解释过 `0x89`，
+纯好看不像话）。真正给出答案的是**设备日志 + 有声时的字节**，不是对着静音包猜。
+教训照旧：认格式要有内容的那一段数据，加上一个会自己交代名字的来源。
+
+对实现的直接含义：解码要喂 `AVAudioCodecDescription` 里的 **AudioSpecificConfig**
+（AOT 39 = AAC-ELD v2，48kHz，2ch，frameLengthFlag=1 即 480），因为包里没有 AU 头也没有
+ADTS；libavcodec 的 `aac` 解码器带 extradata 就能解 ELD。静音时设备**照样 100 包/秒地发**
+（`isDTXEnabled=0`），所以"没声音"不会表现为断流。
