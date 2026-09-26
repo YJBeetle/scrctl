@@ -22,7 +22,8 @@
 // 用法：rr_keepalive_probe [--seconds N] [--attempts N] [--what none,rr,poll,poll5]
 //                          [--timeout N] [--hold] [--event-channel] [--avc-features STR]
 //                          [--audio-leg] [--audio-rr] [--display-subscribe] [--hid-attach]
-//                          [--offer FILE] [--dump-packets] [--dump-status] [--verbose]
+//                          [--offer FILE] [--dump-packets] [--dump-status] [--audio-out FILE]
+//                          [--verbose]
 //
 // 第二轮加的 `poll` 臂是因为第一批数据把"空闲超时"这个模型打掉了：四臂里最后一个视频
 // 包分别落在 +11.1s / +7.1s / +7.1s / +7.1s，而**每一臂都是 +20.0s 整**停止收 SR 并在
@@ -414,6 +415,11 @@ int main(int argc, char **argv) {
     /// 只把自己构造出的那几种 RTCP 打成十六进制然后退出（不碰设备）。
     /// 给"和苹果抓包里的包并排比对"用。
     bool dump_packets = false;
+    /// 把**音频腿**收到的每个 RTP 数据报原样落盘（前面加一个 u16 长度）。
+    /// 为什么要落而不是只看计数：要做 M4 的设备音频，第一件事是知道设备上跑的到底是
+    /// 哪种编码、怎么打包的——这个没有任何文档可查，只能把线上字节拿下来自己认。
+    /// 计数只能回答"有没有在推"，答不出"推的是什么"。
+    std::string audio_out;
     // 在请求里带上 `sessionEventChannel`（一个 XPC UUID）。这是抓包对齐出来的、我们和
     // Xcode DeviceHub 的请求之间唯一差的一个键——苹果的 `timeout` 也是 20，却活了 715 秒。
     // 这一臂就是判"是不是这个键让租期失效"。
@@ -550,6 +556,8 @@ int main(int argc, char **argv) {
             no_timeout_key = true;
         } else if (a == "--dump-packets") {
             dump_packets = true;
+        } else if (a == "--audio-out" && i + 1 < argc) {
+            audio_out = argv[++i];
         } else if (a == "--hid-attach") {
             hid_attach = true;
         } else if (a == "--ping6") {
@@ -956,6 +964,18 @@ int main(int argc, char **argv) {
             uint16_t audio_dest_port = 0;
             uint64_t audio_seen = 0;
             uint32_t audio_highest_seq = 0;
+            // 音频腿的原始数据报按 `[u16 长度][整包字节]` 顺序落盘（`--audio-out`）。
+            // 要做设备音频，第一个要回答的问题不是"能不能收到包"（那个早就量到 12~29/s），
+            // 而是"来的到底是什么编码、怎么打包的"——这个没有任何文档可查，只能把线上
+            // 字节拿下来自己认。
+            struct FileCloser {
+                int operator()(FILE *f) const { return f == nullptr ? 0 : std::fclose(f); }
+            };
+            std::unique_ptr<FILE, FileCloser> audio_dump {
+                audio_out.empty() ? nullptr : std::fopen(audio_out.c_str(), "wb") };
+            if (!audio_out.empty() && audio_dump == nullptr) {
+                std::fprintf(stderr, "打不开音频落盘文件 %s\n", audio_out.c_str());
+            }
             if (audio_leg) {
                 std::random_device rd;
                 shared_session.resize(16);
@@ -989,6 +1009,15 @@ int main(int argc, char **argv) {
                             "RemoteSSRC=%u LocalSSRC=%u\n",
                             audio->receiver_port(), audio_dest_port, audio_pt, a_remote, a_local);
                 print_sync_tokens("音频腿", audio->started().answer);
+                if (!audio_out.empty()) {
+                    // 收到的音频包全是同样 16 字节（12 字节 RTP 头 + 4 字节载荷）、
+                    // 时间戳每包 +480 —— 光看字节认不出这是 AAC 还是 ALAC 还是别的什么。
+                    // answer 里设备自己会交代媒体类型与采样率，那是唯一不用猜的来源，
+                    // 所以把它整条打出来。
+                    std::printf("  音频腿 answer 全貌：%s\n",
+                                scrctl::xpc::describe(audio->started().answer, ~std::size_t { 0 })
+                                    .c_str());
+                }
                 req.client_session_uuid = shared_session;
             }
 
@@ -1453,6 +1482,15 @@ int main(int argc, char **argv) {
                             ai.payload_type == audio->started().payload_type) {
                             ++audio_seen;
                             audio_highest_seq = ai.sequence;
+                            if (audio_dump != nullptr) {
+                                // 连 RTP 头一起写：认格式要看的正是头里的 PT/marker/时间戳
+                                // 与载荷的关系，只留载荷就把"一帧切成几包"这件事丢了。
+                                const uint16_t n = static_cast<uint16_t>(ap.size());
+                                const uint8_t len[2] = {static_cast<uint8_t>(n >> 8),
+                                                        static_cast<uint8_t>(n & 0xFF)};
+                                std::fwrite(len, 1, 2, audio_dump.get());
+                                std::fwrite(ap.data(), 1, ap.size(), audio_dump.get());
+                            }
                         }
                     }
                     if (audio_rr && audio_sender_ssrc != 0 && now_ms() >= next_audio_rr) {
