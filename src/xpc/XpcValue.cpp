@@ -674,7 +674,7 @@ Status decode_message(std::span<const uint8_t> buf, Message &out, std::size_t &c
 
 // ----------------------------------------------------------------- 调试 ------
 
-std::string describe(const Value &v) {
+std::string describe(const Value &v, std::size_t budget) {
     switch (v.type) {
         case Type::Null:
             return "null";
@@ -721,8 +721,8 @@ std::string describe(const Value &v) {
                 if (i) {
                     s += ", ";
                 }
-                s += describe(v.array[i]);
-                if (s.size() > 400) {
+                s += describe(v.array[i], budget);
+                if (s.size() > budget) {
                     s += ", ...";
                     break;
                 }
@@ -737,8 +737,8 @@ std::string describe(const Value &v) {
                 }
                 s += v.dict[i].key;
                 s += ": ";
-                s += describe(v.dict[i].value);
-                if (s.size() > 400) {
+                s += describe(v.dict[i].value, budget);
+                if (s.size() > budget) {
                     s += ", ...";
                     break;
                 }

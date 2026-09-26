@@ -176,6 +176,11 @@ enum class Status { Ok, NeedMore, Malformed };
 
 // ----------------------------------------------------------------- 调试 ------
 /// 单行可读表示，用于探针打印设备回的服务目录。字符串截断到 120 字节。
-[[nodiscard]] std::string describe(const Value &v);
+///
+/// `budget` 是**每个容器**允许的长度：到点就补 `, ...` 收尾。默认 400 适合服务目录
+/// 那种"一眼扫过"的场合；要把一条推送的字段逐个读出来时它会把关键部分切掉（显示信息
+/// 就是：`displays[]` 里每个显示器十几个键、还嵌着 `currentMode`），那种地方传
+/// `SIZE_MAX`。
+[[nodiscard]] std::string describe(const Value &v, std::size_t budget = 400);
 
 }  // namespace scrctl::xpc

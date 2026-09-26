@@ -385,6 +385,9 @@ void dump_sessions(scrctl::remote::Device &dev, const std::vector<uint8_t> &our_
     }
 }
 
+
+
+
 int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     int seconds = 30;
@@ -1035,9 +1038,14 @@ int main(int argc, char **argv) {
                                     "com.apple.coredevice.feature.displayinfoupdates", "", in,
                                     [&](const scrctl::xpc::Value &one) {
                                         ++sub_elements;
-                                        std::printf("    [sub] +%lldms 收到显示推送（%zu 个键）\n",
+                                        // 只打"有几个键"等于没打：要照它给的几何画界面，得知道字段叫什么、
+                                        // 值是像素还是点。整条 describe 打出来（字符串截断到 120 字节）。
+                                        // budget 给到不设上限：这条推送的键正好落在
+                                        // 默认 400 字符之后，截了等于没测。
+                                        std::printf("    [sub] +%lldms 显示推送：%s\n",
                                                     static_cast<long long>(now_ms() - sub_t0),
-                                                    one.is_dict() ? one.dict.size() : 0);
+                                                    scrctl::xpc::describe(one, ~std::size_t { 0 })
+                                                        .c_str());
                                         return !sub_done.load();
                                     },
                                     hold_ms, e2);

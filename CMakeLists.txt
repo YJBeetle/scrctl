@@ -116,6 +116,7 @@ add_library(scrctl_core STATIC
         src/remote/Rsd.cpp
         src/remote/Device.cpp
         src/remote/Pasteboard.cpp
+        src/remote/DisplayInfo.cpp
         src/remote/App.cpp
         src/bitstream/AnnexB.cpp
         src/hid/Hid.cpp)
@@ -225,6 +226,10 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(pasteboard_test PRIVATE scrctl_core)
     add_test(NAME pasteboard COMMAND pasteboard_test)
 
+    add_executable(displayinfo_test tests/displayinfo_test.cpp)
+    target_link_libraries(displayinfo_test PRIVATE scrctl_core)
+    add_test(NAME displayinfo COMMAND displayinfo_test)
+
     add_executable(app_test tests/app_test.cpp)
     target_link_libraries(app_test PRIVATE scrctl_core)
     add_test(NAME app COMMAND app_test)
@@ -286,3 +291,7 @@ target_link_libraries(frame_probe PRIVATE scrctl_core)
 
 add_executable(pasteboard_probe tools/pasteboard_probe.cpp)
 target_link_libraries(pasteboard_probe PRIVATE scrctl_core)
+
+# 只显示几何订阅，不起媒体会话（理由见文件头）。
+add_executable(display_info_probe tools/display_info_probe.cpp)
+target_link_libraries(display_info_probe PRIVATE scrctl_core)
