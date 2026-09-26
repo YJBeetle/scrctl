@@ -1773,3 +1773,28 @@ ADTS；libavcodec 的 `aac` 解码器带 extradata 就能解 ELD。静音时设�
 绝对时刻（`sleep_until`）之后才发现真正的问题是**按住消费方这件事根本没发生**——
 那个"什么时候开始放"的时刻是在建立设备会话**之前**取的，等到循环开始时早就过了。
 两个版本共同的教训和 §13 那条一样：拿"水位不动"当结论之前，先确认那把尺自己是不是直的。
+
+## 18. 非 Apple 平台：静态查得出来的都查了，剩下的只能等 CI
+
+跨平台是硬要求，但写这些代码的机器上没有 Linux 工具链也没有容器，所以"Linux 能不能
+构建"这件事**没有一手证据**。能做的是把"必然会红的几条"提前拿掉：
+
+- **libstdc++ 不像 libc++ 那样顺手替我们带传递 include。** 判据不是"看着像"，是脚本
+  扫"这个 .cpp 用到了某个 std 符号，而它自己与它（递归）包含的本地头里没有任何一处
+  显式 include 对应系统头"。八处命中（`std::malloc/free`、`std::min/max`、
+  `std::equal`、`std::atoi`），补完再扫剩 0 处。同一把尺扫"裸 `uint32_t` 没有
+  `<cstdint>`"——那一类本来就是 0 处。
+- **`cmake_minimum_required` 从 3.28 降到 3.20。** 仓库里用得最新的特性是
+  `pkg_check_modules(... IMPORTED_TARGET)`（3.16）与 C++20（3.12），没有理由为一个
+  用不上的版本号把 Ubuntu 22.04（cmake 3.22）与 Debian 11（3.18）挡在外面。
+- **Apple 专有 API 的边界是干净的**：全仓只有 `decode/VideoToolboxDecoder.cpp` 与
+  `decode/AudioToolboxEldDecoder.cpp` 两个文件 include 苹果框架，两者都在
+  `if(APPLE)` 分支里，别处换 `PlatformDecoderFallback` / `AudioDecoderNone`。
+  `-framework` 那几个 flag 也只在 `APPLE` 分支上加。
+- **POSIX 面只有 `transport/Usbmux.cpp` 一处**（`<sys/socket.h>`/`<sys/un.h>`/`poll`，
+  路径 `/var/run/usbmuxd` 在 macOS 与 Linux 上都是对的）。这也意味着 Windows 不是
+  "差一个后端"而是"这一层要重写"——AMDS 那条路一行没有。
+- 全仓没有 `__attribute__`/`__builtin__`/#pragma once 之外的编译器扩展。
+
+这些加起来仍然只是"少了几条已知的红"。Ubuntu 那一格什么时候能删掉
+`continue-on-error`，要等它自己在 CI 上绿过，不是等我判断。

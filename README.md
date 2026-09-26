@@ -50,7 +50,7 @@ scrctl 走 DeviceHub 底下的那条路（CoreDevice DDI 开发者服务），�
 ## 技术栈
 
 ```
-src/transport/   usbmux（macOS/Linux 走 usbmuxd，Windows 走 AMDS）+ lockdown TLS + CDTunnel
+src/transport/   usbmux（macOS/Linux 走 usbmuxd 的 Unix 套接字）+ lockdown TLS + CDTunnel
 src/net/         用户态 IPv6/TCP/UDP 栈（隧道是用户态数据报，没有内核网卡可用）
 src/http2/       隧道上的 HTTP/2（不需要 HPACK：对端只发定长头表）
 src/xpc/ src/remote/  RemoteXPC 编解码、RSD 服务目录、CoreDevice feature RPC
@@ -88,9 +88,16 @@ VideoToolbox，而它只吃 2 字节的 NAL 长度前缀（上限 65535）——
 Ubuntu 各一格跑 `ctest`，另有一格 ASan+UBSan），但它只覆盖不需要真机的那部分——真机
 回归目前仍然只能人工跑。
 
-剩下的主要是工程化收尾：非 Apple 平台的实机验证（音频那一路在那些平台上**没有**
-可解的后端，见上）、把 Ubuntu 那格 CI 从 `continue-on-error` 提成真门槛、以及
-`--record` 带上音轨。
+**平台现状要说清楚，别按"跨平台"这个词理解**：
+
+| | 现状 |
+| --- | --- |
+| macOS | 真机验证过的那条路（本仓库所有数字都是它给的） |
+| Linux | **一行都没跑过**。CI 有 Ubuntu 那一格，但它是 `continue-on-error`——写它的机器上没有 Linux 工具链。已经静态修掉一批 libstdc++ 会挑的问题（直接 include、CMake 下限降到 3.20），但那不证明它能构建。音频那一路在 Linux 上**没有可解的后端**（见上） |
+| Windows | 只有计划。`transport/Usbmux.cpp` 用的是 POSIX 套接字，要走 AMDS 得先换掉那一层，现在连编译都过不去 |
+
+剩下的主要是工程化收尾：让 Ubuntu 那一格在 CI 上真绿过、`--record` 带上音轨
+（视频现在是裸 Annex-B，加音轨要先有容器）、以及 Windows 那一层。
 
 ## 探针工具（研究用）
 
