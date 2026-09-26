@@ -1479,3 +1479,62 @@ launched application could not be determined. It may have already terminated."�
 
 形状钉在 `tests/app_test.cpp`（离线，不碰设备）——这条 RPC 键放错位置时设备不给字段级
 报错，所以线上看不出来，只能在这里拦。
+
+## 16. `displayinfoupdates`：设备自己报的显示几何（实测，iPhone14,4 / iOS 27.0 / USB）
+
+镜像的可见区尺寸此前是**反推**的：编码帧 1136x2464 比真正的显示区大一圈（HEVC 按 CU
+对齐的填充），而这一圈多大协议里没有。我们只按机型量过一档并硬编码进
+`media::display_crop`，于是表外的机型就把整幅编码帧当可见区——后果不只是边缘一条噪声边，
+**触摸分母跟着错**（HID 报告的 0..1 是相对可见区的）。
+
+`com.apple.coredevice.feature.displayinfoupdates`（服务
+`com.apple.coredevice.deviceinfo`，流式）给的是权威值。整条推送（`display_info_probe`
+打下来的，字段名照原样）：
+
+```text
+{current: true,
+ backlightState: "activeOn",
+ orientation: {currentDeviceOrientationLocked: false,
+               currentDeviceNonFlatOrientation: "portrait",
+               currentDeviceOrientation: "portrait"},
+ displays: [
+   {displayId: 1, primary: true, external: false, name: "LCD", deviceName: "primary",
+    currentMode: {size: [1125, 2436], preferredUIScale: 3, refreshRate: 60,
+                  hdrMode: "standard", bitDepth: 8, colorGamut: "displayP3"},
+    nativeSize: [1080, 2340], bounds: [[0,0],[1125,2436]], frame: [[0,0],[1080,2340]],
+    physicalSize: [2.26891, 4.91597],            // 英寸
+    logicalScale: [1, 1], pointScale: 3,
+    nativeOrientation: "rot0", currentOrientation: "rot0",
+    type: {integrated: {}}, chromeIdentifier: "com.apple.dt.devicekit.chrome.phone3",
+    framebufferMaskIdentifier: "<UUID>", availableModes: [ 同上那一条 ]},
+   {displayId: 2, primary: false, external: true, name: "Wireless", deviceName: "wireless0",
+    nativeSize: [1136, 2448], currentMode: {size: [1136, 2448], pointScale 侧是 1, ...}},
+   {displayId: 3..6, name: "Wireless-1..4", 尺寸全零},   // 在册但没插
+ ]}
+```
+
+三个必须记住的点：
+
+1. **可见区取 `currentMode.size`，不是 `nativeSize`。** 这台设备上它们是两组数
+   （1125x2436 与 1080x2340），拿错的那一版会把画面裁掉一条真内容。
+2. **几何字段的 XPC 类型是 Double**，而 `displayId` 是 UInt64、`preferredUIScale` 与
+   `bitDepth` 是 Int64、`refreshRate` 是 Double。第一版解析器只认两种整数，于是
+   `currentMode.size` 一个都取不到，表现为"问到设备了却拿到 0x0、退回兜底表"，
+   而日志上完全看不出来——因为 `describe()` 打出来 `1125` 与 `1125.0` 长得一模一样。
+   类型是用探针把每个叶子的 XPC 类型打出来才看到的（`display_info_probe` 第一段输出）。
+   **教训：类型要问机器，不能看打印出来的样子猜。**
+3. **它是"订阅即给现状"，不是周期报。** 实测订阅后 +3ms 就推第一条，之后 21 秒内
+   一条都没有，直到我们超时；期间不转屏、不锁屏。所以"起流之前问一次"就够了，
+   产品路径也正是这么接的。要跟着转屏改尺寸得常驻订阅，而订阅必须独占一条连接
+   （`Channel::take_message` 不看消息 id 与 flags），那是另一件事。
+
+时序与推送次数的判据来自同一个探针：`共收到 1 次推送，重订 1 次`。外接那几块
+`Wireless-1..4` 尺寸全零，所以 `find(displayId)` 命中之后还得看宽高是否大于 0，
+否则"找到了"不等于"能用"——产品路径在宽高有一个为零时照样退回兜底表并打一行说明。
+
+顺带纠正两处旧措辞。§6 与 §11 把 1125x2436 叫"逻辑显示"，那是从代码字段名带出来的；
+设备自己的说法是**当前模式**（`currentMode.size`）的尺寸，而同一块屏另有一个
+`nativeSize`（这台设备 1080x2340），两者不是一回事。另外 §6 那条写的是"`get-display-info`
+报 1125x2436"——那是立项早期从 lockdown 那侧问的，与我们现在这条 CoreDevice feature
+**是两个不同的服务给了同一个数**，所以这一档的 1125x2436 有两处独立来源。
+
