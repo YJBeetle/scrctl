@@ -4,6 +4,10 @@
 
 命名沿用 `scr*` 前缀以复用 scrcpy 已建立的认知，CLI 人体工学也照 scrcpy 设计。
 
+离线自检由 GitHub Actions 跑（macOS / Ubuntu 各一格，外加 ASan+UBSan 一格），见
+`.github/workflows/offline-selftest.yml`。**真机那部分不在 CI 里**：一台设备同时只容得
+下一条流，起流、注入、保活这些只能插着手机手工跑，判据都写在 `docs/` 里。
+
 ## 它解决什么
 
 苹果生态里已有的两条路都不够：
@@ -70,7 +74,9 @@ VideoToolbox，而它只吃 2 字节的 NAL 长度前缀（上限 65535）——
 ## 状态
 
 镜像 + 操控（触摸 / 按键 / 键盘 / 剪贴板）已在真机跑通，MaaFramework 的 iOS 控制单元
-已在真机上 dlopen 验证。剩下的主要是工程化：CI、非 Apple 平台的实机验证、以及
+已在真机上 dlopen 验证。CI 已有（`.github/workflows/offline-selftest.yml`：macOS 与
+Ubuntu 各一格跑 `ctest`，另有一格 ASan+UBSan），但它只覆盖不需要真机的那部分——真机
+回归目前仍然只能人工跑。剩下的主要是工程化：非 Apple 平台的实机验证、以及
 `start_app` / `stop_app` 这类设备侧能力。
 
 ## 探针工具（研究用）

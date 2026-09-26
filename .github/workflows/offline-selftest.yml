@@ -1,0 +1,97 @@
+# 离线自检：`ctest` 里那批不需要真机的用例。
+#
+# 为什么要单独有一份：真机验证一次要占住一台 iPhone（同一台设备同时只容得下一条流），
+# 而绝大多数回归——隧道里 IPv6/UDP 的拼包与校验和、RTCP 各包的形状、XPC / HTTP2 /
+# bplist 的编解码、窗口坐标到设备坐标的映射——在离开手机的机器上就能判对错。
+# 这批用例恰好就是这几个月所有"看着像设备的问题"最后翻案成我们自己的 bug 的地方。
+#
+# 项数不写在这里（README 里也不写死）：`ctest --test-dir build -N` 数得出来。
+# 带 `SCRCTL_TEST_STREAM` 的那两项（真机录制的码流）在 CI 上没有输入文件，会自动跳过。
+name: offline-selftest
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ctest:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+          - name: Ubuntu
+            os: ubuntu-latest
+    # Ubuntu 这一格现在是探针，不是门槛：写这份 CI 的机器上没有 Linux 工具链，
+    # "非 Apple 平台能不能配置过、SDL2 的 find_package 走哪条分支"一条都没实测过，
+    # 而跨平台是硬要求——所以让它跑起来把差异报出来，但不拿未经检验的东西拦人。
+    # 等它连绿一阵，就把这一行删掉，让它变成真门槛。
+    continue-on-error: ${{ matrix.os != 'macos-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 装依赖（macOS）
+        if: runner.os == 'macOS'
+        # 与 README 里那行一致。openssl 是 keg-only，配置时要显式给前缀（下一步）。
+        run: brew install sdl2 openssl ffmpeg pkg-config
+
+      - name: 装依赖（Linux）
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake pkg-config libsdl2-dev libssl-dev \
+            libavcodec-dev libavutil-dev libswscale-dev
+
+      - name: 配置
+        # 不指定 -G：默认生成器总归在，而 Ninja 是否预装是 runner 镜像的事。
+        run: |
+          EXTRA=""
+          if [ "$(uname)" = "Darwin" ]; then
+            EXTRA="-DOPENSSL_ROOT_DIR=$(brew --prefix openssl)"
+          fi
+          cmake -B build -DCMAKE_BUILD_TYPE=Release $EXTRA
+
+      - name: 构建
+        run: cmake --build build --parallel
+
+      # 链接成功不等于跑得起来：这一步只证明可执行文件在自己的平台上能起。
+      # `--help` 在 SDL 初始化之前就到点了，所以无显示环境的 runner 也不需要屏幕。
+      - name: 可执行文件冒烟
+        run: ./build/scrctl --help >/dev/null
+
+      - name: 离线自检
+        run: ctest --test-dir build --output-on-failure
+
+  # 同一批用例在 ASan + UBSan 下再跑一遍。为什么值得单开一格：这仓库里全是手工
+  # 拼的字节缓冲（UDP 头、RTP 分片、XPC 序列化），越界与未对齐正是这类代码的默认
+  #  bug 形状，而这批用例不需要真机。
+  sanitizer:
+    name: ASan + UBSan
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 装依赖
+        run: brew install sdl2 openssl ffmpeg pkg-config
+
+      - name: 配置（Debug + 两个 sanitizer）
+        run: >
+          cmake -B build-san -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g"
+          -DOPENSSL_ROOT_DIR="$(brew --prefix openssl)"
+
+      - name: 构建
+        run: cmake --build build-san --parallel
+
+      - name: 离线自检
+        env:
+          UBSAN_OPTIONS: print_stacktrace=1
+        run: ctest --test-dir build-san --output-on-failure
