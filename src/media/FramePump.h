@@ -193,6 +193,8 @@ private:
     FramePump(scrctl::remote::Device &device, Options options, bool verbose);
     void loop();
     /// 停旧会话、起新会话。第一次调用（起流）与重起共用同一条路径。
+    /// 不 spawn 线程——线程只由 `start()` 起，为的是让"worker 会读的无锁字段"
+    /// 都能在线程开始跑之前写完（推导见 `start()` 的注释）。
     bool restart(std::string &err);
 
     scrctl::remote::Device &device_;

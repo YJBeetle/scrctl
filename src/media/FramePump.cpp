@@ -125,6 +125,9 @@ FramePump::FramePump(remote::Device &device, Options options, bool verbose)
 std::unique_ptr<FramePump> FramePump::start(remote::Device &device, const Options &options,
                                             std::string &err, bool verbose) {
     auto pump = std::unique_ptr<FramePump>(new FramePump(device, options, verbose));
+    // `restart()` 只把会话建起来，线程统一由这里最后起：worker 一跑起来就会读
+    // `record_`、`last_keyframe_ms_` 这些**没有锁保护**的字段，先 spawn 再写就是数据
+    // 竞争（review 的 P2——原来这三处写都在 `restart()` 之后，而那时线程已经在了）。
     if (!pump->restart(err)) {
         return nullptr;
     }
@@ -136,8 +139,10 @@ std::unique_ptr<FramePump> FramePump::start(remote::Device &device, const Option
         }
     }
     // 别在起流的一瞬间就判定"卡住"，那会儿还没有关键帧也正常。
+    // `last_packet_ms_` 由 `restart()` 自己写，这里不重复。
     pump->last_keyframe_ms_ = now_ms();
-    pump->last_packet_ms_ = now_ms();
+    pump->worker_running_ = true;
+    pump->worker_ = std::thread(&FramePump::loop, pump.get());
     return pump;
 }
 
@@ -199,9 +204,10 @@ bool FramePump::restart(std::string &err) {
     }
     last_packet_ms_ = now_ms();
 
+    // 第一次调用来自 `start()`，那时线程还没起——`worker_running_` 正好当
+    // "这一趟不是重起"的标记（否则会白计一次重起、还会打一行"已重起"）。
+    // 线程本身不在这里 spawn：见 `start()` 里那段顺序说明。
     if (!worker_running_) {
-        worker_running_ = true;
-        worker_ = std::thread(&FramePump::loop, this);
         return true;
     }
     {
