@@ -83,7 +83,8 @@ struct Options {
     /// scrcpy 的 --no-audio-playback：收流与解码照跑，只是不在电脑上出声。
     /// 录制或排障要"有音频数据但安静"时用它——本机夜里跑真机回归也靠它。
     bool no_audio_playback = false;
-    /// scrcpy 的 --audio-buffer=ms（默认同为 50）：攒够这么多毫秒才开始放。
+    /// scrcpy 的 --audio-buffer=ms（默认同为 50）。它同时是两件事的那一个数：
+    /// 开口放之前先攒多久，以及缓冲想维持的水位（高出它就开始悄悄排）。
     int audio_buffer_ms = 50;
 };
 
@@ -116,8 +117,9 @@ void usage(const char *argv0) {
         "                     想在电脑上静音只能用这一条或本机输出音量——设备给的\n"
         "                     audioSystemOutput 是**音量之前**的抽头，手机上按音量键\n"
         "                     按到零，镜像里照样是满幅（docs §17.2 ②）\n"
-        "  --audio-buffer=MS    攒够 MS 毫秒才开口放，默认 50。调小延迟更低但更容易\n"
-        "                     欠载（表现为断续）\n"
+        "  --audio-buffer=MS    攒够 MS 毫秒才开口放，默认 50。它也是缓冲想维持的\n"
+        "                     水位：囤到两倍就悄悄排回去，所以这个数同时决定\n"
+        "                     起始延迟与音画对齐的稳态。调小延迟更低但更容易欠载（断续）\n"
         "  --no-window          不起窗口只收流（脚本/自动化用）\n"
         "  --window-title TEXT  窗口标题（--title 同义）\n"
         "  --window-width N / --window-height N  显式窗口尺寸，默认按屏幕自动缩\n"
@@ -724,15 +726,16 @@ public:
     AudioOut &operator=(const AudioOut &) = delete;
     ~AudioOut() { close(); }
 
-    /// 打开默认输出设备。`preroll_frames` = 攒够这么多帧才真取（`--audio-buffer`）。
+    /// 打开默认输出设备。水位由泵自己定（`AudioPump::preroll_frames()`），这里不再
+    /// 从外面传毫秒数——否则"攒多久"这件事会有两处换算，而它们会分家。
     ///
     /// 为什么要 preroll：一开口就取，第一个回调必然赶上"缓冲里才两三个包"的时刻，
     /// 于是起始十几毫秒全是补静音的接缝，听感是一声咔。攒 50ms 再放就把它压成
     /// 起始延迟——这也是 scrcpy 那个默认值存在的原因。
-    bool open(scrctl::media::AudioPump &pump, std::size_t preroll_frames, std::string &err) {
+    bool open(scrctl::media::AudioPump &pump, std::string &err) {
         pump_ = &pump;
         channels_ = pump.channels() > 0 ? pump.channels() : 2;
-        preroll_ = preroll_frames;
+        preroll_ = pump.preroll_frames();
         SDL_AudioSpec want {};
         want.freq = static_cast<int>(pump.sample_rate());
         want.format = AUDIO_S16SYS;
@@ -818,12 +821,13 @@ public:
     ///
     /// `want_audio`：起不起音频腿。它是**另一条设备侧会话**，起不来或者这个构建
     /// 根本没有音频后端都不致命——没有声音的镜像仍然是可用的镜像，所以这里只打一行。
+    /// `audio_buffer_ms` = `--audio-buffer`：缓冲想维持的水位。
     bool start(const std::string &serial, const std::string &record_path, bool hw_decode,
-               bool watch_display, bool want_audio, std::string &err);
+               bool watch_display, bool want_audio, int audio_buffer_ms, std::string &err);
 
     /// 打开声卡。要和 `start()` 分开的唯一原因：`start()` 跑在 `SDL_Init` 之前
     /// （窗口还没建就得先有源），而 SDL 的音频子系统在那之后才有。
-    bool start_playback(int preroll_ms, std::string &err);
+    bool start_playback(std::string &err);
 
     void stop_playback() { audio_out_.close(); }
 
@@ -979,12 +983,13 @@ public:
                         rate(as.decoded, last_audio_decoded_),
                         rate(audio_out_.delivered(), last_audio_delivered_),
                         audio_out_.dev_open() ? SDL_GetCurrentAudioDriver() : "未开");
-            std::printf("      全程 解败 %llu 真丢 %llu 迟到 %llu 丢旧 %llu 补静音 %llu "
+            std::printf("      全程 解败 %llu 真丢 %llu 迟到 %llu 丢旧 %llu 调速 %llu 补静音 %llu "
                         "RR %llu/%llu 重起 %llu 缓冲 %zu 帧\n",
                         static_cast<unsigned long long>(as.decode_failed),
                         static_cast<unsigned long long>(as.seq_lost),
                         static_cast<unsigned long long>(as.out_of_order),
                         static_cast<unsigned long long>(as.dropped_stale),
+                        static_cast<unsigned long long>(as.steered),
                         static_cast<unsigned long long>(audio_out_.silence()),
                         static_cast<unsigned long long>(as.rtcp_sent),
                         static_cast<unsigned long long>(as.rtcp_failed),
@@ -1051,7 +1056,8 @@ private:
 LiveSource::~LiveSource() = default;
 
 bool LiveSource::start(const std::string &serial, const std::string &record_path, bool hw_decode,
-                       bool watch_display, bool want_audio, std::string &err) {
+                       bool watch_display, bool want_audio, int audio_buffer_ms,
+                       std::string &err) {
     auto dev = scrctl::remote::Device::establish(serial, err);
     if (!dev) {
         return false;
@@ -1141,6 +1147,7 @@ bool LiveSource::start(const std::string &serial, const std::string &record_path
             std::fprintf(stderr, "%s\n", scrctl::kNoAudioDecoderMessage);
         } else {
             scrctl::media::AudioPump::Options ao;
+            ao.target_backlog_ms = audio_buffer_ms;
             std::string aerr;
             audio_ = scrctl::media::AudioPump::start(*device_, ao, aerr);
             if (audio_ == nullptr) {
@@ -1156,14 +1163,12 @@ bool LiveSource::start(const std::string &serial, const std::string &record_path
     return true;
 }
 
-bool LiveSource::start_playback(int preroll_ms, std::string &err) {
+bool LiveSource::start_playback(std::string &err) {
     if (audio_ == nullptr) {
         err = "没有音频腿可放（--no-audio、起流失败，或这个构建没有音频后端）";
         return false;
     }
-    const std::size_t frames = static_cast<std::size_t>(
-        preroll_ms > 0 ? preroll_ms : 0) * static_cast<std::size_t>(audio_->sample_rate()) / 1000;
-    return audio_out_.open(*audio_, frames, err);
+    return audio_out_.open(*audio_, err);
 }
 
 bool LiveSource::control(double x, double y, bool down, std::string &err) {
@@ -1279,7 +1284,7 @@ int main(int argc, char **argv) {
         auto made = std::make_unique<LiveSource>();
         std::string err;
         if (!made->start(o.serial, o.record, o.hw_decode, !o.no_window && o.orientation < 0,
-                         !o.no_audio, err)) {
+                         !o.no_audio, o.audio_buffer_ms, err)) {
             std::fprintf(stderr, "起流失败: %s\n", err.c_str());
             // 设备在通话中会直接拒绝起流（code 9022）。实测这时它的会话表是空的
             // （getmediastreamserverstatus 回 sessions: []），所以不是"有条旧流占着"，
@@ -1306,7 +1311,7 @@ int main(int argc, char **argv) {
     if (live != nullptr && !o.no_audio && !o.no_audio_playback &&
         SDL_InitSubSystem(SDL_INIT_AUDIO) == 0) {
         std::string aerr;
-        if (!live->start_playback(o.audio_buffer_ms, aerr)) {
+        if (!live->start_playback(aerr)) {
             std::fprintf(stderr, "打不开音频出口: %s（音频腿照收，只是不出声）\n",
                          aerr.c_str());
         }

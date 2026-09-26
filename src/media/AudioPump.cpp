@@ -1,5 +1,6 @@
 #include "media/AudioPump.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <span>
@@ -147,6 +148,29 @@ std::size_t AudioPump::read(int16_t *dst, std::size_t frames) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (ring_.empty() || frames == 0) {
         return 0;
+    }
+    // 水位导向：高出目标就多跳过几帧最旧的，把囤着的东西排掉。分两档，因为"差一点"
+    // 与"差一截"的正确修法不一样：
+    //
+    //   * 差一截（超过两倍目标）：**一次砍回目标**。这时候囤着的东西多半是"窗口还没
+    //     开、声音先攒了半秒"那种没人听过的旧内容，整段丢掉是对的，而慢慢调速要花
+    //     二十几秒（每秒只能悄悄排掉 800 帧），那二十几秒里播放速率是偏快的、
+    //     听感是变调。实测这一档把收敛从 27 秒压到一次调用。
+    //   * 差一点（两倍以内，也就是漂移那种量级）：每次悄悄跳几帧。跳 8 帧是 21ms
+    //     回调的 0.8%，等于把速率调快千分之几——听不出，但它能把每小时几十毫秒的
+    //     漂移持续排掉而永远不必做一次明显的剪切。
+    std::size_t skip = 0;
+    if (used_ > target_frames_ && used_ >= frames) {
+        // `used_ >= frames` 那一判不是啰嗦：不够给的时候 `used_ - frames` 会下溢成
+        // 一个巨大值，`skip` 反而被放行到上限。
+        const std::size_t excess = used_ - target_frames_;
+        skip = used_ > target_frames_ * 2 ? excess : std::min<std::size_t>(excess / 20, 8);
+        skip = std::min(skip, used_ - frames);  // 别把这次要给的帧也算进跳过里
+    }
+    if (skip > 0) {
+        read_ = (read_ + skip) % kRingCapacityFrames;
+        used_ -= skip;
+        stats_.steered += skip;
     }
     const std::size_t take = frames < used_ ? frames : used_;
     for (std::size_t f = 0; f < take; ++f) {

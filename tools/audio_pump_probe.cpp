@@ -45,8 +45,14 @@
 // 所以"视频腿重起会连带杀音频"与发不发 stopAll 无关，是设备侧的会话表本身就这样。
 // stopAll 那一条留着只是让它更早更确定。结论与对策写在 docs §17.2 ⑤。
 //
+// `--realtime` 是给"水位导向"这一条单独造的尺：默认那档取数远远慢于实时（200ms 才取
+// 960 帧），环永远是顶满的，于是"缓冲"这一位量的到底是消费方还是导向逻辑说不清。
+// 这一档改成每 10ms 取 480 帧——生产与消费的标称速率**相等**（都是 48000 帧/秒），
+// 所以缓冲水位的任何变化都只可能来自导向本身。判据：开局攒下的那一截（实测 4000~5000
+// 帧）应该在十几秒内降到目标水位（默认 50ms = 2400 帧）然后待住不动。
+//
 // 用法：audio_pump_probe [--seconds 30] [--with-video] [--mute] [--kill-at 8]
-//                       [--revideo-at N] [-v] [UDID]
+//                       [--revideo-at N] [--realtime] [-v] [UDID]
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -82,6 +88,8 @@ int main(int argc, char **argv) {
     bool mute = false;
     int kill_at = -1;
     int revideo_at = -1;
+    bool realtime = false;
+    int late_open = 0;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "-v" || a == "--verbose") {
@@ -94,13 +102,18 @@ int main(int argc, char **argv) {
             kill_at = std::atoi(argv[++i]);
         } else if ((a == "--revideo-at") && i + 1 < argc) {
             revideo_at = std::atoi(argv[++i]);
+        } else if (a == "--realtime") {
+            realtime = true;
+        } else if (a == "--late-open" && i + 1 < argc) {
+            late_open = std::atoi(argv[++i]);
         } else if ((a == "--seconds" || a == "-s") && i + 1 < argc) {
             seconds = std::atoi(argv[++i]);
         } else if (a == "-h" || a == "--help") {
             std::printf(
                 "用法: %s [--seconds 30] [--with-video] [--mute] [--kill-at 8] [-v] [UDID]\n"
                 "  只跑音频腿看 ①②③；带 --with-video 看 ④；带 --mute 先把设备静音再看"
-                "  包还来不来（测完按回音量）；--kill-at N 在第 N 秒发一次 stopAll，"
+                "  包还来不来（测完按回音量）；--realtime 按实时速率取数（量水位）；"
+                "--kill-at N 在第 N 秒发一次 stopAll，"
                 "量音频掉多久。全程不开窗口、本机不出声"
                 "（PCM 只取出来算峰值，不接任何音频设备）。\n",
                 argv[0]);
@@ -160,6 +173,14 @@ int main(int argc, char **argv) {
     }
 
     const uint64_t t0 = now_ms();
+    // `--late-open N`：先把消费方按住 N 秒再开始按实时取。这一档模拟的是产品里真实
+    // 存在的那段空档（音频腿在起流路径里就起了，声卡要等 SDL_Init 与第一帧之后才开），
+    // 它会在环里留下 100~300ms 的存量——而生产与消费的标称速率相等，**存量不会自己
+    // 排掉**，那就是永久性的音画不同步。水位导向要修的就是这个，所以判据是：
+    // 按住 N 秒之后，缓冲能不能在几秒内从顶（24000）回到目标（默认 2400）。
+    const uint64_t drain_from_ms = now_ms() + static_cast<uint64_t>(late_open) * 1000;
+    auto next_drain = std::chrono::steady_clock::now();
+
     scrctl::media::AudioPump::Stats prev {};
     uint64_t last_change_ms = t0;
     uint64_t last_print_ms = t0;
@@ -186,7 +207,23 @@ int main(int argc, char **argv) {
     uint64_t longest_audio_silence_ms = 0;
     uint64_t restarts_at_kill = 0;
     while ((now_ms() - t0) / 1000 < static_cast<uint64_t>(seconds)) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        const bool draining = !realtime || now_ms() >= drain_from_ms;
+        if (realtime && draining) {
+            // 必须按**绝对时刻**追节拍：`sleep_for(10ms)` 每次实际睡到 13~15ms，
+            // 于是这个消费者只有标称速率的七成——环顶满、全程走"丢最旧"那条路，
+            // 水位导向被盖住，测出来的"水位不动"是探针自己的消费速率问题不是导向的。
+            next_drain += std::chrono::milliseconds(10);
+            // 落后超过 100ms（比如被打印或调度卡住）就重新对齐：连补几十个节拍只会
+            // 把这一轮要取的帧数一次性要光，反而把环掏空。
+            if (std::chrono::steady_clock::now() - next_drain > std::chrono::milliseconds(100)) {
+                next_drain = std::chrono::steady_clock::now();
+            }
+            std::this_thread::sleep_until(next_drain);
+        } else if (!realtime) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
         // 照 `FramePump::restart()` 那个形状发一次 stopAll：它停的是设备上**所有**会话，
         // 所以这一发之后音频腿也死了。要量的就是音频自己多久才发现、发现了多久才恢复。
         if (kill_at >= 0 && static_cast<int>((now_ms() - t0) / 1000) >= kill_at &&
@@ -231,7 +268,8 @@ int main(int argc, char **argv) {
         }
         // 把缓冲里的东西取出来只算峰值：不取就会一直堆到 0.5 秒然后开始丢旧帧，
         // 那样"丢旧帧"这一位会被探针自己的不作为污染。
-        const std::size_t got = audio->read(scratch.data(), scratch_frames);
+        const std::size_t want = (realtime && draining) ? 480 : scratch_frames;
+        const std::size_t got = (realtime && !draining) ? 0 : audio->read(scratch.data(), want);
         if (got > 0) {
             for (std::size_t i = 0; i < got * 2; ++i) {
                 const std::size_t a = scratch[i] < 0 ? -static_cast<std::size_t>(scratch[i])
@@ -280,7 +318,7 @@ int main(int argc, char **argv) {
             window_peak = 0;
             std::printf(
                 "+%3llus 包=%llu 解出=%llu 解败=%llu 非音频=%llu 缺口=%llu 真丢=%llu "
-                "迟到=%llu RR=%llu/%llu 丢旧=%llu 重起=%llu 缓冲=%zu帧 静默=%llus "
+                "迟到=%llu RR=%llu/%llu 丢旧=%llu 调速=%llu 重起=%llu 缓冲=%zu帧 静默=%llus "
                 "本段峰值=%zu\n",
                 static_cast<unsigned long long>((now_ms() - t0) / 1000),
                 static_cast<unsigned long long>(st.packets),
@@ -293,6 +331,7 @@ int main(int argc, char **argv) {
                 static_cast<unsigned long long>(st.rtcp_sent),
                 static_cast<unsigned long long>(st.rtcp_failed),
                 static_cast<unsigned long long>(st.dropped_stale),
+                static_cast<unsigned long long>(st.steered),
                 static_cast<unsigned long long>(st.restarts), audio->buffered_frames(),
                 static_cast<unsigned long long>((now_ms() - last_change_ms) / 1000),
                 window_peak);

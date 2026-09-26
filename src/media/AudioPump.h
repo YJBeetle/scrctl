@@ -40,6 +40,19 @@ public:
         /// ELD 一帧的采样数。它同时是 ASBD 的 mFramesPerPacket——480 才是 ELD，
         /// 1024 是 LC，写错这一位解码器会给出两倍的采样数（docs §17.1）。
         int frame_length = 480;
+        /// 环形缓冲想维持的水位（毫秒），也是"攒够这么多才开口放"的那个数。
+        ///
+        /// 实测（`--realtime --late-open 4` 那一臂，docs §17.2 ⑥）：开局按住消费方
+        /// 4 秒让环顶满（24000 帧 = 500ms），放开之后导向应当在**一次调用内**把它
+        /// 砍回目标量级（实测 24000 -> 1840），之后稳定在 1000~2000 帧。
+        ///
+        /// 为什么需要一个**目标水位**而不是"能囤多少囤多少"：生产与消费的标称速率
+        /// 相等（都是 48kHz），所以缓冲里囤着的东西**永远不会自己排掉**。而开局就有
+        /// 一段只进不出的时间（音频腿在起流路径里就起了，声卡要等 `SDL_Init` 之后才
+        /// 开，中间还隔着等第一帧），那一段攒下来的 100~300ms 会一路留着——镜像里
+        /// 的声音就比画面晚这么多，而且只涨不跌（时钟漂移每小时再涨约 0.5 秒，
+        /// 到 0.5 秒的环顶之后开始丢旧帧）。所以取的时候要按水位导向。
+        int target_backlog_ms = 50;
     };
 
     struct Stats {
@@ -65,6 +78,9 @@ public:
         std::uint64_t rtcp_failed = 0;
         /// 缓冲满时被丢掉的**最旧帧**数（不是包数：一帧 = 一个声道采样点组）。
         std::uint64_t dropped_stale = 0;
+        /// 水位导向多丢掉的帧数（见 `Options::target_backlog_ms`）。它涨得慢是正常
+        /// 的——那是漂移在收敛；它一路猛涨说明消费方跟不上，那时该看的是出口。
+        std::uint64_t steered = 0;
         std::uint64_t restarts = 0;
     };
 
@@ -95,6 +111,10 @@ public:
     /// 会一直在欠载与补静音之间跳。
     [[nodiscard]] std::size_t buffered_frames() const;
 
+    /// 开口放之前要先攒够的帧数（= `target_backlog_ms` 换算）。出口用它，别自己
+    /// 再拿毫秒算一遍，否则两处换算会分家。
+    [[nodiscard]] std::size_t preroll_frames() const { return target_frames_; }
+
     [[nodiscard]] Stats stats() const;
     [[nodiscard]] std::uint16_t receiver_port() const;
     [[nodiscard]] std::uint8_t payload_type() const;
@@ -111,7 +131,12 @@ public:
 
 private:
     AudioPump(remote::Device &device, Options options)
-        : device_(device), options_(std::move(options)) {}
+        : device_(device), options_(std::move(options)) {
+        target_frames_ = static_cast<std::size_t>(options_.target_backlog_ms > 0
+                                                      ? options_.target_backlog_ms
+                                                      : 0) *
+                         static_cast<std::size_t>(options_.sample_rate) / 1000;
+    }
 
     bool start_session(std::string &err);
     void loop();
@@ -130,6 +155,7 @@ private:
     std::size_t write_ = 0;
     std::size_t read_ = 0;
     std::size_t used_ = 0;
+    std::size_t target_frames_ = 0;
     Stats stats_;
 };
 
