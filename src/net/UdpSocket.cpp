@@ -1,5 +1,6 @@
 #include "net/UdpSocket.h"
 
+#include <algorithm>
 #include <chrono>
 
 namespace scrctl::net {
@@ -15,6 +16,22 @@ void put16(uint8_t *p, uint16_t v) {
 }
 
 }  // namespace
+
+std::vector<uint8_t> build_udp_datagram(uint16_t local_port, uint16_t peer_port,
+                                        const uint8_t src[16], const uint8_t dst[16],
+                                        const std::vector<uint8_t> &payload) {
+    std::vector<uint8_t> dgram(kUdpHeaderLen + payload.size());
+    put16(dgram.data(), local_port);
+    put16(dgram.data() + 2, peer_port);
+    put16(dgram.data() + 4, static_cast<uint16_t>(dgram.size()));
+    put16(dgram.data() + 6, 0);  // 校验和先置零，算完回填
+    std::copy(payload.begin(), payload.end(), dgram.begin() + kUdpHeaderLen);
+    const uint16_t sum = l4_checksum(src, dst, dgram.data(), dgram.size(), kNextHeaderUdp);
+    // IPv6 里 UDP 校验和为 0 的含义是"没算"，对端会直接丢包，所以算出 0 也要
+    // 按规范改写成 0xFFFF（它等价于全一的补码）。
+    put16(dgram.data() + 6, sum == 0 ? 0xFFFF : sum);
+    return dgram;
+}
 
 UdpSocket::~UdpSocket() {
     if (bound_) {
@@ -41,18 +58,8 @@ bool UdpSocket::send(const std::vector<uint8_t> &payload, uint16_t peer_port, st
         err = "套接字没绑定就发";
         return false;
     }
-    std::vector<uint8_t> dgram(kUdpHeaderLen + payload.size());
-    put16(dgram.data(), local_port_);
-    put16(dgram.data() + 2, peer_port);
-    put16(dgram.data() + 4, static_cast<uint16_t>(dgram.size()));
-    put16(dgram.data() + 6, 0);  // 校验和先置零，算完回填
-    dgram.insert(dgram.end(), payload.begin(), payload.end());
-    const uint16_t sum =
-        l4_checksum(stack_.local_addr().data(), stack_.peer_addr().data(), dgram.data(),
-                    dgram.size(), kNextHeaderUdp);
-    // IPv6 里 UDP 校验和为 0 的含义是"没算"，对端会直接丢包，所以算出 0 也要
-    // 按规范改写成 0xFFFF（它等价于全一的补码）。
-    put16(dgram.data() + 6, sum == 0 ? 0xFFFF : sum);
+    const auto dgram = build_udp_datagram(local_port_, peer_port, stack_.local_addr().data(),
+                                          stack_.peer_addr().data(), payload);
     return stack_.send(stack_.wrap(dgram, kNextHeaderUdp), err);
 }
 

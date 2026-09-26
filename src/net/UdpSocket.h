@@ -11,6 +11,18 @@
 
 namespace scrctl::net {
 
+/// 组一个 UDP 数据报：8 字节头 + 载荷，校验和按 IPv6 伪头算好回填。
+///
+/// 单独拎成纯函数是因为这里曾经是错的：头缓冲区按"头+载荷"的长度申请却没往里
+/// 写载荷，载荷被 append 到了尾巴上——结果是 UDP 长度字段比实际字节少一截、
+/// 声明的载荷全是零、校验和又按两倍的长度算。设备内核在校验和这一步就丢了，
+/// 不回错、不计数，症状只是"对端从来没收到过任何东西"。
+/// 见 tests/net_test.cpp 里对着这四点写的回归测。
+[[nodiscard]] std::vector<uint8_t> build_udp_datagram(uint16_t local_port, uint16_t peer_port,
+                                                      const uint8_t src[16],
+                                                      const uint8_t dst[16],
+                                                      const std::vector<uint8_t> &payload);
+
 /// 隧道内的一个 UDP 端点。
 ///
 /// 存在的唯一理由：CoreDevice 的媒体流是设备**反向推**到我们隧道地址上的某个
