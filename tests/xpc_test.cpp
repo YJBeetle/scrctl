@@ -127,6 +127,48 @@ void roundtrip(const Value &v, const std::string &what) {
     check(encode(*back) == wire, what + " 往返字节一致");
 }
 
+/// 大 `Data` 必须解得开——这条是被真机撑出来的回归测试。
+///
+/// 判据用 5 MiB：**比旧的 4 MiB 元素上限大，比旧的 8 MiB 缓冲区上限小**，正好卡在
+/// "旧代码必挂、新代码必须过"的那一段。为什么不是随手挑一个大数：设备的截图回信里
+/// PNG 是内联 Data（实测 4,633,963 字节），旧上限把这种正常回信判成畸形，
+/// 症状是"复杂画面上截图服务必然失败"——测试要钉的就是这个尺寸段。
+void test_big_inline_data() {
+    std::printf("\n== 内联大 Data（截图那一档） ==\n");
+    std::vector<uint8_t> blob(5u << 20);
+    for (std::size_t i = 0; i < blob.size(); ++i) {
+        blob[i] = static_cast<uint8_t>(i * 31 + 7);
+    }
+    auto v = make_dict();
+    dict_set(v, "image", make_data(blob));
+    roundtrip(v, "5 MiB 的 Data");
+
+    // 整条消息也要能过：`decode_message` 自己还有一道 body_len 的关卡。
+    Message m;
+    m.body = v;
+    const auto wire = encode_message(m.flags, m.message_id, &m.body);
+    std::string err;
+    std::size_t used = 0;
+    Message back;
+    const auto st = decode_message(wire, back, used, err);
+    check(st == Status::Ok, "5 MiB 的消息整条解得开: " + err);
+    if (st == Status::Ok) {
+        const auto *got = back.body.find("image");
+        check(got != nullptr && got->data.size() == blob.size(), "字节数对得上");
+        check(got != nullptr && !got->data.empty() && got->data[12345] == blob[12345],
+              "中间字节没被挪动");
+    }
+    // 截断的缓冲区不能当成"再来点就够了"：长度字段说 5 MiB 而手里只有 1 KiB 时，
+    // 必须是干净的失败，不是拿 size_t 下溢出来的长度去读。
+    std::string e2;
+    std::size_t u2 = 0;
+    Message m2;
+    const std::vector<uint8_t> cut(wire.begin(), wire.begin() + 1024);
+    const auto st2 = decode_message(cut, m2, u2, e2);
+    check(st2 == Status::NeedMore || st2 == Status::Malformed,
+          "截断的大消息给出干净结局而不是崩: " + e2);
+}
+
 void test_scalars() {
     std::printf("\n== 标量的逐字节形态 ==\n");
     expect_bytes(make_null(), "00100000", "null");
@@ -431,6 +473,7 @@ void test_uuid_text_bounds() {
 }  // namespace
 
 int main() {
+    test_big_inline_data();
     test_scalars();
     test_containers();
     test_golden_decode();

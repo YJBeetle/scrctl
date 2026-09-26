@@ -1,6 +1,7 @@
 #include "xpc/XpcValue.h"
 
 #include <algorithm>
+#include <string>
 #include <cstdio>
 #include <cstring>
 
@@ -9,10 +10,19 @@ namespace {
 
 /// 递归深度上限。设备回的东西是不可信输入，字典套字典的炸弹必须先挡住。
 constexpr int kMaxDepth = 64;
-/// 单个缓冲区允许的上限，跟 plist / json 模块保持一致。
-constexpr std::size_t kMaxBuffer = 8u << 20;
-/// 字符串 / 数据的长度字段允许的最大值。
-constexpr uint32_t kMaxLen = 4u << 20;
+/// 单个缓冲区允许的上限。
+///
+/// **这个数字是被截图撑开的**：`capturescreenshot` 的回信里 PNG 是以 XPC `Data`
+/// **内联**在消息里的（不走文件流），而这台 1125x2436 的设备在放视频时一张截图就是
+/// **4,633,963 字节**（实测，错误消息里打出来的声明长度）。原来那对 8 MiB / 4 MiB
+/// 的天花板把这种正常回信判成畸形，症状是"截图服务在用复杂画面时必然失败"。
+///
+/// 上限本身只是防"长度字段是垃圾时申请一个天文数字的内存"，而真正的越界读已经被
+/// `Reader::take()` 按剩余字节挡住了——所以它只需要"远高于任何真实载荷"，不需要精确。
+constexpr std::size_t kMaxBuffer = 32u << 20;
+/// 字符串 / 数据的长度字段允许的最大值。**故意只有一处定义**：
+/// 一个元素不可能比整条消息还长，写成两个数就会漂移（这次漂移出来的就是那个 bug）。
+constexpr uint32_t kMaxLen = static_cast<uint32_t>(kMaxBuffer);
 
 std::string u64_to_string(uint64_t v) {
     if (v == 0) {
@@ -333,7 +343,9 @@ bool decode_into(Reader &r, Value &out, int depth) {
                 return false;
             }
             if (len > kMaxLen) {
-                r.set_err("数据段长度不合理");
+                // 把两个数都打出来：只说"不合理"的话，下一步还得再跑一遍才知道差多少。
+                r.set_err("数据段长度不合理: 声明 " + std::to_string(len) + " 字节，上限 " +
+                          std::to_string(kMaxLen));
                 return false;
             }
             Value v;
