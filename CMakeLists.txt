@@ -1,4 +1,8 @@
-cmake_minimum_required(VERSION 3.28)
+# 3.20 而不是更高：这一条决定的是"哪些机器还能构建"。跨平台是硬要求，而发行版自带的
+# cmake 普遍比 Homebrew 的老（Ubuntu 22.04 是 3.22，Debian 11 是 3.18）。仓库里用到的
+# 最"新"的特性是 pkg_check_modules 的 IMPORTED_TARGET（3.16）与 C++20（3.12），
+# 没有理由为一个用不上的版本号把一半潜在平台挡在外面。
+cmake_minimum_required(VERSION 3.20)
 
 project(scrctl
         VERSION 0.1.0

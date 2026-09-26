@@ -19,6 +19,7 @@
 // "两条独立的流抢一份资源"和"同一条流被复制了一份"。
 //
 // 用法：two_session_probe [--gap MS] [--verbose]
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <memory>

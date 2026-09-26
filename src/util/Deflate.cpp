@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "util/Deflate.h"
 
 namespace scrctl::util {

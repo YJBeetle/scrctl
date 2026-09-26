@@ -4,6 +4,7 @@
 #include <AudioToolbox/AudioToolbox.h>
 
 #include <cctype>
+#include <cstdlib>
 #include <cstring>
 
 namespace scrctl {

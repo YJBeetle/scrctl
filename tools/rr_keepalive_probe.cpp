@@ -38,6 +38,7 @@
 //
 // 存活信号仍然用设备自己每秒一个的 SR（被动、不引入流量）；`poll` 臂会引入 RPC，所以
 // 它的对照意义是"这一臂能不能活过 20 秒"，而不是"SR 数说明什么"。
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>

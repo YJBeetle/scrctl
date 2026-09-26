@@ -15,6 +15,7 @@
 //
 // 用法：rtcp_probe [--seconds N] [--death] [--verbose]
 //   --death  一边打包一边每秒问一次会话表，把"在/不在"标在同一条时间轴上
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <map>

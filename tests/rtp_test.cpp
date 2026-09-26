@@ -1,5 +1,6 @@
 // RTP 拆包自检。全部用手工构造的包，不打真机——这样每一处偏移错了都会立刻
 // 变成一条明确的失败，而不是"画面有点糊"。
+#include <algorithm>
 #include <cstdio>
 #include <cstdint>
 #include <span>

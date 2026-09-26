@@ -10,6 +10,7 @@
 // 用法：audio_decode_probe IN.rtp OUT.wav [采样率] [声道]
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 

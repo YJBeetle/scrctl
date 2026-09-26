@@ -1,5 +1,6 @@
 // XPC 二进制对象图自检。全部离线：RemoteXPC 那一段一旦接上真机就已经没有
 // 单独验编解码的机会了，所以对齐、长度前缀这些坑必须在没有设备的时候先钉死。
+#include <algorithm>
 #include <cstdio>
 #include <span>
 #include <string>
