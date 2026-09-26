@@ -872,6 +872,63 @@ pasteboard 同），唯一还在动的是一条**隧道维护**连接：
 而苹果是 100/s，中间还夹着探针单循环轮流收两条腿的取样偏差），但"死后还在来包"
 这个定性是稳的。
 
+### 根因找到了，而且答案是设备自己说的：我们的 RTCP 一个都没到
+
+上面那一串"逐个变量控住再重测"的臂，全部建立在同一个从没验过的前提上——
+**"我们发出去的 RTCP 到了设备"**。它错了。判它的仪器不是抓包（用户态隧道抓不到，
+见本节开头），而是**设备自己的 os_log**：`pymobiledevice3 syslog live -o 文件`
+（非 root 可用）能流式收到设备上 `dtremotedisplayd`、`avconferenced`、`kernel`
+三个进程的明文日志，而媒体会话就是它们在管的。
+
+起一条 20 秒租期的流、按 `--what rctlrr --hz 20` 发了 **1041 个 RTCP** 之后，
+设备在死亡那一刻依次打出这四行：
+
+```text
+kernel  : udp connect: [::1:62073<->::2:56006] interface: utun7 (skipped: 1025)
+avconferenced[VCMediaStream [ERROR] checkRTCPPacketTimeoutAgainstTime:lastReceivedPacketTime:
+                    Last RTCP packet receive time:nan
+dtremotedisplayd   : streamDidRTCPTimeOut(_:): AVC[1183494379] RTCP Timeout
+kernel  : udp_connection_summary [...] process: avconferenced:21675
+          Duration: 20.081 sec  bytes in/out: 0/1772803  pkts in/out: 0/1864
+          rxnospace pkts/bytes: 0/0  so_error: 0
+```
+
+**`pkts in: 0`。** 那条 UDP socket 收进 1864 个包（我们收到的 RTP），收进来 0 个，
+而且**没有任何丢弃计数**（`rxnospace 0`、`so_error 0`）——不是到了被丢，是根本没到 PCB。
+`lastReceivedPacketTime` 是 `nan`（从未被赋值），于是触发 `streamDidRTCPTimeOut`，
+于是会话被摘。
+
+这一条同时把两件事翻正、把八件事解释干净：
+
+- **"20 秒是 RTCP 空闲超时"这个最初读法是对的**。后来我说它被推翻了，那句话只对了
+  一半：`RTCPTimeoutInterval` 的确就是我们在请求里报的 `timeout`（所以报多少秒死多少秒
+  这条测量没错），但**计时的机制确实是"多久没收到 RTCP"**，不是无条件倒计时。
+  错的是我由此得出的"设备不看我们发什么"。
+- **上面那八条否证一次性全解释完了**：LTRP、VRAE、音频腿、配对令牌、宿主连接、
+  displayinfoupdates 订阅、HID 附着、offer 原文直发——报什么形状都没用，
+  因为一个字节都没落到那个 socket 上。这批臂不是白跑（它们把"请求侧差异"这个变量
+  真的钉死了），但它们的**结论理由**要换成这一条。
+- **凡是"设备不理我们发的 RTCP"的旧结论都要重读**，尤其是关键帧请求那一串
+  （PLI 无反应、FIR 在 `allowRTCPFB=1` 下仍无反应）。**产品后果**：我们今天
+  **根本没有可用的关键帧请求路径**，序号缺口之后的恢复全靠下一帧 IDR 自己来，
+  而 docs 里那条"设备不响应 PLI/FIR"不是设备的态度，是我们发包没到。
+
+### 这一轮已经排除掉的嫌疑（不需要设备也能排除的部分）
+
+按"包为什么没到"能有的四个位置逐个查，其中三个已经在手的数据里排掉了：
+
+| 嫌疑 | 怎么排的 | 结果 |
+| --- | --- | --- |
+| 目的端口错（发到没人收的端口） | 设备 `udp connect` 那行的四元组 vs 探针打印的 answer：设备绑 `::1:62073` 并 connect 到 `::2:56006`；我们这侧 `connection.sender.port=62073`、自己的收流端口 56006 | **两边逐字一致**，我们发的就是它 connect 的那个元组 |
+| IPv6/UDP 头或校验和算错，被内核静默丢 | 拿苹果抓包里那个**设备确实收进了**的 32 字节 RCTL 当金标准，喂我们的 `l4_checksum`（`tests/net_test.cpp`） | 算出 **0xb212**，与抓包字段一致；回验也得 0 —— 封装没错 |
+| 隧道不往设备方向投递 | 同一条隧道、同一个 `utun7` 上，我们的 **TCP** 是从我们这边到达设备 socket 的（`dtremotedisplayd{Network}: nw_listener handleInbound ... interface: utun7`） | 隧道至少对 TCP 是双向通的 |
+| 源地址/源端口不符 | `UdpSocket::send()` 用 `local_port_` 填源端口，而 `receiver_port()` 返回的就是同一个 `local_port_`，也就是我们写进请求 `receiverPort` 的那个数 | 同源同端口，与 connect 的对端一致 |
+
+还没排掉的：**同一个隧道上客户端→设备的 UDP 到底通不通**。这一条只能问设备，
+仪器已经备好（`--udp-canary`：往设备一个确定没人监听的端口打三个包，看它回不回
+ICMPv6 端口不可达）。三种结果各有含义，写在探针的注释里。
+
+
 
 **剩下的字节级差异只有一处**，在 RCTL 那个字段上。下表是拿苹果那 1469 个 RCTL 和它当时刚收到
 的视频包逐个对齐出来的，不是推的：
