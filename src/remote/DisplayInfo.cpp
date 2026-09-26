@@ -1,8 +1,11 @@
 #include "remote/DisplayInfo.h"
 
+#include <chrono>
 #include <cstdio>
 #include <random>
 #include <span>
+#include <thread>
+#include <utility>
 
 #include "remote/Device.h"
 
@@ -66,6 +69,23 @@ bool as_pair(const xpc::Value *v, int &w, int &h) {
     w = static_cast<int>(a);
     h = static_cast<int>(b);
     return true;
+}
+
+/// 流式 feature 的消息体：参数裹在 actualInput 下，外加一个客户端自己生成的
+/// sideChannel UUID（设备拿它认这条订阅归谁）。形状与 streamapplist 那条一致。
+///
+/// 每次订阅都要一个新的 UUID：重订时拿同一个号，设备侧那两条订阅就分不清彼此。
+[[nodiscard]] xpc::Value stream_input() {
+    std::vector<uint8_t> side(16);
+    for (auto &b : side) {
+        b = static_cast<uint8_t>(std::random_device {} ());
+    }
+    auto proxy = xpc::make_dict();
+    xpc::dict_set(proxy, "sideChannel", xpc::make_uuid(std::span<const uint8_t>(side)));
+    auto input = xpc::make_dict();
+    xpc::dict_set(input, "actualInput", xpc::make_dict());
+    xpc::dict_set(input, "streamProxy", std::move(proxy));
+    return input;
 }
 
 }  // namespace
@@ -139,17 +159,7 @@ std::optional<DisplayInfo> fetch_display_info(Device &device, std::string &err, 
     if (conn == nullptr) {
         return std::nullopt;
     }
-    // 流式 feature 的消息体：参数裹在 actualInput 下，外加一个客户端自己生成的
-    // sideChannel UUID（设备拿它认这条订阅归谁）。形状与 streamapplist 那条一致。
-    std::vector<uint8_t> side(16);
-    for (auto &b : side) {
-        b = static_cast<uint8_t>(std::random_device {} ());
-    }
-    auto proxy = xpc::make_dict();
-    xpc::dict_set(proxy, "sideChannel", xpc::make_uuid(std::span<const uint8_t>(side)));
-    auto input = xpc::make_dict();
-    xpc::dict_set(input, "actualInput", xpc::make_dict());
-    xpc::dict_set(input, "streamProxy", std::move(proxy));
+    const auto input = stream_input();
 
     std::optional<DisplayInfo> out;
     std::string parse_err;
@@ -169,6 +179,136 @@ std::optional<DisplayInfo> fetch_display_info(Device &device, std::string &err, 
         err = parse_err;
     }
     return std::nullopt;
+}
+
+
+// ------------------------------------------------------- 常驻订阅 ----
+
+namespace {
+
+/// 单轮等待上限。它同时就是**退出延迟**：循环只在两轮之间看一眼停止标志，
+/// 所以 Ctrl-C 最多等这么久。再长就会让人觉得窗口卡住了。
+constexpr int kPollMs = 250;
+/// 重订之间的间隔。设这么短是因为转屏引起的订阅作废要立刻补上，否则画面会
+/// 停在旧朝向好几秒。
+constexpr int kReconnectGapMs = 500;
+/// 连着多少次订不上就认了。设备拔走之后 `connect` 会一直失败，不收手就是
+/// 一个每半秒撞一次门的死循环。
+constexpr int kMaxFailedResubscribes = 8;
+
+}  // namespace
+
+DisplayWatcher::DisplayWatcher(Device &device, uint64_t display_id, bool verbose)
+    : device_(device), display_id_(display_id), verbose_(verbose) {}
+
+std::unique_ptr<DisplayWatcher> DisplayWatcher::start(Device &device, uint64_t display_id,
+                                                      std::string &err, bool verbose) {
+    auto watcher = std::unique_ptr<DisplayWatcher>(new DisplayWatcher(device, display_id, verbose));
+    // 先订上再放线程：订不上就是订不上，这时候返回 nullptr 让调用方退回"起流前
+    // 问一次"那一档，比派一个线程去后台反复撞一扇门好。
+    if (!watcher->resubscribe(err)) {
+        return nullptr;
+    }
+    watcher->alive_.store(true);
+    watcher->worker_ = std::thread(&DisplayWatcher::loop, watcher.get());
+    return watcher;
+}
+
+DisplayWatcher::~DisplayWatcher() {
+    stop_.store(true);
+    if (worker_.joinable()) {
+        worker_.join();
+    }
+}
+
+DisplayWatcher::State DisplayWatcher::latest() const {
+    std::lock_guard<std::mutex> lock(mu_);
+    return latest_;
+}
+
+const Display *DisplayWatcher::pick(const DisplayInfo &info) const {
+    const Display *d = info.find(display_id_);
+    if (d == nullptr) {
+        d = info.primary();  // id 对不上退回主屏：外接屏的 id 是设备分配的，不保证连续
+    }
+    // "找到了"不等于"能用"：那几块 Wireless-N 在册但尺寸全零。
+    if (d != nullptr && (d->width <= 0 || d->height <= 0)) {
+        return nullptr;
+    }
+    return d;
+}
+
+bool DisplayWatcher::resubscribe(std::string &err) {
+    conn_ = device_.connect(kService, err, verbose_);
+    if (conn_ == nullptr) {
+        return false;
+    }
+    if (!conn_->subscribe(kFeature, "", stream_input(), err)) {
+        conn_.reset();
+        return false;
+    }
+    return true;
+}
+
+void DisplayWatcher::publish(const xpc::Value &element) {
+    std::string err;
+    const auto info = parse_display_info(element, err);
+    if (info == std::nullopt) {
+        return;  // 解不动的这一条跳过：常驻订阅没有"失败就退出"的余地
+    }
+    const Display *d = pick(*info);
+    if (d == nullptr) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(mu_);
+    if (d->orientation == latest_.orientation && d->width == latest_.width &&
+        d->height == latest_.height) {
+        return;  // 设备把同一条重发了一遍，不算变化
+    }
+    latest_.orientation = d->orientation;
+    latest_.width = d->width;
+    latest_.height = d->height;
+    ++latest_.seq;
+}
+
+void DisplayWatcher::loop() {
+    std::vector<xpc::Value> batch;
+    int failures = 0;
+    while (!stop_.load()) {
+        std::string err;
+        const auto event = conn_->next_batch(batch, kPollMs, err);
+        if (event == ServiceConnection::StreamEvent::Batch) {
+            failures = 0;
+            for (const auto &element : batch) {
+                publish(element);
+            }
+            continue;
+        }
+        if (event == ServiceConnection::StreamEvent::Idle) {
+            continue;  // 常态：设备只在状态真的变了才推
+        }
+        // Finished / DeviceError / Broken —— 这条订阅已经作废，换一条连接重订。
+        conn_.reset();
+        // 退避分片睡。整段睡下去的话，退出最多要慢一整个 gap，而这段等待期间
+        // 用户看到的是"按了 Ctrl-C 没反应"。
+        for (int slept = 0; slept < kReconnectGapMs && !stop_.load(); slept += 20) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        if (stop_.load()) {
+            break;
+        }
+        if (resubscribe(err)) {
+            failures = 0;
+            continue;
+        }
+        if (++failures >= kMaxFailedResubscribes) {
+            // 连着八次订不上，多半是设备已经走了。留下 alive()=false 让调用方知道
+            // 这个增强没了，而不是假装还在跟踪——也别再每半秒撞一次门。
+            alive_.store(false);
+            return;
+        }
+    }
+    alive_.store(false);
 }
 
 }  // namespace scrctl::remote

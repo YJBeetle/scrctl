@@ -171,7 +171,7 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.copy_text = next("--copy");
         } else if (a == "--paste") {
             o.paste = true;
-        } else if (a == "--crop") {
+
             const char *v = next("--crop");
             if (std::sscanf(v, "%dx%d+%d+%d", &o.crop_w, &o.crop_h, &o.crop_x, &o.crop_y) != 4 &&
                 std::sscanf(v, "%d:%d:%d:%d", &o.crop_w, &o.crop_h, &o.crop_x, &o.crop_y) != 4) {
@@ -654,8 +654,11 @@ class LiveSource final : public FrameSource {
 public:
     ~LiveSource() override;
 
+    /// `watch_display`：挂一条常驻订阅跟着转屏改朝向。不起窗口就别挂——那条
+    /// 订阅要独占一个连接、还有一个每 250ms 醒一次的线程，而没有窗口就没人
+    /// 消费朝向，纯开销。
     bool start(const std::string &serial, const std::string &record_path, bool hw_decode,
-               std::string &err);
+               bool watch_display, std::string &err);
 
     /// 起流前向设备要来的可见区尺寸（问不到是 0/0，见 `resolve_crop` 的顺序）。
     void display_size(int &width, int &height) const override {
@@ -663,9 +666,23 @@ public:
         height = display_h_;
     }
 
-    /// 起流前问到的那一档界面旋转。设备转屏后这里不会自己变，得等下一次起流——
-    /// 跟着转屏实时改是 `DisplayWatcher` 的事。
-    [[nodiscard]] int orientation_degrees() const override { return degrees_; }
+    /// 当前该顺时针转多少度。
+    ///
+    /// 优先问常驻订阅（`watcher_`），拿不到才退回起流前问到的那一档。顺序不能反：
+    /// 常驻订阅是唯一会跟着转屏动的来源，而那一档是窗口打开那一刻的快照。
+    ///
+    /// 只有朝向是"活的"。可见区尺寸仍然只在起流前问一次——实测转屏时设备报的
+    /// `currentMode.size` 根本不变（docs §16.1），而中途改尺寸要重建裁剪框、
+    /// 触摸分母与整条几何日志，那些路径现在一条都没验过。
+    [[nodiscard]] int orientation_degrees() const override {
+        if (watcher_ != nullptr) {
+            const auto st = watcher_->latest();
+            if (!st.orientation.empty()) {
+                return scrctl::app::orientation_degrees(st.orientation);
+            }
+        }
+        return degrees_;
+    }
 
     bool next(scrctl::Frame &out, int timeout_ms) override {
         if (pump_ == nullptr) {
@@ -819,6 +836,11 @@ private:
     uint64_t display_id_ = 0;
     std::string display_name_;
 
+    /// 常驻的显示几何订阅。它持有 `Device&`，所以**必须声明在 device_ 之后**
+    /// （成员按声明反序析构，它得比 Device 先走）。起不来不致命：朝向就退回
+    /// 起流前那一档，代价是"转屏不跟着转"。
+    std::unique_ptr<scrctl::remote::DisplayWatcher> watcher_;
+
     std::unique_ptr<scrctl::hid::Service> hid_;
     std::unique_ptr<scrctl::hid::Buttons> buttons_;
     bool hid_unavailable_ = false;
@@ -828,7 +850,7 @@ private:
 LiveSource::~LiveSource() = default;
 
 bool LiveSource::start(const std::string &serial, const std::string &record_path, bool hw_decode,
-                       std::string &err) {
+                       bool watch_display, std::string &err) {
     auto dev = scrctl::remote::Device::establish(serial, err);
     if (!dev) {
         return false;
@@ -868,6 +890,19 @@ bool LiveSource::start(const std::string &serial, const std::string &record_path
         } else {
             std::fprintf(stderr, "向设备问显示几何失败: %s（退回按机型硬编码的裁剪表）\n",
                          derr.empty() ? "推送里没有可用的尺寸" : derr.c_str());
+        }
+    }
+
+    // 起流前那一问只够定下"窗口打开时该转多少度"。设备之后转屏我们一无所知，
+    // 所以还要有人一直挂在订阅上——它是推模型，不挂着就再也没有第二条消息。
+    //
+    // 失败只打一行不返回 false：没有它，画面仍然按起流前那一档转正，只是不会
+    // 跟着转屏走。为一个增强功能把镜像整个停掉是不划算的。
+    if (watch_display) {
+        std::string werr;
+        watcher_ = scrctl::remote::DisplayWatcher::start(*device_, display_id_, werr, false);
+        if (watcher_ == nullptr) {
+            std::fprintf(stderr, "常驻显示订阅起不来: %s（转屏不会跟着转）\n", werr.c_str());
         }
     }
 
@@ -1008,7 +1043,7 @@ int main(int argc, char **argv) {
     } else {
         auto made = std::make_unique<LiveSource>();
         std::string err;
-        if (!made->start(o.serial, o.record, o.hw_decode, err)) {
+        if (!made->start(o.serial, o.record, o.hw_decode, !o.no_window, err)) {
             std::fprintf(stderr, "起流失败: %s\n", err.c_str());
             // 设备在通话中会直接拒绝起流（code 9022）。实测这时它的会话表是空的
             // （getmediastreamserverstatus 回 sessions: []），所以不是"有条旧流占着"，
@@ -1100,6 +1135,10 @@ int main(int argc, char **argv) {
 
     int rendered = 0;
     std::unique_ptr<Presenter> presenter;
+    // 窗口现在按哪一档朝向摆着。-1 = 还没建过窗口，所以第一帧必然进一次重建分支。
+    int applied_degrees = -1;
+    // 只为少打一行：第一次建窗口不需要喊"旋转 -> 重建"。
+    bool first_window = true;
     const Uint64 start = SDL_GetTicks64();
     Uint64 last_stats_at = SDL_GetTicks64();
     bool quit = false;
@@ -1175,13 +1214,29 @@ int main(int argc, char **argv) {
             continue;
         }
 
-        if (presenter == nullptr) {
+        // 朝向变了就把整个 Presenter 重建一次，而不是原地改窗口尺寸。
+        //
+        // 为什么重建：原地改要 `SDL_SetWindowSize` + 重设 logical size，而实测在
+        // dummy 驱动下绘制面尺寸根本不跟着窗口变（render_test 就是这么抓到的）。
+        // 真驱动大概率跟得上，但"大概率"在这儿不够——尺寸不跟着变时 SDL 会按新的
+        // logical size 等比留边，画面缩在窗口一角，那正是我们要修的 bug 的新版本。
+        // 重建走的是启动时那条已经验过的路，代价只是窗口闪一下（转屏本来就是一个
+        // 动作，不是每帧的事）。
+        const int degrees = source->orientation_degrees();
+        if (degrees != applied_degrees) {
+            applied_degrees = degrees;
+            presenter.reset();
             presenter = std::make_unique<Presenter>();
             presenter->set_debug_input(o.debug_input);
             if (!presenter->open(static_cast<int>(f.width), static_cast<int>(f.height),
-                                 resolve_crop(o, f, *source), source->orientation_degrees(), o.scale,
-                                 o.scale_given, o.title, o.verify_at > 0, o.win_w, o.win_h)) {
+                                 resolve_crop(o, f, *source), degrees, o.scale, o.scale_given,
+                                 o.title, o.verify_at > 0, o.win_w, o.win_h)) {
                 return 1;
+            }
+            if (first_window) {
+                first_window = false;
+            } else {
+                std::printf("界面旋转 -> 顺时针 %d°，窗口按新朝向重建\n", degrees);
             }
         }
 

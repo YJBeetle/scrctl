@@ -17,8 +17,10 @@
 #include <span>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <vector>
 
+#include "hid/Hid.h"
 #include "remote/Device.h"
 #include "remote/DisplayInfo.h"
 #include "remote/Rsd.h"
@@ -99,12 +101,29 @@ int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     int seconds = 60;
     bool verbose = false;
+    int watch_seconds = 0;
+    /// `--tap 秒:x:y`，可重复。为什么在同一个进程里注入：**一台设备同时只容一条
+    /// RSD 连接**（新来的会把旧的换掉，见 RemoteXpc.h 的 PeerIdentity 注释），
+    /// 所以"一边挂着订阅一边用另一个进程点一下屏幕"这种用法本身就不安全。
+    /// 要造一次转屏来验订阅，就得在这一个进程里既订着又点。
+    std::vector<std::tuple<int, double, double>> taps;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "-v" || a == "--verbose") {
             verbose = true;
         } else if (a == "--seconds" && i + 1 < argc) {
             seconds = std::atoi(argv[++i]);
+        } else if (a == "--watch" && i + 1 < argc) {
+            watch_seconds = std::atoi(argv[++i]);
+        } else if (a == "--tap" && i + 1 < argc) {
+            const std::string spec = argv[++i];
+            int at = 0;
+            double x = 0, y = 0;
+            if (std::sscanf(spec.c_str(), "%d:%lf,%lf", &at, &x, &y) != 3) {
+                std::fprintf(stderr, "--tap 格式应为 秒:X,Y，收到 %s\n", spec.c_str());
+                return 2;
+            }
+            taps.emplace_back(at, x, y);
         }
     }
 
@@ -116,6 +135,59 @@ int main(int argc, char **argv) {
     }
     std::printf("设备：%s / iOS %s\n", dev->property("ProductType").c_str(),
                 dev->property("OSVersion").c_str());
+
+    if (watch_seconds > 0) {
+        // 常驻订阅那条路：订上之后只看它什么时候推，推了就打新状态。
+        std::string werr;
+        auto watcher = scrctl::remote::DisplayWatcher::start(*dev, 1, werr, verbose);
+        if (watcher == nullptr) {
+            std::fprintf(stderr, "起常驻订阅失败: %s\n", werr.c_str());
+            return 1;
+        }
+        std::printf("已挂上常驻订阅，观察 %d 秒。期间转屏，看它推不推。\n", watch_seconds);
+        const uint64_t w0 = now_ms();
+        const uint64_t w_until = uint64_t(watch_seconds) * 1000;
+        auto hid = scrctl::hid::Service::open(*dev, werr);
+        if (hid == nullptr) {
+            std::fprintf(stderr, "开 HID 失败（--tap 用不了）: %s\n", werr.c_str());
+        }
+        std::size_t next_tap = 0;
+        uint64_t seen_seq = 0;
+        while (now_ms() - w0 < w_until) {
+            const uint64_t elapsed = (now_ms() - w0) / 1000;
+            while (next_tap < taps.size() && std::get<0>(taps[next_tap]) <= int(elapsed)) {
+                const auto [at, tx, ty] = taps[next_tap++];
+                if (hid == nullptr) {
+                    continue;
+                }
+                std::string terr;
+                bool ok = true;
+                for (int i = 0; i <= 12 && ok; ++i) {
+                    ok = hid->touch(scrctl::hid::kSurfaceMainTouchscreen, tx, ty, i < 12, terr);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(15));
+                }
+                std::printf("  +%llus 注入触摸 (%.3f,%.3f): %s %s\n",
+                            static_cast<unsigned long long>(elapsed), tx, ty,
+                            ok ? "已发" : "失败", terr.c_str());
+            }
+            const auto st = watcher->latest();
+            if (st.seq != seen_seq) {
+                seen_seq = st.seq;
+                std::printf("  +%llus 推送 #%llu：%dx%d %s\n",
+                            static_cast<unsigned long long>(elapsed),
+                            static_cast<unsigned long long>(st.seq), st.width, st.height,
+                            st.orientation.c_str());
+            }
+            if (!watcher->alive()) {
+                std::printf("  +%llus 订阅线程已收手（连续重订失败）\n",
+                            static_cast<unsigned long long>(elapsed));
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        std::printf("观察结束，共 %llu 次变化\n", static_cast<unsigned long long>(seen_seq));
+        return 0;
+    }
 
     auto conn = dev->connect("com.apple.coredevice.deviceinfo", err, verbose);
     if (conn == nullptr) {
