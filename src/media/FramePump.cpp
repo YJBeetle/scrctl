@@ -250,6 +250,12 @@ void FramePump::loop() {
         }
         next_pli_ms_ = now_ms() + kPliPeriodMs;
         last_pli_ms_ = now_ms();
+        // 这一轮等待的**起点**。后备重起必须按它算，不能按 `last_pli_ms_`：等待期间
+        // 每秒重发一次 PLI 会把 last_pli_ms_ 一直往前推，"距上次 PLI 满 2 秒"就永远
+        // 不成立（review 的 P1）。
+        if (first_pli_ms_ == 0) {
+            first_pli_ms_ = now_ms();
+        }
         const auto pli = scrctl::rt::build_pli(session_->started().remote_ssrc,
                                                session_->started().local_ssrc);
         std::string serr;
@@ -361,6 +367,11 @@ void FramePump::loop() {
             const bool lost_since_prev = loss_now > loss_seen_;
             if (lost_since_prev) {
                 need_keyframe_ = true;
+                // 只有**丢包**这一种成因才走"PLI 不成就重起"那条后备。超大 NAL 那处
+                // 也置 need_keyframe_，但它有自己那套上限与降级（kMaxOversizedRestarts
+                // + video_unusable_，见上面），被这条通用判据抢走就会绕开上限、变成
+                // 每 1.5 秒停+起而永不成功——那正是加上限要防的事。
+                awaiting_idr_from_loss_ = true;
             }
             loss_seen_ = loss_now;
             if (need_keyframe_) {
@@ -372,6 +383,8 @@ void FramePump::loop() {
                     return;
                 }
                 need_keyframe_ = false;
+                awaiting_idr_from_loss_ = false;
+                first_pli_ms_ = 0;
             }
 
             // 刻意不清空 publishing_.pixels：clear() 之后 resize() 会把 11MB 重新
@@ -431,10 +444,11 @@ void FramePump::loop() {
         // 真的断链时能立刻发出 PLI，而不是等上一轮的节流。
         next_pli_ms_ = 0;
         last_pli_ms_ = 0;
+        first_pli_ms_ = 0;
+        awaiting_idr_from_loss_ = false;
         ever_keyframe_ = false;
         need_keyframe_ = false;
         loss_seen_ = 0;
-        gaps_at_last_check_ = 0;
         // 设备的 SR 累计数每条会话从零重数，我们的 packets 跨会话连着涨。留下这个
         // 基线，读数才是在同一条数轴上比（见 Stats::session_packets_base）。
         // 设备那一侧则反过来：它的数要跟着会话归零，否则重起后的第一秒里读数是
@@ -701,23 +715,26 @@ void FramePump::loop() {
             bool stalled = false;
             {
                 std::lock_guard<std::mutex> lock(mutex_);
-                // 现在这条判据要**三条**同时成立，第三条是新加的：
-                // 1) 出现了新的序号缺口；
-                // 2) 距上一个关键帧超过 stall_restart_ms；
-                // 3) **我们已经发过 PLI、而且等了它这么久**。
+                // 这条判据现在的形状：**正在等 IDR（成因是丢包）+ 从第一次请求算起
+                // 等满了 stall_restart_ms + 距上一个关键帧也超过了它**。
                 //
-                // 第 3 条为什么必需：这条流的 IDR 有多稀疏？实测基线 30 秒只有 1 个
-                // （起流那一下），所以第 2 条几乎是恒真的——任何一个缺口都会立刻重起。
-                // 修好 UDP 之后 PLI 20~35ms 就能换来 IDR，重起（~300ms 且中间无帧）
-                // 应该退到"PLI 不管用时"才发生。不加第 3 条，PLI 那条路根本走不到：
-                // 临时注入一个真实丢包的实验里，缺口出现同一次循环里就重起了，
-                // IDR 虽然在 35ms 后到、却已经用不上。
-                stalled = gaps > gaps_at_last_check_ && last_pli_ms_ != 0 &&
-                          now_ms() - last_pli_ms_ >=
+                // 三个变量各管一件事，少一个就出事故：
+                //  - `awaiting_idr_from_loss_`：只在丢包那处置起，拿到干净关键帧就清。
+                //  - `first_pli_ms_`：**第一次**请求的时刻。
+                //  - `last_keyframe_ms_`：这条流的 IDR 有多稀疏？实测基线 30 秒只有 1 个
+                //    （起流那一下），所以这一项几乎恒真——它存在的意义是"别在刚解出关键帧
+                //    的时候重起"，不是主判据。
+                //
+                // 为什么不用"本轮出现了新缺口"（`gaps > gaps_at_last_check_`）当条件：
+                // 那一版是 review 抓出来的 P1——`gaps_at_last_check_` 每轮都跟着更新，
+                // 所以"缺口"只在丢包那一瞬成立，而那一刻时间项必然还没到点；等到点时
+                // 已经没有"新缺口"了。两个条件互斥，后备重起**永远打不到**：PLI 万一
+                // 没换来 IDR，画面就永久停在旧帧上。
+                stalled = awaiting_idr_from_loss_ && first_pli_ms_ != 0 &&
+                          now_ms() - first_pli_ms_ >=
                               static_cast<uint64_t>(options_.stall_restart_ms) &&
                           now_ms() - last_keyframe_ms_ >
                               static_cast<uint64_t>(options_.stall_restart_ms);
-                gaps_at_last_check_ = gaps;
                 stats_.gaps = gaps;
                 stats_.dropped_fragments = dst.dropped_fragments;
                 if (stalled) {

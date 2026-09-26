@@ -221,8 +221,6 @@ private:
     int width_ = 0;
     int height_ = 0;
     Stats stats_;
-    uint64_t last_keyframe_ms_ = 0;
-    uint64_t gaps_at_last_check_ = 0;
     /// 最后一个**收到的数据报**的时刻。设备结束流时是一个包都不发，只看序号缺口
     /// 检不出来。
     uint64_t last_packet_ms_ = 0;
@@ -232,9 +230,17 @@ private:
     uint64_t next_rtcp_ms_ = 0;
     /// 最早什么时候可以再发一个 PLI（0 = 立刻可发）。见 FramePump.cpp 的 request_keyframe。
     uint64_t next_pli_ms_ = 0;
-    /// 上一次发 PLI 的时刻。卡住重起那条判据要它：**没问过设备就不许重起**，问了且
-    /// 等满 stall_restart_ms 还没关键帧才重起（推导见 FramePump.cpp 的 stalled 那段）。
+    /// 上一次发 PLI 的时刻（等待期间每秒会被刷新，所以**不能**拿它算等待期限）。
     uint64_t last_pli_ms_ = 0;
+    /// 这一轮"等一个干净 IDR"的起点：第一次发 PLI 的时刻，拿到关键帧就清零。
+    /// 后备重起按它算——用 `last_pli_ms_` 的话每秒重发会把它一直往前推，判据永不成立。
+    uint64_t first_pli_ms_ = 0;
+    /// 当前"等关键帧"的成因是不是丢包。只有它才走后备重起；超大 NAL 那种成因有自己的
+    /// 上限与降级，不能被通用判据抢走（见 FramePump.cpp 的 stalled 那段）。
+    bool awaiting_idr_from_loss_ = false;
+    /// 最后一个**解出来的关键帧**的时刻。后备重起拿它做"别在刚解出关键帧时重起"这一档，
+    /// 而这条流实测 30 秒才自发一个 IDR，所以它几乎恒真、不是主判据（见 stalled 那段）。
+    uint64_t last_keyframe_ms_ = 0;
     /// 有超大 NAL 被丢、需要重起会话。由 AU 回调置位，收包线程消费。
     std::atomic<bool> oversized_restart_ { false };
     /// 用户刚刚动过（见 wake()）。由收包线程取走并做一次"流还活着吗"的检查。
