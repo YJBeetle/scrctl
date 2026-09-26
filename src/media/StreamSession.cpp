@@ -31,8 +31,10 @@ std::array<uint8_t, 16> random_uuid_bytes() {
     return out;
 }
 
+/// 收流端口。`thread_local` 的理由与 `net/TcpStream.cpp` 里那两个同源：视频腿与音频腿
+/// 现在会在各自的 worker 线程里重起会话，同时走到这里。
 uint16_t pick_port() {
-    static std::mt19937 rng{std::random_device{}()};
+    static thread_local std::mt19937 rng { std::random_device {} () };
     return static_cast<uint16_t>(49152 + rng() % 16000);
 }
 

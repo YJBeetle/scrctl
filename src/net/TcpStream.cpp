@@ -37,13 +37,17 @@ uint32_t get32(const uint8_t *p) {
 bool seq_lt(uint32_t a, uint32_t b) { return int32_t(a - b) < 0; }
 bool seq_ge(uint32_t a, uint32_t b) { return !seq_lt(a, b); }
 
+// 这两个 `static` 都是 `thread_local`，不是随手加的：`mt19937` 的 `operator()` 会改
+// 内部状态，而"两条腿各自一个线程、各自重起自己的会话"是现在真实存在的形状
+// （media/FramePump 与 media/AudioPump 会在各自的 worker 里同时走到这里）。
+// 共享一个非原子 RNG 是数据竞争，而它的表现不是崩，是两条腿拿到相关的"随机"数。
 uint16_t random_port() {
-    static std::mt19937 rng{std::random_device{}()};
+    static thread_local std::mt19937 rng { std::random_device {} () };
     return static_cast<uint16_t>(49152 + rng() % 16383);
 }
 
 uint32_t random_seq() {
-    static std::mt19937 rng{std::random_device{}()};
+    static thread_local std::mt19937 rng { std::random_device {} () };
     return rng();
 }
 
