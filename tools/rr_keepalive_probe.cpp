@@ -510,6 +510,10 @@ int main(int argc, char **argv) {
     /// 所以那条连接压根不存在。这一臂就是把"附着"这一个变量单独立出来，
     /// 其他一律不动（租期仍 20、一个 RTCP 也不发、不发任何输入以免画面变化）。
     bool hid_attach = false;
+    /// 往设备一个确定没人监听的端口打三个 UDP 数据报，看设备的内核答不答话
+    /// （ICMPv6 端口不可达由 `net::Stack` 打进 stderr）。用途见使用处的说明。
+    bool udp_canary = false;
+    uint16_t canary_port = 47891;
     // AVC 那条形串。抓包对齐到的最后一处可见差别：苹果发 `FLS;VRAE:0;SW:1;`，我们和 p3
     // 都发 `FLS;SW:1;`（p3 还专门注释说 VRAE:0 不能进）。设备会把它回显成
     // `TxCodecFeatureListString`，所以这条改动是可以在 answer 里验证"它收没收下"的——
@@ -540,6 +544,11 @@ int main(int argc, char **argv) {
             dump_packets = true;
         } else if (a == "--hid-attach") {
             hid_attach = true;
+        } else if (a == "--udp-canary") {
+            udp_canary = true;
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                canary_port = static_cast<uint16_t>(std::stoul(argv[++i]));
+            }
         } else if (a == "--event-channel") {
             event_channel = true;
         } else if (a == "--hold") {
@@ -1079,6 +1088,30 @@ int main(int argc, char **argv) {
             if (stream_config_str(session->started().answer, "TxCodecFeatureListString", echoed)) {
                 std::printf("  我们发 %s -> 设备回显 TxCodecFeatureListString=%s\n",
                             avc_features.c_str(), echoed.c_str());
+            }
+
+            // **UDP 金丝雀**：往一个我们确信没人监听的设备端口打三个数据报。
+            //
+            // 为什么要有它：设备的 `lastReceivedPacketTime` 是 nan，而"我们的包没被
+            // 隧道投递出去"和"投出去了但那个端口没人收"这两种成因，在媒体面上看到的
+            // 结果一模一样。唯一能把它们分开的是设备的内核会不会答话——打给一个确定
+            // 关闭的端口，它该回 ICMPv6 `type=1 code=3`（端口不可达），这条由
+            // `net::Stack` 直接打到 stderr。于是三种结果各有含义：
+            //   金丝雀有回信 + RTCP 无回信  → 隧道 UDP 通，媒体端口才是问题
+            //   金丝雀有回信 + RTCP 也有     → 我们发的那个端口上根本没人收（发错端口）
+            //   两种都没有回信              → 客户端→设备的 UDP 整条路不通（但这一条
+            //                                 不能单独成立：设备也可能就是不在隧道里
+            //                                 生成 ICMP，所以它是"弱证据"不是"否证"）
+            if (udp_canary) {
+                for (int i = 0; i < 3; ++i) {
+                    std::string cerr;
+                    const std::vector<uint8_t> junk = {0x80, 0xcc, 0x00, 0x03, 0, 0, 0, 0,
+                                                       0, 0, 0, 0x5a};
+                    const bool ok = session->send_rtp(junk, canary_port, cerr);
+                    std::printf("  金丝雀 #%d -> %u：%s\n", i + 1, canary_port,
+                                ok ? "已写入隧道" : ("写入失败 " + cerr).c_str());
+                    std::this_thread::sleep_for(400ms);
+                }
             }
 
             const uint64_t until = t0 + static_cast<uint64_t>(seconds) * 1000;

@@ -68,10 +68,24 @@ public:
     /// 位置报"帧长过大"，看起来像它自己的 bug。
     [[nodiscard]] uint64_t bad_checksums() const { return bad_checksums_; }
 
+    /// 隧道里收到过多少个 ICMPv6 包，以及最后一条的一行摘要（没有则空串）。
+    ///
+    /// 为什么要有这一位：20 秒断流的根因是设备侧 `lastReceivedPacketTime:nan`
+    /// ——我们发往设备的 UDP 数据报**一个都没落到它的媒体 socket 上**。这件事有两种
+    /// 完全不同的成因，而它们在媒体面上长得一模一样：我们的包没被隧道投递出去，
+    /// 或者到了但那个端口上没人收。区别只在**设备的内核会不会回一个 ICMPv6**：
+    /// 打给一个确定没人监听的端口，内核该回 `type=1 code=3`（端口不可达）；打给活着的
+    /// socket 则不该有回信。所以"能不能看见 ICMP"就是这两种成因的分界线，而在此之前
+    /// 整个栈对 next_header=58 是**直接丢弃且不计数**的，等于把唯一的线索扔了。
+    [[nodiscard]] uint64_t icmp_seen() const { return icmp_seen_; }
+    [[nodiscard]] std::string icmp_last() const;
+
 private:
     void pump_loop();
     /// 读一个入站包并分发。只在泵线程里跑。
     bool pump_once(int timeout_ms, std::string &err);
+    /// 记下一条 ICMPv6（含错误消息回带的内层四元组）。见 `icmp_seen()` 的说明。
+    void observe_icmpv6(const uint8_t *icmp, size_t len);
 
     transport::PacketTunnel &tunnel_;
     std::string local_text_;
@@ -86,6 +100,9 @@ private:
     std::map<uint16_t, UdpEndpoint *> udp_;
 
     uint64_t bad_checksums_ = 0;
+    uint64_t icmp_seen_ = 0;
+    mutable std::mutex icmp_mu_;
+    std::string icmp_last_;
     std::mutex write_mu_;
     std::thread pump_;
     std::atomic<bool> stopping_{false};

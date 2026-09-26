@@ -189,8 +189,66 @@ bool Stack::pump_once(int timeout_ms, std::string &err) {
         if (it != udp_.end()) {
             it->second->on_datagram(packet.data() + l4, packet.size() - l4);
         }
+    } else if (next == 58) {
+        observe_icmpv6(packet.data() + l4, packet.size() - l4);
     }
     return true;  // 没匹配到端点也算成功：分发本来就是尽力而为
+}
+
+std::string Stack::icmp_last() const {
+    std::lock_guard<std::mutex> lock(icmp_mu_);
+    return icmp_last_;
+}
+
+/// 把 ICMPv6 头部（以及错误消息里带的那个内层 IPv6 包头）记下来。
+///
+/// 不校验它的 L4 校验和：上面那段只对 next=6/17 验和，而这一位是"设备有没有答话"的
+/// 存在性证据，验和失败也不该把它当成没发生。
+void Stack::observe_icmpv6(const uint8_t *icmp, std::size_t len) {
+    if (len < 4) {
+        return;
+    }
+    const uint8_t type = icmp[0];
+    const uint8_t code = icmp[1];
+    static constexpr const char *kCodes[] = {
+        "没有路由/目的网不可达", "目的主机不可达", "协议不可达", "端口不可达",
+        "目的地址不可达", "源地址被策略禁止"};
+    std::string line = "ICMPv6 type=" + std::to_string(type) + " code=" + std::to_string(code);
+    if (type == 1 && code <= 5) {
+        line += std::string("（") + kCodes[code] + "）";
+    } else if (type == 2) {
+        line += "（包太大）";
+    } else if (type == 3) {
+        line += "（TTL 耗尽）";
+    } else if (type == 4) {
+        line += "（参数问题）";
+    } else if (type == 128 || type == 129) {
+        line += type == 128 ? "（回音请求）" : "（回音应答）";
+    }
+    // 错误消息（type 1..4）在第 8 字节之后回带触发它的那个包：内层 IPv6 头 40 字节，
+    // 再往后是触发包 L4 头的前 8 字节——对 UDP 来说刚好是 源端口/目的端口/长度/校验和。
+    // 这一串才是分界线："设备回过端口不可达的那个 4 元组，是不是我们发 RTCP 的那个"。
+    if (type <= 4 && len >= 8 + 40 + 8) {
+        const uint8_t *inner = icmp + 8;
+        const std::size_t rest = len - 8;
+        const uint8_t inner_nh = inner[6];
+        char src[64] = "?";
+        char dst[64] = "?";
+        inet_ntop(AF_INET6, inner + 8, src, sizeof(src));
+        inet_ntop(AF_INET6, inner + 24, dst, sizeof(dst));
+        line += " 内层 nh=" + std::to_string(inner_nh) + " " + src + " -> " + dst;
+        if (inner_nh == 17 && rest >= 48 + 8) {
+            const uint16_t sp = get16(inner + 40);
+            const uint16_t dp = get16(inner + 42);
+            line += " 端口 " + std::to_string(sp) + "->" + std::to_string(dp);
+        }
+    }
+    {
+        std::lock_guard<std::mutex> lock(icmp_mu_);
+        ++icmp_seen_;
+        icmp_last_ = line;
+    }
+    std::fprintf(stderr, "    <- %s\n", line.c_str());
 }
 
 }  // namespace scrctl::net

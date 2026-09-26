@@ -116,6 +116,39 @@ int main() {
               "载荷被改后重算不为 0");
     }
 
+    std::printf("\n== 金标准：苹果真的被设备收进的那个 RTCP 包 ==\n");
+    // 来源：Xcode DeviceHub 镜像时的抓包（utun 已被 remoted 解封装，内层明文），
+    // 客户端 fda4:4c2:5901::2:49637 -> 设备 fda4:4c2:5901::1:56179 的一个 32 字节 RCTL。
+    //
+    // 为什么要钉这一条：设备的内核计数器显示我们发往它媒体 socket 的 UDP
+    // **一个都没进去**（`udp_connection_summary ... pkts in: 0`，见 docs §13），
+    // 于是"是不是我们的 IPv6/UDP 头或校验和算错、被内核静默丢掉"成了头号嫌疑。
+    // 这个怀疑不能靠读代码排除——校验和算错的表现恰恰就是"对方静默丢弃"。
+    // 拿一个**同类流量、同一条隧道、设备确实收进了**的真实包当对照向量，
+    // 一次就能把"我们这侧的封装"从嫌疑名单里划掉（结果：一致）。
+    {
+        const auto a_src = addr("fda4:4c2:5901::2");
+        const auto a_dst = addr("fda4:4c2:5901::1");
+        const std::vector<uint8_t> a_payload = {
+            0x80, 0xcc, 0x00, 0x07, 0x00, 0x65, 0xbb, 0xd8, 0x52, 0x43, 0x54, 0x4c,
+            0x85, 0x00, 0x00, 0x04, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06,
+            0x90, 0x64, 0x00, 0x00, 0x00, 0x48, 0x00, 0x00};
+        const uint16_t ours = udp_sum(a_src, a_dst, 49637, 56179, a_payload);
+        check(ours == 0xB212,
+              "我们对苹果那个包算出的校验和 == 抓包里的 0xb212（" + std::to_string(ours) + "）");
+        // 回验方向也要过：把抓到的校验和塞回头字段整段重算得 0，
+        // 说明我们的算法与苹果的收发两端是同一套。
+        std::vector<uint8_t> wire;
+        put16(wire, 49637);
+        put16(wire, 56179);
+        put16(wire, static_cast<uint16_t>(8 + a_payload.size()));
+        put16(wire, 0xB212);
+        wire.insert(wire.end(), a_payload.begin(), a_payload.end());
+        check(scrctl::net::l4_checksum(a_src.data(), a_dst.data(), wire.data(), wire.size(), 17) ==
+                  0,
+              "用苹果抓包里的校验和回验得 0");
+    }
+
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;
 }
