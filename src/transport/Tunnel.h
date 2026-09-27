@@ -44,6 +44,13 @@ public:
                                                  const PemIdentity &identity, bool use_tls,
                                                  std::string &err);
 
+    /// Wi-Fi 那条路：连接是普通的局域网 TCP，加密是 TLS-PSK（密钥来自 pair-verify），
+    /// 之后的 CDTunnel 控制帧与 USB 那条**一模一样**，所以复用同一个对象、同一套
+    /// 隧道内用户态栈。
+    static std::optional<PacketTunnel> establish_psk(Socket &&sock,
+                                                    const std::vector<uint8_t> &psk,
+                                                    std::string &err);
+
     [[nodiscard]] const TunnelParams &params() const { return params_; }
     [[nodiscard]] bool valid() const { return sock_.valid(); }
 
@@ -56,6 +63,9 @@ public:
     bool wait_readable(int ms, std::string &err);
 
 private:
+    /// 发 clientHandshakeRequest 并解析回复。两条路（证书 TLS / PSK）共用这一段。
+    bool client_handshake(std::string &err);
+
     bool write_all(const void *data, size_t len, std::string &err);
     bool read_all(void *data, size_t len, std::string &err);
 

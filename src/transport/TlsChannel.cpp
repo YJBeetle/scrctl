@@ -68,6 +68,29 @@ int verify_accept_peer(int preverify_ok, X509_STORE_CTX *ctx) {
     return 1;
 }
 
+/// ex_data 的槽位全进程申请一次。PSK 回调只能拿到 `SSL*`，而密钥得从我们的对象上取。
+int psk_ex_index() {
+    static const int index = SSL_get_ex_new_index(0, nullptr, nullptr, nullptr, nullptr);
+    return index;
+}
+
+unsigned int psk_client_callback(SSL *ssl, const char *hint, char *identity,
+                                 unsigned int max_identity_len, unsigned char *psk,
+                                 unsigned int max_psk_len) {
+    (void)hint;  // 设备的隧道监听器不发 hint
+    const auto *stored = static_cast<const std::vector<uint8_t> *>(
+        SSL_get_ex_data(ssl, psk_ex_index()));
+    if (stored == nullptr || stored->empty() || stored->size() > max_psk_len ||
+        max_identity_len < 1) {
+        return 0;
+    }
+    // 身份是**空串**：参考实现发的就是空身份（它把 identity 传成 None），这边照抄。
+    // 传别的会怎样没测过，所以不给自己留一个"看起来能用、实际是不是设备说了算"的变量。
+    identity[0] = '\0';
+    std::memcpy(psk, stored->data(), stored->size());
+    return static_cast<unsigned int>(stored->size());
+}
+
 }  // namespace
 
 TlsChannel::TlsChannel() = default;
@@ -166,6 +189,56 @@ bool TlsChannel::handshake(Socket &sock, const PemIdentity &id, std::string &err
         char buf[256] = {0};
         ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
         err = "TLS 握手失败 ssl_err=" + std::to_string(ssl_err) + " " + buf;
+        release();
+        return false;
+    }
+    return true;
+}
+
+bool TlsChannel::handshake_psk(Socket &sock, const std::vector<uint8_t> &psk, std::string &err) {
+    release();
+    if (psk.empty()) {
+        err = "PSK 是空的，握不上";
+        return false;
+    }
+    psk_ = psk;
+    ctx_ = SSL_CTX_new(TLS_client_method());
+    if (ctx_ == nullptr) {
+        return err = openssl_error("SSL_CTX_new 失败"), false;
+    }
+    // 钉在 TLS 1.2：设备的隧道监听器只给 PSK 那批密码套件，而 TLS 1.3 里的 PSK 是
+    // 另一套机制（external PSK），1.3 的 ClientHello 长那样、对方根本不认。
+    SSL_CTX_set_min_proto_version(ctx_, TLS1_2_VERSION);
+    SSL_CTX_set_max_proto_version(ctx_, TLS1_2_VERSION);
+    if (SSL_CTX_set_cipher_list(ctx_, "PSK") != 1) {
+        err = "这个 TLS 后端没有 PSK 密码套件（macOS 系统自带的 LibreSSL 就是这样）";
+        release();
+        return false;
+    }
+    // 两边都没有身份，只有共享密钥：不发证书也不验证书。
+    SSL_CTX_set_verify(ctx_, SSL_VERIFY_NONE, nullptr);
+    SSL_CTX_set_psk_client_callback(ctx_, psk_client_callback);
+
+    ssl_ = SSL_new(ctx_);
+    if (ssl_ == nullptr) {
+        return err = "SSL_new 失败", false;
+    }
+    if (SSL_set_ex_data(ssl_, psk_ex_index(), &psk_) != 1) {
+        return err = "给 TLS 通道挂 PSK 失败", false;
+    }
+    if (SSL_set_fd(ssl_, sock.fd()) != 1) {
+        return err = "SSL_set_fd 失败", false;
+    }
+    if (SSL_connect(ssl_) != 1) {
+        const int ssl_err = SSL_get_error(ssl_, -1);
+        char buf[256] = {0};
+        ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
+        // "unknown psk identity" 这一句值单独说：它的意思不是网络不通，而是
+        // pair-verify 那一步的共享密钥算错了——差的往往就是某个 HKDF 的 salt/info。
+        err = "PSK 握手失败 ssl_err=" + std::to_string(ssl_err) + " " + buf +
+              (std::strstr(buf, "psk") != nullptr
+                   ? "（设备的隧道监听器说这把 PSK 它不认：回头查 pair-verify 的密钥派生）"
+                   : "");
         release();
         return false;
     }

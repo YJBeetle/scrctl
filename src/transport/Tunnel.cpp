@@ -70,7 +70,28 @@ std::optional<PacketTunnel> PacketTunnel::establish(uint32_t device_id, uint16_t
     if (use_tls && !t.tls_.handshake(t.sock_, identity, err)) {
         return std::nullopt;
     }
+    if (!t.client_handshake(err)) {
+        return std::nullopt;
+    }
+    return t;
+}
 
+std::optional<PacketTunnel> PacketTunnel::establish_psk(Socket &&sock,
+                                                        const std::vector<uint8_t> &psk,
+                                                        std::string &err) {
+    PacketTunnel t;
+    t.sock_ = std::move(sock);
+    // PSK 要在 CDTunnel 控制帧之前：明文发过去会被立刻关掉，和 lockdown 那条一样。
+    if (!t.tls_.handshake_psk(t.sock_, psk, err)) {
+        return std::nullopt;
+    }
+    if (!t.client_handshake(err)) {
+        return std::nullopt;
+    }
+    return t;
+}
+
+bool PacketTunnel::client_handshake(std::string &err) {
     json::Value req;
     req.kind = json::Kind::Object_;
     req.object["type"] = [] {
@@ -91,52 +112,52 @@ std::optional<PacketTunnel> PacketTunnel::establish(uint32_t device_id, uint16_t
     std::memcpy(frame.data(), kMagic.data(), kMagic.size());
     put_be16(frame.data() + 8, static_cast<uint16_t>(body.size()));
     std::memcpy(frame.data() + kControlHeaderLen, body.data(), body.size());
-    if (!t.write_all(frame.data(), frame.size(), err)) {
-        return std::nullopt;
+    if (!write_all(frame.data(), frame.size(), err)) {
+        return false;
     }
 
     uint8_t hdr[kControlHeaderLen];
-    if (!t.read_all(hdr, kControlHeaderLen, err)) {
-        return std::nullopt;
+    if (!read_all(hdr, kControlHeaderLen, err)) {
+        return false;
     }
     if (std::memcmp(hdr, kMagic.data(), kMagic.size()) != 0) {
         err = "隧道握手回复的 magic 不对";
-        return std::nullopt;
+        return false;
     }
     const uint16_t payload_len = get_be16(hdr + 8);
     std::vector<uint8_t> payload(payload_len);
-    if (!payload.empty() && !t.read_all(payload.data(), payload.size(), err)) {
-        return std::nullopt;
+    if (!payload.empty() && !read_all(payload.data(), payload.size(), err)) {
+        return false;
     }
 
     auto parsed = json::parse(std::string_view(
         reinterpret_cast<const char *>(payload.data()), payload.size()));
     if (!parsed) {
         err = "隧道握手回复不是合法 JSON";
-        return std::nullopt;
+        return false;
     }
     const auto *cp = parsed->find("clientParameters");
     const json::Value *cp_mtu = nullptr;
     if (cp != nullptr) {
-        t.params_.client_address = cp->find("address") ? cp->find("address")->as_string_or("")
+        params_.client_address = cp->find("address") ? cp->find("address")->as_string_or("")
                                                        : "";
         // MTU 在 clientParameters 里，不在顶层——顶层取会拿到 0。
         cp_mtu = cp->find("mtu");
     }
-    t.params_.server_address =
+    params_.server_address =
         parsed->find("serverAddress") ? parsed->find("serverAddress")->as_string_or("") : "";
-    t.params_.rsd_port =
+    params_.rsd_port =
         static_cast<uint16_t>(parsed->find("serverRSDPort") ? parsed->find("serverRSDPort")->as_int_or(0) : 0);
     const auto *top_mtu = parsed->find("mtu");
-    t.params_.mtu = static_cast<uint16_t>(
+    params_.mtu = static_cast<uint16_t>(
         cp_mtu != nullptr ? cp_mtu->as_int_or(0) : (top_mtu != nullptr ? top_mtu->as_int_or(0) : 0));
 
-    if (t.params_.client_address.empty() || t.params_.server_address.empty() ||
-        t.params_.rsd_port == 0) {
+    if (params_.client_address.empty() || params_.server_address.empty() ||
+        params_.rsd_port == 0) {
         err = "隧道握手回复缺少必要字段";
-        return std::nullopt;
+        return false;
     }
-    return t;
+    return true;
 }
 
 bool PacketTunnel::wait_readable(int ms, std::string &err) {

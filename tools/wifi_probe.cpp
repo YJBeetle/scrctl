@@ -21,8 +21,12 @@
 #include <vector>
 
 #include "jsonlite/Jsonlite.h"
+#include "net/Stack.h"
+#include "remote/RemoteXpc.h"
+#include "remote/Rsd.h"
 #include "plist/Plist.h"
 #include "transport/TcpConnect.h"
+#include "transport/Tunnel.h"
 #include "wifi/Crypto.h"
 #include "wifi/PairRecord.h"
 #include "wifi/PairVerify.h"
@@ -148,6 +152,8 @@ private:
 int main(int argc, char **argv) {
     std::string address, record_path, foreign_path, host_id, udid;
     bool verbose = false;
+    bool want_tunnel = false;
+    bool want_rsd = false;
     int port = 49152;
     for (int i = 1; i < argc; ++i) {
         auto next = [&](std::string &dst) {
@@ -173,6 +179,11 @@ int main(int argc, char **argv) {
             next(udid);
         } else if (std::strcmp(argv[i], "--verbose") == 0) {
             verbose = true;
+        } else if (std::strcmp(argv[i], "--tunnel") == 0) {
+            want_tunnel = true;
+        } else if (std::strcmp(argv[i], "--rsd") == 0) {
+            want_tunnel = true;
+            want_rsd = true;
         } else {
             std::fprintf(stderr, "未知参数 %s\n", argv[i]);
             return 2;
@@ -277,8 +288,69 @@ int main(int argc, char **argv) {
     std::printf("  createListener 给了端口 %lld\n",
                 static_cast<long long>(listener_port->as_int_or(0)));
 
-    const auto probe = scrctl::transport::connect_tcp(
-        address, static_cast<uint16_t>(listener_port->as_int_or(0)), 3000, err);
-    std::printf("  那个端口连得上吗: %s\n", probe ? "连得上" : err.c_str());
+    if (!want_tunnel) {
+        const auto probe = scrctl::transport::connect_tcp(
+            address, static_cast<uint16_t>(listener_port->as_int_or(0)), 3000, err);
+        std::printf("  那个端口连得上吗: %s\n", probe ? "连得上" : err.c_str());
+        return 0;
+    }
+
+    // --tunnel：真的把隧道起起来。这一步同时是 pair-verify 那把共享密钥的判据——
+    // 隧道监听器只认这把 PSK，密钥派生错一个字节就握不上。
+    const uint16_t tunnel_port = static_cast<uint16_t>(listener_port->as_int_or(0));
+    auto tunnel_sock = scrctl::transport::connect_tcp(address, tunnel_port, 5000, err);
+    if (!tunnel_sock) {
+        std::fprintf(stderr, "  连隧道端口 %u 失败: %s\n", tunnel_port, err.c_str());
+        return 1;
+    }
+    std::printf("  连上隧道端口 %u，开始 TLS-PSK + CDTunnel 握手\n", tunnel_port);
+    auto tunnel =
+        scrctl::transport::PacketTunnel::establish_psk(std::move(*tunnel_sock),
+                                                      verified.shared_secret, err);
+    if (!tunnel) {
+        std::fprintf(stderr, "  隧道建立失败: %s\n", err.c_str());
+        return 1;
+    }
+    const auto &p = tunnel->params();
+    std::printf("  隧道通了：本机 %s / 设备 %s / 隧道内 RSD 端口 %u / MTU %u\n",
+                p.client_address.c_str(), p.server_address.c_str(), p.rsd_port, p.mtu);
+    if (!want_rsd) {
+        return 0;
+    }
+
+    // --rsd：复用隧道内那套用户态 IPv6+TCP 栈，读 RSD 目录。这一段跑通，Wi-Fi
+    // 那条路就与 USB 那条在同一个层次上了（后面的起流是同一份代码）。
+    scrctl::net::Stack stack(*tunnel, p.client_address, p.server_address);
+    if (!stack.addresses_ok()) {
+        std::fprintf(stderr, "  隧道内地址解析失败\n");
+        return 1;
+    }
+    if (!stack.start_pump(err)) {
+        std::fprintf(stderr, "  起泵失败: %s\n", err.c_str());
+        return 1;
+    }
+    scrctl::remote::PeerIdentity identity;
+    // peer UUID 要**稳定**：设备每条隧道只留一个 RSD 连接，UUID 一变它就把这台机器
+    // 重新 attach、并关掉已公布的服务端口（见 remote/Device.cpp 里那段注释）。
+    // Wi-Fi 这条用我们自己 host identifier 的那个 UUID。
+    const auto uuid = scrctl::remote::parse_uuid_text(record.host_identifier);
+    if (!uuid) {
+        std::fprintf(stderr, "  host identifier 不是一个能用的 UUID: %s\n",
+                     mask(record.host_identifier, 8).c_str());
+        return 1;
+    }
+    identity.uuid = *uuid;
+    const auto rsd = scrctl::remote::Rsd::open(stack, *tunnel, identity, err);
+    if (!rsd) {
+        std::fprintf(stderr, "  RSD 打不开: %s\n", err.c_str());
+        return 1;
+    }
+    std::printf("  RSD 目录共 %zu 个服务\n", rsd->services().size());
+    for (const char *name : {"com.apple.coredevice.displayservice",
+                             "com.apple.coredevice.screencaptureservice",
+                             "com.apple.coredevice.hid.indigo",
+                             "com.apple.coredevice.appservice"}) {
+        std::printf("    %-46s %s\n", name, rsd->has_service(name) ? "在" : "不在");
+    }
     return 0;
 }
