@@ -12,6 +12,8 @@
 
 #include "net/Stack.h"
 #include "net/UdpSocket.h"
+#include "remote/Device.h"
+#include "remote/Rsd.h"
 
 namespace {
 
@@ -196,6 +198,57 @@ int main() {
                                                                odd_dgram[5],
                                        17) == 0,
               "奇数长度载荷按声明长度自校验得 0");
+    }
+
+    // 连接失败时的两句"人话"必须离线可判：一份外部反馈里那台设备连着重试了好几轮，
+    // 而我们补的后缀把方向指错了（`PasswordProtected` 是锁屏，不是 DDI），另一处只报
+    // "缺哪个服务"、不报"目录里有什么"，远程就分不开"没挂 DDI"与"这版系统没这个服务"。
+    std::printf("\n== 连接失败的措辞要把方向指对 ==\n");
+    {
+        using scrctl::remote::proxy_failure_hint;
+        const auto locked = proxy_failure_hint("StartService(x) 被拒: PasswordProtected");
+        check(locked.find("锁着") != std::string::npos &&
+                  locked.find("解锁") != std::string::npos,
+              "PasswordProtected -> 请解锁（不能再暗示 DDI）: " + locked);
+        check(locked.find("是否已挂载") == std::string::npos,
+              "锁屏那一句里不许反问 DDI 挂载不挂载——两条提问会让用户两条都去查: " + locked);
+        check(locked.find("不是 DDI") != std::string::npos,
+              "但要明说这不是 DDI 的事，省得他自己去猜: " + locked);
+        const auto denied = proxy_failure_hint("StartService(x) 被拒: UserDenied");
+        check(denied.find("信任") != std::string::npos, "UserDenied -> 点信任: " + denied);
+        const auto nosvc = proxy_failure_hint("StartService(x) 被拒: InvalidService");
+        check(nosvc.find("DDI") != std::string::npos, "InvalidService -> 查 DDI: " + nosvc);
+        check(proxy_failure_hint("连接被重置").find("DDI") != std::string::npos,
+              "认不出的错误保留原来那句兜底提问（不能一个都不给）");
+
+        using scrctl::remote::Rsd;
+        std::vector<scrctl::remote::ServiceInfo> seen;
+        const auto empty_msg = Rsd::missing_service_message("com.apple.x.displayservice", seen);
+        check(empty_msg.find("空的") != std::string::npos,
+              "目录为空要说清是空的（那是隧道没通，不是缺服务）: " + empty_msg);
+        seen.push_back({"com.apple.coredevice.hid.indigo", 50001, true, false, "",
+                        {"com.apple.coredevice.feature.remote.hid.button"}});
+        seen.push_back({"com.apple.coredevice.displayservice", 50002, true, false, "", {}});
+        seen.push_back({"com.apple.mobile.installation_proxy", 60100, false, true, "", {}});
+        const auto msg = Rsd::missing_service_message("com.apple.coredevice.screenshotservice", seen);
+        check(msg.find("一共 3 条") != std::string::npos, "要报目录总条数: " + msg);
+        check(msg.find("其中 2 条是 com.apple.coredevice.*") != std::string::npos,
+              "coredevice 那一族要单独点数——它才是「挂没挂 DDI」的判据: " + msg);
+        check(msg.find("com.apple.coredevice.hid.indigo") != std::string::npos,
+              "族里的每一条都要打出来: " + msg);
+        check(msg.find("installation_proxy") == std::string::npos,
+              "族外的不列（实测一台设备有 85 条，全列反而没人读）: " + msg);
+        check(msg.find("com.apple.coredevice.screenshotservice") != std::string::npos,
+              "缺的那个名字本身也必须在句子里");
+        check(msg.find("feature_probe") != std::string::npos, "要给出看全量目录的那条路: " + msg);
+        // 一台只挂了裸 CoreDevice、没有媒体服务的设备（外部反馈那台 iPad 的形状）：
+        // 报错必须能把它和"DDI 完全没挂"分开。
+        const auto no_cd = Rsd::missing_service_message(
+            "com.apple.coredevice.displayservice",
+            {{"com.apple.mobile.installation_proxy", 60100, false, true, "", {}}});
+        check(no_cd.find("一条都没有") != std::string::npos &&
+                  no_cd.find("Xcode") != std::string::npos,
+              "coredevice 族为空 -> 直接指向「没挂 DDI，用 Xcode 连一次」: " + no_cd);
     }
 
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);

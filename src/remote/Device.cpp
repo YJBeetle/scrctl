@@ -21,6 +21,24 @@ void stage(bool verbose, const char *what) {
 
 }  // namespace
 
+std::string proxy_failure_hint(const std::string_view lockdown_error) {
+    const std::string e(lockdown_error);
+    // 锁屏：iOS 只在解锁状态下允许起开发者服务。这一条必须排在最前面——它长得像
+    // "权限不够"，而正确答案是"把屏幕解开"，不是去查 DDI。
+    if (e.find("PasswordProtected") != std::string::npos) {
+        return "（设备现在**锁着**：iOS 只在解锁状态下放行开发者服务。请解锁并让屏幕"
+               "亮着再试；这不是 DDI 的问题）";
+    }
+    if (e.find("UserDenied") != std::string::npos || e.find("Trust") != std::string::npos) {
+        return "（设备上还没点「信任这台电脑」：解锁之后会问一次，点信任再试）";
+    }
+    if (e.find("InvalidService") != std::string::npos) {
+        return "（设备里没有这个服务：开发者模式没开，或 DDI 还没挂载 —— 用 Xcode 连"
+               "一次这台设备就会挂）";
+    }
+    return "（DDI 是否已挂载？开发者模式是否开着？）";
+}
+
 std::string mask(std::string_view value, std::size_t keep) {
     if (value.size() <= keep) {
         return std::string(value);
@@ -54,7 +72,11 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
         return std::nullopt;
     }
     if (devices.empty()) {
-        err = "没有在连设备";
+        // 这句原先只说"没有在连设备"，而最常见的原因根本不在软件层：今天我自己就撞过
+        // 一回——线是只供电不传数据的，设备在旁边充了一晚上，我们这边列表是空的。
+        err = "一台设备都没在连（usbmux 的列表是空的）。先查物理层：换一根确定能传数据的线"
+              "（有些线只供电）、把设备唤醒解锁、拔插一次。注意**还没点「信任」的设备也会"
+              "出现在这个列表里**，所以列表为空不是信任问题，也不是锁屏问题。";
         return std::nullopt;
     }
 
@@ -78,7 +100,15 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
             }
         }
         if (chosen == nullptr) {
-            err = "没有在连设备匹配 " + std::string(mask(udid)) + "（注意信任与锁屏状态）";
+            // 这一句原先写的是"注意信任与锁屏状态"，那是**错的指向**：没点信任、锁着屏的
+            // 设备照样会出现在这个列表里（信任是在后面 lockdown 那一步才要的东西）。
+            // 报了 UDID 却没匹配上，绝大多数就是"插的不是这台"或"这台掉线了"。
+            err = "没有在连设备匹配 " + std::string(mask(udid)) + "；当前在连的是：";
+            for (const auto &d : devices) {
+                err += " " + mask(d.udid);
+            }
+            err += "（一共 " + std::to_string(devices.size()) + " 台）。这一条报的不是信任也不是"
+                   "锁屏——那两种设备都会照常出现在列表里；要么是插的不是这台，要么那台已经掉线。";
             return std::nullopt;
         }
     }
@@ -97,8 +127,7 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
     stage(verbose, "起 CoreDeviceProxy");
     auto ep = dev->lockdown_->start_service(kCoreDeviceProxy, err);
     if (!ep) {
-        err = "起 " + std::string(kCoreDeviceProxy) + " 失败: " + err +
-              "（DDI 是否已挂载？开发者模式是否开着？）";
+        err = "起 " + std::string(kCoreDeviceProxy) + " 失败: " + err + proxy_failure_hint(err);
         return std::nullopt;
     }
     stage(verbose, "CDTunnel 握手");

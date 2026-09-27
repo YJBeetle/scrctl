@@ -441,10 +441,46 @@ std::unique_ptr<ServiceConnection> Rsd::connect_service(std::string_view name, s
                                                         bool verbose) {
     const auto info = service(name);
     if (!info) {
-        err = "设备目录里没有服务 " + std::string(name);
+        err = missing_service_message(name, services_);
         return nullptr;
     }
     return ServiceConnection::open(*stack_, *info, err, verbose);
+}
+
+std::string Rsd::missing_service_message(const std::string_view name,
+                                         const std::vector<ServiceInfo> &seen) {
+    // 服务名很长（`com.apple.coredevice.displayservice` 这种），一条一行才看得清，
+    // 而这个报错只可能在**致命**路径上出现，所以这里不怕刷屏——刷屏正是我们要的：
+    // 用户把整段贴回来，就能判那台设备到底给的是什么目录。
+    //
+    // 但不整条打：实测一台 iOS 27 的目录有 **85** 条，全打反而没人读。打的是
+    // `com.apple.coredevice.*` 这一族——**这一族有没有、有几条，正是"DDI 挂没挂"与
+    // "这版系统的 DeviceKit 缺哪条服务"的分界**。剩下的用数目交代，要全量有
+    // `feature_probe --all`。
+    std::string out = "设备目录里没有服务 " + std::string(name) + "。";
+    if (seen.empty()) {
+        out += "而目录是**空的**（一条服务都没读到）：隧道大概率没通成，或设备还没挂载 DDI。";
+        return out;
+    }
+    std::vector<std::string> cd;
+    for (const auto &s : seen) {
+        if (s.name.rfind("com.apple.coredevice", 0) == 0) {
+            cd.push_back(s.name);
+        }
+    }
+    out += "设备自己给的目录一共 " + std::to_string(seen.size()) + " 条，其中 " +
+           std::to_string(cd.size()) + " 条是 com.apple.coredevice.*：\n";
+    if (cd.empty()) {
+        out += "  （一条都没有 —— 这就是「DDI 没挂／这台设备的 CoreDevice 服务集是空的」，"
+               "先用 Xcode 连一次这台设备）\n";
+    }
+    for (const auto &n : cd) {
+        out += "  · " + n + "\n";
+    }
+    out += "请把这一段整段贴回来：它能直接分得开「DDI 没挂」与「这版系统没实现这套服务」。"
+           "要完整目录（含每条的 feature 列表）跑 `feature_probe`，加 `--all` 打全部 " +
+           std::to_string(seen.size()) + " 条。\n";
+    return out;
 }
 
 const xpc::Value *Rsd::properties() const {

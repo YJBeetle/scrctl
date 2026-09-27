@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
     std::string err;
     auto devices = Device::list(err);
     if (devices.empty()) {
-        std::fprintf(stderr, "没有在连设备: %s\n", err.c_str());
+        std::fprintf(stderr, "建立会话失败: %s\n", err.c_str());
         return 1;
     }
     for (const auto &d : devices) {

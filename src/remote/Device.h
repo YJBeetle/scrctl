@@ -13,6 +13,14 @@
 
 namespace scrctl::remote {
 
+/// `start_service(CoreDeviceProxy)` 失败时该在错误后面补哪一句。
+///
+/// 做成纯函数是因为**补错方向比不补更坏**：一份外部反馈里那台设备连着两次回
+/// `PasswordProtected`（意思是"现在锁着屏"），而我们的后缀写的是"DDI 是否已挂载？
+/// 开发者模式是否开着？"——用户照着去查 DDI，方向整个是错的。设备回的那个错误码
+/// 本身就带着原因，所以这一格离线就能判。
+std::string proxy_failure_hint(std::string_view lockdown_error);
+
 /// 一台设备的一次完整会话：usbmuxd -> lockdown 配对 session -> 双向 TLS ->
 /// CoreDeviceProxy -> CDTunnel -> RSD 目录。
 ///

@@ -127,6 +127,15 @@ public:
     [[nodiscard]] bool supports(std::string_view service_name, std::string_view feature) const;
     [[nodiscard]] const std::vector<ServiceInfo> &services() const { return services_; }
 
+    /// "目录里没有这个服务"那句报错的完整措辞：**把目录里实际看到的一起打出来**。
+    ///
+    /// 理由是一次外部反馈：那台 iPad mini(iOS 18) 走到"设备目录里没有 displayservice"
+    /// 就停了，而我们只报缺什么、不报有什么，远程就分不出"DDI 根本没挂"和"这版系统的
+    /// DeviceKit 没实现这套服务"——两种都要改代码，改法完全不同。设备目录是它自己发的
+    /// 权威清单，所以这一段才是决定性数据。纯函数（输入是个列表），因此离线就能判。
+    static std::string missing_service_message(std::string_view name,
+                                               const std::vector<ServiceInfo> &seen);
+
     /// 目录里这一项的**原始** XPC 字典。解析后的结构体只覆盖了我预料得到的键，
     /// 排查"为什么设备不回话"时用得着没被解读的那些字段。
     [[nodiscard]] const xpc::Value *service_entry(std::string_view name) const;

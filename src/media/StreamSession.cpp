@@ -110,7 +110,11 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
                                                    remote::ServiceConnection *on_conn) {
     const auto info = device.rsd().service("com.apple.coredevice.displayservice");
     if (!info) {
-        err = "设备目录里没有 displayservice（DDI 是否已挂载？）";
+        // 这句必须把**目录里实际有什么**一起打出来：外部反馈里那台 iPad mini(iOS 18) 就
+        // 停在这里，而我们只说"缺 displayservice（DDI 是否已挂载？）"，远程就分不开
+        // "没挂 DDI"与"这版系统的 DeviceKit 压根没这条服务"——两种改法完全不同。
+        err = scrctl::remote::Rsd::missing_service_message(
+            "com.apple.coredevice.displayservice", device.rsd().services());
         return nullptr;
     }
 
