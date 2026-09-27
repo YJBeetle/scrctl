@@ -253,6 +253,8 @@ void FramePump::loop() {
     }
     bool configured = false;
     std::unique_ptr<scrctl::rt::HevcRtpDepacketizer> depacketizer;
+    /// 只给那两档探针开关用：收到的视频包个数（SR 不算）。
+    uint64_t video_seen = 0;
 
     /// 参考链断了就花 12 字节求一个 IDR。
     ///
@@ -266,17 +268,30 @@ void FramePump::loop() {
     /// `pkts in: 40` 说明包到了，但 `Last RTCP packet receive time:nan`，20.13 秒准时死；
     /// 同臂同频同 SSRC，唯一变量就是那个 FIR）。见 docs §13。
     auto request_keyframe = [&] {
+        // 这一轮等待的**起点**。后备重起必须按它算，不能按 `last_pli_ms_`：等待期间
+        // 每秒重发一次 PLI 会把 last_pli_ms_ 一直往前推，"距上次 PLI 满 2 秒"就永远
+        // 不成立（review 的 P1）。
+        //
+        // 它排在**所有提前返回之前**，是因为第一版探针档把这里踩过一次：`debug_suppress_pli`
+        // 检查写在上面，于是"不发 PLI"顺手把这份时钟也压掉了，后备判据里
+        // `first_pli_ms_ != 0` 永远不成立——那条真机跑出来是"没到点"，而没到点的
+        // 原因是档位，不是被测的代码。等 IDR 这件事从决定要等那一刻就开始了，发不发
+        // 得出包是另一回事。
+        if (first_pli_ms_ == 0) {
+            first_pli_ms_ = now_ms();
+        }
+        if (options_.debug_suppress_pli) {
+            // 探针档位：一个 PLI 都不发，于是"参考链断了而 IDR 要不来"这个现场是
+            // 确定性的，唯一还能救场的就是那条后备。
+            std::lock_guard<std::mutex> lock(mutex_);
+            ++stats_.pli_suppressed;
+            return;
+        }
         if (now_ms() < next_pli_ms_) {
             return;  // 正在等 IDR，别刷屏
         }
         next_pli_ms_ = now_ms() + kPliPeriodMs;
         last_pli_ms_ = now_ms();
-        // 这一轮等待的**起点**。后备重起必须按它算，不能按 `last_pli_ms_`：等待期间
-        // 每秒重发一次 PLI 会把 last_pli_ms_ 一直往前推，"距上次 PLI 满 2 秒"就永远
-        // 不成立（review 的 P1）。
-        if (first_pli_ms_ == 0) {
-            first_pli_ms_ = now_ms();
-        }
         const auto pli = scrctl::rt::build_pli(session_->started().remote_ssrc,
                                                session_->started().local_ssrc);
         std::string serr;
@@ -287,6 +302,32 @@ void FramePump::loop() {
             // 发不出去一般是会话已经没了；心跳判据一两秒内会重起，这里不抢它的活。
             std::fprintf(stderr, "PLI 发送失败: %s\n", serr.c_str());
         }
+    };
+
+    /// 看见缺口/作废分片就武装这条后备。**必须在收到包的那一刻看，不能等解析器交出
+    /// 一个 AU 再说**：这条流是内容驱动的，静帧时一个视频字节都不来，而旧写法把"发现
+    /// 丢包"放在 AU 回调里，于是 `awaiting_idr_from_loss_` 从来没被置起——后备重起那条
+    /// 判据里挂的就是它，所以它不但"到点没跑"，而是**根本没被武装**。那是同一个冻屏的
+    /// 第二种成因，搬判据位置治不了它（docs §20）。
+    auto note_loss = [&] {
+        if (depacketizer == nullptr) {
+            return;
+        }
+        const auto &dst = depacketizer->stats();
+        const uint64_t loss_now = dst.seq_gaps + dst.dropped_fragments;
+        if (loss_now <= loss_seen_) {
+            return;
+        }
+        loss_seen_ = loss_now;
+        loss_since_au_ = true;
+        awaiting_idr_from_loss_ = true;
+        if (!need_keyframe_) {
+            // 只在从没武装过时打，免得一次丢包刷出十几行。
+            std::printf("看见序号缺口/作废分片：武装后备重起（%d 毫秒等不到 IDR 就重起会话）\n",
+                        options_.stall_restart_ms);
+        }
+        need_keyframe_ = true;
+        request_keyframe();
     };
 
     // 每个会话一套解析器：重起流意味着 AU 边界要从头算，留着半截 NAL 会把新
@@ -383,18 +424,11 @@ void FramePump::loop() {
             // 丢包（序号缺口或分片丢失）之后，参考链已经不可信：非关键帧解了也是
             // 花的，而且会把坏参考继续传下去。所以丢掉一切直到一个**完整**的关键帧。
             // "完整"= 这个关键帧自己的组装期间没再丢包；沾了丢包的关键帧同样不可信。
-            const auto &dst = depacketizer->stats();
-            const uint64_t loss_now = dst.seq_gaps + dst.dropped_fragments;
-            const bool lost_since_prev = loss_now > loss_seen_;
-            if (lost_since_prev) {
-                need_keyframe_ = true;
-                // 只有**丢包**这一种成因才走"PLI 不成就重起"那条后备。超大 NAL 那处
-                // 也置 need_keyframe_，但它有自己那套上限与降级（kMaxOversizedRestarts
-                // + video_unusable_，见上面），被这条通用判据抢走就会绕开上限、变成
-                // 每 1.5 秒停+起而永不成功——那正是加上限要防的事。
-                awaiting_idr_from_loss_ = true;
-            }
-            loss_seen_ = loss_now;
+            // 丢包由 `note_loss()` 在收到包的那一刻就发现并武装（比这里早），这里只
+            // 消费"自上一个 AU 以来丢过包"这个标记——它管的是另一件事：这个关键帧
+            // 自己的组装期间沾没沾丢包，沾了就不能当干净关键帧用。
+            const bool lost_since_prev = loss_since_au_;
+            loss_since_au_ = false;
             if (need_keyframe_) {
                 if (!keyframe || lost_since_prev) {
                     // 正在等干净关键帧：先去要一个，再决定是否丢弃这个 AU。
@@ -470,6 +504,10 @@ void FramePump::loop() {
         ever_keyframe_ = false;
         need_keyframe_ = false;
         loss_seen_ = 0;
+        loss_since_au_ = false;
+        // 那两档探针开关数的是"**本会话**第几个视频包"：重起之后要能从 0 重数，否则
+        // `debug_ignore_video_after` 会把新会话也一起饿死，就看不见"救回来了没有"。
+        video_seen = 0;
         // 设备的 SR 累计数每条会话从零重数，我们的 packets 跨会话连着涨。留下这个
         // 基线，读数才是在同一条数轴上比（见 Stats::session_packets_base）。
         // 设备那一侧则反过来：它的数要跟着会话归零，否则重起后的第一秒里读数是
@@ -696,6 +734,10 @@ void FramePump::loop() {
                 }
             }
             if (stalled) {
+                {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    ++stats_.stall_restarts;
+                }
                 std::printf("等 IDR 等满 %d 毫秒还没换来新关键帧，重起会话去拿一个\n",
                             options_.stall_restart_ms);
                 restart_now();  // 失败由循环顶端的空会话兜底接手退避重试
@@ -760,6 +802,25 @@ void FramePump::loop() {
             }
         }
 
+        if (!is_sr) {
+            ++video_seen;
+        }
+        if (options_.debug_drop_nth_packet > 0 && !is_sr &&
+            static_cast<int>(video_seen) == options_.debug_drop_nth_packet) {
+            std::printf("!! 探针档位：故意不吃第 %d 个视频包（制造一次真实缺口）\n",
+                        options_.debug_drop_nth_packet);
+            options_.debug_drop_nth_packet = 0;  // 一次性：重起之后的新会话不该再被丢
+            std::lock_guard<std::mutex> lock(mutex_);
+            stats_.debug_dropped_at_ms = now_ms();  // 探针拿它算"到点没到点"
+            continue;
+        }
+        if (options_.debug_ignore_video_after > 0 && !is_sr &&
+            static_cast<int>(video_seen) > options_.debug_ignore_video_after) {
+            // 探针档位：本地模拟"画面静止"。设备那边可能还在动，但从此我们只吃 SR——
+            // 而被测的那条判据关心的恰恰是"只剩心跳在走时它到不到点"，所以这一档让
+            // 那个现场**与屏幕上正在演什么无关**，可复现。
+            continue;
+        }
         std::vector<uint8_t> bytes;
         const uint64_t t_dp0 = now_ms();
         const bool pushed = depacketizer->push(datagram, bytes, err);
@@ -768,6 +829,7 @@ void FramePump::loop() {
             stats_.other_payload = depacketizer->stats().other_payload;
             stats_.ms_depacketize += static_cast<double>(now_ms() - t_dp0);
         }
+        note_loss();
         if (!pushed || bytes.empty()) {
             continue;
         }

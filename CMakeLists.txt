@@ -320,5 +320,9 @@ target_link_libraries(audio_decode_probe PRIVATE scrctl_core)
 
 # 音频腿的真机四问（独立会话号 / 静默时发不发包 / RR 能不能续命 / 与视频腿共存）。
 # 不进 ctest：要真机。
+# PLI 后备重起到不到点（见文件头：三个"专门制造不一致"的档位）
+add_executable(stall_probe tools/stall_probe.cpp)
+target_link_libraries(stall_probe PRIVATE scrctl_core)
+
 add_executable(audio_pump_probe tools/audio_pump_probe.cpp)
 target_link_libraries(audio_pump_probe PRIVATE scrctl_core)
