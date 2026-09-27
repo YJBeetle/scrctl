@@ -655,6 +655,54 @@ void FramePump::loop() {
             restart_now();
             continue;
         }
+        // PLI 没换来 IDR 时的后备重起。**必须挂在每轮必到的位置上**，不能挂在
+        // "这轮真解析出了视频字节"那条支路后面：丢包之后设备只按秒发 SR、不发新帧，
+        // 而 SR 会让 `next_packet` 成功、让 `last_packet_ms_` 一直刷新——于是那条支路
+        // 上的 `continue` 把这份判据整个跳过，静默超时那条也永远不会触发，画面就
+        // 停在旧帧上不动。这与下面 `next_packet` 之前那几段是同一条道理。
+        //
+        // 卡住的判据要两条同时成立：只看序号缺口会误伤（丢一个分片也许下一帧
+        // 就是关键帧），只看"多久没关键帧"又会在静止画面上白白重起。
+        if (options_.stall_restart_ms > 0 && depacketizer != nullptr) {
+            const auto &dst = depacketizer->stats();
+            const uint64_t gaps = dst.seq_gaps;
+            bool stalled = false;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                // 这条判据现在的形状：**正在等 IDR（成因是丢包）+ 从第一次请求算起
+                // 等满了 stall_restart_ms + 距上一个关键帧也超过了它**。
+                //
+                // 三个变量各管一件事，少一个就出事故：
+                //  - `awaiting_idr_from_loss_`：只在丢包那处置起，拿到干净关键帧就清。
+                //  - `first_pli_ms_`：**第一次**请求的时刻。
+                //  - `last_keyframe_ms_`：这条流的 IDR 有多稀疏？实测基线 30 秒只有 1 个
+                //    （起流那一下），所以这一项几乎恒真——它存在的意义是"别在刚解出关键帧
+                //    的时候重起"，不是主判据。
+                //
+                // 为什么不用"本轮出现了新缺口"（`gaps > gaps_at_last_check_`）当条件：
+                // 那一版是 review 抓出来的 P1——`gaps_at_last_check_` 每轮都跟着更新，
+                // 所以"缺口"只在丢包那一瞬成立，而那一刻时间项必然还没到点；等到点时
+                // 已经没有"新缺口"了。两个条件互斥，后备重起**永远打不到**：PLI 万一
+                // 没换来 IDR，画面就永久停在旧帧上。
+                stalled = awaiting_idr_from_loss_ && first_pli_ms_ != 0 &&
+                          now_ms() - first_pli_ms_ >=
+                              static_cast<uint64_t>(options_.stall_restart_ms) &&
+                          now_ms() - last_keyframe_ms_ >
+                              static_cast<uint64_t>(options_.stall_restart_ms);
+                stats_.gaps = gaps;
+                stats_.dropped_fragments = dst.dropped_fragments;
+                if (stalled) {
+                    last_keyframe_ms_ = now_ms();  // 给新会话留出时间，别连着撞
+                }
+            }
+            if (stalled) {
+                std::printf("等 IDR 等满 %d 毫秒还没换来新关键帧，重起会话去拿一个\n",
+                            options_.stall_restart_ms);
+                restart_now();  // 失败由循环顶端的空会话兜底接手退避重试
+                continue;       // 这一轮的包属于上一条会话了
+            }
+        }
+
         if (!session_->next_packet(datagram, 50, err)) {
             {
                 std::lock_guard<std::mutex> lock(mutex_);
@@ -728,44 +776,6 @@ void FramePump::loop() {
         }
         parser_->feed(bytes.data(), bytes.size());
 
-        // 卡住的判据要两条同时成立：只看序号缺口会误伤（丢一个分片也许下一帧
-        // 就是关键帧），只看"多久没关键帧"又会在静止画面上白白重起。
-        if (options_.stall_restart_ms > 0) {
-            const auto &dst = depacketizer->stats();
-            const uint64_t gaps = dst.seq_gaps;
-            bool stalled = false;
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                // 这条判据现在的形状：**正在等 IDR（成因是丢包）+ 从第一次请求算起
-                // 等满了 stall_restart_ms + 距上一个关键帧也超过了它**。
-                //
-                // 三个变量各管一件事，少一个就出事故：
-                //  - `awaiting_idr_from_loss_`：只在丢包那处置起，拿到干净关键帧就清。
-                //  - `first_pli_ms_`：**第一次**请求的时刻。
-                //  - `last_keyframe_ms_`：这条流的 IDR 有多稀疏？实测基线 30 秒只有 1 个
-                //    （起流那一下），所以这一项几乎恒真——它存在的意义是"别在刚解出关键帧
-                //    的时候重起"，不是主判据。
-                //
-                // 为什么不用"本轮出现了新缺口"（`gaps > gaps_at_last_check_`）当条件：
-                // 那一版是 review 抓出来的 P1——`gaps_at_last_check_` 每轮都跟着更新，
-                // 所以"缺口"只在丢包那一瞬成立，而那一刻时间项必然还没到点；等到点时
-                // 已经没有"新缺口"了。两个条件互斥，后备重起**永远打不到**：PLI 万一
-                // 没换来 IDR，画面就永久停在旧帧上。
-                stalled = awaiting_idr_from_loss_ && first_pli_ms_ != 0 &&
-                          now_ms() - first_pli_ms_ >=
-                              static_cast<uint64_t>(options_.stall_restart_ms) &&
-                          now_ms() - last_keyframe_ms_ >
-                              static_cast<uint64_t>(options_.stall_restart_ms);
-                stats_.gaps = gaps;
-                stats_.dropped_fragments = dst.dropped_fragments;
-                if (stalled) {
-                    last_keyframe_ms_ = now_ms();  // 给新会话留出时间，别连着撞
-                }
-            }
-            if (stalled) {
-                restart_now();  // 失败由循环顶端的空会话兜底接手退避重试
-            }
-        }
     }
 }
 
