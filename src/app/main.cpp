@@ -338,6 +338,13 @@ bool parse_args(int argc, char **argv, Options &o) {
     if (o.scale <= 0.0) {
         o.scale = 1.0;
     }
+    if (o.no_window && o.verify_at > 0) {
+        // 拦在参数阶段而不是让它安静地什么都不做：`--verify` 要的是"渲染到第 N 帧时
+        // 回读窗口内容"，而没有窗口就没有渲染器，那条回读**从来没执行过**——它会带着
+        // 退出码 0 结束，看起来像"验过了"。这与 §19 记的那次"仪器自己撒谎"是同一族。
+        std::fprintf(stderr, "--verify 需要窗口（它回读的是渲染器的内容），不能与 --no-window 同用\n");
+        return false;
+    }
     return true;
 }
 
@@ -1555,7 +1562,18 @@ int main(int argc, char **argv) {
         // 必须在 SDL_CreateRenderer 之前设；设晚了没有任何提示，只是驱动还是默认那个。
         SDL_SetHint(SDL_HINT_RENDER_DRIVER, o.render_driver.c_str());
     }
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
+    // 视频子系统**按需**初始化。以前是无条件 `SDL_INIT_VIDEO | SDL_INIT_TIMER`，于是
+    // `--no-window`（脚本、控制单元、CI）这条压根不碰屏幕的路径也要先能开出视频设备：
+    // 在没有显示器、或者 `SDL_VIDEODRIVER` 被指坏了的环境里它直接退在 `SDL_Init`，而报的
+    // 是一句"SDL 初始化失败"——听起来像整个工具起不来，其实它连窗口都不打算开。
+    // 音频子系统早就是"单独初始化 + 容许失败"这个形状了，视频这边只是没人补上同一条规矩。
+    Uint32 sdl_flags = SDL_INIT_TIMER;
+    if (!o.no_window || o.disable_screensaver) {
+        // 后者借视频子系统：`SDL_DisableScreenSaver` 在 cocoa 那边归视频设备管，
+        // 没初始化视频就是个静默的不做事——那比不起窗口更骗人。
+        sdl_flags |= SDL_INIT_VIDEO;
+    }
+    if (SDL_Init(sdl_flags) != 0) {
         std::fprintf(stderr, "SDL 初始化失败: %s\n", SDL_GetError());
         return 1;
     }
