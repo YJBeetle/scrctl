@@ -31,6 +31,14 @@ constexpr int kMaxOversizedRestarts = 3;
 /// 到顶之后的重试间隔。不是彻底停手：用户把画面弄简单了（关掉看板、回到主屏）之后
 /// 这条流还得能自己活回来，所以偶尔还得试一次。解出一帧之后计数清零，回到正常节奏。
 constexpr uint64_t kOversizedRetryMs = 60000;
+/// 起流之后多久还解不出**任何**关键帧，就认定"开头那个 IDR 被丢了"，重起去拿一个。
+constexpr uint64_t kNokeyBlindMs = 5000;
+/// 这一判的上限，与超大那一路同一个数目、同一个道理：**到顶不等于可以停手**。
+/// 停手的后果比慢更糟——SR 每秒还在到，`last_packet_ms_` 一直被喂，静默那条永不响；
+/// 而新会话把 `awaiting_idr_from_loss_` 清了，后备那条也没再武装。于是画面永久停在
+/// 最后一帧好画上，进程、线程、隧道全都好着（review 的 P2）。所以到顶之后转成
+/// "降级 + 每 `kOversizedRetryMs` 再试一次"，由泵自己的退避计时驱动，不靠包到达。
+constexpr int kMaxNokeyRestarts = 3;
 /// 一条媒体会话的租期有多长。**这个数是我们自己在 startmediastream 请求里报的**（那个
 /// 键就叫 `timeout`），设备把它原样抄进 answer 的 `RTCPTimeoutInterval`，然后从"上次
 /// 收到我们 RTCP"起倒数，到点就把这条会话从设备表里摘掉。
@@ -118,6 +126,15 @@ void warn_no_software() {
 }
 
 }  // namespace
+
+NokeyAction plan_nokey(const int restarts, const int max_restarts, const bool already_unusable) {
+    if (restarts < max_restarts) {
+        return NokeyAction::kRetry;
+    }
+    // 到顶之后只有两种可能：还没标记降级（那就标上，从此由退避计时慢速再试），
+    // 或者已经标了（这一轮什么都不做，等那个计时）。**没有"停手"这一档**。
+    return already_unusable ? NokeyAction::kWait : NokeyAction::kDegrade;
+}
 
 FramePump::FramePump(remote::Device &device, Options options, bool verbose)
     : device_(device), options_(std::move(options)), verbose_(verbose) {}
@@ -457,7 +474,7 @@ void FramePump::loop() {
             // 欠账（`awaiting_idr_from_loss_` 是丢包才置起的），打它一下只会让两臂都在
             // 之后的真丢包上重起 —— 判据就退化成"重起发生在失败之后"，而那句在没修的
             // 版本里同样成立。加上这个门槛，受害者才落在被测的那条状态机上。
-            if (keyframe && awaiting_at_entry &&
+            if (keyframe && (awaiting_at_entry || options_.debug_fail_any_keyframe) &&
                 options_.debug_fail_decode_of_keyframe > 0) {
                 --options_.debug_fail_decode_of_keyframe;
                 // 从这一刻起把 PLI 也掐了：这条臂要量的是"IDR 到手却解不出"之后还剩
@@ -724,12 +741,18 @@ void FramePump::loop() {
         if (video_unusable_ && now_ms() - last_restart_ms_ >= kOversizedRetryMs) {
             last_restart_ms_ = now_ms();
             oversized_restart_ = true;
-            std::printf("降级满 %llu 秒，再试一次这条视频流（画面可能已经变简单了）\n",
+            std::printf("降级满 %llu 秒，再试一次这条视频流（画面可能已经变简单、"
+                        "或者后端已经能解这种 IDR 了）\n",
                         static_cast<unsigned long long>(kOversizedRetryMs / 1000));
         }
         if (oversized_restart_) {
             oversized_restart_ = false;
-            std::printf("有 NAL 超过平台后端的长度前缀上限，重起媒体会话拿新关键帧\n");
+            // 这句话有两个来源，别把它们混成一句假话：降级之前只可能是"NAL 超过后端上限"，
+            // 降级之后这个重试也服务于"连续解不出关键帧"那一路（同一个 `video_unusable_`
+            // 计时器管着）。到降级期就按原因说不清了，只能说"再试一次拿新关键帧"。
+            std::printf("%s，重起媒体会话拿新关键帧\n",
+                        video_unusable_ ? "降级期内按退避再试一次这条流"
+                                        : "有 NAL 超过平台后端的长度前缀上限");
             // 失败不在这里睡、也不在这里重试：`restart_now()` 打日志，循环顶端那个
             // "没有会话就绝不往下走"的兜底负责 1 秒退避。以前这里自己睡 1 秒再
             // continue，而 continue 之后的第一句就是解引用空的 `session_`。
@@ -788,6 +811,39 @@ void FramePump::loop() {
             }
         }
 
+        // 起流之后一直解不出任何关键帧：按 `plan_nokey` 那把阶梯走。
+        //
+        // **位置就是这一条的修复本身**。它原先挂在下面 `next_packet` 超时那条支路里，
+        // 于是只有在"一个包都不来"的时候才可能被检查——而臂 C 的真机读数正是这个形状：
+        // 115 秒里 69201 个视频包、6894 个 AU、解出 0 帧、**总重起 0 次**，阶梯一次都没走。
+        // 画面在动的时候包是连续的，50ms 超时几乎轮不到，判据就永远不被评估。这是
+        // docs §20 那条"时间型判据必须挂在每轮必到的位置上"**第三次**复发（前两次：
+        // PLI 后备 20.1、`--verify` 回读 19），每一次的成因都不同，所以每一次都得单独记。
+        if (!ever_keyframe_ && now_ms() - session_start_ms_ > kNokeyBlindMs) {
+            switch (plan_nokey(nokey_restarts_, kMaxNokeyRestarts, video_unusable_)) {
+            case NokeyAction::kRetry:
+                ++nokey_restarts_;
+                session_start_ms_ = now_ms();
+                std::printf("起流 %llu 秒仍未解出关键帧（开头 IDR 可能被丢），重起媒体会话 (%d/%d)\n",
+                            static_cast<unsigned long long>(kNokeyBlindMs / 1000),
+                            nokey_restarts_, kMaxNokeyRestarts);
+                restart_now();
+                continue;  // 这一轮的包属于上一条会话了
+            case NokeyAction::kDegrade:
+                video_unusable_ = true;
+                std::printf("连续 %d 次重起都一个关键帧都没解出来：这条流当前的后端解不了。"
+                            "取帧方请改走截图服务，别再等帧；改成每 %llu 秒才试一次，"
+                            "**不停手**——停手就是永久停在旧画面上。\n",
+                            kMaxNokeyRestarts,
+                            static_cast<unsigned long long>(kOversizedRetryMs / 1000));
+                break;
+            case NokeyAction::kWait:
+                break;
+            }
+            // 到顶之后不在这里排重试：上面那个 `video_unusable_` 退避计时统一管
+            // （与超大那一路同一条规矩：两处都排会互相把对方的间隔吃掉）。
+        }
+
         if (!session_->next_packet(datagram, 50, err)) {
             {
                 std::lock_guard<std::mutex> lock(mutex_);
@@ -798,15 +854,6 @@ void FramePump::loop() {
             // 一个包都不来了：设备已经把我们这条流结束掉了（实测它会在几分钟之后
             // 自己停，且我们从不回 RTCP 接收报告）。不重起的话用户看到的就是
             // "窗口冻住"，而进程、线程、隧道全都好着——最难往流上想。
-            if (!ever_keyframe_ && now_ms() - session_start_ms_ > 5000 &&
-                nokey_restarts_ < 3) {
-                ++nokey_restarts_;
-                session_start_ms_ = now_ms();
-                std::printf("起流 %d 秒仍未解出关键帧（开头 IDR 可能被丢），重起媒体会话 (%d/3)\n",
-                            5, nokey_restarts_);
-                restart_now();
-                continue;
-            }
             if (options_.silence_restart_ms > 0) {
                 const uint64_t quiet = now_ms() - last_packet_ms_;
                 judge_quiet(quiet, std::max<uint64_t>(kQuietCertainMs,

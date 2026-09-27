@@ -70,6 +70,7 @@ int main(int argc, char **argv) {
     int drop_at = 700;
     int ignore_after = 900;
     int fail_decode = 0;
+    int fail_every = 0;
     int watch_ms = 20000;
     bool verbose = false;
     for (int i = 1; i < argc; ++i) {
@@ -84,6 +85,8 @@ int main(int argc, char **argv) {
             ignore_after = std::stoi(argv[++i]);
         } else if (a == "--fail-decode" && i + 1 < argc) {
             fail_decode = std::stoi(argv[++i]);
+        } else if (a == "--fail-every-keyframe" && i + 1 < argc) {
+            fail_every = std::stoi(argv[++i]);
         } else if (a == "--watch" && i + 1 < argc) {
             watch_ms = std::stoi(argv[++i]);
         }
@@ -93,22 +96,33 @@ int main(int argc, char **argv) {
     // 一个视频包都不吃，拆包器就永远看不到跳号，`seq_gaps` 不涨，后备判据压根不武装
     // ——第一版默认值正好是 drop=60/ignore=60，于是一次都测不出来（跑出来像"没到点"，
     // 实际是"没发生"）。留 40 个包的下限是给跳号一点到达时间。
-    if (fail_decode == 0 && drop_at > 0 && ignore_after > 0 &&
-        ignore_after <= drop_at + 40) {
-        std::fprintf(stderr,
-                     "--ignore-video-after(%d) 必须比 --drop-at-packet(%d)+40 大：\n"
-                     "                     丢包点之后还要收若干个包，缺口才看得见\n",
-                     ignore_after, drop_at);
-        return 2;
+    // 臂 C 一条包都不丢（它量的是"没有丢包的持续解不出"），所以这两道校验只管 A/B。
+    if (fail_every == 0) {
+        if (fail_decode == 0 && drop_at > 0 && ignore_after > 0 &&
+            ignore_after <= drop_at + 40) {
+            std::fprintf(stderr,
+                         "--ignore-video-after(%d) 必须比 --drop-at-packet(%d)+40 大：\n"
+                         "                     丢包点之后还要收若干个包，缺口才看得见\n",
+                         ignore_after, drop_at);
+            return 2;
+        }
+        // 丢包点落在开头那个 IDR 里 = 每次会话都注定解不出东西（IDR 自己缺了分片，
+        // 后面所有帧的参考链都是断的），那这一臂从头到尾在量的就不是被测判据。IDR 最大
+        // 实测 64KB、一包 ~1300B，所以 200 包这个下限留了三倍的余量。
+        if (drop_at > 0 && drop_at < 200) {
+            std::fprintf(stderr,
+                         "--drop-at-packet(%d) 太小：要落在会话开头那个 IDR 之后（>=200），\n"
+                         "                     否则缺口打在 IDR 自己身上，量到的全是重起循环\n",
+                         drop_at);
+            return 2;
+        }
     }
-    // 丢包点落在开头那个 IDR 里 = 每次会话都注定解不出东西（IDR 自己缺了分片，
-    // 后面所有帧的参考链都是断的），那这一臂从头到尾在量的就不是被测判据。IDR 最大
-    // 实测 64KB、一包 ~1300B，所以 200 包这个下限留了三倍的余量。
-    if (drop_at > 0 && drop_at < 200) {
+    // 臂 C 的 N 有个下限：要让阶梯真的走到顶（3 次快重起 + 降级那一次打印），
+    // 少于此就只会看到"第一次重起就好了"，量不到被测的终态。
+    if (fail_every > 0 && fail_every < 4) {
         std::fprintf(stderr,
-                     "--drop-at-packet(%d) 太小：要落在会话开头那个 IDR 之后（>=200），\n"
-                     "                     否则缺口打在 IDR 自己身上，量到的全是重起循环\n",
-                     drop_at);
+                     "--fail-every-keyframe(%d) 太小：上限是 3 次重起后降级，N 至少 4 才走得到\n",
+                     fail_every);
         return 2;
     }
 
@@ -122,23 +136,36 @@ int main(int argc, char **argv) {
     scrctl::media::FramePump::Options o;
     o.stall_restart_ms = stall_ms;
     o.silence_restart_ms = 0;  // 关掉，免得两把尺混在一起说不清是谁救的场
-    o.debug_drop_nth_packet = drop_at;
-    if (fail_decode == 0) {
-        // 臂 A：IDR 永远不来 + 只剩心跳。
-        o.debug_suppress_pli = true;
-        o.debug_ignore_video_after = ignore_after;
+    if (fail_every > 0) {
+        // 臂 C：**不丢包**，只让每个 IDR 都"解不出图"。量的是"后端对这条流的 IDR 一直
+        // 无输出"这个终态：没有丢包就不会武装后备，而 SR 每秒照到、静默那条也永不响，
+        // 于是唯一还在动的只剩"起流 5 秒没关键帧"那把阶梯——它到顶之后必须转成降级，
+        // 不能停手（review 的 P2）。
+        o.debug_fail_decode_of_keyframe = fail_every;
+        o.debug_fail_any_keyframe = true;
     } else {
-        // 臂 B：PLI 照发（不然没有 IDR 可以判死），视频照吃（要后面的 AU 继续上门才有
-        // 东西可数），但从假装失败那一刻起把 PLI 掐断。
-        o.debug_fail_decode_of_keyframe = fail_decode;
-        o.debug_suppress_pli_after_fail = true;
+        o.debug_drop_nth_packet = drop_at;
+        if (fail_decode == 0) {
+            // 臂 A：IDR 永远不来 + 只剩心跳。
+            o.debug_suppress_pli = true;
+            o.debug_ignore_video_after = ignore_after;
+        } else {
+            // 臂 B：PLI 照发（不然没有 IDR 可以判死），视频照吃（要后面的 AU 继续上门才有
+            // 东西可数），但从假装失败那一刻起把 PLI 掐断。
+            o.debug_fail_decode_of_keyframe = fail_decode;
+            o.debug_suppress_pli_after_fail = true;
+        }
     }
     auto pump = scrctl::media::FramePump::start(*dev, o, err, verbose);
     if (pump == nullptr) {
         std::fprintf(stderr, "起泵失败: %s\n", err.c_str());
         return 1;
     }
-    if (fail_decode == 0) {
+    if (fail_every > 0) {
+        std::printf("档位在跑：不丢包、静默重起关闭；把接下来 %d 个 IDR 一律判成\"解不出图\""
+                    "（看阶梯到顶之后是降级还是停手）\n",
+                    fail_every);
+    } else if (fail_decode == 0) {
         std::printf("档位在跑：第 %d 个视频包不吃、第 %d 个之后只剩 SR、PLI 一个不发、"
                     "静默重起关闭、等满 %d 毫秒就重起\n",
                     drop_at, ignore_after, stall_ms);
@@ -158,6 +185,10 @@ int main(int argc, char **argv) {
     uint64_t restarted_at = 0;
     uint64_t frames_after_restart = 0;  // 重起之后新解出的帧数（差值，不是采样次数）
     uint64_t decoded_at_restart = 0;
+    // 臂 C 的两个关键时刻：降级标记第一次立起来、以及它后来自己掉下去（=自愈）。
+    uint64_t unusable_at = 0, usable_again_at = 0;
+    uint64_t restarts_at_unusable = 0, decoded_at_unusable = 0;
+    bool last_unusable = false;
     scrctl::media::FramePump::Stats last {};
 
     while (now_ms() - t0 < static_cast<uint64_t>(watch_ms)) {
@@ -175,6 +206,21 @@ int main(int argc, char **argv) {
                         static_cast<unsigned long long>(st.stall_restarts));
         }
         frames_after_restart = restarted_at == 0 ? 0 : st.decoded - decoded_at_restart;
+        const bool unusable = pump->video_unusable();
+        if (unusable && !last_unusable) {
+            unusable_at = now_ms();
+            restarts_at_unusable = st.restarts;
+            decoded_at_unusable = st.decoded;
+            std::printf("  +%-6llu ms  降级标记立起来了（总重起=%llu 解出=%llu）\n", unusable_at - t0,
+                        static_cast<unsigned long long>(st.restarts),
+                        static_cast<unsigned long long>(st.decoded));
+        } else if (!unusable && last_unusable) {
+            usable_again_at = now_ms();
+            std::printf("  +%-6llu ms  降级标记掉了、帧又开始解得出来（总重起=%llu 解出=%llu）\n",
+                        usable_again_at - t0, static_cast<unsigned long long>(st.restarts),
+                        static_cast<unsigned long long>(st.decoded));
+        }
+        last_unusable = unusable;
         if (fail_snap_at == 0) {
             if (st.forced_decode_failures > last.forced_decode_failures) {
                 fail_snap_at = now_ms();
@@ -223,6 +269,41 @@ int main(int argc, char **argv) {
                 static_cast<unsigned long long>(st.forced_decode_failures),
                 static_cast<unsigned long long>(st.stall_restarts),
                 static_cast<unsigned long long>(st.restarts));
+    if (fail_every > 0) {
+        // 臂 C 判的是两件事，顺序不能反：
+        //   1. 阶梯到顶之后**降级标记有没有立起来**（立了=转成了"慢速再试"，没立=停在旧画面）；
+        //   2. 之后它有没有**自己掉下去**（掉下去=那条流又解得开了，降级不是终局）。
+        // 只看第 1 条会放过"降级成了一個出不来的坑"这种错——那正是 §20.1 之后仍然存在的
+        // 第二种停手形状，所以这里把"又活了"单独判一次。
+        std::printf("臂 C 读数：降级立于 +%llu ms（其时总重起=%llu、解出=%llu），"
+                    "又活了 %s，结束时解出 %llu 帧\n",
+                    unusable_at == 0 ? 0 : unusable_at - t0,
+                    static_cast<unsigned long long>(restarts_at_unusable),
+                    static_cast<unsigned long long>(decoded_at_unusable),
+                    usable_again_at == 0 ? "没发生过"
+                            : ("+" + std::to_string(usable_again_at - t0) + " ms").c_str(),
+                    static_cast<unsigned long long>(st.decoded));
+        if (unusable_at == 0) {
+            std::printf("P2 判据：**到顶之后没降级**——阶梯停在 3 次上不动了，而 SR 每秒还在喂，"
+                        "于是画面永久停在旧帧（review 说的就是这个）\n");
+            return 1;
+        }
+        if (usable_again_at == 0) {
+            std::printf("P2 判据：降级立了但%s 毫秒的窗口里没等到那一次退避重起（间隔是 60 秒，"
+                        "--watch 要给够）\n",
+                        std::to_string(watch_ms).c_str());
+            return 2;
+        }
+        std::printf("P2 判据：修过的。阶梯走满（+%llu ms 降级，其时总重起=%llu、解出 0 帧）-> "
+                    "帧恢复于 +%llu ms（降级之后 %llu ms）；结束时解出 %llu 帧、总重起 %llu 次。\n"
+                    "  谁救的场看最后那两个数：降级之后 30 秒内就恢复 = 阶梯自己那几次重起里"
+                    "有一个 IDR 解开了；要等满 60 秒才恢复 = 是降级的那把慢速退避救的。\n",
+                    unusable_at - t0, static_cast<unsigned long long>(restarts_at_unusable),
+                    usable_again_at - t0, usable_again_at - unusable_at,
+                    static_cast<unsigned long long>(st.decoded),
+                    static_cast<unsigned long long>(st.restarts));
+        return st.decoded > decoded_at_unusable ? 0 : 1;
+    }
     if (fail_decode > 0) {
         if (fail_snap_at == 0) {
             std::printf("判据不成立：那次假装失败根本没发生（丢包之后没等到一个干净的 IDR）\n"

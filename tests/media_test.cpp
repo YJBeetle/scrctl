@@ -332,6 +332,35 @@ int main() {
         check(bad == 0, "扫一遍请求值：水位永远够得着（这条挂了就是'设了反而静音'）");
     }
 
+    // "起流后一直解不出关键帧"那把阶梯。这一段真机要跑一分多钟才走得到顶，而它顶上
+    // 原本是一个**看不见的终态**：重试满 3 次就停手，SR 每秒还在喂 `last_packet_ms_`
+    // 让静默那条永不响，新会话又把后备的武装清了 —— 于是画面永久停在最后一帧好画上，
+    // 而进程、隧道全都好着（review 的 P2）。这里判的就是"到顶不许等于停手"。
+    std::printf("\n== 解不出关键帧的阶梯：到顶转降级，不许停手 ==\n");
+    {
+        using scrctl::media::NokeyAction;
+        constexpr int kMax = 3;
+        check(plan_nokey(0, kMax, false) == NokeyAction::kRetry, "第一次：照正常节拍重起");
+        check(plan_nokey(2, kMax, false) == NokeyAction::kRetry, "没到上限就还是重起");
+        check(plan_nokey(3, kMax, false) == NokeyAction::kDegrade,
+              "到顶这一次：转成降级（而不是什么都不做）");
+        check(plan_nokey(4, kMax, false) == NokeyAction::kDegrade,
+              "计数万一越过上限也要能补上降级");
+        check(plan_nokey(3, kMax, true) == NokeyAction::kWait,
+              "已经降级了：这一轮什么都不做，交给退避计时管（两处都排会互相吃掉间隔）");
+        // 上限本身不许被写成 0：那等于一上来就降级，正常那一档（开头 IDR 真被丢）就没人救了。
+        check(plan_nokey(0, 0, false) == NokeyAction::kDegrade, "上限 0 也要走降级，不能停手");
+        int stops = 0;
+        for (int r = 0; r <= 12; ++r) {
+            // 阶梯走到底之后不该出现"既不是重起也不是降级、还一直不变"的死格。
+            const auto a = plan_nokey(r, kMax, r > kMax);
+            if (a == NokeyAction::kWait && r <= kMax) {
+                ++stops;
+            }
+        }
+        check(stops == 0, "扫一遍次数：没到上限之前永远不会提前躺平");
+    }
+
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;
 }
