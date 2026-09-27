@@ -2202,3 +2202,99 @@ README 并考虑退回截图服务。所以这一节留在这儿等下一次反�
 
 顺带记一件对本机有意义的事：`--list-devices` 与 `ioreg -p IOUSB` 这两个口子已经足够判断
 "设备到底在不在总线上"——今晚我自己那根只供电的线就是靠它们当场定性的（详见提交历史）。
+
+## 22. M5 侦察：Wi-Fi 这条路今晚走通了哪几段（实测，iPhone13 mini / iOS 27.0 / 同网段）
+
+**结论先行，三句话**：
+
+1. 无线隧道**建得起来**，而且起来之后 RSD 目录与 USB **逐项一样**（各 85 条服务），
+   `displayservice` 在——所以 M5 不需要为"无线上某些服务没有"设计降级路径。
+2. 今晚最大的收获是**配对可以不碰手机**：USB 上那条 `remotepairingdeviced` 控制面能把
+   RemotePairing 记录引导出来（免弹窗），之后网络侧只做 pair-verify。这把 M5 原先最大的
+   未知数——"用户是不是必须去 设置 > 开发者 > 配对的 Mac 里点一下"——从关键路径上摘掉了。
+3. 只剩一个真未知数：**媒体流在无线上的表现**（设备反向打进隧道的 RTP 走空中），以及我们
+   自己的实现。
+
+下面每一条都标了是量出来的还是推出来的。仪器是 pymobiledevice3（只当仪表用，一行代码不进
+产品，GPL 那条红线照守）。
+
+### 22.1 发现（量出来的）
+
+- 设备在局域网广播 `_remotepairing._tcp`，看到的端口是 **49152**；TXT 四键
+  `identifier` / `authTag` / `flags=0` / `minVer=8` / `ver=26`。
+- **同一台设备有两个 identifier**：USB 控制面上 `peerDeviceInfo.identifier` 就是 **UDID**，
+  而 mDNS 里那个是不透明 UUID（`32567CFA-…`）。所以我们存记录不能只按 identifier 索引，
+  得把"这条记录对应哪台设备"和"它在广播里叫什么"分开记。
+- **不用 mDNS 也能定位设备**（这条对产品形状影响很大）：lockdown 顶层 `WiFiAddress` 与那条
+  A 记录 `10.24.24.7` 的 ARP MAC 一致——MAC 是我拿 `arp -n` 与 lockdown 的值比出来的，不是
+  猜的。也就是说"已配对的设备要做 pair-verify"时地址可以问 lockdown 要；mDNS 只有在**第一
+  次配对**才真正需要。
+- 同一个 49152 在四条链路上都握手成功：USB 的 NCM 口（`fe80::…%en6`、`fe80::…%en7`、
+  `169.254.73.199`）和 Wi-Fi 口（`10.24.24.7`）。顺带：广播里到底出现几个地址**不稳定**，
+  同一台设备连跑三次分别给 3/3/5 条——Wi-Fi 那条 A 记录有时不在。所以"靠一次 browse 拿地址"
+  这种写法天生会偶发失败，这也是一手证据支持"地址走 lockdown、mDNS 只做配对"。
+
+### 22.2 配对：USB 引导、免弹窗（量出来的）
+
+`com.apple.dt.remotepairingdeviced.lockdown` 这条 lockdown 服务说的是**同一套 RPPairing 帧**
+（`RPPairing` magic + u16BE 长度 + JSON 信封）。设备在这条面上答的：
+
+| 字段 | 值 |
+| --- | --- |
+| `wireProtocolVersion` | 26 |
+| `minimumSupportedWireProtocolVersion` | 8 |
+| `deviceOptions.allowsPairSetup` | **true** |
+| `deviceOptions.allowsPinlessPairing` | true |
+| `deviceOptions.allowsFreePairing` | false |
+| `deviceOptions.allowsIncomingTunnelConnections` | **false**（这条面只配对，不建隧道） |
+
+走完 pair-setup 落的记录有四个键：`public_key` / `private_key` / `remote_unlock_host_key` /
+**`peer_alt_irk`（16 字节）**。最后这个是关键：广播里的 `authTag` 就是它算出来的，主机靠它在
+不连接的前提下认出"这条广播是我已经配对过的哪台设备"。今晚实测匹配成功（`authTag=cuHWkXdk`
+对上了我们的记录），所以 authTag 那条推导链不是纸面说法。
+
+两个要记下的对照事实：
+
+- **`_remotepairing-manual-pairing._tcp` 我们这台根本没广播**（browse 回来是空列表）。所以
+  "等设备进配对模式、主机主动 SRP"那条路在 iOS 27 上是走不通的；能走的是 USB 引导（今晚这条）
+  或者 iOS 27 的设备端主动配对（设置 > 开发者 > 配对的 Mac，要人点）。
+- USB 引导之所以免弹窗，是**推出来的机制**：它跑在已经互信的 lockdownd 通道上，设备不再问用户
+  一次。我量到的是结果——整条 pair-setup 期间没人碰手机，记录落了地。
+
+### 22.3 隧道：pair-verify → createListener(tcp) → TLS1.2-PSK → CDTunnel（量出来的）
+
+对 `10.24.24.7:49152` 逐段跑通：pair-verify 过（设备认我们的 host 密钥）、`createListener`
+回了端口、TLS-PSK 握手过、CDTunnel 握手给出隧道内地址 `fd45:230b:54f1::1` 与 RSD 端口 61990。
+网络那条面上设备答的 `allowsIncomingTunnelConnections` 是 **true**，和 USB 控制面正好相反——
+"哪条面只配对、哪条面才建隧道"就是这么分的。
+
+还有一条写实现时要用得上：设备 TXT 与握手都报 **`wireProtocolVersion=26`**，而今晚真正握手成功
+时主机发出去的是 **19**（仪器里那个常量），设备照收。**别拿设备的版本号当自己该发的值**——
+发 26 会怎样没测，但"发 19 能用"这条是量出来的。
+
+一个坑，**是仪器侧的不是设备的**：TLS-PSK 要 OpenSSL 后端，而 macOS 系统 python 链的是
+LibreSSL 2.8.3，`set_ciphers("PSK")` 直接 `No cipher can be selected`。本机为此另开了
+`.probe-venv314`（brew python3.14 + OpenSSL 3.6）。**对我们的产品这不是问题**：
+`src/transport/TlsChannel` 本来就链 OpenSSL，PSK 只是多一个 `SSL_CTX_set_psk_client_callback`。
+
+### 22.4 Wi-Fi 与 USB 的 RSD 目录：逐项一样（量出来的）
+
+两边各 **85** 条服务。逐名 diff 只剩两条差异，而且两条都是我正则截断造成的假差异
+（`com.apple.carkit.remote` ⊂ `…remote-iap.service`、`com.apple.dt.remote` ⊂
+`…remoteFetchSymbols`）。真正关心的都在：`displayservice`、`screencaptureservice`、
+`hid.indigo`、`hid.universalhidservice`、`appservice`、`pasteboardservice`、`devicecontrol`。
+
+（这里要给自己记一笔：第一次比的时候我把 `feature_probe --all` 输出里的**feature 标识符**当成
+服务名去 diff，得出"USB 多 30 多条"的假结论。检查的方式很简单——两边目录总数都是 85，差 30
+条不可能对得上。**计数不一致时先怀疑自己的抽取，不要先怀疑设备。**）
+
+### 22.5 还没测的（别提前当结论用）
+
+1. 媒体流在无线隧道上的真实表现。设备反向打进隧道的 RTP 走的是空中：MTU、丢包率、时延都和
+   USB 不同，我们的 64KB 长度前缀、PLI 阶梯、租期那套判据要拿无线再跑一遍才敢说话。
+2. "一台设备只留一条 RSD 连接、换了 peer 就把已公布的服务端口全关掉"这条规矩（见
+   `remote/Device.cpp` 里那段关于 peer UUID 必须稳定的注释）在"USB 一条 + Wi-Fi 一条"下还成
+   不成立。这条如果反过来咬，症状会很像"起了 Wi-Fi 之后 USB 的流死了"。
+3. 我们自己的实现。剩下的量：RPPairing 帧、pair-verify 密码学（X25519 + HKDF-SHA512 +
+   ChaCha20-Poly1305 + Ed25519，OpenSSL 全给）、TLS-PSK、记录存取；mDNS 只有第一次配对才需要。
+   `Tunnel.cpp` / 用户态 IPv6+TCP 栈 / `Rsd` 三块是现成的，直接复用。
