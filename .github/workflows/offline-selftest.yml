@@ -28,11 +28,11 @@ jobs:
             os: macos-latest
           - name: Ubuntu
             os: ubuntu-latest
-    # Ubuntu 这一格现在是探针，不是门槛：写这份 CI 的机器上没有 Linux 工具链，
-    # "非 Apple 平台能不能配置过、SDL2 的 find_package 走哪条分支"一条都没实测过，
-    # 而跨平台是硬要求——所以让它跑起来把差异报出来，但不拿未经检验的东西拦人。
-    # 等它连绿一阵，就把这一行删掉，让它变成真门槛。
-    continue-on-error: ${{ matrix.os != 'macos-latest' }}
+    # Ubuntu 这一格**已经是门槛**（2026-09-27 撤掉了 continue-on-error）。撤的理由不是
+    # "它绿了几轮"，而是去看了它到底跑没跑：日志里是 `100% tests passed, 0 tests failed
+    # out of 15`，`可执行文件冒烟` 那步也真起来了。continue-on-error 会把"这一步失败"
+    # 和"这一步从没跑过"折叠成同一个绿色，那种绿色没有信息量——要判它成活，得看步级结论
+    # 与日志里的计数，而不是看 job 的 conclusion。
     steps:
       - uses: actions/checkout@v4
 

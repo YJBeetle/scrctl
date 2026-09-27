@@ -1847,8 +1847,17 @@ SDL_VIDEODRIVER=dummy SDL_AUDIO_DRIVER=disk ./build-cmake/scrctl --no-window --e
   "差一个后端"而是"这一层要重写"——AMDS 那条路一行没有。
 - 全仓没有 `__attribute__`/`__builtin__`/#pragma once 之外的编译器扩展。
 
-这些加起来仍然只是"少了几条已知的红"。Ubuntu 那一格什么时候能删掉
-`continue-on-error`，要等它自己在 CI 上绿过，不是等我判断。
+这些加起来仍然只是"少了几条已知的红"。真正的判据只能来自 CI，而它现在有了：
+2026-09-27 那两次 push 之后 Ubuntu 格的**步级**结论是
+`装依赖（Linux）/ 配置 / 构建 / 可执行文件冒烟 / 离线自检` 全 success，日志里是
+`100% tests passed, 0 tests failed out of 15`。于是 `continue-on-error` 已撤，
+Ubuntu 与 macOS 一样是门槛。
+
+**这里有一个通用教训，比这条 CI 本身值钱**：带 `continue-on-error` 的 job，它的
+`conclusion` 会把"这一步失败了"和"这一步根本没跑"折叠成同一个绿色。所以"它绿过几轮"
+**不构成**撤掉那一行的理由——要看的是步级结论加日志里的实际计数（`gh run view --json jobs`
+取步级；取整份日志要挂代理，直连 GitHub 会把下载静默截断）。仍然没被 CI 覆盖的是**真机**
+那一半：Linux 上 libusb、DDI 挂载、隧道建立没有一次对着手机跑过。
 
 ## 19. `--verify` 的回读一直读错了地方（以及它为什么一直没被发现）
 

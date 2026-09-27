@@ -93,11 +93,11 @@ Ubuntu 各一格跑 `ctest`，另有一格 ASan+UBSan），但它只覆盖不需
 | | 现状 |
 | --- | --- |
 | macOS | 真机验证过的那条路（本仓库所有数字都是它给的） |
-| Linux | **一行都没跑过**。CI 有 Ubuntu 那一格，但它是 `continue-on-error`——写它的机器上没有 Linux 工具链。已经静态修掉一批 libstdc++ 会挑的问题（直接 include、CMake 下限降到 3.20），但那不证明它能构建。音频那一路在 Linux 上**没有可解的后端**（见上） |
+| Linux | **构建与离线自检在 CI 的 Ubuntu 格上真跑过**（配置、链接、`scrctl --help` 起得来、15 项 ctest 全绿，2026-09-27 起这一格是门槛不是探针）。但这只覆盖"不需要手机的那一半"：libusb、DDI 挂载、隧道建立**没有一次对着真机跑过**，写这些代码的机器上没有 Linux。音频那一路在 Linux 上**没有可解的后端**（见上） |
 | Windows | 只有计划。`transport/Usbmux.cpp` 用的是 POSIX 套接字，要走 AMDS 得先换掉那一层，现在连编译都过不去 |
 
-剩下的主要是工程化收尾：让 Ubuntu 那一格在 CI 上真绿过、`--record` 带上音轨
-（视频现在是裸 Annex-B，加音轨要先有容器）、以及 Windows 那一层。
+剩下的主要是工程化收尾：Linux 那一半要有真机才能判（CI 只覆盖不需要手机的部分）、
+`--record` 带上音轨（视频现在是裸 Annex-B，加音轨要先有容器）、以及 Windows 那一层。
 
 ## 探针工具（研究用）
 
