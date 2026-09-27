@@ -280,9 +280,9 @@ void FramePump::loop() {
         if (first_pli_ms_ == 0) {
             first_pli_ms_ = now_ms();
         }
-        if (options_.debug_suppress_pli) {
-            // 探针档位：一个 PLI 都不发，于是"参考链断了而 IDR 要不来"这个现场是
-            // 确定性的，唯一还能救场的就是那条后备。
+        if (options_.debug_suppress_pli || pli_off_) {
+            // 探针档位：一个 PLI 都不发（或从某一刻起不再发），于是"参考链断了而 IDR
+            // 要不来"这个现场是确定性的，唯一还能救场的就是那条后备。
             std::lock_guard<std::mutex> lock(mutex_);
             ++stats_.pli_suppressed;
             return;
@@ -429,6 +429,14 @@ void FramePump::loop() {
             // 自己的组装期间沾没沾丢包，沾了就不能当干净关键帧用。
             const bool lost_since_prev = loss_since_au_;
             loss_since_au_ = false;
+            // 这一轮是不是"在等一个干净关键帧"的状态。清除要等解码真的出图之后再做，
+            // 所以先把这个判断的结果存下来（下面还要用一次）。
+            const bool was_awaiting = need_keyframe_;
+            // 探针门槛读的是这份**进轮快照**，不是活的 `awaiting_idr_from_loss_`：
+            // 后者正是被测的那一位。第一版变异臂把清除挪回解码之前，结果受害者门槛
+            // 先被清空、假装失败一次都没发生，判据不成立也不推翻——仪器依赖了被测物，
+            // 这是同一类错（§20 那条"提前返回顺手压掉时钟"的亲兄弟）。
+            const bool awaiting_at_entry = awaiting_idr_from_loss_;
             if (need_keyframe_) {
                 if (!keyframe || lost_since_prev) {
                     // 正在等干净关键帧：先去要一个，再决定是否丢弃这个 AU。
@@ -437,9 +445,6 @@ void FramePump::loop() {
                     ++stats_.dropped_awaiting_keyframe;
                     return;
                 }
-                need_keyframe_ = false;
-                awaiting_idr_from_loss_ = false;
-                first_pli_ms_ = 0;
             }
 
             // 刻意不清空 publishing_.pixels：clear() 之后 resize() 会把 11MB 重新
@@ -447,7 +452,31 @@ void FramePump::loop() {
             // 才 resize，尺寸没变就是原地覆写。
             Frame &f = publishing_;
             const uint64_t t_decode0 = now_ms();
-            const bool ok = decoder->decode(au, f);
+            bool ok = false;
+            // 受害者只能是"来修丢包的那个 IDR"。会话开头那一个 IDR 到手时还没有任何
+            // 欠账（`awaiting_idr_from_loss_` 是丢包才置起的），打它一下只会让两臂都在
+            // 之后的真丢包上重起 —— 判据就退化成"重起发生在失败之后"，而那句在没修的
+            // 版本里同样成立。加上这个门槛，受害者才落在被测的那条状态机上。
+            if (keyframe && awaiting_at_entry &&
+                options_.debug_fail_decode_of_keyframe > 0) {
+                --options_.debug_fail_decode_of_keyframe;
+                // 从这一刻起把 PLI 也掐了：这条臂要量的是"IDR 到手却解不出"之后还剩
+                // 什么能救场。留着 PLI 就有第二条恢复路径（下一次 IDR 是干净的、能解出来），
+                // 症状被它盖掉，两臂读数会一模一样。
+                if (options_.debug_suppress_pli_after_fail) {
+                    pli_off_ = true;
+                }
+                {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    ++stats_.forced_decode_failures;
+                }
+                std::printf("!! 探针档位：假装这个关键帧 AU 解不出图（IDR 到手而解码失败，"
+                            "%s）\n",
+                            options_.debug_suppress_pli_after_fail ? "此后 PLI 全部按住"
+                                                                   : "PLI 仍然照发");
+            } else {
+                ok = decoder->decode(au, f);
+            }
             const uint64_t t_published0 = now_ms();
             {
                 std::lock_guard<std::mutex> lock(mutex_);
@@ -458,6 +487,18 @@ void FramePump::loop() {
                 std::lock_guard<std::mutex> lock(mutex_);
                 ++stats_.no_output;
                 return;
+            }
+            // **解除警戒要放在"这一帧真的解出来并发布了"之后**，不能放在解析器交出
+            // 一个看起来干净的关键帧 AU 的时候：解码器完全可能收下同一个 AU 却给不出
+            // 图（`!ok || !f` 那一条分支）。旧顺序下那一刻 `awaiting_idr_from_loss_`
+            // 已经被清成 false，于是后备判据永远不会再武装——IDR 到手却解不出来的那种
+            // 坏法会一路静默，画面停在坏帧上，而这正是这条后备唯一要防的事。
+            // 清的位置挪下来之后，判据的时钟（`first_pli_ms_`）也还活着：下一次重起
+            // 该等多久是按"我们还在等"算的。
+            if (was_awaiting) {
+                need_keyframe_ = false;
+                awaiting_idr_from_loss_ = false;
+                first_pli_ms_ = 0;
             }
             if (keyframe) {
                 ever_keyframe_ = true;
@@ -505,6 +546,8 @@ void FramePump::loop() {
         need_keyframe_ = false;
         loss_seen_ = 0;
         loss_since_au_ = false;
+        // `pli_off_` **故意**不在这里清：探针那一臂要的是"从此以后只有后备能救场"，
+        // 新会话再放出一次 PLI 就会多出第二条恢复路径，两臂读数又会糊成一样。
         // 那两档探针开关数的是"**本会话**第几个视频包"：重起之后要能从 0 重数，否则
         // `debug_ignore_video_after` 会把新会话也一起饿死，就看不见"救回来了没有"。
         video_seen = 0;
