@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "media/AudioPump.h"
 #include "media/FramePump.h"
 #include "media/MediaOffer.h"
 #include "plist/Bplist.h"
@@ -288,6 +289,47 @@ int main() {
         const auto *features = only(other_avc, 3);
         check(features != nullptr && as_text(features->bytes) == "FLS;SW:1;LTRP:1;",
               "改能力串能落到 AVC bank 里（--bit-rate / 编解码开关以后就靠这条口子）");
+    }
+
+    // 音频水位与环容量。这一段是纯算术，不需要设备——而它要防的正是"没设备就测不到"
+    // 的那类错：容量写死 500ms、水位随便填，于是 `--audio-buffer 600` 的症状是整条腿
+    // 静音（出口那道 `buffered < preroll` 的闸门永远开着），不是"延迟大一点"。
+    std::printf("\n== 音频水位与环容量 ==\n");
+    {
+        using scrctl::media::AudioPump;
+        auto opts = [](int ms) {
+            AudioPump::Options o;
+            o.target_backlog_ms = ms;
+            return o;
+        };
+        const auto def = AudioPump::compute_waterline(opts(50));
+        check(def.target_frames == 2400 && def.capacity_frames == 24000,
+              "默认 50ms 保持原样（2400 帧水位 / 24000 帧环）");
+        check(def.clamped_to_ms == 0, "默认不被收档");
+
+        const auto big = AudioPump::compute_waterline(opts(600));
+        check(big.target_frames == 600 * 48, "600ms 仍然是 600ms：容量跟着长，不是把水位压低");
+        check(big.capacity_frames > big.target_frames * 2,
+              "容量至少在两倍水位之上，否则'超两倍就砍'那一档永远撞不到");
+
+        const auto huge = AudioPump::compute_waterline(opts(999999));
+        check(huge.clamped_to_ms == 1000 && huge.target_frames == 48000,
+              "离谱的值收到 1000ms 并报出来（一个命令行参数不该决定分配多少内存）");
+
+        check(AudioPump::compute_waterline(opts(0)).target_frames == 0, "0 = 不攒，取多少给多少");
+        check(AudioPump::compute_waterline(opts(-5)).target_frames == 0, "负数按 0 处理");
+
+        int bad = 0;
+        for (int ms : {-1000, 0, 1, 5, 50, 100, 400, 500, 501, 600, 900, 1000, 1001, 5000,
+                       999999, 2000000}) {
+            const auto w = AudioPump::compute_waterline(opts(ms));
+            if (w.target_frames >= w.capacity_frames || w.capacity_frames < 24000) {
+                ++bad;
+                std::printf("    水位 %d ms: target=%zu capacity=%zu\n", ms, w.target_frames,
+                            w.capacity_frames);
+            }
+        }
+        check(bad == 0, "扫一遍请求值：水位永远够得着（这条挂了就是'设了反而静音'）");
     }
 
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);

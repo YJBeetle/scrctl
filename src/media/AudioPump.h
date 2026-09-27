@@ -42,18 +42,42 @@ public:
         int frame_length = 480;
         /// 环形缓冲想维持的水位（毫秒），也是"攒够这么多才开口放"的那个数。
         ///
-        /// 实测（`--realtime --late-open 4` 那一臂，docs §17.2 ⑥）：开局按住消费方
-        /// 4 秒让环顶满（24000 帧 = 500ms），放开之后导向应当在**一次调用内**把它
-        /// 砍回目标量级（实测 24000 -> 1840），之后稳定在 1000~2000 帧。
+        /// 默认 50 与 scrcpy 的 `--audio-buffer` 默认值同一个数（`scrcpy --help` 抄来的，
+        /// 不是猜的）。**上限 1000ms**，超了会被收到 1000 并打一行说明——理由在
+        /// `compute_waterline()`。
         ///
         /// 为什么需要一个**目标水位**而不是"能囤多少囤多少"：生产与消费的标称速率
         /// 相等（都是 48kHz），所以缓冲里囤着的东西**永远不会自己排掉**。而开局就有
         /// 一段只进不出的时间（音频腿在起流路径里就起了，声卡要等 `SDL_Init` 之后才
         /// 开，中间还隔着等第一帧），那一段攒下来的 100~300ms 会一路留着——镜像里
         /// 的声音就比画面晚这么多，而且只涨不跌（时钟漂移每小时再涨约 0.5 秒，
-        /// 到 0.5 秒的环顶之后开始丢旧帧）。所以取的时候要按水位导向。
+        /// 到环顶之后开始丢旧帧）。所以取的时候要按水位导向。
+        ///
+        /// 导向本身的判据臂是 `--realtime --late-open 4`（docs §17.2 ⑥）：开局按住消费方
+        /// 4 秒让默认那一档的环顶满（24000 帧），放开之后导向应当在**一次调用内**把它砍回
+        /// 目标量级（实测 24000 → 1840），之后稳定在 1000~2000 帧。
         int target_backlog_ms = 50;
     };
+
+    /// 目标水位与环容量——这两个数是**一起**算出来的，不能各自定。
+    ///
+    /// 为什么单列成一个纯函数：它以前是"水位可填任意毫秒，容量恒为 24000 帧（500ms）"，
+    /// 于是 `--audio-buffer 600` 会让预滚闸门去等一个**环永远装不满**的水位，结果不是
+    /// "延迟大一点"而是**一整条腿不出声**（出口那里 `buffered < preroll` 恒成立）。
+    /// 现在容量跟着水位放大（留四倍空间，见下），并且水位封顶。
+    ///
+    /// 为什么容量要留到四倍而不是刚好两倍：导向的第二档判据是"超过两倍目标就一次砍回
+    /// 目标"，容量若只到两倍，那一档永远不会被撞到，环顶的"丢最旧"会先发生——而丢最旧
+    /// 是不可听的那种丢，调速是可控的那种。
+    struct Waterline {
+        std::size_t target_frames = 0;
+        std::size_t capacity_frames = 0;
+        /// 非 0 表示请求的毫秒数被收到了这一档（调用方要打一行说明，别让人以为设进去了）。
+        int clamped_to_ms = 0;
+    };
+
+    /// 按 `options` 算出这对数。纯算术，不碰设备，所以离线测得到（tests/media_test）。
+    [[nodiscard]] static Waterline compute_waterline(const Options &options);
 
     struct Stats {
         /// PT 对上音频腿的那个数的 RTP 包（不管解不解得开）。
@@ -134,10 +158,9 @@ public:
 private:
     AudioPump(remote::Device &device, Options options)
         : device_(device), options_(std::move(options)) {
-        target_frames_ = static_cast<std::size_t>(options_.target_backlog_ms > 0
-                                                      ? options_.target_backlog_ms
-                                                      : 0) *
-                         static_cast<std::size_t>(options_.sample_rate) / 1000;
+        const Waterline w = compute_waterline(options_);
+        target_frames_ = w.target_frames;
+        capacity_frames_ = w.capacity_frames;
     }
 
     /// 一条会话的、**别的线程需要看的**那几个数。全是标量，复制出去就是快照。
@@ -176,6 +199,9 @@ private:
     std::size_t read_ = 0;
     std::size_t used_ = 0;
     std::size_t target_frames_ = 0;
+    /// 环容量（帧）。由 `compute_waterline()` 跟目标水位一起算出来，不是常量——
+    /// 常量容量配可变水位就是那条"设大 `--audio-buffer` 反而永久静音"的 bug。
+    std::size_t capacity_frames_ = 0;
     Stats stats_;
 };
 

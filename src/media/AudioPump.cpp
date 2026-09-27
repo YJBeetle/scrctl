@@ -24,10 +24,18 @@ constexpr uint64_t kRtcpPeriodMs = 1000;
 /// 停止响应和 RTCP 节拍一起抖。
 constexpr int kPollTimeoutMs = 50;
 
-/// 环形缓冲容量（帧）= 0.5 秒。它是"设备推得比我们取得快时能囤多久"的上限，而囤下来的
-/// 每一毫秒都是延迟。0.5 秒够跨过一次已知抖动（停+起重起约 300ms），又不至于把音画
-/// 差做成半秒。
-constexpr std::size_t kRingCapacityFrames = 24000;
+/// 环形缓冲容量的**下限** = 0.5 秒。它是"设备推得比我们取得快时能囤多久"的上限，而囤
+/// 下来的每一毫秒都是延迟。0.5 秒够跨过一次已知抖动（停+起重起约 300ms），又不至于把
+/// 音画差做成半秒。
+///
+/// 但它只是下限：容量实际由 `AudioPump::compute_waterline()` 跟着目标水位算，因为
+/// "容量写死 + 水位随便设"会让 `--audio-buffer 600` 变成一条永远静音的腿（见那里）。
+constexpr std::size_t kMinRingCapacityFrames = 24000;
+
+/// 目标水位的上限（毫秒）。再高就不是缓冲而是"把声音存起来晚点放"了：镜像的价值在于
+/// 跟手，一秒钟的声音滞后配上 60fps 的画面，看口型已经对不上了。留这个顶还有个作用是
+/// 环容量跟着水位放大，不设顶就等于让一个命令行参数决定分配多少内存。
+constexpr int kMaxTargetBacklogMs = 1000;
 
 /// 多久没收到任何音频包就去问一次设备"这条会话还在不在"。
 ///
@@ -55,8 +63,41 @@ uint64_t now_ms() {
 
 }  // namespace
 
+AudioPump::Waterline AudioPump::compute_waterline(const Options &options) {
+    Waterline w;
+    int ms = options.target_backlog_ms;
+    if (ms > kMaxTargetBacklogMs) {
+        w.clamped_to_ms = kMaxTargetBacklogMs;
+        ms = kMaxTargetBacklogMs;
+    }
+    if (ms < 0) {
+        ms = 0;  // 0 = 不攒，取多少给多少；负数没有意义
+    }
+    const std::size_t rate =
+        options.sample_rate > 0 ? static_cast<std::size_t>(options.sample_rate) : 48000;
+    w.target_frames = static_cast<std::size_t>(ms) * rate / 1000;
+    // 四倍出头：留够"先撞到两倍那一档、还能继续收"的余量，让环顶的丢最旧成为最后手段
+    // 而不是常态（两档导向的分工见 read()）。
+    w.capacity_frames =
+        std::max<std::size_t>(kMinRingCapacityFrames, w.target_frames * 4 + w.target_frames / 4);
+    // 这一条兜的是"水位必须够得着"：出口那道闸门是 `buffered < preroll`，装不满就是
+    // 永远静音。上面的四倍关系已经保证了，这里只是让"以后有人改容量下限"时改不动这条
+    // 不变式。
+    if (w.target_frames >= w.capacity_frames) {
+        w.capacity_frames = w.target_frames * 4 + 1;
+    }
+    return w;
+}
+
 std::unique_ptr<AudioPump> AudioPump::start(remote::Device &device, const Options &options,
                                            std::string &err, bool verbose) {
+    // 先算一次水位：`compute_waterline()` 是纯函数，这里和构造函数算出来的必须一样，
+    // 而"请求被收档"这件事要在起流之前就说出来，别等有人对着一个静音的腿找原因。
+    const Waterline w = compute_waterline(options);
+    if (w.clamped_to_ms != 0) {
+        std::printf("--audio-buffer %d 被收到 %d 毫秒（目标水位与环容量一起跟着变）\n",
+                    options.target_backlog_ms, w.clamped_to_ms);
+    }
     auto pump = std::unique_ptr<AudioPump>(new AudioPump(device, options));
     pump->verbose_ = verbose;
     if (!pump->start_session(err)) {
@@ -152,32 +193,32 @@ void AudioPump::push(const std::vector<int16_t> &pcm) {
     }
     std::lock_guard<std::mutex> lock(mutex_);
     if (ring_.empty()) {
-        ring_.assign(kRingCapacityFrames * channels, 0);
+        ring_.assign(capacity_frames_ * channels, 0);
     }
     // 满了丢**最旧**的：这是实时流，攒着的旧声音放出来只会越来越对不上画面。
     std::size_t from = 0;
-    if (frames >= kRingCapacityFrames) {
+    if (frames >= capacity_frames_) {
         // 一次喂进来的比整个环还大（正常走不到：ELD 一帧 480）。这一支存在的理由是
         // 守住"used_ 不超过容量"这条不变式——不单独处理的话下面那句 `used_ += `
         // 会把它推成一个大于容量的数，之后每次 read 都在一个假水位上算取多少，
         // 症状是"没声"而不是"这一帧丢了"。
-        stats_.dropped_stale += used_ + frames - kRingCapacityFrames;
+        stats_.dropped_stale += used_ + frames - capacity_frames_;
         used_ = 0;
         read_ = write_;
-        from = frames - kRingCapacityFrames;
-    } else if (used_ + frames > kRingCapacityFrames) {
-        const std::size_t drop = used_ + frames - kRingCapacityFrames;
-        read_ = (read_ + drop) % kRingCapacityFrames;
+        from = frames - capacity_frames_;
+    } else if (used_ + frames > capacity_frames_) {
+        const std::size_t drop = used_ + frames - capacity_frames_;
+        read_ = (read_ + drop) % capacity_frames_;
         used_ -= drop;
         stats_.dropped_stale += drop;
     }
     for (std::size_t f = from; f < frames; ++f) {
-        const std::size_t slot = ((write_ + (f - from)) % kRingCapacityFrames) * channels;
+        const std::size_t slot = ((write_ + (f - from)) % capacity_frames_) * channels;
         for (std::size_t c = 0; c < channels; ++c) {
             ring_[slot + c] = pcm[f * channels + c];
         }
     }
-    write_ = (write_ + (frames - from)) % kRingCapacityFrames;
+    write_ = (write_ + (frames - from)) % capacity_frames_;
     used_ += frames - from;
 }
 
@@ -207,18 +248,18 @@ std::size_t AudioPump::read(int16_t *dst, std::size_t frames) {
         skip = std::min(skip, used_ - frames);  // 别把这次要给的帧也算进跳过里
     }
     if (skip > 0) {
-        read_ = (read_ + skip) % kRingCapacityFrames;
+        read_ = (read_ + skip) % capacity_frames_;
         used_ -= skip;
         stats_.steered += skip;
     }
     const std::size_t take = frames < used_ ? frames : used_;
     for (std::size_t f = 0; f < take; ++f) {
-        const std::size_t slot = ((read_ + f) % kRingCapacityFrames) * channels;
+        const std::size_t slot = ((read_ + f) % capacity_frames_) * channels;
         for (std::size_t c = 0; c < channels; ++c) {
             dst[f * channels + c] = ring_[slot + c];
         }
     }
-    read_ = (read_ + take) % kRingCapacityFrames;
+    read_ = (read_ + take) % capacity_frames_;
     used_ -= take;
     return take;
 }
