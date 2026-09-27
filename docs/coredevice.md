@@ -2298,3 +2298,38 @@ LibreSSL 2.8.3，`set_ciphers("PSK")` 直接 `No cipher can be selected`。本�
 3. 我们自己的实现。剩下的量：RPPairing 帧、pair-verify 密码学（X25519 + HKDF-SHA512 +
    ChaCha20-Poly1305 + Ed25519，OpenSSL 全给）、TLS-PSK、记录存取；mDNS 只有第一次配对才需要。
    `Tunnel.cpp` / 用户态 IPv6+TCP 栈 / `Rsd` 三块是现成的，直接复用。
+
+### 22.6 同一晚：我们自己的实现走到哪一步（真机读数，不是仪器）
+
+上面那些是"拿仪器量出来的路"。这一节是**我们自己的代码**在同一台设备上跑出来的：
+
+| 段 | 读数 |
+| --- | --- |
+| pair-verify | 过（设备认我们的 host 密钥），`tools/wifi_probe --address <ip>` |
+| createListener(tcp) | 给了端口，端口连得上 |
+| TLS1.2-PSK + CDTunnel | 过：本机 `fde1:71fc:88cc::2` / 设备 `::1` / 隧道内 RSD 61998 / **MTU 16000** |
+| 隧道内 RSD 目录 | 85 个服务，`displayservice`、`screencaptureservice`、`hid.indigo`、`appservice` 都在 |
+
+隧道参数与 USB 那条**一模一样**（USB 侧 MTU 也是 16000，是我们请求的那个值），
+所以从 RSD 往上的代码不需要为无线分叉——这一条是 M5 最重要的架构结论：Wi-Fi 只是
+"把隧道接上来"的那一段不同，隧道里面完全相同。
+
+踩到的坑值得单独记，因为它的形状很骗人：握手答得好好的，**第一条 pairingData 发出去
+连接就被关**。第一反应是"我们的 JSON 是紧凑的、参考实现带空格"——把两边的字节都灌进
+一个本地 dump 服务器逐字节一比，差别确实只有空格。但那是**假线索**：真原因是
+`{"event":{"_0":{"pairingData":…}}}` 里 `event` 的联合体那层 `_0` 我漏了。教训是
+**"两边字节不一样"不等于"字节不一样导致失败"**，判据要落在设备上，不能落在 diff 上。
+这种 bug 在现场看起来永远像网络问题，因为设备不给任何错误码、直接关连接。
+
+所以现在有两道离线判据：
+- `tests/wifi_test.cpp` 里拿真机回信搭的"假设备"回放，钉死 `event._0.pairingData._0`
+  这两层包装、两条 verify 的 `startNewSession` 一 true 一 false、以及设备回 ERROR 时
+  要判"没配对"并补一句同样两层包装的 `pairVerifyFailed`。变异判据做过：把 `_0` 去掉，
+  红的正好是那一条。
+- PSK 这条本身就是 pair-verify 的判据：隧道监听器只认那把密钥，密钥派生差一个字节
+  都握不上（`handshake_psk` 的失败文案专门认这句）。
+
+没测的（下一步的头两个问题）：
+1. **流在无线上跑不起来/跑得好不好**——目前只到"读得到目录"。
+2. **USB 一条 + Wi-Fi 一条并存**时，"设备每条隧道只留一个 RSD 连接、peer UUID 一变就
+   把这台机器重新 attach"这条规矩还成不成立。
