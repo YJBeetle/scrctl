@@ -292,10 +292,21 @@ if(SCRCTL_BUILD_TESTS)
 
     # 真机录制相关的两个测试需要一个 .hevc 输入；没有就跳过而不是失败，
     # 免得干净 checkout 上 ctest 全红。
+    #
+    # 但"注册时存在"不等于"跑的时候还在"：这个输入是个 CACHE 路径，而 macOS 的
+    # 每日清理会把 /tmp 里放了几天的一切都收走（真发生过：同一棵树上午 17/17，
+    # 半夜变成 15/17 两项红，红的原因是"打不开输入文件"，与被测代码无关）。所以
+    # 除了 configure 期这一道，运行期也要能跳——用 SKIP_REGULAR_EXPRESSION 认那句
+    # "打不开"，缺文件就是 Skipped，不是 Failed。
     set(SCRCTL_TEST_STREAM "" CACHE FILEPATH "用于测试的真机录制 .hevc（可留空跳过）")
     if(SCRCTL_TEST_STREAM)
+        if(NOT EXISTS "${SCRCTL_TEST_STREAM}")
+            message(WARNING "SCRCTL_TEST_STREAM=${SCRCTL_TEST_STREAM} 现在不存在，"
+                            "这两项测试会记为 Skipped（不是通过）")
+        endif()
         add_test(NAME annexb COMMAND annexb_test ${SCRCTL_TEST_STREAM})
         add_test(NAME decode COMMAND decode_test ${SCRCTL_TEST_STREAM} ${CMAKE_BINARY_DIR}/f.raw 5)
+        set_tests_properties(annexb decode PROPERTIES SKIP_REGULAR_EXPRESSION "打不开")
     endif()
 endif()
 
