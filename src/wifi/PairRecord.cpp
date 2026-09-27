@@ -1,0 +1,259 @@
+#include "wifi/PairRecord.h"
+
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include <cerrno>
+#include <cstdio>
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
+
+#include "wifi/Tlv.h"
+
+namespace scrctl::wifi {
+namespace {
+
+constexpr char kHeader[] = "scrctl-pair-record 1";
+constexpr size_t kMaxRecordText = 16384;
+
+std::string hex(const Bytes &data) {
+    static constexpr char kDigits[] = "0123456789abcdef";
+    std::string out;
+    out.reserve(data.size() * 2);
+    for (const uint8_t b : data) {
+        out += kDigits[b >> 4];
+        out += kDigits[b & 0xF];
+    }
+    return out;
+}
+
+std::optional<Bytes> unhex(std::string_view text, std::string &err) {
+    if (text.size() % 2 != 0) {
+        err = "hex 长度不是偶数";
+        return std::nullopt;
+    }
+    auto nibble = [](char c) -> int {
+        if (c >= '0' && c <= '9') {
+            return c - '0';
+        }
+        if (c >= 'a' && c <= 'f') {
+            return c - 'a' + 10;
+        }
+        if (c >= 'A' && c <= 'F') {
+            return c - 'A' + 10;
+        }
+        return -1;
+    };
+    Bytes out;
+    out.reserve(text.size() / 2);
+    for (size_t i = 0; i < text.size(); i += 2) {
+        const int hi = nibble(text[i]), lo = nibble(text[i + 1]);
+        if (hi < 0 || lo < 0) {
+            err = "hex 里有非法字符";
+            return std::nullopt;
+        }
+        out.push_back(static_cast<uint8_t>((hi << 4) | lo));
+    }
+    return out;
+}
+
+std::string_view trim(std::string_view s) {
+    while (!s.empty() && (s.front() == ' ' || s.front() == '\t')) {
+        s.remove_prefix(1);
+    }
+    while (!s.empty() && (s.back() == ' ' || s.back() == '\t' || s.back() == '\r')) {
+        s.remove_suffix(1);
+    }
+    return s;
+}
+
+/// UDID 是设备给的外部输入，不能直接当文件名的一部分——一台恶意/故障设备给一个
+/// `../../etc/x` 就能把我们这份"读出来再写回去"的代码变成任意路径写。
+std::string sanitize(const std::string &udid) {
+    std::string out;
+    out.reserve(udid.size());
+    for (const char c : udid) {
+        const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                        (c >= '0' && c <= '9');
+        out += ok ? c : '_';
+    }
+    return out;
+}
+
+bool write_file(const std::string &path, std::string_view text, std::string &err) {
+    const std::string tmp = path + ".tmp";
+    std::FILE *f = std::fopen(tmp.c_str(), "wb");
+    if (f == nullptr) {
+        err = "打不开临时文件 " + tmp;
+        return false;
+    }
+    // 0600 要在内容落地之前设好：这把钥匙加对方设备的信任，值得较这个真。
+    if (::fchmod(::fileno(f), 0600) != 0) {
+        err = "设置记录文件权限失败";
+        std::fclose(f);
+        ::remove(tmp.c_str());
+        return false;
+    }
+    const size_t written = std::fwrite(text.data(), 1, text.size(), f);
+    std::fclose(f);
+    if (written != text.size()) {
+        err = "写记录文件没写完";
+        ::remove(tmp.c_str());
+        return false;
+    }
+    if (std::rename(tmp.c_str(), path.c_str()) != 0) {
+        err = "换名失败";
+        ::remove(tmp.c_str());
+        return false;
+    }
+    return true;
+}
+
+std::optional<std::string> read_file(const std::string &path, std::string &err) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        err = "打不开 " + path;
+        return std::nullopt;
+    }
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    std::string text = ss.str();
+    if (text.size() > kMaxRecordText) {
+        err = "记录文件太大，不像配对记录";
+        return std::nullopt;
+    }
+    return text;
+}
+
+}  // namespace
+
+std::string format_record(const PairRecord &record) {
+    std::ostringstream out;
+    out << kHeader << '\n';
+    out << "udid=" << record.udid << '\n';
+    out << "host_identifier=" << record.host_identifier << '\n';
+    out << "host_private_key=" << hex(record.host_private_key) << '\n';
+    out << "host_public_key=" << hex(record.host_public_key) << '\n';
+    if (!record.advertised_identifier.empty()) {
+        out << "advertised_identifier=" << record.advertised_identifier << '\n';
+    }
+    if (!record.peer_alt_irk.empty()) {
+        out << "peer_alt_irk=" << hex(record.peer_alt_irk) << '\n';
+    }
+    if (!record.remote_unlock_host_key.empty()) {
+        out << "remote_unlock_host_key=" << record.remote_unlock_host_key << '\n';
+    }
+    return out.str();
+}
+
+std::optional<PairRecord> parse_record(std::string_view text, std::string &err) {
+    PairRecord record;
+    bool first = true;
+    bool seen_private = false;
+    size_t pos = 0;
+    while (pos <= text.size()) {
+        size_t nl = text.find('\n', pos);
+        if (nl == std::string_view::npos) {
+            nl = text.size();
+        }
+        const std::string_view line = trim(text.substr(pos, nl - pos));
+        pos = nl + 1;
+        if (line.empty()) {
+            continue;
+        }
+        if (first) {
+            first = false;
+            if (line != kHeader) {
+                err = "不是 scrctl 的配对记录（首部不认）";
+                return std::nullopt;
+            }
+            continue;
+        }
+        const size_t eq = line.find('=');
+        if (eq == std::string_view::npos) {
+            err = "记录里有一行不是 key=value";
+            return std::nullopt;
+        }
+        const std::string_view key = trim(line.substr(0, eq));
+        const std::string_view value = trim(line.substr(eq + 1));
+        auto set_hex = [&](Bytes &field, size_t want) -> bool {
+            const std::optional<Bytes> bytes = unhex(value, err);
+            if (!bytes) {
+                return false;
+            }
+            if (bytes->size() != want) {
+                err = "字段长度不对：" + std::string(key) + " 要 " + std::to_string(want) +
+                      " 字节，实际 " + std::to_string(bytes->size());
+                return false;
+            }
+            field = *bytes;
+            return true;
+        };
+        if (key == "udid") {
+            record.udid = value;
+        } else if (key == "host_identifier") {
+            record.host_identifier = value;
+        } else if (key == "host_private_key") {
+            if (!set_hex(record.host_private_key, 32)) {
+                return std::nullopt;
+            }
+            seen_private = true;
+        } else if (key == "host_public_key") {
+            if (!set_hex(record.host_public_key, 32)) {
+                return std::nullopt;
+            }
+        } else if (key == "advertised_identifier") {
+            record.advertised_identifier = value;
+        } else if (key == "peer_alt_irk") {
+            if (!set_hex(record.peer_alt_irk, 16)) {
+                return std::nullopt;
+            }
+        } else if (key == "remote_unlock_host_key") {
+            record.remote_unlock_host_key = value;
+        }
+        // 未知键**忽略**：向后兼容比报错有用——老版本读新记录时该能继续用。
+    }
+    if (!seen_private) {
+        err = "记录里没有 host_private_key";
+        return std::nullopt;
+    }
+    return record;
+}
+
+bool save_record(const std::string &path, const PairRecord &record, std::string &err) {
+    const size_t slash = path.find_last_of('/');
+    if (slash != std::string::npos && slash > 0) {
+        const std::string dir = path.substr(0, slash);
+        if (::mkdir(dir.c_str(), 0700) != 0 && errno != EEXIST) {
+            // 父目录不存在时mkdir只补一层，所以先试一次、失败就明确报出来，
+            // 不要写出一个"保存成功但其实写到了别处"的结果。
+            err = "建目录失败 " + dir;
+            return false;
+        }
+    }
+    return write_file(path, format_record(record), err);
+}
+
+std::optional<PairRecord> load_record(const std::string &path, std::string &err) {
+    const std::optional<std::string> text = read_file(path, err);
+    if (!text) {
+        return std::nullopt;
+    }
+    return parse_record(*text, err);
+}
+
+std::string default_record_dir() {
+    const char *xdg = std::getenv("XDG_DATA_HOME");
+    if (xdg != nullptr && *xdg != '\0') {
+        return std::string(xdg) + "/scrctl";
+    }
+    const char *home = std::getenv("HOME");
+    return std::string(home != nullptr ? home : ".") + "/.local/share/scrctl";
+}
+
+std::string record_path(const std::string &dir, const std::string &udid) {
+    return dir + "/remote-" + sanitize(udid) + ".pair";
+}
+
+}  // namespace scrctl::wifi

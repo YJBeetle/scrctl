@@ -114,6 +114,7 @@ add_library(scrctl_core STATIC
         src/rt/RtpSeq.cpp
         src/rt/Rtcp.cpp
         src/transport/Usbmux.cpp
+        src/transport/TcpConnect.cpp
         src/transport/TlsChannel.cpp
         src/transport/Lockdown.cpp
         src/transport/Tunnel.cpp
@@ -127,7 +128,12 @@ add_library(scrctl_core STATIC
         src/remote/DisplayInfo.cpp
         src/remote/App.cpp
         src/bitstream/AnnexB.cpp
-        src/hid/Hid.cpp)
+        src/hid/Hid.cpp
+        src/wifi/Crypto.cpp
+        src/wifi/Tlv.cpp
+        src/wifi/Rppairing.cpp
+        src/wifi/PairRecord.cpp
+        src/wifi/PairVerify.cpp)
 target_include_directories(scrctl_core PUBLIC src)
 target_link_libraries(scrctl_core PUBLIC ScrctlAppleFrameworks OpenSSL::SSL OpenSSL::Crypto)
 target_compile_options(scrctl_core PRIVATE -Wall -Wextra)
@@ -276,6 +282,11 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(jsonlite_test PRIVATE scrctl_core)
     add_test(NAME jsonlite COMMAND jsonlite_test)
 
+    # 无线那一套（密码学 / TLV / 记录 / 帧）离线就能判，不需要设备。
+    add_executable(wifi_test tests/wifi_test.cpp)
+    target_link_libraries(wifi_test PRIVATE scrctl_core)
+    add_test(NAME wifi COMMAND wifi_test)
+
     add_executable(xpc_test tests/xpc_test.cpp)
     target_link_libraries(xpc_test PRIVATE scrctl_core)
     add_test(NAME xpc COMMAND xpc_test)
@@ -337,3 +348,7 @@ target_link_libraries(stall_probe PRIVATE scrctl_core)
 
 add_executable(audio_pump_probe tools/audio_pump_probe.cpp)
 target_link_libraries(audio_pump_probe PRIVATE scrctl_core)
+
+# M5：对我们自己的 RemotePairing 实现做真机握手（要设备在同一网络上）。
+add_executable(wifi_probe tools/wifi_probe.cpp)
+target_link_libraries(wifi_probe PRIVATE scrctl_core)
