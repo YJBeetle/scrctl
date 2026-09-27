@@ -177,7 +177,23 @@ void usage(const char *argv0) {
         "                     前缀 ? 改成按 App 名字前缀匹配（大小写不敏感），\n"
         "                     前缀 + 表示先杀掉在跑的实例（两个可叠用，顺序 ? 在前）\n"
         "  --copy TEXT        把文本写进设备剪贴板后退出（中文走这条路）\n"
-        "  --paste            读设备剪贴板并打印后退出；与 --copy 同用时写完读回\n",
+        "  --paste            读设备剪贴板并打印后退出；与 --copy 同用时写完读回\n"
+        "\n"
+        "这些 scrcpy 的选项在这条路上没有对应项，三组原因各不相同：\n"
+        "  --max-size / --resolution / --max-fps / --video-bit-rate / --video-codec\n"
+        "                     编码尺寸、码率、帧率是**设备定的**，不是能谈的：offer 里的\n"
+        "                     pair_index 从 0 扫到 6，answer 一直回 1136x2464；把码率表中\n"
+        "                     那档 6000000 改成 60000000，answer 依旧回 TXMaxBitrate 6000000。\n"
+        "                     删档更糟——会退到表里 f2=299 那条，实测掉到 0.1Mbps/8fps。\n"
+        "                     判据与数字见 tools/bitrate_probe 与 docs §11，别照猜测改。\n"
+        "  --mouse / --mouse-bind / --keyboard\n"
+        "                     注入只有一条路（HID），没有“用哪种设备仿真”这一层；而鼠标\n"
+        "                     当前只有左键绑到触摸，右键/中键/滚轮没有绑定，所以也没有\n"
+        "                     一份可改的键位表。\n"
+        "  --turn-screen-off / --power-off-on-close / --screen-off-timeout / --tcpip /\n"
+        "  --port / --camera-* / --v4l2-* / --new-display / --otg\n"
+        "                     Android 侧的机制（电源管理、adb 转发、虚拟相机与虚拟屏），\n"
+        "                     CoreDevice 这条路里没有对应的服务。\n",
         argv0);
 }
 
