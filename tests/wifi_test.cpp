@@ -10,10 +10,12 @@
 #include <cstdio>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "wifi/Crypto.h"
 #include "wifi/PairRecord.h"
+#include "wifi/PairVerify.h"
 #include "wifi/Rppairing.h"
 #include "wifi/Tlv.h"
 
@@ -403,6 +405,124 @@ void test_rppairing() {
     check(cold_err.find("主密钥") != std::string::npos, "这种情况要说清是没装主密钥");
 }
 
+/// ---- 5. pair-verify 的消息形状（对着真机抓下来的字节判） ----
+///
+/// 这一节存在的唯一理由：真机踩的那个坑（`event` 少一层 `_0`）在这里判得住。
+/// 帧的**内容**对不对只有设备说了算，但形状错了设备是"直接关连接、不给原因"，
+/// 所以在离线这侧把形状钉死，比在现场靠猜便宜两个数量级。
+void test_pair_verify_shape() {
+    // 设备的回信用 j_obj 现搭，而不是手写一大串花括号：今晚这个测试自己就先被
+    // "少写一个 }" 绊了一次，而 JSON 括号数错在源码里根本看不出来。搭出来的内容与
+    // 真机上抓到的回信同构（handshake 回复 + pairingData 事件），字段值是实测的。
+    const scrctl::json::Value device_handshake = j_obj(
+        {{"minimumSupportedWireProtocolVersion", j_int(8)},
+         {"wireProtocolVersion", j_int(26)},
+         {"deviceOptions",
+          j_obj({{"allowsIncomingTunnelConnections", j_bool(true)},
+                 {"allowsPairSetup", j_bool(false)}})}});
+    // 一层一个语句地搭，不在一行里数括号——今晚这个测试自己就先被"少一个 }"绊了一次。
+    scrctl::json::Value hs_slot = j_obj({{"_0", device_handshake}});
+    scrctl::json::Value hs = j_obj({{"handshake", std::move(hs_slot)}});
+    scrctl::json::Value body = j_obj({{"_1", std::move(hs)}, {"forRequestIdentifier", j_int(0)}});
+    scrctl::json::Value response = j_obj({{"response", std::move(body)}});
+    scrctl::json::Value plain_slot = j_obj({{"_0", std::move(response)}});
+    scrctl::json::Value plain = j_obj({{"plain", std::move(plain_slot)}});
+    scrctl::json::Value envelope = j_obj({{"originatedBy", j_str("device")},
+                                  {"sequenceNumber", j_int(0)},
+                                  {"message", std::move(plain)}});
+    const std::string handshake_reply = scrctl::json::write(envelope);
+
+    // PV-Msg02：STATE=2 + 一个合法的 X25519 公钥（RFC 7748 5.2 里 Bob 的）。
+    const Bytes peer_pub =
+        from_hex("8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba9a994576788a8");
+    const Bytes msg02 = scrctl::wifi::tlv_build({{scrctl::wifi::TlvType::State, Bytes{0x02}},
+                                                 {scrctl::wifi::TlvType::PublicKey, peer_pub},
+                                                 {scrctl::wifi::TlvType::EncryptedData,
+                                                  Bytes(16, 0x5A)}});
+    const auto pairing_reply = [&](const Bytes &tlv) {
+        const scrctl::json::Value payload =
+            j_obj({{"data", j_str(scrctl::wifi::b64_encode(tlv))},
+                   {"kind", j_str("verifyManualPairing")}});
+        scrctl::json::Value data_slot = j_obj({{"_0", payload}});
+        scrctl::json::Value pairing = j_obj({{"pairingData", std::move(data_slot)}});
+        scrctl::json::Value event_slot = j_obj({{"_0", std::move(pairing)}});
+        scrctl::json::Value event = j_obj({{"event", std::move(event_slot)}});
+        scrctl::json::Value plain_slot = j_obj({{"_0", std::move(event)}});
+        scrctl::json::Value plain = j_obj({{"plain", std::move(plain_slot)}});
+        scrctl::json::Value envelope = j_obj({{"originatedBy", j_str("device")},
+                                      {"sequenceNumber", j_int(1)},
+                                      {"message", std::move(plain)}});
+        return scrctl::json::write(envelope);
+    };
+    const auto reply_with = [&](const Bytes &tlv) { return device_frame(pairing_reply(tlv)); };
+
+    scrctl::wifi::PairRecord record;
+    record.udid = "U";
+    record.host_identifier = "AC106655-9E9F-3445-96B3-075257AF1912";
+    record.host_private_key =
+        from_hex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60");
+    record.host_public_key = Bytes(32, 0x22);
+
+    {
+        MemStream io;
+        scrctl::wifi::Rppairing channel(io);
+        io.feed(device_frame(handshake_reply));
+        io.feed(reply_with(msg02));
+        io.feed(reply_with(scrctl::wifi::tlv_build({{scrctl::wifi::TlvType::State, Bytes{0x04}}})));
+
+        std::string err;
+        const scrctl::wifi::PairVerifyResult result = scrctl::wifi::pair_verify(channel, record, err);
+        check(result.outcome == scrctl::wifi::VerifyOutcome::Paired,
+              "回信里没有 ERROR 就该判成已配对");
+        check(result.shared_secret.size() == 32, "共享密钥 32 字节");
+        check(result.device_handshake.find("wireProtocolVersion") != nullptr &&
+                  result.device_handshake.find("wireProtocolVersion")->as_int_or(0) == 26,
+              "设备握手里那个 26 要留档（它是设备的版本，不是我们该发的）");
+
+        // 三条发出去的帧：handshake 请求、PV-Msg01、PV-Msg03。
+        const std::string sent = io.take_written();
+        check(sent.find(R"JSON("event":{"_0":{"pairingData":{"_0":{"data":)JSON") !=
+                  std::string::npos,
+              "pairingData 事件必须有 event._0.pairingData._0 这两层联合体包装");
+        check(sent.find(R"JSON("kind":"verifyManualPairing","startNewSession":true)JSON") !=
+                  std::string::npos,
+              "第一条 verify 要 startNewSession=true");
+        check(sent.find(R"JSON("kind":"verifyManualPairing","startNewSession":false)JSON") !=
+                  std::string::npos,
+              "第三条（带签名的那条）要 startNewSession=false");
+        // 我们自己的 PV-Msg01 要能按同样的规矩解回来：STATE=1 + 32 字节临时公钥。
+        const size_t data_at = sent.find(R"JSON("data":")JSON") + 8;
+        const size_t data_end = sent.find('"', data_at);
+        std::string decode_err;
+        const auto tlv_bytes =
+            scrctl::wifi::b64_decode(sent.substr(data_at, data_end - data_at), decode_err);
+        std::string parse_err;
+        const auto fields = scrctl::wifi::tlv_parse(tlv_bytes.value_or(Bytes()), parse_err);
+        check(scrctl::wifi::tlv_state(fields) == 0x01, "第一步的 STATE 是 1");
+        const Bytes *our_pub = scrctl::wifi::tlv_get(fields, scrctl::wifi::TlvType::PublicKey);
+        check(our_pub != nullptr && our_pub->size() == 32, "第一步要带 32 字节的临时公钥");
+    }
+
+    {
+        // 设备回 ERROR：要判成"没配对"，还要补一句 pairVerifyFailed（同样两层包装）。
+        MemStream io;
+        scrctl::wifi::Rppairing channel(io);
+        io.feed(device_frame(handshake_reply));
+        io.feed(reply_with(msg02));
+        io.feed(reply_with(scrctl::wifi::tlv_build({{scrctl::wifi::TlvType::State, Bytes{0x06}},
+                                                    {scrctl::wifi::TlvType::Error, Bytes{0x02}}})));
+
+        std::string err;
+        const scrctl::wifi::PairVerifyResult result = scrctl::wifi::pair_verify(channel, record, err);
+        check(result.outcome == scrctl::wifi::VerifyOutcome::NotPaired,
+              "设备答了但带 ERROR，要判成没配对，不能算传输失败");
+        check(!err.empty(), "这种情况要给得出原因");
+        const std::string sent = io.take_written();
+        check(sent.find(R"JSON("event":{"_0":{"pairVerifyFailed":{}}})JSON") != std::string::npos,
+              "要补一句 pairVerifyFailed 让设备把会话收干净");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -410,6 +530,7 @@ int main() {
     test_tlv();
     test_pair_record();
     test_rppairing();
+    test_pair_verify_shape();
     std::printf("%d 条判据，%d 条不通过\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }
