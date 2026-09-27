@@ -414,29 +414,63 @@ void test_sequence_reordering() {
     // 序列会被记成两次缺口：101 迟到把水位从 102 拽回 101，103 于是"跳"了一格。
     // 而 seq_gaps 在视频那条腿上是发 PLI、甚至重起整条会话的理由。
     RtpSeq seq;
-    uint32_t lost = 0;
     std::size_t gaps = 0, late = 0;
     const uint16_t arrival[] = {100, 102, 101, 103};
     for (const uint16_t s : arrival) {
-        lost = 0;
-        switch (seq.observe(s, &lost)) {
+        switch (seq.observe(s)) {
         case RtpSeq::Verdict::kGap: ++gaps; break;
         case RtpSeq::Verdict::kLate: ++late; break;
         default: break;
         }
     }
-    check(gaps == 1 && lost == 0, "四个包一个没丢：只有一处真缺口");
-    check(late == 1, "迟到那包记成迟到，不记成缺口");
+    // 三个量要分开看，它们各自回答一个问题：
+    //   gaps_detected()  往前跳过几个号（1 个：101）——只增
+    //   lost()           现在确实没到的有几个（0 个：101 后来到了）
+    //   high()           RR 要报的水位
+    check(gaps == 1 && late == 1, "四个包一个没丢：只有一处缺口事件、一次迟到");
+    check(seq.gaps_detected() == 1, "缺口按号数累计一次，不因为 103 又跳一格而记两笔");
+    check(seq.lost() == 0, "补齐之后真正没到的包数是 0");
     check(seq.high() == 103, "水位是见过的最高号，不是最后到达的 101");
+
+    // 真丢一个、而且再也没来：这个数必须待在 1，不能被"后来又到了几个包"冲掉。
+    RtpSeq gone;
+    for (const uint16_t s : {100, 101, 103, 104}) gone.observe(s);
+    check(gone.lost() == 1 && gone.gaps_detected() == 1, "真丢一个就是 1");
+    // 已经补过的洞上再来一次同一个号（重复包），不能把 lost() 往下多冲一格——
+    // 否则丢包数会变成"看网络心情"的数，也就失去意义了。
+    RtpSeq refilled;
+    for (const uint16_t s : {100, 102, 101, 101}) refilled.observe(s);
+    check(refilled.lost() == 0, "同一个迟到包重复到达只冲销一次");
+    RtpSeq dupthenloss;
+    for (const uint16_t s : {100, 101, 101, 103}) dupthenloss.observe(s);
+    check(dupthenloss.lost() == 1, "重复包不算补齐：水位之后的洞仍然欠着");
+
+    // 迟得太久就不算补齐了。101 这个洞在 101+1024 之后被判死，此后再到的 101
+    // 只会是别的东西（换了流、或表早就不认它）。
+    RtpSeq aged;
+    check(aged.observe(100) == RtpSeq::Verdict::kFirst, "建水位");
+    check(aged.observe(102) == RtpSeq::Verdict::kGap, "欠一个 101");
+    check(aged.observe(1200) == RtpSeq::Verdict::kGap, "水位走远");
+    check(aged.observe(101) == RtpSeq::Verdict::kLate, "101 现在才到：判迟到了");
+    check(aged.lost() == aged.gaps_detected(), "洞判死之后迟到的包不再冲销，欠账只增不减");
 
     // 回绕：水位跨 65535 那一圈之后，正常往前走的包不能被判成倒退。
     RtpSeq wrap;
     check(wrap.observe(65534) == RtpSeq::Verdict::kFirst, "第一个包只建水位");
     check(wrap.observe(65535) == RtpSeq::Verdict::kInOrder, "65535 接得上");
     check(wrap.observe(0) == RtpSeq::Verdict::kInOrder, "回绕到 0 仍然算接上");
-    uint32_t wl = 0;
-    check(wrap.observe(2, &wl) == RtpSeq::Verdict::kGap && wl == 1, "回绕之后缺口仍然数得对");
+    check(wrap.observe(2) == RtpSeq::Verdict::kGap, "回绕之后缺口仍然数得出来");
+    check(wrap.lost() == 1, "回绕之后的缺口记成 1 个");
     check(wrap.observe(1) == RtpSeq::Verdict::kLate, "回绕之后的迟到不误判成大片缺口");
+    check(wrap.lost() == 0, "回绕之后的迟到补齐同样要冲销掉");
+
+    // 一次跳掉整个重排窗口：多半是换了流而不是真丢一千个包。账要如实记 big，
+    // 但别为此留一张满表——判成丢失是对的，只是别把内存吃在那儿。
+    RtpSeq jump;
+    jump.observe(100);
+    check(jump.observe(2100) == RtpSeq::Verdict::kGap, "跳 2000 号算缺口事件");
+    check(jump.lost() == 1999 && jump.observe(150) == RtpSeq::Verdict::kLate,
+          "大跳的账留着，迟到的旧号不再改它");
 
     // 重复包：既不推进水位，也不算缺口。
     RtpSeq dup;
@@ -445,6 +479,10 @@ void test_sequence_reordering() {
     dup.reset();
     check(dup.observe(5000) == RtpSeq::Verdict::kFirst,
           "换会话要重置：新流的第一包不该对上旧水位算成丢几千个");
+    dup.observe(5000);
+    dup.observe(5002);
+    dup.reset();
+    check(dup.lost() == 0, "reset 要把欠账一起清掉，否则新会话第一秒就背着旧账");
 
     // 端到端：喂真的 RTP 包，判拆包器的账与它回 RR 用的那个数。
     HevcRtpDepacketizer d;
@@ -453,10 +491,13 @@ void test_sequence_reordering() {
     for (const uint16_t s : arrival) {
         d.push(packet(s, 1000, false, single(1, {0xA4})), out, err);
     }
-    check(d.stats().seq_gaps == 1 && d.stats().seq_lost == 1,
-          "拆包器：一次真缺口，迟到那次不再补记一笔");
+    check(d.stats().seq_gaps == 1 && d.stats().seq_lost == 0,
+          "拆包器：一次缺口，补齐之后真丢 0 个");
     check(d.stats().reordered == 1, "迟到单独计一位 reordered");
     check(d.last_sequence() == 103, "RR 报最高水位（报 101 会让设备以为我们落后一个包）");
+    d.push(packet(105, 1000, false, single(1, {0xA4})), out, err);
+    check(d.stats().seq_gaps == 2 && d.stats().seq_lost == 1,
+          "接着真丢一个 104：seq_lost 从 0 变 1，说明它是当前欠账而不是历史累计");
 }
 
 }  // namespace

@@ -94,11 +94,9 @@ bool HevcRtpDepacketizer::push(std::span<const uint8_t> datagram, std::vector<ui
     // 序号连续性：见 `rt/RtpSeq`。这里以前是本地两份裸变量，把"迟到的包"也算进水位，
     // 于是乱序到达会造出**假的丢包**——而 `seq_gaps` 在视频这条腿上是发 PLI、甚至
     // 重起整条会话的理由，账错一次就白重起一次。
-    uint32_t lost = 0;
-    switch (seq_.observe(info.sequence, &lost)) {
+    switch (seq_.observe(info.sequence)) {
     case RtpSeq::Verdict::kGap:
         ++stats_.seq_gaps;
-        stats_.seq_lost += lost;
         break;
     case RtpSeq::Verdict::kLate:
         ++stats_.reordered;
@@ -107,6 +105,8 @@ bool HevcRtpDepacketizer::push(std::span<const uint8_t> datagram, std::vector<ui
     case RtpSeq::Verdict::kInOrder:
         break;
     }
+    // 取的是 `RtpSeq` 的累计值而不是本地累加：迟到补齐要能冲销，本地 `+=` 只会单向虚增。
+    stats_.seq_lost = seq_.lost();
     std::span<const uint8_t> body = datagram.subspan(info.payload_offset);
 
     while (body.size() >= 2) {

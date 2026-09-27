@@ -296,6 +296,9 @@ void AudioPump::loop() {
     uint64_t last_packet_ms = now_ms();
     uint64_t last_probe_ms = 0;
     scrctl::rt::RtpSeq seq;
+    /// `seq` 每换一条会话就归零（序号空间是新的），而 `stats_.seq_lost` 要的是整条腿
+    /// 开下来真丢了多少，所以旧会话的读数在 reset 之前搬到这里存着。
+    uint64_t lost_carry = 0;
     uint64_t decode_failures_logged = 0;
 
     while (!stopping_.load()) {
@@ -311,7 +314,9 @@ void AudioPump::loop() {
                 std::printf("音频会话已重起，收流端口=%u\n", session_->receiver_port());
                 last_packet_ms = now_ms();
                 next_rtcp_ms = last_packet_ms + kRtcpPeriodMs;
-                seq.reset();  // 新会话的序号空间与上一条无关，不重置会把第一包判成大片缺口
+                // 新会话的序号空间与上一条无关，不重置会把第一包判成大片缺口。
+                lost_carry += seq.lost();
+                seq.reset();
                 continue;
             }
             std::fprintf(stderr, "重起音频会话失败: %s（1 秒后再试）\n", rerr.c_str());
@@ -381,17 +386,18 @@ void AudioPump::loop() {
         // 的头文件里）。这里以前是两份裸变量，而它们把水位更新成"最后**到达**的序号"：
         // 100、102、101、103 这样一个都没丢的序列会被记成两次缺口——101 迟到把水位
         // 从 102 拽回 101，103 于是"跳"了一格。
-        uint32_t lost = 0;
-        const auto verdict = seq.observe(info.sequence, &lost);
+        const auto verdict = seq.observe(info.sequence);
         {
             std::lock_guard<std::mutex> lock(mutex_);
             ++stats_.packets;
             if (verdict == scrctl::rt::RtpSeq::Verdict::kGap) {
                 ++stats_.seq_gaps;
-                stats_.seq_lost += lost;
             } else if (verdict == scrctl::rt::RtpSeq::Verdict::kLate) {
                 ++stats_.out_of_order;
             }
+            // 取累计值而不是本地 `+=` 一个增量：迟到补齐要把缺口冲回去，而这里跨会话累加，
+            // 所以把上一会话的读数在 `seq.reset()` 之前收进 `lost_carry`。
+            stats_.seq_lost = lost_carry + seq.lost();
         }
         // 分片重组与丢包重传对音频没有意义：ELD 一包就是一帧（10ms），丢一包就是少 10ms
         // 声音，补不出来。所以这里只数缺口、不追包。
