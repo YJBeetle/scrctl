@@ -1,6 +1,7 @@
 #include "wifi/Rppairing.h"
 
 #include <cstring>
+#include <utility>
 
 namespace scrctl::wifi {
 
@@ -22,6 +23,13 @@ json::Value j_bool(bool v) {
     json::Value out;
     out.kind = json::Kind::Bool;
     out.boolean = v;
+    return out;
+}
+
+json::Value j_arr(std::vector<json::Value> items) {
+    json::Value out;
+    out.kind = json::Kind::Array_;
+    out.array = std::move(items);
     return out;
 }
 

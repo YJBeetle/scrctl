@@ -133,7 +133,8 @@ add_library(scrctl_core STATIC
         src/wifi/Tlv.cpp
         src/wifi/Rppairing.cpp
         src/wifi/PairRecord.cpp
-        src/wifi/PairVerify.cpp)
+        src/wifi/PairVerify.cpp
+        src/wifi/RemotePairing.cpp)
 target_include_directories(scrctl_core PUBLIC src)
 target_link_libraries(scrctl_core PUBLIC ScrctlAppleFrameworks OpenSSL::SSL OpenSSL::Crypto)
 target_compile_options(scrctl_core PRIVATE -Wall -Wextra)

@@ -6,6 +6,8 @@
 #include <vector>
 
 #include "net/Stack.h"
+#include "wifi/PairRecord.h"
+#include "wifi/RemotePairing.h"
 #include "remote/Rsd.h"
 #include "transport/Lockdown.h"
 #include "transport/Tunnel.h"
@@ -46,6 +48,21 @@ public:
     static std::optional<Device> establish(std::string_view udid, std::string &err,
                                            bool verbose = false);
 
+    /// 用一条远程配对记录走局域网建立会话（docs §22）。
+    ///
+    /// 与 USB 那条**只有"隧道怎么接上"不同**：这里是 pair-verify → createListener →
+    /// TLS-PSK → CDTunnel，接上之后隧道内的地址、那套用户态 IPv6+TCP 栈、RSD 目录、
+    /// 服务连接、起流全共用同一份代码。
+    ///
+    /// `address` 是设备的局域网地址（可以问 lockdown 的 WiFiAddress 要，不必依赖
+    /// mDNS）；`port` 是设备 RemotePairing 端口（正常应从广播里拿，这里给的是兜底值）。
+    /// 没有 lockdown 会话，所以 `establish_wifi` 出来的设备**不能**再走任何依赖
+    /// lockdownd 的路子——目前只有建立过程本身用到它。
+    static std::optional<Device> establish_wifi(const std::string &address,
+                                                const wifi::PairRecord &record, std::string &err,
+                                                bool verbose = false,
+                                                uint16_t port = wifi::kAdvertisedPortFallback);
+
     [[nodiscard]] Rsd &rsd() { return *rsd_; }
     /// 隧道协商出来的两个地址与 RSD 端口。起流时要把自己的地址报给设备。
     [[nodiscard]] const transport::TunnelParams &tunnel_params() const { return tunnel_->params(); }
@@ -79,6 +96,11 @@ public:
                             xpc::Value &output, std::string &err, bool verbose, int timeout_ms);
 
 private:
+    /// 隧道接上之后的共同部分：起用户态栈、起泵、连 RSD 读目录。
+    /// USB 与 Wi-Fi 两条建立路径都收在这一处，免得"泵必须先起来"这种规矩写两份。
+    bool finish_session(transport::PacketTunnel &&tunnel, PeerIdentity identity, bool verbose,
+                        std::string &err);
+
     std::string udid_;
     std::string connection_type_;
     std::optional<transport::Lockdown> lockdown_;

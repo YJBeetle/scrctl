@@ -41,6 +41,7 @@ private:
 json::Value j_str(std::string_view s);
 json::Value j_int(int64_t v);
 json::Value j_bool(bool v);
+json::Value j_arr(std::vector<json::Value> items);
 json::Value j_obj(std::vector<std::pair<std::string, json::Value>> kv);
 
 /// RemotePairing 控制通道：帧、信封、序号、主密钥。

@@ -48,6 +48,9 @@ namespace {
 struct Options {
     std::string path;       ///< 空 = 走真机实时流
     std::string serial;     ///< scrcpy 的 --serial：指定哪台设备
+    /// `--wifi=<局域网地址>`：走无线那条路（pair-verify + TLS-PSK 隧道），而不是 USB。
+    /// 设备还是要**插着或者曾经插过**——配对记录得先在这台机器上存在。
+    std::string wifi;
     std::string record;     ///< 实时流顺手把 Annex-B 录到文件
     bool list_devices = false;
     bool no_control = false;  ///< scrcpy 的 --no-control：只看不动
@@ -124,6 +127,9 @@ void usage(const char *argv0) {
         "\n"
         "  (无参数)             镜像当前连接的设备\n"
         "  -s, --serial SERIAL  多台设备时指定哪一台（UDID）\n"
+        "  --wifi ADDRESS       改走局域网：与设备的 RemotePairing 端口握手、起 TLS-PSK\n"
+        "                     隧道。要配过一次对（记录在本机的记录目录里），并且与设备\n"
+        "                     在同一个网络。地址可以直接给 IPv4/IPv6；USB 那条是默认。\n"
         "  --list-devices       列出在连设备后退出\n"
         "  --play FILE          改播已录制的 Annex-B HEVC 文件\n"
         "  -r, --record FILE    把实时流另存为 Annex-B\n"
@@ -192,10 +198,14 @@ void usage(const char *argv0) {
         "                     注入只有一条路（HID），没有“用哪种设备仿真”这一层；而鼠标\n"
         "                     当前只有左键绑到触摸，右键/中键/滚轮没有绑定，所以也没有\n"
         "                     一份可改的键位表。\n"
-        "  --turn-screen-off / --power-off-on-close / --screen-off-timeout / --tcpip /\n"
+        "  --turn-screen-off / --power-off-on-close / --screen-off-timeout /\n"
         "  --port / --camera-* / --v4l2-* / --new-display / --otg\n"
         "                     Android 侧的机制（电源管理、adb 转发、虚拟相机与虚拟屏），\n"
-        "                     CoreDevice 这条路里没有对应的服务。\n",
+        "                     CoreDevice 这条路里没有对应的服务。\n"
+        "  --tcpip            对应的东西在这里叫 --wifi，而且机制不同：adb 是把 adbd 换成\n"
+        "                     监听 TCP 端口，iOS 这边是另一套 RemotePairing 配对 + TLS-PSK\n"
+        "                     隧道（设备不需要\"转成网络模式\"，USB 与无线可以同时各有一条）。\n"
+        "                     所以没有沿用 --tcpip 这个名字：它在这里既不贴切也会误导。\n",
         argv0);
 }
 
@@ -227,6 +237,8 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.path = next("--play");
         } else if (a == "-s" || a == "--serial") {
             o.serial = next("--serial");
+        } else if (a == "--wifi") {
+            o.wifi = next("--wifi");
         } else if (a == "-r" || a == "--record") {
             o.record = next("--record");
         } else if (a == "--list-devices") {
@@ -988,8 +1000,9 @@ public:
     /// `want_audio`：起不起音频腿。它是**另一条设备侧会话**，起不来或者这个构建
     /// 根本没有音频后端都不致命——没有声音的镜像仍然是可用的镜像，所以这里只打一行。
     /// `audio_buffer_ms` = `--audio-buffer`：缓冲想维持的水位。
-    bool start(const std::string &serial, const std::string &record_path, bool hw_decode,
-               bool watch_display, bool want_audio, int audio_buffer_ms, std::string &err);
+    bool start(const std::string &serial, const std::string &wifi, const std::string &record_path,
+               bool hw_decode, bool watch_display, bool want_audio, int audio_buffer_ms,
+               std::string &err);
 
     /// 打开声卡。要和 `start()` 分开的唯一原因：`start()` 跑在 `SDL_Init` 之前
     /// （窗口还没建就得先有源），而 SDL 的音频子系统在那之后才有。
@@ -1223,12 +1236,43 @@ private:
     uint64_t serial_ = 0;
 };
 
+namespace {
+
+/// UDID 只打尾巴四位：日志会被贴到 issue 里，全号不该跟着出去。
+std::string tail4(std::string_view s) {
+    return s.size() <= 4 ? std::string(s) : "****" + std::string(s.substr(s.size() - 4));
+}
+
+/// 打开一个会话：`--wifi` 给了地址就走局域网那条，否则走 USB。
+///
+/// 无线这条需要一台**之前插过**的设备：配对记录（`~/.local/share/scrctl/remote-*.pair`）
+/// 得先存在。现在还没有做 pair-setup，所以这一步只能靠
+/// `wifi_probe`/将来 `scrctl --pair` 落下来的记录。
+std::optional<scrctl::remote::Device> open_device(const std::string &serial,
+                                                 const std::string &wifi, std::string &err) {
+    if (wifi.empty()) {
+        return scrctl::remote::Device::establish(serial, err);
+    }
+    const std::string dir = scrctl::wifi::default_record_dir();
+    std::string load_err;
+    auto record = scrctl::wifi::load_record(scrctl::wifi::record_path(dir, serial), load_err);
+    if (!record) {
+        // 路径里带 UDID，所以这里只报目录，让读者自己去对文件名。
+        err = "读不到 " + tail4(serial) + " 的远程配对记录（目录 " + dir +
+              "）：" + load_err + "。无线这条路要先配一次对——这台设备插过这台机器并配过对吗？";
+        return std::nullopt;
+    }
+    return scrctl::remote::Device::establish_wifi(wifi, *record, err);
+}
+
+}  // namespace
+
 LiveSource::~LiveSource() = default;
 
-bool LiveSource::start(const std::string &serial, const std::string &record_path, bool hw_decode,
-                       bool watch_display, bool want_audio, int audio_buffer_ms,
-                       std::string &err) {
-    auto dev = scrctl::remote::Device::establish(serial, err);
+bool LiveSource::start(const std::string &serial, const std::string &wifi,
+                       const std::string &record_path, bool hw_decode, bool watch_display,
+                       bool want_audio, int audio_buffer_ms, std::string &err) {
+    auto dev = open_device(serial, wifi, err);
     if (!dev) {
         return false;
     }
@@ -1427,7 +1471,7 @@ int main(int argc, char **argv) {
     // 这种情况），只发不读的话这种失败在本地完全看不出来。
     if (o.list_apps) {
         std::string err;
-        auto dev = scrctl::remote::Device::establish(o.serial, err);
+        auto dev = open_device(o.serial, o.wifi, err);
         if (!dev) {
             std::fprintf(stderr, "建立会话失败: %s\n", err.c_str());
             return 1;
@@ -1446,7 +1490,7 @@ int main(int argc, char **argv) {
 
     if (!o.copy_text.empty() || o.paste) {
         std::string err;
-        auto dev = scrctl::remote::Device::establish(o.serial, err);
+        auto dev = open_device(o.serial, o.wifi, err);
         if (!dev) {
             std::fprintf(stderr, "建立会话失败: %s\n", err.c_str());
             return 1;
@@ -1479,7 +1523,7 @@ int main(int argc, char **argv) {
     } else {
         auto made = std::make_unique<LiveSource>();
         std::string err;
-        if (!made->start(o.serial, o.record, o.hw_decode, !o.no_window && o.orientation < 0,
+        if (!made->start(o.serial, o.wifi, o.record, o.hw_decode, !o.no_window && o.orientation < 0,
                          !o.no_audio, o.audio_buffer_ms, err)) {
             std::fprintf(stderr, "起流失败: %s\n", err.c_str());
             // 设备在通话中会直接拒绝起流（code 9022）。实测这时它的会话表是空的

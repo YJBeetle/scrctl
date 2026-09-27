@@ -4,6 +4,9 @@
 #include <memory>
 
 #include "remote/RemoteXpc.h"
+#include "transport/TcpConnect.h"
+#include "wifi/PairVerify.h"
+#include "wifi/RemotePairing.h"
 
 namespace scrctl::remote {
 namespace {
@@ -138,8 +141,6 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
         err = "包隧道建立失败: " + err;
         return std::nullopt;
     }
-    dev->tunnel_ = std::make_unique<transport::PacketTunnel>(std::move(*tunnel));
-
     // peer UUID 用配对记录里的 HostID：设备上每条隧道只保留一个 RSD 连接，而且
     // 会记住被它换掉的那个 peer，UUID 一变就把整台机器重新 attach、关掉所有已
     // 公布的服务端口。所以这个值必须跨进程、跨重启稳定。
@@ -152,22 +153,98 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
     identity.uuid = *uuid;
 
     stage(verbose, "隧道内连 RSD 并读目录");
-    dev->stack_ =
-        std::make_unique<net::Stack>(*dev->tunnel_, dev->tunnel_->params().client_address,
-                                     dev->tunnel_->params().server_address);
-    if (!dev->stack_->addresses_ok()) {
-        err = "隧道给的地址不是合法 IPv6";
+    if (!dev->finish_session(std::move(*tunnel), identity, verbose, err)) {
         return std::nullopt;
+    }
+    return dev;
+}
+
+bool Device::finish_session(transport::PacketTunnel &&tunnel, PeerIdentity identity, bool verbose,
+                            std::string &err) {
+    tunnel_ = std::make_unique<transport::PacketTunnel>(std::move(tunnel));
+    stage(verbose, "隧道内连 RSD 并读目录");
+
+    stack_ =
+        std::make_unique<net::Stack>(*tunnel_, tunnel_->params().client_address,
+                                     tunnel_->params().server_address);
+    if (!stack_->addresses_ok()) {
+        err = "隧道给的地址不是合法 IPv6";
+        return false;
     }
     // 泵线程必须在任何连接之前起来：端点只从自己的队列取数据，没人替它们读隧道。
-    if (!dev->stack_->start_pump(err)) {
-        return std::nullopt;
+    if (!stack_->start_pump(err)) {
+        return false;
     }
-    dev->rsd_ = Rsd::open(*dev->stack_, *dev->tunnel_, identity, err, verbose);
-    if (!dev->rsd_) {
-        return std::nullopt;
+    rsd_ = Rsd::open(*stack_, *tunnel_, identity, err, verbose);
+    if (!rsd_) {
+        return false;
     }
     stage(verbose, "就绪");
+    return true;
+}
+
+std::optional<Device> Device::establish_wifi(const std::string &address,
+                                             const wifi::PairRecord &record, std::string &err,
+                                             bool verbose, uint16_t port) {
+    std::optional<Device> dev;
+    dev.emplace();
+    dev->udid_ = record.udid;
+    dev->connection_type_ = "WiFi";
+
+    stage(verbose, "局域网 pair-verify");
+    auto control = transport::connect_tcp(address, port, 5000, err);
+    if (!control) {
+        err = "连不上设备的 RemotePairing 端口 " + address + ":" + std::to_string(port) +
+              "：" + err + "（设备与本机在同一个网络上吗？配过对吗？）";
+        return std::nullopt;
+    }
+    wifi::SocketStream stream(*control);
+    wifi::Rppairing channel(stream);
+    const wifi::PairVerifyResult verified = wifi::pair_verify(channel, record, err);
+    if (verified.outcome != wifi::VerifyOutcome::Paired) {
+        if (verified.outcome == wifi::VerifyOutcome::NotPaired) {
+            err = "设备不认这条配对记录：" + mask(record.udid, 8) +
+                  " 在这台设备上没配过，或者已经在设备上被删掉了";
+        } else {
+            err = "pair-verify 没走通: " + verified.error;
+        }
+        return std::nullopt;
+    }
+
+    stage(verbose, "请设备开隧道端口");
+    const auto listener = wifi::request_tcp_listener(channel, verified.shared_secret, err);
+    if (!listener) {
+        return std::nullopt;
+    }
+    // 控制通道到此为止：隧道是**另一条** TCP 连接，端口是刚才要来的那个。
+    control->close();
+
+    stage(verbose, "TLS-PSK + CDTunnel 握手");
+    auto tunnel_sock = transport::connect_tcp(address, *listener, 5000, err);
+    if (!tunnel_sock) {
+        err = "连不上隧道端口 " + std::to_string(*listener) + "：" + err;
+        return std::nullopt;
+    }
+    auto tunnel =
+        transport::PacketTunnel::establish_psk(std::move(*tunnel_sock), verified.shared_secret,
+                                               err);
+    if (!tunnel) {
+        err = "包隧道建立失败: " + err;
+        return std::nullopt;
+    }
+
+    // peer UUID 用我们自己注册时的 host identifier。和 USB 那条一样的规矩：这个值
+    // 必须跨进程、跨重启稳定，否则设备每次都要把这台机器重新 attach 一遍。
+    const auto uuid = parse_uuid_text(record.host_identifier);
+    if (!uuid) {
+        err = "配对记录里的 host identifier 不是合法 UUID，给不出稳定的 peer 身份";
+        return std::nullopt;
+    }
+    PeerIdentity identity;
+    identity.uuid = *uuid;
+    if (!dev->finish_session(std::move(*tunnel), identity, verbose, err)) {
+        return std::nullopt;
+    }
     return dev;
 }
 
