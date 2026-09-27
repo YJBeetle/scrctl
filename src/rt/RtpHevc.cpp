@@ -91,18 +91,22 @@ bool HevcRtpDepacketizer::push(std::span<const uint8_t> datagram, std::vector<ui
         return true;
     }
     ++stats_.packets;
-    // 序号连续性：int16 差值处理回绕。负数就是乱序到达（我们不重排，只记账）。
-    if (have_seq_) {
-        const int delta = static_cast<int16_t>(info.sequence - last_seq_);
-        if (delta > 1) {
-            ++stats_.seq_gaps;
-            stats_.seq_lost += static_cast<uint64_t>(delta - 1);
-        } else if (delta <= 0) {
-            ++stats_.reordered;
-        }
+    // 序号连续性：见 `rt/RtpSeq`。这里以前是本地两份裸变量，把"迟到的包"也算进水位，
+    // 于是乱序到达会造出**假的丢包**——而 `seq_gaps` 在视频这条腿上是发 PLI、甚至
+    // 重起整条会话的理由，账错一次就白重起一次。
+    uint32_t lost = 0;
+    switch (seq_.observe(info.sequence, &lost)) {
+    case RtpSeq::Verdict::kGap:
+        ++stats_.seq_gaps;
+        stats_.seq_lost += lost;
+        break;
+    case RtpSeq::Verdict::kLate:
+        ++stats_.reordered;
+        break;
+    case RtpSeq::Verdict::kFirst:
+    case RtpSeq::Verdict::kInOrder:
+        break;
     }
-    have_seq_ = true;
-    last_seq_ = info.sequence;
     std::span<const uint8_t> body = datagram.subspan(info.payload_offset);
 
     while (body.size() >= 2) {

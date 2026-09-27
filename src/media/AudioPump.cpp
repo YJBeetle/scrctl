@@ -9,6 +9,7 @@
 #include "remote/Device.h"
 #include "rt/Rtcp.h"
 #include "rt/RtpHevc.h"
+#include "rt/RtpSeq.h"
 
 namespace scrctl::media {
 namespace {
@@ -253,8 +254,7 @@ void AudioPump::loop() {
     uint64_t next_rtcp_ms = now_ms() + kRtcpPeriodMs;
     uint64_t last_packet_ms = now_ms();
     uint64_t last_probe_ms = 0;
-    bool have_seq = false;
-    uint16_t last_seq = 0;
+    scrctl::rt::RtpSeq seq;
     uint64_t decode_failures_logged = 0;
 
     while (!stopping_.load()) {
@@ -270,7 +270,7 @@ void AudioPump::loop() {
                 std::printf("音频会话已重起，收流端口=%u\n", session_->receiver_port());
                 last_packet_ms = now_ms();
                 next_rtcp_ms = last_packet_ms + kRtcpPeriodMs;
-                have_seq = false;
+                seq.reset();  // 新会话的序号空间与上一条无关，不重置会把第一包判成大片缺口
                 continue;
             }
             std::fprintf(stderr, "重起音频会话失败: %s（1 秒后再试）\n", rerr.c_str());
@@ -286,7 +286,7 @@ void AudioPump::loop() {
         if (now >= next_rtcp_ms) {
             next_rtcp_ms = now + kRtcpPeriodMs;
             const auto rr = scrctl::rt::build_rr(session_->started().remote_ssrc,
-                                                 session_->started().local_ssrc, last_seq);
+                                                 session_->started().local_ssrc, seq.high());
             std::string serr;
             const bool ok = session_->send_rtp(rr, session_->started().sender_port, serr);
             uint64_t failed_after = 0;
@@ -336,24 +336,21 @@ void AudioPump::loop() {
             ++stats_.other_payload;
             continue;
         }
-        if (have_seq) {
-            // 序号差按 mod 2^16 解释：`uint16_t(a - b)` 落在 (0, 32768) 才是"往前"，
-            // 否则是迟到。直接比大小在跨越 65535 那一圈时会把一个正常的包判成倒退。
-            const unsigned jump = static_cast<unsigned>(
-                static_cast<uint16_t>(info.sequence - last_seq));
-            std::lock_guard<std::mutex> lock(mutex_);
-            if (jump > 1 && jump < 32768) {
-                ++stats_.seq_gaps;
-                stats_.seq_lost += jump - 1;
-            } else if (jump == 0 || jump >= 32768) {
-                ++stats_.out_of_order;
-            }
-        }
-        have_seq = true;
-        last_seq = info.sequence;
+        // 记账走 `rt::RtpSeq`（与视频拆包器同一份，理由和那段 mod 2^16 的注释都在它
+        // 的头文件里）。这里以前是两份裸变量，而它们把水位更新成"最后**到达**的序号"：
+        // 100、102、101、103 这样一个都没丢的序列会被记成两次缺口——101 迟到把水位
+        // 从 102 拽回 101，103 于是"跳"了一格。
+        uint32_t lost = 0;
+        const auto verdict = seq.observe(info.sequence, &lost);
         {
             std::lock_guard<std::mutex> lock(mutex_);
             ++stats_.packets;
+            if (verdict == scrctl::rt::RtpSeq::Verdict::kGap) {
+                ++stats_.seq_gaps;
+                stats_.seq_lost += lost;
+            } else if (verdict == scrctl::rt::RtpSeq::Verdict::kLate) {
+                ++stats_.out_of_order;
+            }
         }
         // 分片重组与丢包重传对音频没有意义：ELD 一包就是一帧（10ms），丢一包就是少 10ms
         // 声音，补不出来。所以这里只数缺口、不追包。

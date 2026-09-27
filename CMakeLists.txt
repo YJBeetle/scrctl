@@ -111,6 +111,7 @@ add_library(scrctl_core STATIC
         src/media/FramePump.cpp
         src/media/AudioPump.cpp
         src/rt/RtpHevc.cpp
+        src/rt/RtpSeq.cpp
         src/rt/Rtcp.cpp
         src/transport/Usbmux.cpp
         src/transport/TlsChannel.cpp

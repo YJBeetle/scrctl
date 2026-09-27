@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "rt/RtpSeq.h"
+
 namespace scrctl::rt {
 
 /// CoreDevice 视频流的 RTP 载荷拆包。
@@ -63,17 +65,18 @@ public:
     void reset();
 
     [[nodiscard]] const Stats &stats() const { return stats_; }
-    /// 最后一个视频包的 RTP 序号（一个都没收到则 0）。
-    /// 回 RTCP 的 RR 里"扩展最高序号"那一位要它：如实报我们收到到哪，比报 0 有用。
-    [[nodiscard]] uint16_t last_sequence() const { return last_seq_; }
+    /// 见过的**最高**视频包 RTP 序号（一个都没收到则 0）。
+    /// 回 RTCP 的 RR 里"highest sequence number"那一位要的就是它——注意不是"最后
+    /// **收到**的那个"：乱序到达时两者不同，而设备拿这个数对它的发送计数。
+    [[nodiscard]] uint16_t last_sequence() const { return seq_.high(); }
     /// 是否有还没收完的分片。
     [[nodiscard]] bool mid_fragment() const { return !partial_.empty(); }
     [[nodiscard]] uint32_t fragment_timestamp() const { return partial_ts_; }
 
 private:
     uint8_t video_pt_;
-    bool have_seq_ = false;
-    uint16_t last_seq_ = 0;
+    /// 序号水位与缺口判定都在这一个对象里（为什么不用两个裸变量：见 `rt/RtpSeq.h`）。
+    RtpSeq seq_;
     std::vector<uint8_t> partial_;
     uint32_t partial_ts_ = 0;
     uint8_t partial_type_ = 0;

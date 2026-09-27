@@ -10,6 +10,7 @@
 #include "bitstream/AnnexB.h"
 #include "rt/Rtcp.h"
 #include "rt/RtpHevc.h"
+#include "rt/RtpSeq.h"
 
 namespace {
 
@@ -23,6 +24,7 @@ void check(bool ok, const std::string &what) {
 }
 
 using scrctl::rt::HevcRtpDepacketizer;
+using scrctl::rt::RtpSeq;
 
 /// 一个 RTP 包，按真机的样子构造：12 字节头（X=1）+ 8 字节扩展头 + HEVC 载荷。
 /// 扩展头的形状是从真机包上抄的（profile 0x9011、长度 1 个 32 位字），不是编的——
@@ -405,6 +407,58 @@ void test_rtcp_shapes() {
     check(fir2[11] == 8 && fir.size() == fir2.size(), "序号每请求加一（重复序号不会换来新 IDR）");
 }
 
+void test_sequence_reordering() {
+    std::printf("\n== 乱序到达不该被记成丢包 ==\n");
+    // 这条链路上乱序是实测常态（一秒 100 个包的音频流里每 2 秒就有几次）。旧写法把
+    // 序号水位更新成"最后**到达**的那个"，于是 100、102、101、103 这样一个都没丢的
+    // 序列会被记成两次缺口：101 迟到把水位从 102 拽回 101，103 于是"跳"了一格。
+    // 而 seq_gaps 在视频那条腿上是发 PLI、甚至重起整条会话的理由。
+    RtpSeq seq;
+    uint32_t lost = 0;
+    std::size_t gaps = 0, late = 0;
+    const uint16_t arrival[] = {100, 102, 101, 103};
+    for (const uint16_t s : arrival) {
+        lost = 0;
+        switch (seq.observe(s, &lost)) {
+        case RtpSeq::Verdict::kGap: ++gaps; break;
+        case RtpSeq::Verdict::kLate: ++late; break;
+        default: break;
+        }
+    }
+    check(gaps == 1 && lost == 0, "四个包一个没丢：只有一处真缺口");
+    check(late == 1, "迟到那包记成迟到，不记成缺口");
+    check(seq.high() == 103, "水位是见过的最高号，不是最后到达的 101");
+
+    // 回绕：水位跨 65535 那一圈之后，正常往前走的包不能被判成倒退。
+    RtpSeq wrap;
+    check(wrap.observe(65534) == RtpSeq::Verdict::kFirst, "第一个包只建水位");
+    check(wrap.observe(65535) == RtpSeq::Verdict::kInOrder, "65535 接得上");
+    check(wrap.observe(0) == RtpSeq::Verdict::kInOrder, "回绕到 0 仍然算接上");
+    uint32_t wl = 0;
+    check(wrap.observe(2, &wl) == RtpSeq::Verdict::kGap && wl == 1, "回绕之后缺口仍然数得对");
+    check(wrap.observe(1) == RtpSeq::Verdict::kLate, "回绕之后的迟到不误判成大片缺口");
+
+    // 重复包：既不推进水位，也不算缺口。
+    RtpSeq dup;
+    dup.observe(7);
+    check(dup.observe(7) == RtpSeq::Verdict::kLate && dup.high() == 7, "重复包记迟到");
+    dup.reset();
+    check(dup.observe(5000) == RtpSeq::Verdict::kFirst,
+          "换会话要重置：新流的第一包不该对上旧水位算成丢几千个");
+
+    // 端到端：喂真的 RTP 包，判拆包器的账与它回 RR 用的那个数。
+    HevcRtpDepacketizer d;
+    std::string err;
+    std::vector<uint8_t> out;
+    for (const uint16_t s : arrival) {
+        d.push(packet(s, 1000, false, single(1, {0xA4})), out, err);
+    }
+    check(d.stats().seq_gaps == 1 && d.stats().seq_lost == 1,
+          "拆包器：一次真缺口，迟到那次不再补记一笔");
+    check(d.stats().reordered == 1, "迟到单独计一位 reordered");
+    check(d.last_sequence() == 103, "RR 报最高水位（报 101 会让设备以为我们落后一个包）");
+}
+
 }  // namespace
 
 int main() {
@@ -416,6 +470,7 @@ int main() {
     test_payload_type_filter();
     test_feeds_annexb_parser();
     test_rtcp_shapes();
+    test_sequence_reordering();
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;
 }
