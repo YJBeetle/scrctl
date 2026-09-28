@@ -455,12 +455,75 @@ int run_pair_setup(const std::string &address, int port, const std::string &udid
 
 }  // namespace
 
+/// 把 USB CoreDeviceProxy 隧道里那张 RSD 服务表整张打出来：pair-setup 的 RemoteXPC
+/// 入口（docs §25.7）如果存在，就该在这张表里。
+int run_usb_services(bool verbose) {
+    std::string err;
+    auto mux = scrctl::transport::Usbmux::open(err);
+    if (!mux) {
+        std::fprintf(stderr, "连不上 usbmuxd: %s\n", err.c_str());
+        return 1;
+    }
+    std::vector<scrctl::transport::DeviceRecord> devices;
+    if (!mux->list_devices(devices, err) || devices.empty()) {
+        std::fprintf(stderr, "没有设备\n");
+        return 1;
+    }
+    const auto &device = devices.front();
+    std::optional<scrctl::transport::Lockdown> lockdown =
+        scrctl::transport::Lockdown::establish(device.device_id, device.udid, err);
+    if (!lockdown) {
+        std::fprintf(stderr, "lockdown 建立失败: %s\n", err.c_str());
+        return 1;
+    }
+    const std::optional<scrctl::transport::Lockdown::ServiceEndpoint> endpoint =
+        lockdown->start_service("com.apple.internal.devicecompute.CoreDeviceProxy", err);
+    if (!endpoint) {
+        std::fprintf(stderr, "起 CoreDeviceProxy 失败: %s\n", err.c_str());
+        return 1;
+    }
+    auto tunnel = scrctl::transport::PacketTunnel::establish(
+        device.device_id, endpoint->port, lockdown->identity(), endpoint->requires_tls, err);
+    if (!tunnel) {
+        std::fprintf(stderr, "隧道建立失败: %s\n", err.c_str());
+        return 1;
+    }
+    const auto &p = tunnel->params();
+    scrctl::net::Stack stack(*tunnel, p.client_address, p.server_address);
+    if (!stack.addresses_ok() || !stack.start_pump(err)) {
+        std::fprintf(stderr, "隧道内栈失败: %s\n", err.c_str());
+        return 1;
+    }
+    scrctl::remote::PeerIdentity identity;
+    const auto uuid = scrctl::remote::parse_uuid_text(lockdown->host_id());
+    if (!uuid) {
+        std::fprintf(stderr, "host_id 不是能用的 UUID\n");
+        return 1;
+    }
+    identity.uuid = *uuid;
+    const auto rsd = scrctl::remote::Rsd::open(stack, *tunnel, identity, err);
+    if (!rsd) {
+        std::fprintf(stderr, "RSD 打不开: %s\n", err.c_str());
+        return 1;
+    }
+    std::printf("隧道内 RSD 服务共 %zu 个：\n", rsd->services().size());
+    for (const auto &svc : rsd->services()) {
+        std::printf("  %-60s port=%-5u remotexpc=%d tls=%d%s%s\n", svc.name.c_str(),
+                    static_cast<unsigned>(svc.port), svc.uses_remote_xpc ? 1 : 0,
+                    svc.encrypt_socket_data ? 1 : 0,
+                    svc.entitlement.empty() ? "" : " ent=", svc.entitlement.c_str());
+    }
+    (void)verbose;
+    return 0;
+}
+
 int main(int argc, char **argv) {
     std::string address, record_path, foreign_path, host_id, udid;
     bool verbose = false;
     bool want_tunnel = false;
     bool want_rsd = false;
     bool want_pair_setup = false;
+    bool want_usb_services = false;
     bool save_record_to_disk = true;
     bool probe_verify_first = true;
     std::string host_name_override;
@@ -497,6 +560,8 @@ int main(int argc, char **argv) {
             want_rsd = true;
         } else if (std::strcmp(argv[i], "--pair-setup") == 0) {
             want_pair_setup = true;
+        } else if (std::strcmp(argv[i], "--usb-services") == 0) {
+            want_usb_services = true;
         } else if (std::strcmp(argv[i], "--no-save") == 0) {
             save_record_to_disk = false;
         } else if (std::strcmp(argv[i], "--no-verify-probe") == 0) {
@@ -509,6 +574,9 @@ int main(int argc, char **argv) {
             std::fprintf(stderr, "未知参数 %s\n", argv[i]);
             return 2;
         }
+    }
+    if (want_usb_services) {
+        return run_usb_services(verbose);
     }
     if (want_pair_setup) {
         return run_pair_setup(address, port, udid, host_id, verbose, save_record_to_disk,
