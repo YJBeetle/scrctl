@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "app/SourcePick.h"
 #include "plist/Plist.h"
 #include "remote/App.h"
 #include "xpc/XpcValue.h"
@@ -116,6 +117,27 @@ int main() {
     check(!pids.empty() && pids[0] == 24368 && pids[1] == 24370,
           "pid 与顺序都对，且 .app2 那种近似名没被误伤");
     check(App::matching_pids(processes, "").empty(), "空路径不匹配任何东西（防误杀全部）");
+
+    // 运行中降级那本四格状态账。第一版写在 next() 里时把"起流就降级"（泵不存在）
+    // 判成了"回升"，而那一格在 iOS 18 上是常态——所以这里把组合跑全，不等真机凑现场。
+    using scrctl::app::pick_picture_source;
+    using scrctl::app::SourcePick;
+    check(pick_picture_source(true, false, false, false) == SourcePick::kStayStream,
+          "正常：等媒体泵");
+    check(pick_picture_source(true, true, false, false) == SourcePick::kToShot,
+          "跑着解不出画面：切去截图源");
+    check(pick_picture_source(true, true, false, true) == SourcePick::kStayStream,
+          "截图源起失败过：不再每帧撞，继续等泵");
+    check(pick_picture_source(true, true, true, false) == SourcePick::kStayShot,
+          "已降级且泵仍解不出：留在截图路");
+    check(pick_picture_source(true, false, true, false) == SourcePick::kToStream,
+          "泵回升：切回实时流");
+    check(pick_picture_source(false, false, true, false) == SourcePick::kStayShot,
+          "起流就降级（泵不存在）：留在截图路——第一版写错的就是这一格");
+    check(pick_picture_source(false, false, true, true) == SourcePick::kStayShot,
+          "起流就降级且截图源也曾失败过：仍留在截图路（它活着就用它）");
+    check(pick_picture_source(false, false, false, false) == SourcePick::kStayStream,
+          "两条路都没有：交给调用方判空，不在这里编一个来源");
 
     std::printf(Failures == 0 ? "\n全部通过\n" : "\n%d 项失败\n", Failures);
     return Failures == 0 ? 0 : 1;

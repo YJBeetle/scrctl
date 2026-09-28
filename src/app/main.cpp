@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "app/RenderPanel.h"
+#include "app/SourcePick.h"
 #include "app/ViewGeom.h"
 #include "bitstream/AnnexB.h"
 #include "decode/AudioDecoder.h"
@@ -1038,6 +1039,11 @@ public:
     /// `currentMode.size` 根本不变（docs §16.1），而中途改尺寸要重建裁剪框、
     /// 触摸分母与整条几何日志，那些路径现在一条都没验过。
     [[nodiscard]] int orientation_degrees() const override {
+        if (shot_ != nullptr) {
+            // 截图服务给的是设备合成好的正立图（docs §24），再按朝向转就转歪。起流就降级
+            // 的那条路靠 degrees_=0 兜住，运行中切过来也得生效，所以判据挂在 shot_ 上。
+            return 0;
+        }
         if (watcher_ != nullptr) {
             const auto st = watcher_->latest();
             if (!st.orientation.empty()) {
@@ -1048,6 +1054,38 @@ public:
     }
 
     bool next(scrctl::Frame &out, int timeout_ms) override {
+        // 运行中的降级与回升：FramePump 连续重起仍解不出关键帧时置 video_unusable_ 并喊
+        // "取帧方请改走截图服务"，真解出关键帧后又清掉。起流那一刻的兜底门只覆盖"起流就
+        // 失败"，这一条覆盖"跑着跑着解不出来"——不接的话窗口永久停在旧画面上（审查 P1）。
+        // 四格状态账在 pick_picture_source 里、离线跑全组合（tests/app_test.cpp）；语义与
+        // MaaFW 控制单元一致（ScrctlSession 每次取帧都问同一个标志）。两条路的序号各记各的
+        // （serial_ / shot_serial_），来回切不会把截图的号喂给泵当"since"。
+        switch (scrctl::app::pick_picture_source(pump_ != nullptr,
+                                                  pump_ != nullptr && pump_->video_unusable(),
+                                                  shot_ != nullptr, shot_failed_)) {
+            case scrctl::app::SourcePick::kToShot: {
+                std::string serr;
+                auto shot = scrctl::media::ScreenshotSource::start(*device_, serr);
+                if (shot != nullptr) {
+                    std::printf("媒体流当前解不出画面，改走截图轮询兜底（约 2 fps）；"
+                                "泵在后台按退避继续试，解出来会切回来\n");
+                    shot_ = std::move(shot);
+                } else {
+                    // 与 HID 同一条规矩：失败过一次就不再每帧撞一遍。
+                    std::fprintf(stderr, "想降级到截图兜底但它起不来: %s（继续等媒体流）\n",
+                                 serr.c_str());
+                    shot_failed_ = true;
+                }
+                break;
+            }
+            case scrctl::app::SourcePick::kToStream:
+                std::printf("媒体流又能解出画面了，切回实时流\n");
+                shot_.reset();
+                break;
+            case scrctl::app::SourcePick::kStayShot:
+            case scrctl::app::SourcePick::kStayStream:
+                break;
+        }
         if (shot_ != nullptr) {
             return shot_->latest(out, shot_serial_, timeout_ms);
         }
@@ -1269,10 +1307,13 @@ private:
     bool hid_unavailable_ = false;
     uint64_t serial_ = 0;
 
-    /// 截图轮询兜底源。媒体流被设备按版本拒（iOS 27 以下）时顶上：画面约 2 fps，
-    /// 但触摸/按键注入走的是同一条 HID 路，不受影响。与 pump_ 互斥（一个会话只有一条画面路）。
+    /// 截图轮询兜底源。两种顶上方式：起流就被设备按版本拒（iOS 27 以下），或者跑着跑着
+    /// 解码后端解不出关键帧（FramePump::video_unusable，见 next()）。画面约 2 fps，但
+    /// 触摸/按键注入走的是同一条 HID 路，不受影响。任一时刻与 pump_ 只有一条在出画面。
     std::unique_ptr<scrctl::media::ScreenshotSource> shot_;
     uint64_t shot_serial_ = 0;
+    /// 运行中降级时截图源起失败过：之后不再每帧重试（同 HID 那条规矩）。
+    bool shot_failed_ = false;
 };
 
 namespace {
