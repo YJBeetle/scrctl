@@ -3,61 +3,9 @@
 #include "wifi/Tlv.h"
 
 namespace scrctl::wifi {
-namespace {
 
-/// 主机报的"我自己会说这套协议的版本"。设备 TXT 里那个 `ver=26` 是**它**的版本，
-/// 不是我们该发的值——实测对 iOS 27 发 19 能用（docs §22.3）。
-constexpr int64_t kWireProtocolVersion = 19;
-
-/// 发一条 pairingData 事件，回一条 pairingData 事件，返回解出来的 TLV 字节。
-///
-/// 设备拒绝时走的是 `pairingRejectedWithError`，那句 `NSLocalizedDescription` 是
-/// 人话——直接抬出去，别让调用方去猜"为什么没有 pairingData"。
-std::optional<Bytes> pairing_data_roundtrip(Rppairing &channel, const Bytes &tlv,
-                                            std::string_view kind, bool start_new_session,
-                                            std::string &err) {
-    const json::Value payload =
-        j_obj({{"data", j_str(b64_encode(tlv))},
-               {"kind", j_str(kind)},
-               {"startNewSession", j_bool(start_new_session)}});
-    // 外面那层 `_0` 是 event 的联合体包装，不是 pairingData 的：少了它设备直接关连接
-    // （真机现场：握手答得好好的，第一条 pairingData 发出去就没有然后了）。
-    json::Value wrapper = j_obj({{"pairingData", j_obj({{"_0", payload}})}});
-    const json::Value inner = j_obj({{"event", j_obj({{"_0", std::move(wrapper)}})}});
-    if (!channel.send_plain(inner, err)) {
-        return std::nullopt;
-    }
-    const std::optional<json::Value> reply = channel.receive(err);
-    if (!reply) {
-        return std::nullopt;
-    }
-    const json::Value *event = reply->find("event");
-    if (event == nullptr) {
-        err = "配对过程中设备回的不是 event";
-        return std::nullopt;
-    }
-    const json::Value *zero = event->find("_0");
-    if (const json::Value *rejected =
-            zero != nullptr ? zero->find("pairingRejectedWithError") : nullptr) {
-        const json::Value *wrapped = rejected->find("wrappedError");
-        const json::Value *user = wrapped != nullptr ? wrapped->find("userInfo") : nullptr;
-        const json::Value *why = user != nullptr ? user->find("NSLocalizedDescription") : nullptr;
-        err = "设备拒绝: " + (why != nullptr ? why->as_string_or() : std::string("(没有描述)"));
-        return std::nullopt;
-    }
-    const json::Value *data = zero != nullptr ? zero->find("pairingData") : nullptr;
-    const json::Value *inner_data = data != nullptr ? data->find("_0") : nullptr;
-    const json::Value *bytes = inner_data != nullptr ? inner_data->find("data") : nullptr;
-    if (bytes == nullptr || !bytes->is_string()) {
-        err = "event 里没有 pairingData._0.data";
-        return std::nullopt;
-    }
-    return b64_decode(bytes->as_string_or(), err);
-}
-
-}  // namespace
-
-PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::string &err) {
+PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::string &err,
+                             bool announce_failure) {
     PairVerifyResult result;
     if (!host.complete()) {
         err = "配对记录不完整，没法签名";
@@ -157,9 +105,11 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
     if (tlv_get(final_fields, TlvType::Error) != nullptr) {
         // 设备答了、但说不认识这把钥匙。补一句 pairVerifyFailed 让对端把会话收干净，
         // 然后**不要**重连重试——重试一万次也是同一句。
-        std::string ignored;
-        json::Value body = j_obj({{"pairVerifyFailed", j_obj({})}});
-        channel.send_plain(j_obj({{"event", j_obj({{"_0", std::move(body)}})}}), ignored);
+        if (announce_failure) {
+            std::string ignored;
+            json::Value body = j_obj({{"pairVerifyFailed", j_obj({})}});
+            channel.send_plain(j_obj({{"event", j_obj({{"_0", std::move(body)}})}}), ignored);
+        }
         err = "设备不认识这条配对记录（没配过，或者在设备上被删了）";
         result.outcome = VerifyOutcome::NotPaired;
         result.error = err;

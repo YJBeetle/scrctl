@@ -170,6 +170,74 @@ std::optional<json::Value> Rppairing::plain_roundtrip(const json::Value &inner, 
     return receive(err);
 }
 
+std::optional<Bytes> pairing_data_roundtrip(Rppairing &channel, const Bytes &tlv,
+                                            std::string_view kind, bool start_new_session,
+                                            std::string &err, std::string_view sending_host,
+                                            const ProgressFn &progress) {
+    std::vector<std::pair<std::string, json::Value>> fields = {
+        {"data", j_str(b64_encode(tlv))},
+        {"kind", j_str(kind)},
+        {"startNewSession", j_bool(start_new_session)}};
+    if (!sending_host.empty()) {
+        fields.emplace_back("sendingHost", j_str(sending_host));
+    }
+    const json::Value payload = j_obj(std::move(fields));
+    // 外面那层 `_0` 是 event 的联合体包装，不是 pairingData 的：少了它设备直接关连接
+    // （真机现场：握手答得好好的，第一条 pairingData 发出去就没有然后了）。
+    json::Value wrapper = j_obj({{"pairingData", j_obj({{"_0", payload}})}});
+    const json::Value inner = j_obj({{"event", j_obj({{"_0", std::move(wrapper)}})}});
+    if (!channel.send_plain(inner, err)) {
+        return std::nullopt;
+    }
+
+    bool consent_pending = true;  // 第一帧可能是 awaitingUserConsent，之后就不是了
+    while (true) {
+        const std::optional<json::Value> reply = channel.receive(err);
+        if (!reply) {
+            return std::nullopt;
+        }
+        const json::Value *event = reply->find("event");
+        if (event == nullptr) {
+            err = "配对过程中设备回的不是 event";
+            return std::nullopt;
+        }
+        const json::Value *zero = event->find("_0");
+        if (zero == nullptr) {
+            err = "event 里没有 _0";
+            return std::nullopt;
+        }
+        if (const json::Value *rejected = zero->find("pairingRejectedWithError")) {
+            const json::Value *wrapped = rejected->find("wrappedError");
+            const json::Value *user = wrapped != nullptr ? wrapped->find("userInfo") : nullptr;
+            const json::Value *why = user != nullptr ? user->find("NSLocalizedDescription") : nullptr;
+            err = "设备拒绝: " + (why != nullptr ? why->as_string_or() : std::string("(没有描述)"));
+            return std::nullopt;
+        }
+        if (zero->find("awaitingUserConsent") != nullptr) {
+            if (!consent_pending) {
+                err = "设备连着两次说要等用户同意";
+                return std::nullopt;
+            }
+            consent_pending = false;
+            if (progress) {
+                progress("设备在等你在屏幕上点「信任」——点了这一步才会继续");
+            }
+            continue;
+        }
+        const json::Value *data = zero->find("pairingData");
+        const json::Value *inner_data = data != nullptr ? data->find("_0") : nullptr;
+        const json::Value *bytes = inner_data != nullptr ? inner_data->find("data") : nullptr;
+        if (bytes == nullptr || !bytes->is_string()) {
+            err = "event 里没有 pairingData._0.data，实际字段：";
+            for (const auto &kv : zero->object) {
+                err += " " + kv.first;
+            }
+            return std::nullopt;
+        }
+        return b64_decode(bytes->as_string_or(), err);
+    }
+}
+
 std::optional<json::Value> Rppairing::encrypted_roundtrip(const json::Value &request,
                                                           std::string &err) {
     if (client_main_.size() != 32) {

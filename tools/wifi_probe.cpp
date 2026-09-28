@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -25,10 +26,13 @@
 #include "remote/RemoteXpc.h"
 #include "remote/Rsd.h"
 #include "plist/Plist.h"
+#include "transport/Lockdown.h"
 #include "transport/TcpConnect.h"
 #include "transport/Tunnel.h"
+#include "transport/Usbmux.h"
 #include "wifi/Crypto.h"
 #include "wifi/PairRecord.h"
+#include "wifi/PairSetup.h"
 #include "wifi/PairVerify.h"
 #include "wifi/Rppairing.h"
 
@@ -147,6 +151,287 @@ private:
     bool verbose_ = false;
 };
 
+/// lockdown 服务连接上的字节流（可能带 TLS）。RPPairing 只要求"写全 / 读够"，
+/// 所以底下是普通 socket 还是 SSL 都由这一层吃掉。
+class TlsByteStream final : public scrctl::wifi::ByteStream {
+public:
+    explicit TlsByteStream(SSL *ssl) : ssl_(ssl) {}
+
+    bool write_all(const void *data, size_t len, std::string &err) override {
+        const auto *p = static_cast<const char *>(data);
+        for (size_t off = 0; off < len;) {
+            const int n = SSL_write(ssl_, p + off, static_cast<int>(len - off));
+            if (n <= 0) {
+                err = "TLS 写失败（SSL_get_error=" + std::to_string(SSL_get_error(ssl_, n)) + "）";
+                return false;
+            }
+            off += static_cast<size_t>(n);
+        }
+        return true;
+    }
+    bool read_exact(void *data, size_t len, std::string &err) override {
+        auto *p = static_cast<char *>(data);
+        for (size_t off = 0; off < len;) {
+            const int n = SSL_read(ssl_, p + off, static_cast<int>(len - off));
+            if (n <= 0) {
+                err = "TLS 读断了（SSL_get_error=" + std::to_string(SSL_get_error(ssl_, n)) + "）";
+                return false;
+            }
+            off += static_cast<size_t>(n);
+        }
+        return true;
+    }
+
+private:
+    SSL *ssl_;
+};
+
+/// USB 那条 `remotepairingdeviced.lockdown` 控制面。
+constexpr char kPairingService[] = "com.apple.dt.remotepairingdeviced.lockdown";
+
+/// 一条控制面连接。设备在配对结束后会**关掉**它（实测，与参考实现注释一致），
+/// 所以这是一次性对象：要再说话就重开一条。
+struct PairingPlane {
+    scrctl::transport::Socket sock;
+    scrctl::transport::TlsChannel tls;
+    /// 真正干活的那层（socket 或 TLS）。`stream` 可能是套在它外面的 TracingStream。
+    std::unique_ptr<scrctl::wifi::ByteStream> inner;
+    std::unique_ptr<scrctl::wifi::ByteStream> stream;
+    std::unique_ptr<scrctl::wifi::Rppairing> channel;
+};
+
+/// 一条控制面怎么开：给了 address 走普通 TCP（Wi-Fi 手动配对面），否则走 usbmux
+/// 转发（USB lockdown 面，可能要 TLS）。两条面说的都是同一套 RPPairing 帧。
+struct PlaneSpec {
+    std::string address;
+    uint32_t device_id = 0;
+    uint16_t port = 0;
+    bool use_tls = false;
+    scrctl::transport::PemIdentity identity;
+};
+
+bool open_plane(const PlaneSpec &spec, bool verbose, PairingPlane &out, std::string &err) {
+    if (spec.address.empty()) {
+        auto mux = scrctl::transport::Usbmux::open(err);
+        if (!mux) {
+            return false;
+        }
+        std::optional<scrctl::transport::Socket> sock =
+            mux->connect(spec.device_id, spec.port, err);
+        if (!sock) {
+            return false;
+        }
+        out.sock = std::move(*sock);
+        if (spec.use_tls && !out.tls.handshake(out.sock, spec.identity, err)) {
+            return false;
+        }
+    } else {
+        std::optional<scrctl::transport::Socket> sock = scrctl::transport::connect_tcp(
+            spec.address, spec.port, 8000, err);
+        if (!sock) {
+            return false;
+        }
+        out.sock = std::move(*sock);
+    }
+    // 设备掐连接时可能不发 FIN（USB 面实测），没有读超时这里会永久挂住，症状像
+    // 我们卡死。配对要等人点「信任」，给两分钟。
+    if (!out.sock.set_read_timeout(120000, err)) {
+        return false;
+    }
+    std::unique_ptr<scrctl::wifi::ByteStream> base =
+        spec.use_tls ? std::unique_ptr<scrctl::wifi::ByteStream>(
+                           std::make_unique<TlsByteStream>(out.tls.handle()))
+                     : std::make_unique<scrctl::wifi::SocketStream>(out.sock);
+    if (verbose) {
+        out.inner = std::move(base);
+        out.stream = std::make_unique<TracingStream>(*out.inner, true);
+    } else {
+        out.stream = std::move(base);
+    }
+    out.channel = std::make_unique<scrctl::wifi::Rppairing>(*out.stream);
+    return true;
+}
+
+/// pair-setup 本体：建配对、落盘、再开一条面用新记录 pair-verify 验收。
+///
+/// 验收这一步不能省：pair-setup 全程我们自己算 SRP/签名，"算对了"只有设备认这把
+/// 密钥才算数；而设备认不认，只有拿落盘的记录再握一次手才问得出来。
+int finish_pair_setup(const PlaneSpec &spec, std::string udid,
+                      const std::string &host_id_override, bool verbose, bool save,
+                      bool probe_verify_first) {
+    std::string err;
+    const std::string hostname = scrctl::wifi::local_hostname();
+    if (hostname.empty()) {
+        std::fprintf(stderr, "取不到本机主机名\n");
+        return 1;
+    }
+    // identifier 默认**不**用苹果那个 uuid3(hostname)。理由值得记一句：identifier 相同
+    // 在设备那边就是同一条配对记录，pair-setup 会把 Xcode/macOS 自己那把 Ed25519 顶掉
+    //（症状是无线调试忽然要重新配对）。加个后缀就多一条属于 scrctl 的记录，谁也不动谁。
+    // 要跟参考实现的记录互操作时用 --host-id 显式给。
+    const std::string identifier = host_id_override.empty()
+                                       ? scrctl::wifi::host_identifier_uuid3(hostname + ".scrctl")
+                                       : host_id_override;
+    if (identifier.empty()) {
+        std::fprintf(stderr, "算不出 host identifier\n");
+        return 1;
+    }
+    std::printf("host identifier = %s（%s）\n", mask(identifier, 8).c_str(),
+                host_id_override.empty() ? "uuid3(主机名 + \".scrctl\")" : "命令行给的");
+
+    PairingPlane plane;
+    if (!open_plane(spec, verbose, plane, err)) {
+        std::fprintf(stderr, "连控制面失败: %s\n", err.c_str());
+        return 1;
+    }
+    const scrctl::wifi::ProgressFn progress = [](std::string_view msg) {
+        std::printf("  · %.*s\n", static_cast<int>(msg.size()), msg.data());
+        std::fflush(stdout);
+    };
+    scrctl::wifi::PairSetupOptions setup_options;
+    setup_options.probe_verify_first = probe_verify_first;
+    const scrctl::wifi::PairSetupResult setup = scrctl::wifi::pair_setup(
+        *plane.channel, identifier, hostname, udid, progress, setup_options, err);
+    if (!setup.ok) {
+        std::fprintf(stderr, "pair-setup 失败: %s\n", setup.error.c_str());
+        return 1;
+    }
+    std::printf("pair-setup 走通了\n");
+    print_handshake(setup.device_handshake);
+    std::printf("  host 密钥 %zu/%zu 字节，peer altIRK %s，远程解锁密钥 %s\n",
+                setup.record.host_private_key.size(), setup.record.host_public_key.size(),
+                setup.record.peer_alt_irk.size() == 16 ? "拿到了" : "没有",
+                setup.record.remote_unlock_host_key.empty() ? "没有" : "拿到了");
+
+    if (save) {
+        const std::string path =
+            scrctl::wifi::record_path(scrctl::wifi::default_record_dir(), udid);
+        if (!scrctl::wifi::save_record(path, setup.record, err)) {
+            std::fprintf(stderr, "写记录失败: %s\n", err.c_str());
+            return 1;
+        }
+        std::printf("记录写到 %s\n", path.c_str());
+    }
+
+    // 设备在配对结束后会关掉那条连接，所以验收要重开一条。
+    std::printf("重开一条控制面，用新记录走 pair-verify\n");
+    PairingPlane verify_plane;
+    if (!open_plane(spec, verbose, verify_plane, err)) {
+        std::fprintf(stderr, "重连控制面失败: %s\n", err.c_str());
+        return 1;
+    }
+    const scrctl::wifi::PairVerifyResult verified =
+        scrctl::wifi::pair_verify(*verify_plane.channel, setup.record, err);
+    if (verified.outcome != scrctl::wifi::VerifyOutcome::Paired) {
+        std::fprintf(stderr, "  新记录 pair-verify 没过: %s\n", verified.error.c_str());
+        return 1;
+    }
+    std::printf("  新记录 pair-verify 通过（设备认这把密钥了）\n");
+    print_handshake(verified.device_handshake);
+    return 0;
+}
+
+/// `--pair-setup`：把配对**从零建起来**，然后用新记录当场 pair-verify 验收。跑通这条，
+/// M5 就不再需要"先用参考实现配一次对"这个前置条件。
+///
+/// 两条控制面：
+///   给了 --address —— 设备 mDNS 广播的那个手动配对端口（Wi-Fi 面）。pair-setup 的
+///       正路：设备会弹「信任」框，点了才继续。
+///   没给 —— USB 那条 `remotepairingdeviced.lockdown` 面。iOS 27 上实测**不收**
+///       pair-setup：M1 一到就被 `Invalidating control channel` 掐掉（设备 oslog 量
+///       出来的，见 docs），所以这条路只用来复现那个症状。
+int run_pair_setup(const std::string &address, int port, const std::string &udid_filter,
+                   const std::string &host_id_override, bool verbose, bool save,
+                   bool probe_verify_first) {
+    std::string err;
+    PlaneSpec spec;
+    spec.address = address;
+    spec.port = static_cast<uint16_t>(port);
+
+    if (address.empty()) {
+        auto mux = scrctl::transport::Usbmux::open(err);
+        if (!mux) {
+            std::fprintf(stderr, "连不上 usbmuxd: %s\n", err.c_str());
+            return 1;
+        }
+        std::vector<scrctl::transport::DeviceRecord> devices;
+        if (!mux->list_devices(devices, err)) {
+            std::fprintf(stderr, "列设备失败: %s\n", err.c_str());
+            return 1;
+        }
+        std::vector<const scrctl::transport::DeviceRecord *> candidates;
+        for (const auto &d : devices) {
+            if (!udid_filter.empty()) {
+                if (d.udid == udid_filter) {
+                    candidates.push_back(&d);
+                }
+            } else if (d.is_usb()) {
+                candidates.push_back(&d);
+            }
+        }
+        if (candidates.empty()) {
+            std::fprintf(stderr, "没找到%s设备\n", udid_filter.empty() ? "USB " : "那台 ");
+            return 1;
+        }
+        if (candidates.size() > 1) {
+            std::fprintf(stderr, "插着 %zu 台，得用 --udid 指一台\n", candidates.size());
+            return 1;
+        }
+        const scrctl::transport::DeviceRecord &device = *candidates.front();
+        std::printf("设备 %s（%s）\n", mask(device.udid, 8).c_str(),
+                    device.connection_type.c_str());
+
+        std::optional<scrctl::transport::Lockdown> lockdown =
+            scrctl::transport::Lockdown::establish(device.device_id, device.udid, err);
+        if (!lockdown) {
+            std::fprintf(stderr, "lockdown 建立失败: %s\n", err.c_str());
+            return 1;
+        }
+        const std::optional<scrctl::transport::Lockdown::ServiceEndpoint> endpoint =
+            lockdown->start_service(kPairingService, err);
+        if (!endpoint) {
+            std::fprintf(stderr, "起 %s 失败: %s\n", kPairingService, err.c_str());
+            return 1;
+        }
+        std::printf("控制面端口 %u（TLS %s）\n", endpoint->port,
+                    endpoint->requires_tls ? "要" : "不要");
+        spec.device_id = device.device_id;
+        spec.port = endpoint->port;
+        spec.use_tls = endpoint->requires_tls;
+        spec.identity = lockdown->identity();
+        return finish_pair_setup(spec, device.udid, host_id_override, verbose, save,
+                                 probe_verify_first);
+    }
+
+    // Wi-Fi 面：连接本身不带 UDID，落盘的文件名要它——插着一台 USB 设备就当是它
+    //（这台 iPhone 正是我们要配的），否则让命令行给。
+    std::string udid = udid_filter;
+    if (udid.empty()) {
+        auto mux = scrctl::transport::Usbmux::open(err);
+        if (mux) {
+            std::vector<scrctl::transport::DeviceRecord> devices;
+            if (mux->list_devices(devices, err)) {
+                std::vector<const scrctl::transport::DeviceRecord *> usb;
+                for (const auto &d : devices) {
+                    if (d.is_usb()) {
+                        usb.push_back(&d);
+                    }
+                }
+                if (usb.size() == 1) {
+                    udid = usb.front()->udid;
+                    std::printf("记录按插着的这台设备落盘（%s）\n", mask(udid, 8).c_str());
+                }
+            }
+        }
+        if (udid.empty()) {
+            std::fprintf(stderr, "Wi-Fi 面不知道设备是谁，得给 --udid\n");
+            return 2;
+        }
+    }
+    std::printf("控制面 %s:%d（Wi-Fi 手动配对面）\n", address.c_str(), port);
+    return finish_pair_setup(spec, udid, host_id_override, verbose, save, probe_verify_first);
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -154,6 +439,9 @@ int main(int argc, char **argv) {
     bool verbose = false;
     bool want_tunnel = false;
     bool want_rsd = false;
+    bool want_pair_setup = false;
+    bool save_record_to_disk = true;
+    bool probe_verify_first = true;
     int port = 49152;
     for (int i = 1; i < argc; ++i) {
         auto next = [&](std::string &dst) {
@@ -184,15 +472,26 @@ int main(int argc, char **argv) {
         } else if (std::strcmp(argv[i], "--rsd") == 0) {
             want_tunnel = true;
             want_rsd = true;
+        } else if (std::strcmp(argv[i], "--pair-setup") == 0) {
+            want_pair_setup = true;
+        } else if (std::strcmp(argv[i], "--no-save") == 0) {
+            save_record_to_disk = false;
+        } else if (std::strcmp(argv[i], "--no-verify-probe") == 0) {
+            probe_verify_first = false;
         } else {
             std::fprintf(stderr, "未知参数 %s\n", argv[i]);
             return 2;
         }
     }
+    if (want_pair_setup) {
+        return run_pair_setup(address, port, udid, host_id, verbose, save_record_to_disk,
+                              probe_verify_first);
+    }
     if (address.empty()) {
         std::fprintf(stderr,
                      "用法: wifi_probe --address <ip> [--port 49152] "
-                     "(--record <pair> | --pmd3-record <plist> --host-id <ID> [--udid <UDID>])\n");
+                     "(--record <pair> | --pmd3-record <plist> --host-id <ID> [--udid <UDID>])\n"
+                     "      wifi_probe --pair-setup [--udid <UDID>] [--host-id <ID>] [--no-save]\n");
         return 2;
     }
 

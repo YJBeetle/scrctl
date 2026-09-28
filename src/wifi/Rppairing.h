@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -43,6 +44,11 @@ json::Value j_int(int64_t v);
 json::Value j_bool(bool v);
 json::Value j_arr(std::vector<json::Value> items);
 json::Value j_obj(std::vector<std::pair<std::string, json::Value>> kv);
+
+/// 主机报的"我自己会说这套协议的版本"。设备 TXT 里那个 `ver=26` 是**它**的版本，
+/// 不是我们该发的值——实测对 iOS 27 发 19 能用（docs §22.3）。pair-setup 与
+/// pair-verify 的 handshake 用的是同一条，所以放在这里共用。
+inline constexpr int64_t kWireProtocolVersion = 19;
 
 /// RemotePairing 控制通道：帧、信封、序号、主密钥。
 ///
@@ -92,5 +98,22 @@ private:
     /// 上一次加密请求用的 nonce：设备的回信用同一个值，不是各自计数。
     std::string last_nonce_;
 };
+
+/// 把中间状态说给人听的回调（例如"设备正在等你在屏幕上点信任"）。空函数=不报。
+using ProgressFn = std::function<void(std::string_view)>;
+
+/// 发一条 pairingData 事件，回一条 pairingData 事件，返回解出来的 TLV 字节。
+/// pair-verify 与 pair-setup 共用这条管道；`sending_host` 非空时带上 sendingHost 键
+///（pair-setup 的三条都要它，verify 不带）。
+///
+/// 设备的回信有三种形状，都得当正常情况处理：
+///   pairingData            —— 直接就是下一步的 TLV；
+///   awaitingUserConsent    —— 屏幕上弹了"信任这台电脑？"，要**再收一帧**才是 TLV；
+///   pairingRejectedWithError —— 那句 `NSLocalizedDescription` 是人话，直接抬出去，
+///                               别让调用方去猜"为什么没有 pairingData"。
+std::optional<Bytes> pairing_data_roundtrip(Rppairing &channel, const Bytes &tlv,
+                                            std::string_view kind, bool start_new_session,
+                                            std::string &err, std::string_view sending_host = "",
+                                            const ProgressFn &progress = nullptr);
 
 }  // namespace scrctl::wifi

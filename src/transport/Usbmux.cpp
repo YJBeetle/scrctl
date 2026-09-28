@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <poll.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/un.h>
 #include <unistd.h>
 
@@ -121,6 +122,10 @@ bool Socket::read_exact(void *data, size_t len, std::string &err) {
             if (errno == EINTR) {
                 continue;
             }
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                err = "读超时（对端在时限内没给字节）";
+                return false;
+            }
             err = std::string("recv 失败: ") + std::strerror(errno);
             return false;
         }
@@ -129,6 +134,17 @@ bool Socket::read_exact(void *data, size_t len, std::string &err) {
             return false;
         }
         got += static_cast<size_t>(n);
+    }
+    return true;
+}
+
+bool Socket::set_read_timeout(int ms, std::string &err) {
+    timeval tv{};
+    tv.tv_sec = ms / 1000;
+    tv.tv_usec = (ms % 1000) * 1000;
+    if (::setsockopt(fd_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) != 0) {
+        err = std::string("设读超时失败: ") + std::strerror(errno);
+        return false;
     }
     return true;
 }

@@ -36,6 +36,10 @@ public:
     /// 等待可读，最多 ms 毫秒。返回 false 表示超时或出错。
     bool wait_readable(int ms, std::string &err);
 
+    /// 给 recv 设一个超时（SO_RCVTIMEO）。控制面这类"对端可能一声不吭把连接掐掉又
+    /// 不发 FIN"的路，没有它 read 会永久挂着——症状像我们卡死，其实是设备早走了。
+    bool set_read_timeout(int ms, std::string &err);
+
     /// 读一个 lockdown 风格的帧：4 字节**大端**长度 + 该长度的负载。
     bool read_len_prefixed_be(std::vector<uint8_t> &out, std::string &err);
     bool write_len_prefixed_be(std::string_view payload, std::string &err);

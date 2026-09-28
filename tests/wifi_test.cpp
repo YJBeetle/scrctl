@@ -17,6 +17,7 @@
 #include "wifi/Opack.h"
 #include "wifi/Srp.h"
 #include "wifi/PairRecord.h"
+#include "wifi/PairSetup.h"
 #include "wifi/PairVerify.h"
 #include "wifi/Rppairing.h"
 #include "wifi/Tlv.h"
@@ -635,6 +636,109 @@ void test_pair_verify_shape() {
     }
 }
 
+/// ---- 7. pair-setup 的离线判据 ----
+///
+/// SRP 与 OPACK 各自有 oracle 向量（上面两节），这里判的是**接线**：identifier 的
+/// 算法、密钥生成、以及 pairingData 那条管道对三种回信形状的处理。真机那一趟才是
+/// 最终判据，但"设备在等你点信任"这种一帧之差的东西，离线钉住比在现场对着静默的
+/// 连接猜便宜得多。
+void test_pair_setup() {
+    // uuid3(DNS, ...) 的期望值由 python 的 uuid 模块生成 [对拍]。
+    check(scrctl::wifi::host_identifier_uuid3("python.org") == "6FA459EA-EE8A-3CA4-894E-DB77E160355E",
+          "uuid3(DNS) 要对得上（版本位与变体位最容易写错）[对拍]");
+    check(scrctl::wifi::host_identifier_uuid3("localhost") == "DD8A91F6-CA32-30E0-983C-8F309D653045",
+          "uuid3 另一组 [对拍]");
+    check(scrctl::wifi::host_identifier_uuid3("YJBeetle-M2.local") ==
+              "AC106655-9E9F-3445-96B3-075257AF1912",
+          "uuid3 与参考实现在本机主机名上的取值一致 [对拍]");
+    check(scrctl::wifi::host_identifier_uuid3("a") != scrctl::wifi::host_identifier_uuid3("b"),
+          "不同主机名要给出不同 identifier（否则两台机器会互相顶掉记录）");
+
+    std::string err;
+    const std::optional<scrctl::wifi::Ed25519KeyPair> key = scrctl::wifi::ed25519_keypair(err);
+    check(key.has_value(), "Ed25519 身份密钥要生成得出来");
+    if (key) {
+        check(key->pub != key->seed, "公钥不等于种子");
+        const std::optional<Bytes> sig = scrctl::wifi::ed25519_sign(
+            std::string_view(reinterpret_cast<const char *>(key->seed.data()), key->seed.size()),
+            Bytes{0x01, 0x02}, err);
+        check(sig.has_value() && sig->size() == 64, "生成出来的种子要能直接拿去签名");
+    }
+    const std::optional<scrctl::wifi::Ed25519KeyPair> key2 = scrctl::wifi::ed25519_keypair(err);
+    check(key2.has_value() && key && key2->pub != key->pub, "每次生成的身份密钥要不一样");
+    const std::optional<Bytes> r1 = scrctl::wifi::random_bytes(16, err);
+    const std::optional<Bytes> r2 = scrctl::wifi::random_bytes(16, err);
+    check(r1 && r2 && r1->size() == 16 && *r1 != *r2, "随机字节（altIRK 用）要真随机");
+
+    // pairingData 管道的三种回信形状。
+    const auto event_frame = [](const scrctl::json::Value &event_body) {
+        scrctl::json::Value event_slot = j_obj({{"_0", event_body}});
+        scrctl::json::Value event = j_obj({{"event", std::move(event_slot)}});
+        scrctl::json::Value plain_slot = j_obj({{"_0", std::move(event)}});
+        scrctl::json::Value plain = j_obj({{"plain", std::move(plain_slot)}});
+        scrctl::json::Value envelope = j_obj({{"originatedBy", j_str("device")},
+                                              {"sequenceNumber", j_int(0)},
+                                              {"message", std::move(plain)}});
+        return device_frame(scrctl::json::write(envelope));
+    };
+    const Bytes payload = Bytes{0x06, 0x01, 0x02};
+    const auto data_reply = [&]() {
+        const scrctl::json::Value body = j_obj(
+            {{"data", j_str(scrctl::wifi::b64_encode(payload))},
+             {"kind", j_str("setupManualPairing")}});
+        scrctl::json::Value slot = j_obj({{"_0", body}});
+        return event_frame(j_obj({{"pairingData", std::move(slot)}}));
+    };
+
+    {
+        // 先回 awaitingUserConsent、再回 pairingData：两帧都得消费掉，第二帧才是数据。
+        MemStream io;
+        scrctl::wifi::Rppairing channel(io);
+        io.feed(event_frame(j_obj({{"awaitingUserConsent", j_obj({})}})));
+        io.feed(data_reply());
+        int progress_calls = 0;
+        std::string roundtrip_err;
+        const std::optional<Bytes> out = scrctl::wifi::pairing_data_roundtrip(
+            channel, Bytes{0x00, 0x01, 0x00}, "setupManualPairing", true, roundtrip_err,
+            "host.local", [&](std::string_view) { ++progress_calls; });
+        check(out.has_value() && *out == payload,
+              "设备先说在等用户同意时，要接着收下一帧，不能当成失败");
+        check(progress_calls == 1, "等用户点信任这件事要报出来（不报就是一次静默卡住）");
+        const std::string sent = io.take_written();
+        check(sent.find(R"JSON("sendingHost":"host.local")JSON") != std::string::npos,
+              "pair-setup 的 pairingData 要带 sendingHost");
+        check(sent.find(R"JSON("startNewSession":true)JSON") != std::string::npos,
+              "M1 要 startNewSession=true");
+    }
+    {
+        // 拒绝：那句 NSLocalizedDescription 是人话，必须原样抬出去。
+        MemStream io;
+        scrctl::wifi::Rppairing channel(io);
+        scrctl::json::Value user_info = j_obj({{"NSLocalizedDescription", j_str("User denied pairing")}});
+        scrctl::json::Value wrapped = j_obj({{"userInfo", std::move(user_info)}});
+        scrctl::json::Value rejected = j_obj({{"wrappedError", std::move(wrapped)}});
+        io.feed(event_frame(j_obj({{"pairingRejectedWithError", std::move(rejected)}})));
+        std::string deny_err;
+        check(!scrctl::wifi::pairing_data_roundtrip(channel, Bytes{0x00}, "setupManualPairing", true,
+                                                    deny_err, "host.local", nullptr),
+              "用户点了「不信任」要判成失败");
+        check(deny_err.find("User denied pairing") != std::string::npos,
+              "设备给的原因要原样带出来，不能只剩「没有 pairingData」");
+    }
+    {
+        // 既不是数据也不是已知状态：报出来的是设备实际给了哪些字段，方便现场对上号。
+        MemStream io;
+        scrctl::wifi::Rppairing channel(io);
+        io.feed(event_frame(j_obj({{"somethingNew", j_obj({})}})));
+        std::string odd_err;
+        check(!scrctl::wifi::pairing_data_roundtrip(channel, Bytes{0x00}, "setupManualPairing", true,
+                                                    odd_err, "host.local", nullptr),
+              "认不出的回信形状要判成失败");
+        check(odd_err.find("somethingNew") != std::string::npos,
+              "认不出时要把设备给的字段名列出来");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -645,6 +749,7 @@ int main() {
     test_pair_record();
     test_rppairing();
     test_pair_verify_shape();
+    test_pair_setup();
     std::printf("%d 条判据，%d 条不通过\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

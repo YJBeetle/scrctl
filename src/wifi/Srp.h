@@ -27,7 +27,7 @@ public:
     [[nodiscard]] const Bytes &client_public() const { return a_public_; }  // A
     [[nodiscard]] const Bytes &session_key() const { return k_; }           // K
     [[nodiscard]] const Bytes &client_proof() const { return m1_; }         // M1
-    /// 校验设备回的李 proof（M2）。
+    /// 校验设备回的 proof（M2）。
     [[nodiscard]] bool verify_server_proof(const Bytes &m2) const;
 
 private:

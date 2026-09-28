@@ -2,6 +2,7 @@
 
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
+#include <openssl/rand.h>
 
 #include <algorithm>
 #include <cstring>
@@ -151,9 +152,37 @@ std::optional<X25519KeyPair> x25519_keypair(std::string &err) {
     return out;
 }
 
+std::optional<Bytes> random_bytes(size_t n, std::string &err) {
+    Bytes out(n);
+    if (n > 0 && RAND_bytes(out.data(), static_cast<int>(n)) != 1) {
+        err = "取随机字节失败（CSPRNG 没播种？）";
+        return std::nullopt;
+    }
+    return out;
+}
+
+std::optional<Ed25519KeyPair> ed25519_keypair(std::string &err) {
+    const std::optional<Bytes> seed = random_bytes(32, err);
+    if (!seed) {
+        return std::nullopt;
+    }
+    const std::string_view seed_view(sv(*seed));
+    PkeyUp key = raw_key(EVP_PKEY_ED25519, seed_view, true, err);
+    if (!key) {
+        return std::nullopt;
+    }
+    Ed25519KeyPair out;
+    std::memcpy(out.seed.data(), seed->data(), out.seed.size());
+    size_t len = out.pub.size();
+    if (EVP_PKEY_get_raw_public_key(key.get(), out.pub.data(), &len) != 1 || len != out.pub.size()) {
+        err = "取 Ed25519 公钥失败";
+        return std::nullopt;
+    }
+    return out;
+}
+
 std::optional<Bytes> x25519_shared(const std::array<uint8_t, 32> &priv, std::string_view peer_pub,
-                                   std::string &err) {
-    if (peer_pub.size() != 32) {
+                                   std::string &err) {    if (peer_pub.size() != 32) {
         err = "对端 X25519 公钥长度不是 32";
         return std::nullopt;
     }

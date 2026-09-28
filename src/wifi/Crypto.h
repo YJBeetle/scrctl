@@ -31,6 +31,18 @@ struct X25519KeyPair {
 
 std::optional<X25519KeyPair> x25519_keypair(std::string &err);
 
+/// Ed25519 长期身份密钥对（pair-setup 时新生成一把，之后一直存在配对记录里）。
+/// 与 X25519 那对的区别：这对**不是**临时的，它就是设备认我们这台主机的凭据。
+struct Ed25519KeyPair {
+    std::array<uint8_t, 32> seed{};  ///< 私钥种子（不是 PEM/DER）
+    std::array<uint8_t, 32> pub{};
+};
+
+std::optional<Ed25519KeyPair> ed25519_keypair(std::string &err);
+
+/// CSPRNG 字节。`n` 为 0 时返回空 vector。
+std::optional<Bytes> random_bytes(size_t n, std::string &err);
+
 /// 共享密钥。任一公钥不是合法的 Curve25519 点时返回 nullopt——对端给的是外部输入，
 /// 全零/低阶点必须在这里挡掉，否则后面所有密钥都从一个可预测的值派生。
 std::optional<Bytes> x25519_shared(const std::array<uint8_t, 32> &priv, std::string_view peer_pub,
