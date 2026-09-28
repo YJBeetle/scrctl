@@ -48,10 +48,19 @@ private:
     unsigned long long packets_ = 0;
 };
 
+// 探针动作按命令行出现的顺序执行。为什么必须能排队：唤醒-截图-手势-截图这套判据
+// 要是拆成几个进程，每个进程各自建会话要一两秒，而这台设备几秒就睡——基线还没拍
+// 屏幕就黑了，差分全是假的（2026-09-28 在 iPadOS 18 那台上就这样作废了两轮）。
+struct QueuedAction {
+    enum Kind { kButton, kTap, kLine, kShot } kind;
+    double v[4] = {0, 0, 0, 0};
+    std::string arg;
+};
+
 void usage(const char *argv0) {
     std::printf(
         "用法: %s [-v] [--list] [--tap X Y] [--stroke] [--line X0 Y0 X1 Y1] [--button NAME]\n"
-        "           [--no-stream] [UDID]\n"
+        "           [--shot FILE] [--no-stream] [UDID]\n"
         "\n"
         "  --list    列出设备注册的 HID 面\n"
         "  --tap     在归一化坐标 (0..1) 点一下，默认按住 90ms\n"
@@ -59,6 +68,11 @@ void usage(const char *argv0) {
         "  --line    画一条插值直线，用于注入前后的截图对比\n"
         "  --button  按一次硬件按键（home/lock/volup/voldn/mute）。息屏的设备只能靠\n"
         "            按键唤醒，而唤醒本身又是「注入落没落地」最干净的判据\n"
+        "  --shot    在同一进程里抓一张 screencaptureservice 的 PNG 存到 FILE\n"
+        "\n"
+        "  --button/--tap/--line/--shot **按命令行出现的顺序**执行。这台 iPad 几秒就睡，\n"
+        "  而每个探针进程各自建会话要一两秒——「唤醒-截图-手势-截图」必须压在一个进程里\n"
+        "  才跑赢自动锁屏，跨进程做差分拿到的基线是假的。\n"
         "  --probe-reply  一发一收地发一对报告，把设备的回信原样打出来\n"
         "  --no-stream  不起流。用来复验注入到底要不要一条在跑的流（结论：不要，见 hid_gate_probe）\n"
         "  --swipe-loop N  连续横向拖动 N 秒。在无边记里它就是平移画布，是一个\n"
@@ -75,16 +89,12 @@ int main(int argc, char **argv) {
     bool list = false;
     bool raw_surfaces = false;
     bool stroke = false;
-    bool line = false;
     bool probe_reply = false;
     std::string keys;
     bool paste = false;
-    double lx0 = 0.2, ly0 = 0.66, lx1 = 0.32, ly1 = 0.70;
     bool with_stream = true;
     int swipe_seconds = 0;
-    bool want_tap = false;
-    double tx = 0.5, ty = 0.5;
-    std::string button_name;
+    std::vector<QueuedAction> queue;
     std::string serial;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -95,23 +105,37 @@ int main(int argc, char **argv) {
         } else if (a == "--raw") {
             raw_surfaces = true;
         } else if (a == "--tap") {
-            want_tap = true;
+            QueuedAction q;
+            q.kind = QueuedAction::kTap;
             if (i + 2 < argc) {
-                tx = std::atof(argv[i + 1]);
-                ty = std::atof(argv[i + 2]);
+                q.v[0] = std::atof(argv[i + 1]);
+                q.v[1] = std::atof(argv[i + 2]);
                 i += 2;
+            } else {
+                q.v[0] = q.v[1] = 0.5;
             }
+            queue.push_back(q);
         } else if (a == "--stroke") {
             stroke = true;
         } else if (a == "--button" && i + 1 < argc) {
-            button_name = argv[++i];
+            QueuedAction q;
+            q.kind = QueuedAction::kButton;
+            q.arg = argv[++i];
+            queue.push_back(q);
+        } else if (a == "--shot" && i + 1 < argc) {
+            QueuedAction q;
+            q.kind = QueuedAction::kShot;
+            q.arg = argv[++i];
+            queue.push_back(q);
         } else if (a == "--line" && i + 4 < argc) {
-            line = true;
-            lx0 = std::atof(argv[i + 1]);
-            ly0 = std::atof(argv[i + 2]);
-            lx1 = std::atof(argv[i + 3]);
-            ly1 = std::atof(argv[i + 4]);
+            QueuedAction q;
+            q.kind = QueuedAction::kLine;
+            q.v[0] = std::atof(argv[i + 1]);
+            q.v[1] = std::atof(argv[i + 2]);
+            q.v[2] = std::atof(argv[i + 3]);
+            q.v[3] = std::atof(argv[i + 4]);
             i += 4;
+            queue.push_back(q);
         } else if (a == "--paste") {
             paste = true;
         } else if (a == "--keys" && i + 1 < argc) {
@@ -187,40 +211,91 @@ int main(int argc, char **argv) {
     }
 
     int rc = 0;
-    if (!button_name.empty()) {
-        static const std::pair<const char *, uint16_t> kCodes[] = {
-            {"home", scrctl::hid::button::kHome},   {"lock", scrctl::hid::button::kLock},
-            {"volup", scrctl::hid::button::kVolumeUp},
-            {"voldn", scrctl::hid::button::kVolumeDown}, {"mute", scrctl::hid::button::kMute},
-        };
-        uint16_t code = 0;
-        for (const auto &e : kCodes) {
-            if (button_name == e.first) {
-                code = e.second;
+    for (const auto &qa : queue) {
+        switch (qa.kind) {
+        case QueuedAction::kButton: {
+            static const std::pair<const char *, uint16_t> kCodes[] = {
+                {"home", scrctl::hid::button::kHome},   {"lock", scrctl::hid::button::kLock},
+                {"volup", scrctl::hid::button::kVolumeUp},
+                {"voldn", scrctl::hid::button::kVolumeDown}, {"mute", scrctl::hid::button::kMute},
+            };
+            uint16_t code = 0;
+            for (const auto &e : kCodes) {
+                if (qa.arg == e.first) {
+                    code = e.second;
+                    break;
+                }
+            }
+            if (code == 0) {
+                std::fprintf(stderr, "不认识按键 %s（可用：home/lock/volup/voldn/mute）\n",
+                             qa.arg.c_str());
+                return 2;
+            }
+            auto buttons = scrctl::hid::Buttons::open(*device, err, verbose);
+            if (buttons == nullptr) {
+                std::fprintf(stderr, "打开按键面失败: %s\n", err.c_str());
+                return 1;
+            }
+            std::printf("按硬件键 %s\n", qa.arg.c_str());
+            if (!buttons->press(scrctl::hid::button::kUsagePageConsumer, code, 90, err)) {
+                std::fprintf(stderr, "按键失败: %s\n", err.c_str());
+                rc = 1;
+            }
+            break;
+        }
+        case QueuedAction::kTap:
+            std::printf("点击 (%.3f, %.3f)\n", qa.v[0], qa.v[1]);
+            if (!hid->tap(qa.v[0], qa.v[1], 90, err)) {
+                std::fprintf(stderr, "点击失败: %s\n", err.c_str());
+                rc = 1;
+            }
+            break;
+        case QueuedAction::kLine: {
+            std::printf("画线 (%.3f,%.3f) -> (%.3f,%.3f)\n", qa.v[0], qa.v[1], qa.v[2], qa.v[3]);
+            std::vector<std::pair<double, double>> pts;
+            for (int i = 0; i <= 24; ++i) {
+                const double t = i / 24.0;
+                pts.emplace_back(qa.v[0] + (qa.v[2] - qa.v[0]) * t,
+                                 qa.v[1] + (qa.v[3] - qa.v[1]) * t);
+            }
+            if (!hid->stroke(pts, 12, err)) {
+                std::fprintf(stderr, "画线失败: %s\n", err.c_str());
+                rc = 1;
+            }
+            break;
+        }
+        case QueuedAction::kShot: {
+            // 与 screenshot_probe 同一条 callscreenshot，只是活在**这个**进程里：
+            // 判据要求截图与手势之间只隔毫秒，跨进程的一两秒会被自动锁屏抢跑。
+            auto input = scrctl::xpc::make_dict();
+            scrctl::xpc::dict_set(input, "displayUniqueID", scrctl::xpc::make_null());
+            scrctl::xpc::dict_set(input, "requestedFormat", scrctl::xpc::make_string("png"));
+            scrctl::xpc::Value out;
+            if (!device->feature("com.apple.coredevice.screencaptureservice",
+                                 "com.apple.coredevice.feature.capturescreenshot",
+                                 "com.apple.coredevice.action.capturescreenshot", input, out, err,
+                                 verbose, 15000)) {
+                std::fprintf(stderr, "截图失败: %s\n", err.c_str());
+                rc = 1;
                 break;
             }
+            const auto *image = out.find("image");
+            if (image == nullptr || image->data.empty()) {
+                std::fprintf(stderr, "截图回信里没有 image 字节\n");
+                rc = 1;
+                break;
+            }
+            std::FILE *fp = std::fopen(qa.arg.c_str(), "wb");
+            if (fp == nullptr) {
+                std::fprintf(stderr, "写不了 %s\n", qa.arg.c_str());
+                rc = 1;
+                break;
+            }
+            std::fwrite(image->data.data(), 1, image->data.size(), fp);
+            std::fclose(fp);
+            std::printf("截图 %zu 字节 -> %s\n", image->data.size(), qa.arg.c_str());
+            break;
         }
-        if (code == 0) {
-            std::fprintf(stderr, "不认识按键 %s（可用：home/lock/volup/voldn/mute）\n",
-                         button_name.c_str());
-            return 2;
-        }
-        auto buttons = scrctl::hid::Buttons::open(*device, err, verbose);
-        if (buttons == nullptr) {
-            std::fprintf(stderr, "打开按键面失败: %s\n", err.c_str());
-            return 1;
-        }
-        std::printf("按硬件键 %s\n", button_name.c_str());
-        if (!buttons->press(scrctl::hid::button::kUsagePageConsumer, code, 90, err)) {
-            std::fprintf(stderr, "按键失败: %s\n", err.c_str());
-            rc = 1;
-        }
-    }
-    if (want_tap) {
-        std::printf("点击 (%.3f, %.3f)\n", tx, ty);
-        if (!hid->tap(tx, ty, 90, err)) {
-            std::fprintf(stderr, "点击失败: %s\n", err.c_str());
-            rc = 1;
         }
     }
     if (stroke) {
@@ -231,19 +306,6 @@ int main(int argc, char **argv) {
                                                             {0.56, 0.52}};
         if (!hid->stroke(pts, 16, err)) {
             std::fprintf(stderr, "拖动失败: %s\n", err.c_str());
-            rc = 1;
-        }
-    }
-    if (line) {
-        // 一条插值出来的直线，用来做"注入前后截图对比"这种可判定的实验。
-        std::printf("画线 (%.3f,%.3f) -> (%.3f,%.3f)\n", lx0, ly0, lx1, ly1);
-        std::vector<std::pair<double, double>> pts;
-        for (int i = 0; i <= 24; ++i) {
-            const double t = i / 24.0;
-            pts.emplace_back(lx0 + (lx1 - lx0) * t, ly0 + (ly1 - ly0) * t);
-        }
-        if (!hid->stroke(pts, 12, err)) {
-            std::fprintf(stderr, "画线失败: %s\n", err.c_str());
             rc = 1;
         }
     }
@@ -314,8 +376,8 @@ int main(int argc, char **argv) {
             rc = 1;
         }
     }
-    if (!list && !want_tap && !stroke && !line && !probe_reply && !raw_surfaces &&
-        keys.empty() && !paste && swipe_seconds == 0 && button_name.empty()) {
+    if (!list && queue.empty() && !stroke && !probe_reply && !raw_surfaces &&
+        keys.empty() && !paste && swipe_seconds == 0) {
         usage(argv[0]);
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(200));

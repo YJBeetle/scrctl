@@ -100,8 +100,8 @@ iPadOS 18.7.8 上 `displayservice` 和它的 feature 列表都在目录里，但
 按版本拒（code 9021，设备原话 "Remote control requires iOS 27.0 or later on this device"），
 `getmediasupportinfo` 回 `supportedFeatures: 0`（iOS 27 的 iPhone 回 972）。同一台 iPadOS 18 上：
 **截图服务可用**（1536x2048 PNG 实测）、**HID 按键可用**（息屏时按 home 能把屏幕唤醒）、
-**触摸注入不落地**（两次"必然改变画面"的手势做区域差分，逐像素差为 0）。判据与过程见
-docs §23。
+**触摸注入落地**（无边记画布上连画两笔，区域差分 3686 / 9542 像素）。也就是说 iOS 18 上缺的只是
+实时视频流与音频，"看 + 操控"都还在。判据与过程（含一轮作废的错判及其原因）见 docs §23。
 
 ## 状态
 
