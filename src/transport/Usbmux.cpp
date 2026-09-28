@@ -88,11 +88,20 @@ void Socket::close() {
     }
 }
 
+#if defined(MSG_NOSIGNAL)
+// Linux 没有 SO_NOSIGPIPE：对端 RST/半关闭之后一次 send 就是 SIGPIPE，默认动作是
+// **杀进程**——无线那条路上设备睡觉、路由器重启都会给 RST，所以不能靠"没遇到"。
+// macOS/BSD 那边建连时开了 SO_NOSIGPIPE（TcpConnect），这里给剩下的平台按次禁掉。
+constexpr int kNoSigPipe = MSG_NOSIGNAL;
+#else
+constexpr int kNoSigPipe = 0;
+#endif
+
 bool Socket::write_all(const void *data, size_t len, std::string &err) {
     const auto *p = static_cast<const uint8_t *>(data);
     size_t left = len;
     while (left > 0) {
-        const ssize_t n = ::send(fd_, p, left, 0);
+        const ssize_t n = ::send(fd_, p, left, kNoSigPipe);
         if (n < 0) {
             if (errno == EINTR) {
                 continue;
