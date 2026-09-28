@@ -1,5 +1,8 @@
 #include "wifi/PairRecord.h"
 
+#include <algorithm>
+#include <filesystem>
+
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -254,6 +257,39 @@ std::string default_record_dir() {
 
 std::string record_path(const std::string &dir, const std::string &udid) {
     return dir + "/remote-" + sanitize(udid) + ".pair";
+}
+
+std::vector<std::string> list_record_udids(const std::string &dir, std::string &err) {
+    std::vector<std::string> out;
+    static constexpr std::string_view kPrefix = "remote-";
+    static constexpr std::string_view kSuffix = ".pair";
+    std::error_code ec;
+    const std::filesystem::path root(dir);
+    if (!std::filesystem::is_directory(root, ec)) {
+        // 目录不存在只是"还没有任何记录"，不是错误：调用方要能分清"没有"与"读不了"，
+        // 但这两种在这里的处置一样（都当成没有），所以不必把 ec 抬出去。
+        err.clear();
+        return out;
+    }
+    for (const auto &entry : std::filesystem::directory_iterator(root, ec)) {
+        if (ec) {
+            err = "读目录 " + dir + " 中断: " + ec.message();
+            break;
+        }
+        if (!entry.is_regular_file(ec)) {
+            continue;
+        }
+        const std::string name = entry.path().filename().string();
+        if (name.size() <= kPrefix.size() + kSuffix.size() ||
+            name.compare(0, kPrefix.size(), kPrefix) != 0 ||
+            name.compare(name.size() - kSuffix.size(), kSuffix.size(), kSuffix) != 0) {
+            continue;
+        }
+        out.push_back(
+            name.substr(kPrefix.size(), name.size() - kPrefix.size() - kSuffix.size()));
+    }
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 }  // namespace scrctl::wifi

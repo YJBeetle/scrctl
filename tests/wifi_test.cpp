@@ -8,6 +8,8 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -794,6 +796,30 @@ const scrctl::json::Value &jat(const scrctl::json::Value &value, std::string_vie
 /// 为什么这三条值得单独立判据：类型发错的症状与"设备不喜欢我们的字段"完全一样
 /// （连接当场 invalidated），而 iOS 27 只在这条载体上收 pair-setup（docs §25.8），
 /// 所以这里错了，真机上看到的又是那十条已否证假设的样子。
+void test_record_listing() {
+    // `--wifi` 不给 -s 时靠这个挑记录，所以"哪些算记录、哪些不算"要有判据：
+    // 前缀/后缀不对的、以及空 UDID 那个 `remote-.pair`，都不能被当成一条记录。
+    std::error_code ec;
+    const auto root = std::filesystem::temp_directory_path(ec) / "scrctl-record-list-test";
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root, ec);
+    for (const char *name : {"remote-BBB.pair", "remote-AAA.pair", "other.pair",
+                             "remote-.pair", "notes.txt", "remote-CCC.pair.bak"}) {
+        std::ofstream out(root / name);
+        out << "x=1\n";
+    }
+    std::string err;
+    const std::vector<std::string> found = scrctl::wifi::list_record_udids(root.string(), err);
+    // 诱饵三个：别的扩展名、空 UDID 的 `remote-.pair`、以及 `.pair.bak` 备份。
+    check(found.size() == 2, "只认 remote-<udid>.pair 这一种文件名（.bak 备份不算）");
+    check(found.size() == 2 && found[0] == "AAA" && found[1] == "BBB",
+          "结果要排好序（多于一条时报候选的顺序才稳定）");
+    const std::vector<std::string> none =
+        scrctl::wifi::list_record_udids((root / "nope").string(), err);
+    check(none.empty(), "目录不存在要当成'一条都没有'，不是错误");
+    std::filesystem::remove_all(root, ec);
+}
+
 void test_pairing_xpc() {
     using scrctl::xpc::Type;
     std::string err;
@@ -893,6 +919,7 @@ int main() {
     test_rppairing();
     test_pair_verify_shape();
     test_pair_setup();
+    test_record_listing();
     test_pairing_xpc();
     std::printf("%d 条判据，%d 条不通过\n", checks, failures);
     return failures == 0 ? 0 : 1;

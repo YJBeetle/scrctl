@@ -46,4 +46,12 @@ std::string default_record_dir();
 /// `<dir>/remote-<UDID 末段>.pair`。UDID 里有连字符，路径里统一换成下划线。
 std::string record_path(const std::string &dir, const std::string &udid);
 
+/// 目录里已有的记录，按文件名里那段 UDID 返回（已排序；目录不存在=空，不算错误）。
+///
+/// 为什么需要它：`--wifi <地址>` 手上只有一个 IP，而记录是按 UDID 存的。在做 mDNS
+/// 发现（把广播里的 authTag 对回记录的 altIRK）之前，"目录里只有一条就用它"是唯一
+/// 不用用户抄 UDID 的办法；多于一条时也要能把候选报出来，而不是报一个空文件名。
+/// 返回的串可以直接再喂给 `record_path`（sanitize 是幂等的）。
+std::vector<std::string> list_record_udids(const std::string &dir, std::string &err);
+
 }  // namespace scrctl::wifi
