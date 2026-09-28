@@ -81,6 +81,28 @@ VideoToolbox，而它只吃 2 字节的 NAL 长度前缀（上限 65535）——
 49652~70101 字节、动画里的 P 帧 256278 字节，那种帧只能整帧丢弃并重起会话。非 Apple
 平台没有 VideoToolbox，软解就是唯一后端。
 
+## 首次连接一台设备
+
+三件事，缺一不可，全是设备侧的开关：
+
+1. **开发者模式**：设置 → 隐私与安全性 → 开发者模式，打开后重启一次。
+2. **信任本机**：插上之后在设备上点「信任」。
+3. **挂 DDI（个性化开发者磁盘镜像）**：iOS 17+ 上镜像 / 截图 / 注入用的那一批
+   `com.apple.coredevice.*` 服务，只在 DDI 挂上之后才出现在设备目录里。挂法二选一：
+   用 Xcode 连一次这台设备（Window → Devices and Simulators），或命令行
+   `pymobiledevice3 mounter auto-mount`（按设备的 build 从 Apple 下载并 personalize 一份）。
+   `pymobiledevice3 mounter list` 输出为空就是没挂。**这件事可逆**：重启即卸，也能
+   `mounter umount-personalized` 主动卸。scrctl 不替你做这一步——没挂时它会在报错里直说，
+   并打出设备自己给的目录里 `com.apple.coredevice.*` 这一族有几条（0 条 = 没挂）。
+
+**支持范围是真机量出来的，别按服务名在不在猜**：镜像与音频这条媒体流要求 **iOS 27+**。
+iPadOS 18.7.8 上 `displayservice` 和它的 feature 列表都在目录里，但 `startmediastream` 被设备
+按版本拒（code 9021，设备原话 "Remote control requires iOS 27.0 or later on this device"），
+`getmediasupportinfo` 回 `supportedFeatures: 0`（iOS 27 的 iPhone 回 972）。同一台 iPadOS 18 上：
+**截图服务可用**（1536x2048 PNG 实测）、**HID 按键可用**（息屏时按 home 能把屏幕唤醒）、
+**触摸注入不落地**（两次"必然改变画面"的手势做区域差分，逐像素差为 0）。判据与过程见
+docs §23。
+
 ## 状态
 
 镜像 + 操控（触摸 / 按键 / 键盘 / 剪贴板）已在真机跑通，MaaFramework 的 iOS 控制单元
