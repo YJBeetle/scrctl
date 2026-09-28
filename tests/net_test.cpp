@@ -249,6 +249,17 @@ int main() {
         check(no_cd.find("一条都没有") != std::string::npos &&
                   no_cd.find("Xcode") != std::string::npos,
               "coredevice 族为空 -> 直接指向「没挂 DDI，用 Xcode 连一次」: " + no_cd);
+        // iOS 18 的设备会按版本拒掉媒体流（code 9021）。只转述设备原话的话，用户会照着
+        // 去查 DDI 与配对——而这两样都是好的，门槛在设备系统版本上。
+        const auto gate = scrctl::remote::Rsd::remote_control_version_hint(
+            "Remote control requires iOS 27.0 or later on this device.");
+        check(gate.find("iOS 27+") != std::string::npos && gate.find("DDI") != std::string::npos,
+              "版本门槛要明说「不是 DDI 没挂、不是配对问题」: " + gate);
+        check(gate.find("截图服务") != std::string::npos,
+              "要交代同机上还有什么能用: " + gate);
+        check(scrctl::remote::Rsd::remote_control_version_hint(
+                  "The operation couldn't be completed.") == "",
+              "无关的设备错误不贴这段补白");
     }
 
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);

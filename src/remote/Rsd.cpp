@@ -221,6 +221,7 @@ std::string device_error_text(std::string_view feature_identifier, const xpc::Va
         err += "：" + detail;
     }
     err += "（code " + std::to_string(code) + "）";
+    err += Rsd::remote_control_version_hint(detail);
     // NSDebugDescription 是"缺哪个键 / 哪个类型不对"的正式答案，NSCodingPath 指出
     // 是哪一个键。这两个必须**原样、不截断**地交出去：整个 error 字典的 describe
     // 会把长字符串掐掉（深层路径正好是最长的那段），而探协议时恰恰要读那半截。
@@ -481,6 +482,18 @@ std::string Rsd::missing_service_message(const std::string_view name,
            "要完整目录（含每条的 feature 列表）跑 `feature_probe`，加 `--all` 打全部 " +
            std::to_string(seen.size()) + " 条。\n";
     return out;
+}
+
+std::string Rsd::remote_control_version_hint(const std::string_view device_detail) {
+    // 这句设备原话是它自己报的版本门槛（iPadOS 18.7.8 上 startmediastream 实测回它，
+    // code 9021；同机 getmediasupportinfo 的 supportedFeatures=0 是旁证）。匹配词用
+    // "requires iOS" 而不是码值：码值是观测来的，措辞才是设备想说的话。
+    if (device_detail.find("requires iOS") == std::string_view::npos) {
+        return "";
+    }
+    return "（设备侧的系统版本门槛：媒体流（镜像+音频）实测要求 iOS 27+，iOS 18 的设备"
+           "一律回这句——不是 DDI 没挂、也不是配对问题。同一台 iOS 18 设备上截图服务与"
+           "按键注入仍可用；scrctl 目前没有截图式兜底镜像。见 docs §23）";
 }
 
 const xpc::Value *Rsd::properties() const {

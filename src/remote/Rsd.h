@@ -136,6 +136,11 @@ public:
     static std::string missing_service_message(std::string_view name,
                                                const std::vector<ServiceInfo> &seen);
 
+    /// 设备回 "…requires iOS 27.0 or later on this device"（code 9021）时的补白。
+    /// 光转述设备原话，用户会照着去查 DDI 与配对——而这两样都是好的：门槛在设备侧
+    /// 的系统版本上（iPadOS 18.7.8 实测，docs §23）。纯函数，离线可判。
+    static std::string remote_control_version_hint(std::string_view device_detail);
+
     /// 目录里这一项的**原始** XPC 字典。解析后的结构体只覆盖了我预料得到的键，
     /// 排查"为什么设备不回话"时用得着没被解读的那些字段。
     [[nodiscard]] const xpc::Value *service_entry(std::string_view name) const;
