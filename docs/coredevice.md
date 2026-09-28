@@ -2493,3 +2493,73 @@ share with this Mac.」——文案里写死了 27.0。至此这个边界有两�
   后面，做这种时序敏感的判据时要记得它不在队列里（下一台设备上把它进队列）。
 - **Wi-Fi / pair-setup 不在这一轮**：按用户指示留到其 iPhone 上做（协议栈与版本门槛无关，
   媒体流的 9021 不影响隧道那一层；且给借来的设备写配对记录不合适）。
+
+## 25. pair-setup：代码写完了，但 iOS 27 的设备不收（实测，iPhone13 mini / iOS 27.0 / 两条控制面）
+
+这一节记的是"做完了哪几段、被什么挡住、挡住的证据是什么"。结论先行：**pair-setup 的实现
+（SRP-3072 + OPACK + M1..M6 + createRemoteUnlockKey）与离线判据都齐了，但在这台 iOS 27.0
+的真机上，设备在收到 setup 的 M1 后立刻掐掉连接，两条控制面都一样；参考实现（pymobiledevice3
+最新版）在同一台设备上症状完全相同**——所以挡住我们的不是我们的字节，是设备侧的一个我们还没
+找到的前置条件。
+
+### 25.1 已经落地的部分
+
+- `src/wifi/Srp.{h,cpp}`：SRP-6a（RFC 5054 3072 位模数、SHA-512），公式与参考实现逐条对齐，
+  离线拿 python srptools 当 oracle 对过 A/K/M1/M2。
+- `src/wifi/Opack.{h,cpp}`：Apple 的 OPACK 二进制对象格式（M5/M6 的 INFO 用），离线拿
+  python opack2 的编码结果逐字节对过。
+- `src/wifi/PairSetup.{h,cpp}`：`pair_setup()` 走完整条链：先按 pair-verify 的路数问一次
+  "你认不认识我"（见 25.2 第二条），再 M1→M2（SRP 参数）→M3→M4（双向证明）→M5（host 的
+  Ed25519 密钥 + OPACK 设备信息，ChaCha20-Poly1305 封在 PS-Msg05 的 nonce 下）→M6（解出
+  设备的 altIRK）→ 装主密钥 → createRemoteUnlockKey（失败不致命）。
+- `tools/wifi_probe --pair-setup`：两条控制面都能跑——USB 的
+  `com.apple.dt.remotepairingdeviced.lockdown`（要 TLS）与 Wi-Fi 的 mDNS 手动配对端口；
+  成功后落盘并**重开一条连接用新记录 pair-verify 验收**（设备配对完会关掉旧连接）。
+- 离线判据 100 条全绿（`wifi_test`）：uuid3 的三个 KAT、密钥生成、以及 pairingData 管道对
+  `awaitingUserConsent` / `pairingRejectedWithError` / 认不出的形状这三种回信的处理。
+
+identifier 默认取 `uuid3(DNS, 主机名 + ".scrctl")`，**不**用苹果那个 `uuid3(DNS, 主机名)`。
+这一条本来只是"怕顶掉别人的记录"的保守选择，25.3 的 oslog 把它变成了有证据的决定：设备钥匙串里
+已经躺着一条 identifier 正好是 `uuid3(DNS, 主机名)` 的记录（macOS/Xcode 自己那条），identifier
+相同就是同一条记录，pair-setup 会把它的 Ed25519 公钥换掉。
+
+### 25.2 两个量出来的协议细节
+
+1. **handshake 之后设备停在 `deviceAwaitingPairVerify`**，要先走完一轮 verify（设备回 ERROR）
+   才肯谈 setup。直接发 setup 的 M1，症状是连接被立刻掐掉、一句解释都没有。设备 oslog：
+   `socket-8: ControlChannel connection state changing from deviceAwaitingPairVerify to
+   deviceValidatingPairingPolicyInProgress(initialPairingData: ... setupManualPairing ...)`
+   紧跟 `Invalidating control channel connection due to reason: <private>`（0.3 毫秒后）。
+   参考实现也是这么绕的：它拿一把全零密钥去签 verify，吃一个 ERROR，再继续 setup。
+2. **`pairVerifyFailed` 这句收尾事件在 iOS 27 上会把连接掐掉**（参考实现照发不误，疑似它在
+   新系统上这条路本来就坏了）。oslog：收到该事件后
+   `state changing from verifyManualPairingInProgress to invalidated`。所以 `pair_setup()` 里
+   那一轮 verify 探针**不发**这句——`pair_verify()` 有个 `announce_failure` 开关管这件事。
+
+### 25.3 挡住我们的那道墙（以及为什么判定是设备侧）
+
+两条控制面、解锁状态、屏幕亮着（截图确认过两次主屏）、连试三次、换参考实现，症状一致：M1 发出，
+设备 `Received pairing data from peer` 之后立刻 `Invalidating control channel connection`，
+Wi-Fi 面直接关连接，USB 面连 FIN 都不发（我们这边 read 永久挂住——已给控制面加了 120s 读超时，
+把"挂死"变成"报超时"）。
+
+同一窗口里设备 oslog 还有两条值得记的：
+
+- `Fetching paired peer with identifier AC106655-9E9F-3445-96B3-075257AF1912`（以及另外三条）
+  ——苹果自己的工具用的 identifier 就是 `uuid3(DNS, 主机名)`，见 25.1 末段。
+- `ManagedConfiguration: Pairing is allowed pending user acceptance.` /
+  `remotepairingdeviced: ManagedConfiguration approved pairing.` ——MDM 那条策略链**批准**了，
+  但这两行出现在连接已经被掐掉**之后**。要么是这个 daemon 的策略应答天生慢一拍（掐连接是另一个
+  本地检查干的），要么掐连接本身就是"策略还没答完就先拒绝"的实现方式。原因字段是 `<private>`，
+  不开 private-data 日志拿不到，而没有越狱开不了。
+
+参考实现当 oracle 的那一趟特意用了另一个 identifier（`uuid3(DNS, 主机名 + ".pmd3probe")`），
+不碰这台 Mac 已有的记录；它同样以超时告终。
+
+### 25.4 剩下要问的
+
+- 那个"本地检查"到底是什么：iOS 27 是否要求手动配对由**设备侧**发起（设置里某个入口），或要求
+  连接带 mDNS TXT 里的 authTag（新主机拿不出来），或要求某个我们没开的开关。等下一台设备或用户
+  在设置里翻一遍再试。
+- 一旦 M1 能被收下，后面的 M2..M6 只有真机才能验；`wifi_probe --pair-setup` 已经把验收
+  （重连 + pair-verify）接在落盘后面，跑通一次就是端到端的判据。
