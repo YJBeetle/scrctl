@@ -132,6 +132,7 @@ add_library(scrctl_core STATIC
         src/hid/Hid.cpp
         src/wifi/Crypto.cpp
         src/wifi/Srp.cpp
+        src/wifi/Opack.cpp
         src/wifi/Tlv.cpp
         src/wifi/Rppairing.cpp
         src/wifi/PairRecord.cpp

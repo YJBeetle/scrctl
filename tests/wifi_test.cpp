@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "wifi/Crypto.h"
+#include "wifi/Opack.h"
 #include "wifi/Srp.h"
 #include "wifi/PairRecord.h"
 #include "wifi/PairVerify.h"
@@ -224,6 +225,64 @@ void test_srp() {
     Bytes wrong = m2;
     wrong[0] ^= 0xff;
     check(!srp.verify_server_proof(wrong), "改一个字节的 M2 要验不过");
+}
+
+
+/// ---- 1c. OPACK ----
+void test_opack() {
+    const auto from_hex = [](const char *h) {
+        Bytes out;
+        for (const char *p = h; p[0] && p[1]; p += 2) {
+            out.push_back(static_cast<uint8_t>(std::stoi(std::string(p, 2), nullptr, 16)));
+        }
+        return out;
+    };
+    // oracle：参考实现用的 opack2 编码器对同一份字典现算的字节（pair-setup 的 M5 INFO 形状）。
+    scrctl::wifi::OpackValue info;
+    info.kind = scrctl::wifi::OpackValue::Kind::kDict;
+    const auto kv = [&](const char *k, scrctl::wifi::OpackValue v) {
+        info.dict.emplace_back(scrctl::wifi::OpackValue::of_string(k), std::move(v));
+    };
+    kv("altIRK", scrctl::wifi::OpackValue::of_bytes(from_hex("e9e82dc06a49796b566f540019b1c77b")));
+    kv("btAddr", scrctl::wifi::OpackValue::of_string("11:22:33:44:55:66"));
+    kv("mac", scrctl::wifi::OpackValue::of_bytes(from_hex("112233445566")));
+    kv("remotepairing_serial_number", scrctl::wifi::OpackValue::of_string("AAAAAAAAAAAA"));
+    kv("accountID",
+       scrctl::wifi::OpackValue::of_string("AC106655-9E9F-3445-96B3-075257AF1912"));
+    kv("model", scrctl::wifi::OpackValue::of_string("computer-model"));
+    kv("name", scrctl::wifi::OpackValue::of_string("test-host"));
+    Bytes enc;
+    std::string err;
+    check(scrctl::wifi::opack_encode(info, enc, err), ("OPACK 编码要成功: " + err).c_str());
+    check(to_hex(enc) ==
+              "e746616c7449524b80e9e82dc06a49796b566f540019b1c77b466274416464725131313a32323a33333a34343a3535"
+              "3a3636436d6163761122334455665b72656d6f746570616972696e675f73657269616c5f6e756d6265724c4141414141"
+              "41414141414141496163636f756e744944612441433130363635352d394539462d333434352d393642332d3037353235"
+              "37414631393132456d6f64656c4e636f6d70757465722d6d6f64656c446e616d6549746573742d686f7374",
+          "编码字节与 oracle 逐字节一致（含 0x61 长串档与 0x80 短字节串档）");
+    scrctl::wifi::OpackValue back;
+    check(scrctl::wifi::opack_decode(enc, back, err), ("自己的字节要能解回来: " + err).c_str());
+    const auto *alt = back.find("altIRK");
+    check(alt != nullptr && alt->kind == scrctl::wifi::OpackValue::Kind::kBytes &&
+              to_hex(alt->bytes) == "e9e82dc06a49796b566f540019b1c77b",
+          "解回来的 altIRK 要是原字节");
+    // 第二份 oracle：嵌套 + 小整数 + bool + 40 字节串 + 40 字符串（0x91/0x61 两档长度前缀）。
+    const Bytes nested = from_hex(
+        "e24161d309019128000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "004162e14163612878787878787878787878787878787878787878787878787878787878787878787878787878787878");
+    scrctl::wifi::OpackValue n;
+    check(scrctl::wifi::opack_decode(nested, n, err), ("嵌套 oracle 要能解: " + err).c_str());
+    const auto *a = n.find("a");
+    check(a != nullptr && a->kind == scrctl::wifi::OpackValue::Kind::kList && a->list.size() == 3 &&
+              a->list[0].integer == 1 && a->list[0].kind == scrctl::wifi::OpackValue::Kind::kInt &&
+              a->list[1].boolean && a->list[2].bytes.size() == 40,
+          "数组三档（小整数/bool/长字节串）都要对");
+    const auto *b = n.find("b");
+    const auto *c = b != nullptr ? b->find("c") : nullptr;
+    check(c != nullptr && c->str.size() == 40, "嵌套字典里的 40 字符串要走 0x61 档");
+    Bytes truncated(nested.begin(), nested.end() - 5);
+    scrctl::wifi::OpackValue t;
+    check(!scrctl::wifi::opack_decode(truncated, t, err), "截断的 OPACK 要报错，不能解出半截");
 }
 
 /// ---- 2. TLV ----
@@ -581,6 +640,7 @@ void test_pair_verify_shape() {
 int main() {
     test_crypto();
     test_srp();
+    test_opack();
     test_tlv();
     test_pair_record();
     test_rppairing();
