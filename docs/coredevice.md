@@ -2360,3 +2360,61 @@ scrctl -s ****801E --wifi 10.24.24.7 --no-window --no-audio --stats --time-limit
    要么问 lockdown 的 `WiFiAddress`（§22.1：那条已经够定位了，只是端口仍来自广播）。
 3. **HID 在无线上落不落地**。注入服务连的是"设备反推回来的 TCP"，隧道换了底层之后
    这条路没重测；而且按 §15 的教训，判"落地"要用区域差分，不能信返回成功。
+## 23. 那台 iPad mini 到手了：§21 留的 (a)/(b) 两问都有答案了（实测，iPad11,2 / iPadOS 18.7.8 / USB）
+
+§21 里那台别人反馈连不上的 iPad mini，现在有一台同形状的在手边（iPad11,2 = iPad mini 5，
+iPadOS 18.7.8 build 22H352，开发者模式已开、已信任）。留的两个解释如今都能判：
+
+**(a) 成立，而且是第一层。** 到手时 `pymobiledevice3 mounter list` 是 `[]`（什么都没挂），
+RSD 目录 58 条服务、`com.apple.coredevice.*` 一条都没有——与 §21 那份日志的形状逐项对上。
+挂上 DDI 之后目录变成 **79 条**，`displayservice` / `screencaptureservice` / `hid.indigo` /
+`hid.universalhidservice` / `deviceinfo` 全在。所以"目录里没有 coredevice 族"首先就是没挂 DDI。
+
+**(b) 也成立，在更深一层。** DDI 挂上、服务都在，但媒体流这条路在 iPadOS 18 上是空的：
+
+```
+getmediasupportinfo -> {supportedFeatures: 0,
+                        supportedFeaturesDescription: "No supported features are available:  (Raw Value: 0)",
+                        avcFrameworkVersion: "2125.2.1"}
+startmediastream    -> 失败：Remote control requires iOS 27.0 or later on this device.（code 9021）
+```
+
+后一句是**设备自己说的版本门槛**，不是我们猜的；前一句是旁证（对照 iOS 27 那台 iPhone 回的是
+`supportedFeatures: 972`）。结论：镜像/音频这条媒体流是 **iOS 27+ 的能力**，iOS 18 上服务名在、
+feature 列表在、但一调就被设备按版本拒。这就是支持范围，得写进 README。
+
+**iOS 18 上还能用的两样**（都是量出来的）：
+
+- 截图服务：`capturescreenshot` 回 41384 字节 PNG、1536x2048，头校验通过。兜底路在这台设备上通。
+- HID 按键面（`hid.indigo`）：息屏状态下按 home，屏幕醒了（截图从全黑变成有内容）。落地。
+
+**iOS 18 上不落地的一样**：触摸面（`hid.universalhidservice` 的面 257）。判据是区域差分，两次、
+每次都用"先按 home 唤醒、立刻截图"确认基线不是黑的：横拖一页（0.80,0.50 → 0.20,0.50）与
+下拖叫 Spotlight（0.50,0.35 → 0.50,0.75），前后截图**逐像素差 0**（3145728 像素全同）。
+按键面落地而触摸面不落地，说明不是"注入整个被禁"，是 universalhidservice 这一路在 iOS 18 上 inert。
+键盘面没测（要先有聚焦的文本框，而 Spotlight 没被叫出来）。
+
+**一个差点把上面判错的坑，记下来**：这台设备的截图服务在**屏幕睡着时回全黑 PNG**，而且它入睡
+很快（几秒到几十秒）。第一次拖拽差分就是废的——基线本身就是黑的，"前后相同"什么都说明不了。
+之后所有区域差分都把"按 home 唤醒"和动作压在同一条命令里。§15 的"判落地用区域差分"要再加一句：
+**先确认基线不是睡眠黑屏**。
+
+### 23.1 DDI 挂载怎么操作（以及 scrctl 不自己做这件事）
+
+- 挂：用 Xcode 连一次这台设备（Window → Devices and Simulators），或命令行
+  `pymobiledevice3 mounter auto-mount`——它会按设备的 build 从 Apple 拉对应那份**个性化**
+  DDI（TSS 签名那一步约 2 秒），实测 exit 0 后 `mounter list` 非空、目录 58 → 79 条。
+- 查：`pymobiledevice3 mounter list`（空 = 没挂）。
+- 卸：`pymobiledevice3 mounter umount-personalized`；**重启也会自己卸**，所以这件事天然可逆，
+  不是对设备的持久改动。卸需要设备处于解锁态——锁着时回 `{'Error': 'DeviceLocked'}`（实测两次）。
+- scrctl **不自己挂**：它只在报错里把"没挂 DDI"这件事说清楚（§21 第 3 条那段目录诊断）。
+  自动挂意味着要替用户下载并 personalize 一份镜像，这个动作留给 Xcode / 仪器更显式。
+
+### 23.2 同一段目录诊断打三遍，等于没打（§21 第 3 条的后续）
+
+§21 把"目录里没有 X 服务"改成了整段目录诊断，但没改**它会被打几次**：问显示几何、挂转屏订阅、
+起流这三步各自失败各自打一遍，没挂 DDI 的设备上同一段话连着出现三次（用户贴回来的报错里就是
+三次）。现在 `LiveSource::start` 先看目录里 `com.apple.coredevice.*` 是不是零条：是零条时前两步
+闭嘴——它们在这种情形下**必然**失败，而致命的起流那步一定会把整段诊断打出来。真机验证靠卸 DDI
+造现场：改前 `grep -c "请把这一段整段贴回来"` = 3，改后 = 1。目录正常但单独缺 `deviceinfo`
+的设备（族非空）行为不变，两处警告照打。

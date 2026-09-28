@@ -1278,6 +1278,18 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     }
     device_ = std::make_unique<scrctl::remote::Device>(std::move(*dev));
 
+    // 目录里一条 com.apple.coredevice.* 都没有时（没挂 DDI 的设备就是这个形状），
+    // 问几何、挂订阅、起流三步**必然**全失败，而整段目录诊断只需要打一次——起流那步
+    // 是致命的、一定会打。实测一台没挂 DDI 的 iPad 上同一段诊断连着打了三遍，
+    // 刷屏到没人读，所以前两步在这种情形下闭嘴。
+    bool coredevice_family_empty = true;
+    for (const auto &s : device_->rsd().services()) {
+        if (s.name.rfind("com.apple.coredevice", 0) == 0) {
+            coredevice_family_empty = false;
+            break;
+        }
+    }
+
     scrctl::media::FramePump::Options options;
     options.record_path = record_path;
     options.use_hardware = hw_decode;
@@ -1308,7 +1320,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             display_id_ = d->id;
             display_name_ = d->name;
             degrees_ = scrctl::app::orientation_degrees(d->orientation);
-        } else {
+        } else if (!coredevice_family_empty) {
             std::fprintf(stderr, "向设备问显示几何失败: %s（退回按机型硬编码的裁剪表）\n",
                          derr.empty() ? "推送里没有可用的尺寸" : derr.c_str());
         }
@@ -1322,7 +1334,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     if (watch_display) {
         std::string werr;
         watcher_ = scrctl::remote::DisplayWatcher::start(*device_, display_id_, werr, false);
-        if (watcher_ == nullptr) {
+        if (watcher_ == nullptr && !coredevice_family_empty) {
             std::fprintf(stderr, "常驻显示订阅起不来: %s（转屏不会跟着转）\n", werr.c_str());
         }
     }
