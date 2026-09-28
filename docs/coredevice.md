@@ -2673,3 +2673,26 @@ allowsPinlessPairing=是、allowsPromptlessAutomationPairingUpgrade=是、allows
 （新增的全部针对转换器：三条类型规则、往返等价、UUID 文本化、"别处的 data 不当二进制"）。
 25.6 那十一条已否证的字段假设一条都不用翻案：**门确实只在传输层**。
 
+### 25.9 事后才看到的门牌：`deviceOptions.allowsPairSetup`（实测，2026-09-29）
+
+用新记录在 Wi-Fi 面（`10.24.24.7:49152`，字节流载体）跑 pair-verify + createListener，全通：
+`pair-verify 通过` → `createListener 给了端口 62165` → 端口连得上。同一趟的 handshake 里，
+设备把 25.6 那道门**自己写在脸上**：
+
+| deviceOptions | RemoteXPC 面（USB 隧道内） | 字节流面（Wi-Fi 49152） |
+| --- | --- | --- |
+| allowsPairSetup | 是 | **否** |
+| allowsPinlessPairing | 是 | **否** |
+| allowsPromptlessAutomationPairingUpgrade | 是 | **否** |
+| allowsIncomingTunnelConnections | 是 | 是 |
+| allowsFreePairing | 否 | 否 |
+| allowsSharingSensitiveInfo | 是 | 是 |
+
+也就是说：字节流面并不是"讨厌我们的 M1"，它**根本不接受 pair-setup**，而且提前就说清楚了。
+`pair_setup()` 现在在 handshake 之后、发任何 pairingData 之前读这一句，不收就立刻失败并把设备
+原话交出去（真机实测 0.44 秒返回；离线判据 116 条，含"判失败前不得发出 M1"这一条）。
+
+这条教训比协议事实更值钱：**先读对端自报的能力位，再去逐字段对差异**。25.1–25.7 那十一条假设
+全部是在没读 `deviceOptions` 的情况下烧掉的。
+
+

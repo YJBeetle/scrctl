@@ -88,6 +88,23 @@ std::optional<std::map<uint8_t, Bytes>> parse_reply(const Bytes &raw, const char
     return fields;
 }
 
+/// 这条面收不收 pair-setup，设备在 handshake 里**自己就报了**：字节流面（Wi-Fi 手动口
+/// 49152、USB lockdown 的 remotepairingdeviced）上是"否"，RemoteXPC 面（隧道内的
+/// untrusted.tunnelservice）上是"是"——iOS 27 的那道门就挂在这一层（docs §25.8）。
+///
+/// 必须在**发任何 pairingData 之前**问：不问的话症状是"M1 发出去就没有然后了"，与
+/// "字段不对"长得一模一样，我们为此逐条否证过十一条假设（25.1–25.7）。
+bool plane_allows_pair_setup(const json::Value &handshake, std::string &err) {
+    const json::Value *options = handshake.find("deviceOptions");
+    const json::Value *allowed = options != nullptr ? options->find("allowsPairSetup") : nullptr;
+    if (allowed != nullptr && allowed->kind == json::Kind::Bool && !allowed->boolean) {
+        err = "这条控制面不接受 pair-setup（设备自报 deviceOptions.allowsPairSetup=否）；"
+              "iOS 27 上只有 RemoteXPC 入口收（wifi_probe --pair-setup-xpc）";
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 std::string host_identifier_uuid3(std::string_view hostname) {
@@ -153,6 +170,9 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
             return fail();
         }
         result.device_handshake = *device_handshake;
+        if (!plane_allows_pair_setup(*device_handshake, err)) {
+            return fail();
+        }
         if (const json::Value *peer = device_handshake->find("peerDeviceInfo")) {
             if (const json::Value *identifier = peer->find("identifier")) {
                 advertised = identifier->as_string_or();
@@ -252,6 +272,9 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
             return fail();
         }
         result.device_handshake = *device_handshake;
+        if (!plane_allows_pair_setup(*device_handshake, err)) {
+            return fail();
+        }
         if (const json::Value *peer = device_handshake->find("peerDeviceInfo")) {
             if (const json::Value *identifier = peer->find("identifier")) {
                 advertised = identifier->as_string_or();

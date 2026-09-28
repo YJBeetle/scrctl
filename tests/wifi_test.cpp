@@ -746,6 +746,39 @@ void test_pair_setup() {
         check(odd_err.find("somethingNew") != std::string::npos,
               "认不出时要把设备给的字段名列出来");
     }
+    {
+        // 设备在 handshake 里自报"这条面不收 pair-setup"（iOS 27 的字节流面就是这样，
+        // docs §25.8）时，要当场把话说明白，而不是把 M1 发出去等它掐线——后者的症状与
+        // "字段不对"一模一样，25.1–25.7 那十一条被否证的假设就是这么烧掉的。
+        const auto handshake_with = [](bool allows_pair_setup) {
+            scrctl::json::Value options =
+                j_obj({{"allowsPairSetup", j_bool(allows_pair_setup)},
+                       {"allowsIncomingTunnelConnections", j_bool(true)}});
+            scrctl::json::Value hs_body = j_obj({{"wireProtocolVersion", j_int(26)},
+                                                 {"deviceOptions", std::move(options)}});
+            scrctl::json::Value hs = j_obj({{"handshake", j_obj({{"_0", std::move(hs_body)}})}});
+            scrctl::json::Value response =
+                j_obj({{"response", j_obj({{"_1", std::move(hs)}})}});
+            scrctl::json::Value plain =
+                j_obj({{"plain", j_obj({{"_0", std::move(response)}})}});
+            scrctl::json::Value envelope = j_obj({{"originatedBy", j_str("device")},
+                                                  {"sequenceNumber", j_int(0)},
+                                                  {"message", std::move(plain)}});
+            return device_frame(scrctl::json::write(envelope));
+        };
+        MemStream io;
+        scrctl::wifi::FramedCarrier carrier(io);
+        scrctl::wifi::Rppairing channel(carrier);
+        io.feed(handshake_with(false));
+        std::string setup_err;
+        const scrctl::wifi::PairSetupResult result = scrctl::wifi::pair_setup(
+            channel, "HOST-IDENTIFIER", "host.local", "UDID", nullptr, {}, setup_err);
+        check(!result.ok, "设备自报不收 pair-setup 的面要判失败");
+        check(setup_err.find("allowsPairSetup") != std::string::npos,
+              "失败原因要指名设备那句自报，而不是一句含糊的'没回信'");
+        check(io.written.find("pairingData") == std::string::npos,
+              "判失败之前不能把 M1 发出去");
+    }
 }
 
 
