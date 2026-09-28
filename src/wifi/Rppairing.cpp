@@ -170,10 +170,9 @@ std::optional<json::Value> Rppairing::plain_roundtrip(const json::Value &inner, 
     return receive(err);
 }
 
-std::optional<Bytes> pairing_data_roundtrip(Rppairing &channel, const Bytes &tlv,
-                                            std::string_view kind, bool start_new_session,
-                                            std::string &err, std::string_view sending_host,
-                                            const ProgressFn &progress) {
+bool send_pairing_data(Rppairing &channel, const Bytes &tlv, std::string_view kind,
+                       bool start_new_session, std::string &err,
+                       std::string_view sending_host) {
     std::vector<std::pair<std::string, json::Value>> fields = {
         {"data", j_str(b64_encode(tlv))},
         {"kind", j_str(kind)},
@@ -186,7 +185,14 @@ std::optional<Bytes> pairing_data_roundtrip(Rppairing &channel, const Bytes &tlv
     // （真机现场：握手答得好好的，第一条 pairingData 发出去就没有然后了）。
     json::Value wrapper = j_obj({{"pairingData", j_obj({{"_0", payload}})}});
     const json::Value inner = j_obj({{"event", j_obj({{"_0", std::move(wrapper)}})}});
-    if (!channel.send_plain(inner, err)) {
+    return channel.send_plain(inner, err);
+}
+
+std::optional<Bytes> pairing_data_roundtrip(Rppairing &channel, const Bytes &tlv,
+                                            std::string_view kind, bool start_new_session,
+                                            std::string &err, std::string_view sending_host,
+                                            const ProgressFn &progress) {
+    if (!send_pairing_data(channel, tlv, kind, start_new_session, err, sending_host)) {
         return std::nullopt;
     }
 

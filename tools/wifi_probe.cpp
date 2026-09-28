@@ -155,7 +155,7 @@ private:
 /// 所以底下是普通 socket 还是 SSL 都由这一层吃掉。
 class TlsByteStream final : public scrctl::wifi::ByteStream {
 public:
-    explicit TlsByteStream(SSL *ssl) : ssl_(ssl) {}
+    TlsByteStream(SSL *ssl, scrctl::transport::Socket &sock) : ssl_(ssl), sock_(sock) {}
 
     bool write_all(const void *data, size_t len, std::string &err) override {
         const auto *p = static_cast<const char *>(data);
@@ -182,8 +182,17 @@ public:
         return true;
     }
 
+    bool wait_readable(int ms, std::string &err) override {
+        // 已解出但还没被读走的字节也算"可读"，否则会把缓冲里的回信等丢。
+        if (SSL_pending(ssl_) > 0) {
+            return true;
+        }
+        return sock_.wait_readable(ms, err);
+    }
+
 private:
     SSL *ssl_;
+    scrctl::transport::Socket &sock_;
 };
 
 /// USB 那条 `remotepairingdeviced.lockdown` 控制面。
@@ -240,7 +249,7 @@ bool open_plane(const PlaneSpec &spec, bool verbose, PairingPlane &out, std::str
     }
     std::unique_ptr<scrctl::wifi::ByteStream> base =
         spec.use_tls ? std::unique_ptr<scrctl::wifi::ByteStream>(
-                           std::make_unique<TlsByteStream>(out.tls.handle()))
+                           std::make_unique<TlsByteStream>(out.tls.handle(), out.sock))
                      : std::make_unique<scrctl::wifi::SocketStream>(out.sock);
     if (verbose) {
         out.inner = std::move(base);
@@ -258,7 +267,8 @@ bool open_plane(const PlaneSpec &spec, bool verbose, PairingPlane &out, std::str
 /// 密钥才算数；而设备认不认，只有拿落盘的记录再握一次手才问得出来。
 int finish_pair_setup(const PlaneSpec &spec, std::string udid,
                       const std::string &host_id_override, bool verbose, bool save,
-                      bool probe_verify_first, const std::string &host_name_override) {
+                      bool probe_verify_first, const std::string &host_name_override,
+                   const std::string &pairing_kind) {
     std::string err;
     std::string hostname = scrctl::wifi::local_hostname();
     if (hostname.empty()) {
@@ -295,6 +305,10 @@ int finish_pair_setup(const PlaneSpec &spec, std::string udid,
     };
     scrctl::wifi::PairSetupOptions setup_options;
     setup_options.probe_verify_first = probe_verify_first;
+    if (!pairing_kind.empty()) {
+        setup_options.pairing_kind = pairing_kind;
+    }
+    std::printf("pairing kind = %s\n", setup_options.pairing_kind.c_str());
     const scrctl::wifi::PairSetupResult setup = scrctl::wifi::pair_setup(
         *plane.channel, identifier, hostname, udid, progress, setup_options, err);
     if (!setup.ok) {
@@ -347,7 +361,8 @@ int finish_pair_setup(const PlaneSpec &spec, std::string udid,
 ///       出来的，见 docs），所以这条路只用来复现那个症状。
 int run_pair_setup(const std::string &address, int port, const std::string &udid_filter,
                    const std::string &host_id_override, bool verbose, bool save,
-                   bool probe_verify_first, const std::string &host_name_override) {
+                   bool probe_verify_first, const std::string &host_name_override,
+                   const std::string &pairing_kind) {
     std::string err;
     PlaneSpec spec;
     spec.address = address;
@@ -405,7 +420,7 @@ int run_pair_setup(const std::string &address, int port, const std::string &udid
         spec.use_tls = endpoint->requires_tls;
         spec.identity = lockdown->identity();
         return finish_pair_setup(spec, device.udid, host_id_override, verbose, save,
-                                 probe_verify_first, host_name_override);
+                                 probe_verify_first, host_name_override, pairing_kind);
     }
 
     // Wi-Fi 面：连接本身不带 UDID，落盘的文件名要它——插着一台 USB 设备就当是它
@@ -435,7 +450,7 @@ int run_pair_setup(const std::string &address, int port, const std::string &udid
     }
     std::printf("控制面 %s:%d（Wi-Fi 手动配对面）\n", address.c_str(), port);
     return finish_pair_setup(spec, udid, host_id_override, verbose, save, probe_verify_first,
-                             host_name_override);
+                             host_name_override, pairing_kind);
 }
 
 }  // namespace
@@ -449,6 +464,7 @@ int main(int argc, char **argv) {
     bool save_record_to_disk = true;
     bool probe_verify_first = true;
     std::string host_name_override;
+    std::string pairing_kind;
     int port = 49152;
     for (int i = 1; i < argc; ++i) {
         auto next = [&](std::string &dst) {
@@ -487,6 +503,8 @@ int main(int argc, char **argv) {
             probe_verify_first = false;
         } else if (std::strcmp(argv[i], "--host-name") == 0) {
             next(host_name_override);
+        } else if (std::strcmp(argv[i], "--pairing-kind") == 0) {
+            next(pairing_kind);
         } else {
             std::fprintf(stderr, "未知参数 %s\n", argv[i]);
             return 2;
@@ -494,7 +512,7 @@ int main(int argc, char **argv) {
     }
     if (want_pair_setup) {
         return run_pair_setup(address, port, udid, host_id, verbose, save_record_to_disk,
-                              probe_verify_first, host_name_override);
+                              probe_verify_first, host_name_override, pairing_kind);
     }
     if (address.empty()) {
         std::fprintf(stderr,

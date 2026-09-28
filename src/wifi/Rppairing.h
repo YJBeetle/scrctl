@@ -21,6 +21,13 @@ public:
     virtual ~ByteStream() = default;
     virtual bool write_all(const void *data, size_t len, std::string &err) = 0;
     virtual bool read_exact(void *data, size_t len, std::string &err) = 0;
+    /// 在 ms 毫秒内会不会有字节可读。pair-setup 的 verify 探针要用它判"设备这次
+    /// 到底回不回话"（iOS 27 上签名有效但 identifier 未知时它**不回**，docs §25.6）。
+    virtual bool wait_readable(int ms, std::string &err) {
+        (void)ms;
+        err = "这条流不支持等可读";
+        return false;
+    }
 };
 
 /// 包住一个已连上的 socket。
@@ -33,6 +40,7 @@ public:
     bool read_exact(void *data, size_t len, std::string &err) override {
         return sock_.read_exact(data, len, err);
     }
+    bool wait_readable(int ms, std::string &err) override { return sock_.wait_readable(ms, err); }
 
 private:
     transport::Socket &sock_;
@@ -84,6 +92,10 @@ public:
     /// 一次加密往返：`request` 形如 `{"request":{…}}`，返回解出来的 `response._1`。
     std::optional<json::Value> encrypted_roundtrip(const json::Value &request, std::string &err);
 
+    /// ms 毫秒内有没有回信可读。pair-setup 的 verify 探针靠它区分"设备不回话"与
+    /// "设备回了 Msg04"（iOS 27 上前者才是"没配对"的正常表现，docs §25.6）。
+    bool reply_pending(int ms, std::string &err) { return io_.wait_readable(ms, err); }
+
     [[nodiscard]] uint64_t sequence() const { return sequence_; }
     [[nodiscard]] uint64_t encrypted_sequence() const { return encrypted_sequence_; }
 
@@ -101,6 +113,12 @@ private:
 
 /// 把中间状态说给人听的回调（例如"设备正在等你在屏幕上点信任"）。空函数=不报。
 using ProgressFn = std::function<void(std::string_view)>;
+
+/// 只发不收：pair-setup 的 verify 探针发完 PV-Msg03 不能傻等回信（设备在"签名有效但
+/// identifier 未知"时不回），发与收必须能拆开。
+bool send_pairing_data(Rppairing &channel, const Bytes &tlv, std::string_view kind,
+                       bool start_new_session, std::string &err,
+                       std::string_view sending_host = "");
 
 /// 发一条 pairingData 事件，回一条 pairingData 事件，返回解出来的 TLV 字节。
 /// pair-verify 与 pair-setup 共用这条管道；`sending_host` 非空时带上 sendingHost 键

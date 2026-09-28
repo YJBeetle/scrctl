@@ -2584,3 +2584,38 @@ Wi-Fi 面直接关连接，USB 面连 FIN 都不发（我们这边 read 永久�
   删用户活记录的破坏性点击，且本轮实测**我们在这台 iPhone 上的单点触摸坐标不可靠**（此前
   "注入落地"的判据都在 iPad 上、且是 stroke/差分这类大区域判据），所以这两下留给人的手做，
   不用盲点做。
+
+### 25.6 成功样本抓到了：差异不在字段，在传输层（实测，2026-09-29 凌晨，Xcode Pair 当 oracle）
+
+用户在 Xcode 设备窗点 Pair（USB 面）能成功。抓设备 oslog 把成功序列与我们的失败序列逐行对：
+
+成功序列（通道名 `remotexpc-8`）：
+1. handshake → `deviceAwaitingPairVerify`；
+2. verify 的 M1 → 设备日志原话 "**Not paired with anyone, failing pairVerify**"，回一条带 ERROR
+   的 pairingData（活记录为零时它连 SRP 都不进）；
+3. 客户端**不发 PV-Msg03**，回一句 `pairVerifyFailed` → 状态落 `unauthenticated`（连接活着）；
+4. pairingData **kind = `upgradeNonAutomationLockdownPairing`**（不是 `setupManualPairing`），
+   startNewSession=true、data 6 字节、sendingHost="YJBeetle-M2"（不带 .local）、pairingOptions=nil
+   → `upgradeLockdownPairingInProgress` → 三轮 SRP → `authenticated`。
+
+我们此前失败的三个真实原因，按发现顺序：
+- kind 错：`setupManualPairing` 在这台设备上两条字节流面都被直接掐掉；
+- 序错：M2 带 ERROR 时我们还发 PV-Msg03（序外消息），之后无论发什么都被掐——"pairVerifyFailed
+  掐连接"这个早先结论是错的，掐连接的是它前面那条 Msg03（`pair_verify()` 与 `pair_setup()` 都已
+  按成功样本改正：M2 见 ERROR 就只回 pairVerifyFailed）；
+- **传输层错（最终答案）**：把上面全改对、活记录清零、M1 字段与成功样本逐字一致之后，
+  `socket-N`（USB 字节流面）上依旧 `unauthenticated → invalidated`。成功样本走的是 `remotexpc-N`
+  ——lockdown 起出来的 RemoteXPC 入口。设备把 pair-setup 的受理 gate 挂在传输层：只认带会话
+  凭据的 RemoteXPC 入口，字节流入口一律拒。参考实现只说字节流面，所以它在这台设备上也永远
+  失败（与 25.3 的 oracle 实验一致）。
+
+顺带修正 25.3/25.4 的两条旧结论：活记录条数、主机名冷却、identifier 已知/未知都**不是** gate
+（各自单独否证，见提交历史）；"M2 带 ERROR 时设备不回话"也不对——回话与否取决于活记录是否为零
+（为零时 M1 就被拒并回 ERROR，有活记录时进 SRP 再在 Msg04 回 ERROR）。
+
+### 25.7 剩下的路
+
+pair-setup 要通，得把配对通道搬上 RemoteXPC 入口：lockdown StartService 起 remotexpc 那个服务
+（名字待枚举），复用 `src/http2` + `src/xpc` + `src/remote/RemoteXpc.cpp` 那套栈（#48 读 RSD 用的
+就是它），RPPairing 的 JSON 信封改由 xpc 消息承载。代码侧本轮已把协议层改对（kind 可配、
+verify 探针用真钥匙、M2-ERROR 的正确收尾），离线判据 100 条仍全绿；差的只是这层传输。

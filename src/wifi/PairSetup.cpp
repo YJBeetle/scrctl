@@ -127,6 +127,18 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
         err = "没有 host identifier，注册不了（主机名取不到时可以显式给一个）";
         return fail();
     }
+    // host 密钥一开始就生成：verify 探针的签名必须用它（真钥匙），M5 注册的是同一把。
+    const std::optional<Ed25519KeyPair> host_key = ed25519_keypair(err);
+    if (!host_key) {
+        return fail();
+    }
+    const Bytes host_public(host_key->pub.begin(), host_key->pub.end());
+    // 苹果客户端在 pairingData 里报的主机名不带 ".local"（oslog 实测 sendingHost 是
+    // "YJBeetle-M2"），照它来。
+    std::string host_label(hostname);
+    if (host_label.size() > 6 && host_label.compare(host_label.size() - 6, 6, ".local") == 0) {
+        host_label.erase(host_label.size() - 6);
+    }
 
     // 1) 开场。两档（见 PairSetupOptions）：
     //    probe_verify_first —— 先按 verify 问一轮"认不认识我"（参考实现的走法）；
@@ -135,28 +147,103 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
     //    现场能一行命令换着试，不用重新编译。
     std::string advertised;
     if (options.probe_verify_first) {
-        PairRecord probe_record;
-        probe_record.udid = std::string(udid);
-        probe_record.host_identifier = std::string(host_identifier);
-        probe_record.host_private_key.assign(32, 0);
-        probe_record.host_public_key.assign(32, 0);
-        const PairVerifyResult pre =
-            pair_verify(channel, probe_record, err, /*announce_failure=*/false);
-        if (pre.outcome == VerifyOutcome::Paired) {
-            err = "设备已经认这个 identifier 了，不需要 pair-setup（直接用现有记录）";
+        const std::optional<json::Value> device_handshake =
+            do_handshake(channel, /*attempt_verify=*/true, err);
+        if (!device_handshake) {
             return fail();
         }
-        if (pre.outcome == VerifyOutcome::TransportFailure) {
-            return fail();
-        }
-        result.device_handshake = pre.device_handshake;
-        if (const json::Value *peer = pre.device_handshake.find("peerDeviceInfo")) {
+        result.device_handshake = *device_handshake;
+        if (const json::Value *peer = device_handshake->find("peerDeviceInfo")) {
             if (const json::Value *identifier = peer->find("identifier")) {
                 advertised = identifier->as_string_or();
             }
         }
+        // verify 探针。签名必须用**真钥匙**：全零钥匙的签名在密码学上无效，设备会走错误
+        // 路径、状态卡在 verifyManualPairingInProgress，之后的 upgrade M1 一律被掐；
+        // 真钥匙 + 未知 identifier 才走到干净的 unauthenticated（docs §25.6，苹果成功
+        // 样本与我们的失败样本在设备 oslog 里逐行对出来的差别）。
+        const std::optional<X25519KeyPair> vk = x25519_keypair(err);
+        if (!vk) {
+            return fail();
+        }
+        const Bytes our_x_pub(vk->pub.begin(), vk->pub.end());
+        const Bytes v1 =
+            tlv_build({{TlvType::State, Bytes{0x01}}, {TlvType::PublicKey, our_x_pub}});
+        const std::optional<Bytes> raw_v2 =
+            pairing_data_roundtrip(channel, v1, "verifyManualPairing", true, err);
+        if (!raw_v2) {
+            return fail();
+        }
+        const std::optional<std::map<uint8_t, Bytes>> vf = parse_reply(*raw_v2, "verify-M2", err);
+        if (!vf) {
+            return fail();
+        }
+        const auto send_verify_failed = [&channel]() {
+            std::string ignored;
+            json::Value body = j_obj({{"pairVerifyFailed", j_obj({})}});
+            channel.send_plain(j_obj({{"event", j_obj({{"_0", std::move(body)}})}}), ignored);
+        };
+        if (tlv_get(*vf, TlvType::Error) != nullptr) {
+            // 设备连试都不试（"Not paired with anyone"）：回一句 pairVerifyFailed 就落到
+            // unauthenticated，**千万别发 Msg03**（docs §25.6）。
+            send_verify_failed();
+        } else {
+            // identifier 可能在设备那边挂着（含已撤销的）：走完 Msg03 看它认不认。
+            const Bytes *peer_x = tlv_get(*vf, TlvType::PublicKey);
+            if (peer_x == nullptr || peer_x->size() != 32) {
+                err = "verify 的 M2 里没有 32 字节公钥";
+                return fail();
+            }
+            const std::optional<Bytes> shared = x25519_shared(vk->priv, sv(*peer_x), err);
+            if (!shared) {
+                return fail();
+            }
+            const std::optional<Bytes> vkey = hkdf_sha512(*shared, "Pair-Verify-Encrypt-Salt",
+                                                          "Pair-Verify-Encrypt-Info", 32, err);
+            if (!vkey) {
+                return fail();
+            }
+            Bytes signbuf = our_x_pub;
+            signbuf.insert(signbuf.end(), host_identifier.begin(), host_identifier.end());
+            signbuf.insert(signbuf.end(), peer_x->begin(), peer_x->end());
+            const std::optional<Bytes> sig =
+                ed25519_sign(std::string_view(reinterpret_cast<const char *>(host_key->seed.data()),  // NOLINT
+                                              host_key->seed.size()),
+                             signbuf, err);
+            if (!sig) {
+                return fail();
+            }
+            const Bytes identity = tlv_build({{TlvType::Identifier, bytes_of(host_identifier)},
+                                              {TlvType::Signature, *sig}});
+            static constexpr char kPvMsg03[] = "\x00\x00\x00\x00PV-Msg03";
+            const std::optional<Bytes> sealed = chacha_seal(
+                sv(*vkey), std::string_view(kPvMsg03, sizeof(kPvMsg03) - 1), identity, err);
+            if (!sealed) {
+                return fail();
+            }
+            const Bytes v3 =
+                tlv_build({{TlvType::State, Bytes{0x03}}, {TlvType::EncryptedData, *sealed}});
+            const std::optional<Bytes> raw_v4 =
+                pairing_data_roundtrip(channel, v3, "verifyManualPairing", false, err);
+            if (!raw_v4) {
+                return fail();
+            }
+            std::string v4_tlv_err;
+            const std::map<uint8_t, Bytes> v4f = tlv_parse(*raw_v4, v4_tlv_err);
+            if (!v4_tlv_err.empty()) {
+                err = "verify-M4 的 TLV 没解干净: " + v4_tlv_err;
+                return fail();
+            }
+            if (tlv_get(v4f, TlvType::Error) != nullptr) {
+                // ERROR = 不认这把钥匙，正是我们要的正常结局。
+                send_verify_failed();
+            } else {
+                err = "设备认这个 identifier：已经配过了，不需要 pair-setup";
+                return fail();
+            }
+        }
         if (progress) {
-            progress("设备说不认识这把钥匙（预期），开始 pair-setup 的 M1");
+            progress("verify 探针干净落地（设备没认这把钥匙），发 upgrade M1");
         }
     } else {
         const std::optional<json::Value> device_handshake =
@@ -174,10 +261,11 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
             progress("handshake（attemptPairVerify=false）完成，发 M1");
         }
     }
-    // 2) M1 → M2：设备给出 SRP 的 salt 与 B。
+    // 2) M1 → M2：设备给出 SRP 的 salt 与 B。kind 见 PairSetupOptions::pairing_kind。
+    const std::string kind = options.pairing_kind;
     const Bytes m1 = tlv_build({{TlvType::Method, Bytes{0x00}}, {TlvType::State, Bytes{0x01}}});
     const std::optional<Bytes> raw_m2 =
-        pairing_data_roundtrip(channel, m1, "setupManualPairing", true, err, hostname, progress);
+        pairing_data_roundtrip(channel, m1, kind, true, err, host_label, progress);
     if (!raw_m2) {
         return fail();
     }
@@ -203,7 +291,7 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
                                 {TlvType::PublicKey, srp.client_public()},
                                 {TlvType::Proof, srp.client_proof()}});
     const std::optional<Bytes> raw_m4 =
-        pairing_data_roundtrip(channel, m3, "setupManualPairing", false, err, hostname, progress);
+        pairing_data_roundtrip(channel, m3, kind, false, err, host_label, progress);
     if (!raw_m4) {
         return fail();
     }
@@ -237,11 +325,6 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
     if (!sign_prefix) {
         return fail();
     }
-    const std::optional<Ed25519KeyPair> host_key = ed25519_keypair(err);
-    if (!host_key) {
-        return fail();
-    }
-    const Bytes host_public(host_key->pub.begin(), host_key->pub.end());
     Bytes signbuf = *sign_prefix;
     signbuf.insert(signbuf.end(), host_identifier.begin(), host_identifier.end());
     signbuf.insert(signbuf.end(), host_public.begin(), host_public.end());
@@ -277,7 +360,7 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
          OpackValue::of_string("AAAAAAAAAAAA")},
         {OpackValue::of_string("accountID"), OpackValue::of_string(std::string(host_identifier))},
         {OpackValue::of_string("model"), OpackValue::of_string("computer-model")},
-        {OpackValue::of_string("name"), OpackValue::of_string(std::string(hostname))},
+        {OpackValue::of_string("name"), OpackValue::of_string(host_label)},
     };
     Bytes info_bytes;
     if (!opack_encode(info, info_bytes, err)) {
@@ -296,7 +379,7 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
     const Bytes m5 =
         tlv_build({{TlvType::EncryptedData, *sealed}, {TlvType::State, Bytes{0x05}}});
     const std::optional<Bytes> raw_m6 =
-        pairing_data_roundtrip(channel, m5, "setupManualPairing", false, err, hostname, progress);
+        pairing_data_roundtrip(channel, m5, kind, false, err, host_label, progress);
     if (!raw_m6) {
         return fail();
     }

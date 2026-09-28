@@ -45,6 +45,11 @@ struct PairSetupOptions {
     /// setup（docs §25.2/§25.3），所以这条路留作开关，另一档是 handshake 直接报
     /// attemptPairVerify=false、然后发 setup 的 M1。
     bool probe_verify_first = true;
+    /// pairingData 的 kind。iOS 27 实测（docs §25.6）：已经有 lockdown（USB 信任）配对、
+    /// 但还没有远程配对记录的主机，设备只收 `upgradeNonAutomationLockdownPairing`；
+    /// 参考实现硬编码的 `setupManualPairing` 在这台设备上两条面都被直接掐掉。
+    /// 完全没有 lockdown 配对的新主机才走 setupManualPairing（带屏幕同意框那条）。
+    std::string pairing_kind = "upgradeNonAutomationLockdownPairing";
 };
 
 PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,

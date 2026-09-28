@@ -53,6 +53,20 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
     //    苹果那套实现同样没解（它的 TODO 里明写着），所以这里不解不是偷懒，是与对端一致。
     std::string tlv_err;
     const std::map<uint8_t, Bytes> second = tlv_parse(*reply1, tlv_err);
+    // 设备在 M2 里就带 ERROR = 它连试都不试（"Not paired with anyone"，设备 oslog 原话）。
+    // 这时**不能**再发 PV-Msg03：那条序外消息会让设备把连接掐掉（docs §25.6，我们踩了
+    // 一整晚）。正确收尾是一句 pairVerifyFailed，然后报"没配对"。
+    if (tlv_get(second, TlvType::Error) != nullptr) {
+        if (announce_failure) {
+            std::string ignored;
+            json::Value body = j_obj({{"pairVerifyFailed", j_obj({})}});
+            channel.send_plain(j_obj({{"event", j_obj({{"_0", std::move(body)}})}}), ignored);
+        }
+        err = "设备不认识这条配对记录（没配过，或者在设备上被删了）";
+        result.outcome = VerifyOutcome::NotPaired;
+        result.error = err;
+        return result;
+    }
     const Bytes *peer_pub = tlv_get(second, TlvType::PublicKey);
     if (peer_pub == nullptr || peer_pub->size() != 32) {
         err = "PV-Msg02 里没有 32 字节的公钥" +
