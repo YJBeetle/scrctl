@@ -1399,24 +1399,30 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
         }
     }
 
-    pump_ = scrctl::media::FramePump::start(*device_, options, err);
+    // --video-source=screenshot 是**强制**：连媒体流都不去起。原先这个值只在"起流
+    // 失败"那条支路里被读，于是流一起成功它就被跳过——而帮助文本承诺的是强制（审查 P2）。
+    const bool force_screenshot = video_source == "screenshot";
+    if (!force_screenshot) {
+        pump_ = scrctl::media::FramePump::start(*device_, options, err);
+    }
     if (pump_ == nullptr) {
         // 兜底门：媒体流被设备按版本拒（iOS 27 以下，code 9021，设备原话里带
-        // "requires iOS"）时改走截图轮询。只在**这一种**失败上自动降级——别的失败
-        // （比如另一客户端占着流）自动降到 2 fps 会把真问题盖住；想强制就用
-        // --video-source=screenshot。
+        // "requires iOS"）时改走截图轮询。自动降级只在**这一种**失败上发生——别的失败
+        // （比如另一客户端占着流）自动降到 2 fps 会把真问题盖住；想强制就是上面那条。
         const bool version_gate = err.find("requires iOS") != std::string::npos;
-        if (version_gate || video_source == "screenshot") {
+        if (version_gate || force_screenshot) {
             const std::string stream_err = err;
             std::string serr;
             auto shot = scrctl::media::ScreenshotSource::start(*device_, serr);
             if (shot != nullptr) {
-                std::printf("媒体流不可用：%s\n", stream_err.c_str());
+                if (!stream_err.empty()) {
+                    std::printf("媒体流不可用：%s\n", stream_err.c_str());
+                }
                 std::printf("改用截图轮询兜底：实测一次截图约 0.5 秒，画面约 2 fps——能看能操作，"
                             "不是能看视频；触摸/按键注入走同一条 HID 路，不受影响\n");
                 shot_ = std::move(shot);
                 err.clear();
-            } else if (video_source == "screenshot") {
+            } else if (force_screenshot) {
                 err = "截图兜底也起不来: " + serr;
                 return false;
             }
