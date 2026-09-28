@@ -31,7 +31,12 @@ bool decode_png_bgra(const std::vector<uint8_t> &png, scrctl::Frame &out, std::s
 class ScreenshotSource {
 public:
     /// 目录里没有 screencaptureservice、连不上、或第一张截图就拿不到时返回 nullptr。
-    static std::unique_ptr<ScreenshotSource> start(remote::Device &device, std::string &err);
+    ///
+    /// `capture_first`：起流就降级那条路传 true（默认）——兜底路连一张都拿不到时它就是
+    /// 空的，原因要直接交出去，而不是起个线程在里面默默失败。运行中降级那条路传 false：
+    /// 那次切换发生在渲染线程上，同步拿第一张会把窗口冻到一次截图 RPC 的上限。
+    static std::unique_ptr<ScreenshotSource> start(remote::Device &device, std::string &err,
+                                                   bool capture_first = true);
     ~ScreenshotSource();
 
     ScreenshotSource(const ScreenshotSource &) = delete;

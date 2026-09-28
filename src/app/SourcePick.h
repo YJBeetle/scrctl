@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 namespace scrctl::app {
 
 /// 取每一帧之前，画面该从哪条路来。
@@ -15,17 +17,25 @@ enum class SourcePick {
     kToStream,    ///< 泵回升了：调用方负责释放截图源
 };
 
+/// 截图源起失败之后过多久再试一次。
+///
+/// 一次失败不该判永久（审查 P2）：截图 RPC 可能只是暂时不通，而媒体后端仍解不出画面，
+/// 判永久就等于本次会话一路停在旧画面上。30 秒与 FramePump 降级期的重试同节奏——
+/// 每帧都撞会把渲染线程泡在建连接的来回里，60 秒又让"爬回来"慢得看不出在救。
+inline constexpr uint64_t kShotRetryMs = 30000;
+
 /// `has_pump` 媒体泵存在（起流成功过）；`video_dead` 泵自报当前解不出画面
 /// （`FramePump::video_unusable`：连续重起仍拿不到关键帧）；`has_shot` 截图源活着；
-/// `shot_failed` 截图源起失败过（起失败就不再每帧重试，同 HID 那条规矩）。
+/// `ms_since_shot_fail` 距上次截图源起失败过了多少毫秒，从没失败过传 `UINT64_MAX`
+/// （冷却期内不重试，冷却一过就再试）。
 inline SourcePick pick_picture_source(bool has_pump, bool video_dead, bool has_shot,
-                                      bool shot_failed) {
+                                      uint64_t ms_since_shot_fail) {
     if (has_shot) {
         // 起流就降级的那一格泵不存在：`!video_dead` 在那里是"没有泵"而不是"泵回升"，
         // 必须留在截图路上。这一格就是第一版写错的地方。
         return (has_pump && !video_dead) ? SourcePick::kToStream : SourcePick::kStayShot;
     }
-    if (has_pump && video_dead && !shot_failed) {
+    if (has_pump && video_dead && ms_since_shot_fail >= kShotRetryMs) {
         return SourcePick::kToShot;
     }
     return SourcePick::kStayStream;

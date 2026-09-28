@@ -25,6 +25,11 @@ constexpr const char *kAction = "com.apple.coredevice.action.capturescreenshot";
 /// 截图失败后的退避。不能贴着失败猛重试：设备拒一次（比如屏幕睡了的某些状态）
 /// 就是一句语义错误，猛重试只会把日志刷满而不会变好。
 constexpr int kRetryBackoffMs = 250;
+/// 单次截图 RPC 的上限。实测 0.2~0.6 秒（MaaFW 侧静态 84ms），5 秒已是 8~25 倍余量；
+/// 这个数同时是"切换画面源时渲染线程最多冻多久"与"teardown join 最多等多久"的上限
+/// （审查 P3）。原先的 30 秒换来的只是"设备真卡死时晚 25 秒放弃"，而那一档本来也由
+/// worker 的退避重试兜着。
+constexpr int kCaptureTimeoutMs = 5000;
 
 }  // namespace
 
@@ -95,28 +100,31 @@ ScreenshotSource::ScreenshotSource(remote::Device &device) : device_(device) {}
 ScreenshotSource::~ScreenshotSource() { stop(); }
 
 std::unique_ptr<ScreenshotSource> ScreenshotSource::start(remote::Device &device,
-                                                          std::string &err) {
+                                                          std::string &err, bool capture_first) {
     if (!device.rsd().has_service(kService)) {
         err = "设备目录里没有 " + std::string(kService);
         return nullptr;
     }
     std::unique_ptr<ScreenshotSource> src(new ScreenshotSource(device));
     // 第一张同步拿：兜底路如果连一张都拿不到，它就是空的，原因要直接交出去，
-    // 而不是起一个线程在里面默默失败。
-    std::vector<uint8_t> png;
-    if (!src->capture_once(png, err)) {
-        return nullptr;
-    }
-    scrctl::Frame first;
-    if (!decode_png_bgra(png, first, err)) {
-        return nullptr;
-    }
-    {
-        std::lock_guard<std::mutex> lk(src->mu_);
-        src->frame_ = std::move(first);
-        src->serial_ = 1;
-        src->stats_.frames = 1;
-        src->stats_.bytes = png.size();
+    // 而不是起一个线程在里面默默失败。运行中降级那一路传 capture_first=false：那次
+    // 切换发生在渲染线程上，同步拿会把窗口冻到 kCaptureTimeoutMs（审查 P3）。
+    if (capture_first) {
+        std::vector<uint8_t> png;
+        if (!src->capture_once(png, err)) {
+            return nullptr;
+        }
+        scrctl::Frame first;
+        if (!decode_png_bgra(png, first, err)) {
+            return nullptr;
+        }
+        {
+            std::lock_guard<std::mutex> lk(src->mu_);
+            src->frame_ = std::move(first);
+            src->serial_ = 1;
+            src->stats_.frames = 1;
+            src->stats_.bytes = png.size();
+        }
     }
     src->worker_ = std::thread([raw = src.get()] { raw->loop(); });
     return src;
@@ -135,7 +143,8 @@ bool ScreenshotSource::capture_once(std::vector<uint8_t> &png, std::string &err)
     xpc::Value out;
     // 30 秒上限：截图 RPC 实测半秒级，给到 30 秒是防"设备某次卡住"把泵线程永久挂住；
     // 真卡到那份上这一路本来也没救了，下一轮退避后重试。
-    if (conn->invoke(kFeature, kAction, input, out, 30000, err) != remote::CallResult::Ok) {
+    if (conn->invoke(kFeature, kAction, input, out, kCaptureTimeoutMs, err) !=
+        remote::CallResult::Ok) {
         return false;
     }
     const auto *image = out.find("image");

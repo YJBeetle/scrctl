@@ -118,25 +118,33 @@ int main() {
           "pid 与顺序都对，且 .app2 那种近似名没被误伤");
     check(App::matching_pids(processes, "").empty(), "空路径不匹配任何东西（防误杀全部）");
 
-    // 运行中降级那本四格状态账。第一版写在 next() 里时把"起流就降级"（泵不存在）
-    // 判成了"回升"，而那一格在 iOS 18 上是常态——所以这里把组合跑全，不等真机凑现场。
+    // 运行中降级那本状态账。第一版写在 next() 里时把"起流就降级"（泵不存在）判成了
+    // "回升"，而那一格在 iOS 18 上是常态；第二版把截图源的一次失败判成永久，冷却这格
+    // 就是为它加的（审查 P2）。组合在这里跑全，不等真机凑现场。
     using scrctl::app::pick_picture_source;
     using scrctl::app::SourcePick;
-    check(pick_picture_source(true, false, false, false) == SourcePick::kStayStream,
+    constexpr uint64_t kNever = UINT64_MAX;
+    check(pick_picture_source(true, false, false, kNever) == SourcePick::kStayStream,
           "正常：等媒体泵");
-    check(pick_picture_source(true, true, false, false) == SourcePick::kToShot,
+    check(pick_picture_source(true, true, false, kNever) == SourcePick::kToShot,
           "跑着解不出画面：切去截图源");
-    check(pick_picture_source(true, true, false, true) == SourcePick::kStayStream,
-          "截图源起失败过：不再每帧撞，继续等泵");
-    check(pick_picture_source(true, true, true, false) == SourcePick::kStayShot,
+    check(pick_picture_source(true, true, false, 0) == SourcePick::kStayStream,
+          "截图源刚起失败：冷却期内不撞");
+    check(pick_picture_source(true, true, false, scrctl::app::kShotRetryMs - 1) ==
+              SourcePick::kStayStream,
+          "冷却期差一毫秒也还不撞");
+    check(pick_picture_source(true, true, false, scrctl::app::kShotRetryMs) ==
+              SourcePick::kToShot,
+          "冷却一过就再试：一次失败不判永久");
+    check(pick_picture_source(true, true, true, kNever) == SourcePick::kStayShot,
           "已降级且泵仍解不出：留在截图路");
-    check(pick_picture_source(true, false, true, false) == SourcePick::kToStream,
+    check(pick_picture_source(true, false, true, kNever) == SourcePick::kToStream,
           "泵回升：切回实时流");
-    check(pick_picture_source(false, false, true, false) == SourcePick::kStayShot,
+    check(pick_picture_source(false, false, true, kNever) == SourcePick::kStayShot,
           "起流就降级（泵不存在）：留在截图路——第一版写错的就是这一格");
-    check(pick_picture_source(false, false, true, true) == SourcePick::kStayShot,
-          "起流就降级且截图源也曾失败过：仍留在截图路（它活着就用它）");
-    check(pick_picture_source(false, false, false, false) == SourcePick::kStayStream,
+    check(pick_picture_source(false, false, true, 0) == SourcePick::kStayShot,
+          "起流就降级且截图源也曾失败：它活着就继续用它");
+    check(pick_picture_source(false, false, false, kNever) == SourcePick::kStayStream,
           "两条路都没有：交给调用方判空，不在这里编一个来源");
 
     std::printf(Failures == 0 ? "\n全部通过\n" : "\n%d 项失败\n", Failures);

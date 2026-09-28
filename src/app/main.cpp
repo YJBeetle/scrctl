@@ -1060,26 +1060,40 @@ public:
         // 四格状态账在 pick_picture_source 里、离线跑全组合（tests/app_test.cpp）；语义与
         // MaaFW 控制单元一致（ScrctlSession 每次取帧都问同一个标志）。两条路的序号各记各的
         // （serial_ / shot_serial_），来回切不会把截图的号喂给泵当"since"。
+        const uint64_t now_ticks = SDL_GetTicks64();
+        const uint64_t since_shot_fail = shot_failed_ ? now_ticks - shot_fail_ms_ : UINT64_MAX;
         switch (scrctl::app::pick_picture_source(pump_ != nullptr,
                                                   pump_ != nullptr && pump_->video_unusable(),
-                                                  shot_ != nullptr, shot_failed_)) {
+                                                  shot_ != nullptr, since_shot_fail)) {
             case scrctl::app::SourcePick::kToShot: {
                 std::string serr;
-                auto shot = scrctl::media::ScreenshotSource::start(*device_, serr);
+                // 首张**不同步拿**：这一切换发生在渲染线程上，同步拿会把窗口冻到一次
+                // 截图 RPC 的上限（审查 P3）。worker 起来后约半秒就有第一张，这期间窗口
+                // 继续显示媒体流的最后一帧——与"永久停住"的区别是它自己在往前走。
+                auto shot = scrctl::media::ScreenshotSource::start(*device_, serr,
+                                                                   /*capture_first=*/false);
                 if (shot != nullptr) {
                     std::printf("媒体流当前解不出画面，改走截图轮询兜底（约 2 fps）；"
                                 "泵在后台按退避继续试，解出来会切回来\n");
                     shot_ = std::move(shot);
                 } else {
-                    // 与 HID 同一条规矩：失败过一次就不再每帧撞一遍。
-                    std::fprintf(stderr, "想降级到截图兜底但它起不来: %s（继续等媒体流）\n",
-                                 serr.c_str());
+                    // 冷却期（kShotRetryMs）内不再撞，冷却一过再试：一次失败不判永久，
+                    // 否则截图 RPC 只是暂时不通时，本次会话就一路停在旧画面上（审查 P2）。
+                    std::fprintf(stderr, "想降级到截图兜底但它起不来: %s（%llu 秒后再试）\n",
+                                 serr.c_str(),
+                                 static_cast<unsigned long long>(scrctl::app::kShotRetryMs / 1000));
                     shot_failed_ = true;
+                    shot_fail_ms_ = now_ticks;
                 }
                 break;
             }
             case scrctl::app::SourcePick::kToStream:
+                // 别在渲染线程上析构：~ScreenshotSource 会 join 那个可能正卡在截图 RPC
+                // 里的 worker（审查 P3）。stop() 只置标志+唤醒，对象挪进 retired_，
+                // join 留给 teardown（不在热路径上）。
                 std::printf("媒体流又能解出画面了，切回实时流\n");
+                shot_->stop();
+                retired_.push_back(std::move(shot_));
                 shot_.reset();
                 break;
             case scrctl::app::SourcePick::kStayShot:
@@ -1312,8 +1326,14 @@ private:
     /// 触摸/按键注入走的是同一条 HID 路，不受影响。任一时刻与 pump_ 只有一条在出画面。
     std::unique_ptr<scrctl::media::ScreenshotSource> shot_;
     uint64_t shot_serial_ = 0;
-    /// 运行中降级时截图源起失败过：之后不再每帧重试（同 HID 那条规矩）。
+    /// 运行中降级时截图源起失败的时间点（SDL 时钟）：冷却期（kShotRetryMs）内不再撞，
+    /// 冷却一过再试——一次失败不判永久，否则本次会话就一路停在旧画面上（审查 P2）。
     bool shot_failed_ = false;
+    uint64_t shot_fail_ms_ = 0;
+    /// 切回实时流时退下来的截图源：stop() 已叫过，join 留给 teardown。渲染线程上 join
+    /// 一个可能卡在截图 RPC 里的线程会把窗口冻到 RPC 上限（审查 P3）。声明在 device_
+    /// 之后，所以先于 device_ 析构（截图源持有 Device&）。
+    std::vector<std::unique_ptr<scrctl::media::ScreenshotSource>> retired_;
 };
 
 namespace {
