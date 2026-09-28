@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "remote/PairingChannel.h"
 #include "wifi/Crypto.h"
 #include "wifi/Opack.h"
 #include "wifi/Srp.h"
@@ -428,7 +429,8 @@ std::string sealed_frame(const Bytes &server_key, uint64_t counter, const std::s
 
 void test_rppairing() {
     MemStream io;
-    scrctl::wifi::Rppairing channel(io);
+    scrctl::wifi::FramedCarrier carrier(io);
+    scrctl::wifi::Rppairing channel(carrier);
     std::string err;
 
     check(channel.send_plain(j_obj({{"event", j_obj({{"ping", j_obj({})}})}}), err),
@@ -463,7 +465,8 @@ void test_rppairing() {
     // 帧头不对的那一条要**单独一个流**：坏帧后面那些字节是没人消费的，
     // 接着用同一条流测后面的东西，测出来的是"错位"，不是本来想测的判据。
     MemStream junk_io;
-    scrctl::wifi::Rppairing junk(junk_io);
+    scrctl::wifi::FramedCarrier junk_carrier(junk_io);
+    scrctl::wifi::Rppairing junk(junk_carrier);
     // 喂的字节**不能**带真 magic（带了先撞上的就是 JSON 解析，测不到帧头判据）。
     junk_io.feed(std::string(30, 'X'));
     std::string magic_err;
@@ -510,7 +513,8 @@ void test_rppairing() {
     check(channel.encrypted_sequence() == 2, "被拒的那一次不推进加密计数");
 
     MemStream cold_io;
-    scrctl::wifi::Rppairing cold(cold_io);
+    scrctl::wifi::FramedCarrier cold_carrier(cold_io);
+    scrctl::wifi::Rppairing cold(cold_carrier);
     cold_io.feed(device_frame(
         R"({"message":{"streamEncrypted":{"_0":"AAAAAAAAAAAAAAAAAAAAAAAAAAA="}},"originatedBy":"device"})"));
     std::string cold_err;
@@ -578,7 +582,8 @@ void test_pair_verify_shape() {
 
     {
         MemStream io;
-        scrctl::wifi::Rppairing channel(io);
+        scrctl::wifi::FramedCarrier carrier(io);
+        scrctl::wifi::Rppairing channel(carrier);
         io.feed(device_frame(handshake_reply));
         io.feed(reply_with(msg02));
         io.feed(reply_with(scrctl::wifi::tlv_build({{scrctl::wifi::TlvType::State, Bytes{0x04}}})));
@@ -619,7 +624,8 @@ void test_pair_verify_shape() {
     {
         // 设备回 ERROR：要判成"没配对"，还要补一句 pairVerifyFailed（同样两层包装）。
         MemStream io;
-        scrctl::wifi::Rppairing channel(io);
+        scrctl::wifi::FramedCarrier carrier(io);
+        scrctl::wifi::Rppairing channel(carrier);
         io.feed(device_frame(handshake_reply));
         io.feed(reply_with(msg02));
         io.feed(reply_with(scrctl::wifi::tlv_build({{scrctl::wifi::TlvType::State, Bytes{0x06}},
@@ -693,7 +699,8 @@ void test_pair_setup() {
     {
         // 先回 awaitingUserConsent、再回 pairingData：两帧都得消费掉，第二帧才是数据。
         MemStream io;
-        scrctl::wifi::Rppairing channel(io);
+        scrctl::wifi::FramedCarrier carrier(io);
+        scrctl::wifi::Rppairing channel(carrier);
         io.feed(event_frame(j_obj({{"awaitingUserConsent", j_obj({})}})));
         io.feed(data_reply());
         int progress_calls = 0;
@@ -713,7 +720,8 @@ void test_pair_setup() {
     {
         // 拒绝：那句 NSLocalizedDescription 是人话，必须原样抬出去。
         MemStream io;
-        scrctl::wifi::Rppairing channel(io);
+        scrctl::wifi::FramedCarrier carrier(io);
+        scrctl::wifi::Rppairing channel(carrier);
         scrctl::json::Value user_info = j_obj({{"NSLocalizedDescription", j_str("User denied pairing")}});
         scrctl::json::Value wrapped = j_obj({{"userInfo", std::move(user_info)}});
         scrctl::json::Value rejected = j_obj({{"wrappedError", std::move(wrapped)}});
@@ -728,7 +736,8 @@ void test_pair_setup() {
     {
         // 既不是数据也不是已知状态：报出来的是设备实际给了哪些字段，方便现场对上号。
         MemStream io;
-        scrctl::wifi::Rppairing channel(io);
+        scrctl::wifi::FramedCarrier carrier(io);
+        scrctl::wifi::Rppairing channel(carrier);
         io.feed(event_frame(j_obj({{"somethingNew", j_obj({})}})));
         std::string odd_err;
         check(!scrctl::wifi::pairing_data_roundtrip(channel, Bytes{0x00}, "setupManualPairing", true,
@@ -736,6 +745,107 @@ void test_pair_setup() {
               "认不出的回信形状要判成失败");
         check(odd_err.find("somethingNew") != std::string::npos,
               "认不出时要把设备给的字段名列出来");
+    }
+}
+
+
+/// json::Value 只有 find（返回指针），链式取值读起来太吵；测试里用这个。
+const scrctl::json::Value &jat(const scrctl::json::Value &value, std::string_view key) {
+    static const scrctl::json::Value kMissing{};
+    const auto *found = value.find(key);
+    return found != nullptr ? *found : kMissing;
+}
+
+/// 配对信封在 RemoteXPC 载体上的类型规则。
+///
+/// 为什么这三条值得单独立判据：类型发错的症状与"设备不喜欢我们的字段"完全一样
+/// （连接当场 invalidated），而 iOS 27 只在这条载体上收 pair-setup（docs §25.8），
+/// 所以这里错了，真机上看到的又是那十条已否证假设的样子。
+void test_pairing_xpc() {
+    using scrctl::xpc::Type;
+    std::string err;
+
+    const Bytes tlv = from_hex("01010203040506");
+    {
+        const auto payload = j_obj({{"data", j_str(scrctl::wifi::b64_encode(tlv))},
+                                    {"kind", j_str("setupManualPairing")},
+                                    {"startNewSession", j_bool(false)},
+                                    {"sendingHost", j_str("YJBeetle-M2")}});
+        const auto inner = j_obj(
+            {{"event", j_obj({{"_0", j_obj({{"pairingData", j_obj({{"_0", payload}})}})}})}});
+        const auto envelope = j_obj({{"message", j_obj({{"plain", j_obj({{"_0", inner}})}})},
+                                     {"originatedBy", j_str("host")},
+                                     {"sequenceNumber", j_int(7)}});
+        const auto x = scrctl::remote::json_to_xpc(envelope, err);
+        check(x.has_value(), "配对信封要能转成 XPC 字典");
+        if (!x) {
+            return;
+        }
+        const auto &seq = x->at("sequenceNumber");
+        check(seq.type == Type::UInt64 && seq.uint64 == 7, "sequenceNumber 得是 XPC uint64");
+        const auto &data = x->at("message").at("plain").at("_0").at("event").at("_0")
+                               .at("pairingData").at("_0").at("data");
+        check(data.type == Type::Data && data.data == tlv,
+              "pairingData._0.data 得是 XPC data，字节要一模一样");
+        const auto &kind = x->at("message").at("plain").at("_0").at("event").at("_0")
+                               .at("pairingData").at("_0").at("kind");
+        check(kind.type == Type::String && kind.string == "setupManualPairing",
+              "同一层的 kind 仍是字符串（规则是看路径的，不是看类型猜的）");
+        const auto back = scrctl::remote::xpc_to_json(*x, err);
+        check(back.has_value() && scrctl::json::write(*back) == scrctl::json::write(envelope),
+              "转回 JSON 要与原信封逐字节等价（data 还原成同一份 base64）");
+    }
+    {
+        const Bytes cipher = from_hex("aabbccdd");
+        const auto envelope =
+            j_obj({{"message", j_obj({{"streamEncrypted",
+                                       j_obj({{"_0", j_str(scrctl::wifi::b64_encode(cipher))}})}})},
+                   {"originatedBy", j_str("host")},
+                   {"sequenceNumber", j_int(3)}});
+        const auto x = scrctl::remote::json_to_xpc(envelope, err);
+        check(x.has_value(), "加密信封要能转成 XPC");
+        const auto &slot = x->at("message").at("streamEncrypted").at("_0");
+        check(slot.type == Type::Data && slot.data == cipher, "streamEncrypted._0 得是 XPC data");
+    }
+    {
+        // handshake 那条：wireProtocolVersion 是有符号 int64，不是 uint64。
+        const auto handshake = j_obj(
+            {{"hostOptions", j_obj({{"attemptPairVerify", j_bool(true)}})},
+             {"wireProtocolVersion", j_int(scrctl::wifi::kWireProtocolVersion)}});
+        const auto request = j_obj({{"request", j_obj({{"_0", j_obj(
+            {{"handshake", j_obj({{"_0", handshake}})}})}})}});
+        const auto envelope = j_obj({{"message", j_obj({{"plain", j_obj({{"_0", request}})}})},
+                                     {"originatedBy", j_str("host")},
+                                     {"sequenceNumber", j_int(0)}});
+        const auto x = scrctl::remote::json_to_xpc(envelope, err);
+        const auto &ver = x->at("message").at("plain").at("_0").at("request").at("_0")
+                              .at("handshake").at("_0").at("wireProtocolVersion");
+        check(ver.type == Type::Int64 && ver.int64 == scrctl::wifi::kWireProtocolVersion,
+              "wireProtocolVersion 得是 XPC int64");
+        const auto &attempt = x->at("message").at("plain").at("_0").at("request").at("_0")
+                                    .at("handshake").at("_0").at("hostOptions").at("attemptPairVerify");
+        check(attempt.type == Type::Bool && attempt.boolean, "attemptPairVerify 得是 XPC bool");
+    }
+    {
+        // 别处的 data 字符串不该被当成二进制：那条 base64 解不出来，误判会直接报错。
+        const auto envelope = j_obj(
+            {{"response", j_obj({{"_1", j_obj({{"data", j_str("not base64 at all!")}})}})}});
+        const auto x = scrctl::remote::json_to_xpc(envelope, err);
+        check(x.has_value() && x->at("response").at("_1").at("data").type == Type::String,
+              "不在 pairingData 下的 data 仍按字符串转");
+    }
+    {
+        // 设备的 identifier 在这条载体上可能是 UUID 对象；还原成与字节流载体同一种文本，
+        // 上层读到的才是同一个东西。
+        scrctl::xpc::Value dict = scrctl::xpc::make_dict();
+        scrctl::xpc::dict_set(dict, "identifier",
+                              scrctl::xpc::make_uuid(from_hex("ac1066559e9f344596b3075257af1912")));
+        scrctl::xpc::dict_set(dict, "port", scrctl::xpc::make_uint64(49152));
+        const auto j = scrctl::remote::xpc_to_json(dict, err);
+        check(j.has_value(), "XPC 字典要能转成 JSON");
+        check(j && jat(*j, "identifier").as_string_or() == "ac106655-9e9f-3445-96b3-075257af1912",
+              "UUID 要还原成 8-4-4-4-12 文本");
+        check(j && jat(*j, "port").as_int_or() == 49152, "uint64 要变成 JSON 整数");
     }
 }
 
@@ -750,6 +860,7 @@ int main() {
     test_rppairing();
     test_pair_verify_shape();
     test_pair_setup();
+    test_pairing_xpc();
     std::printf("%d 条判据，%d 条不通过\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

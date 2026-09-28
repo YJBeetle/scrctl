@@ -57,6 +57,15 @@ public:
     /// 回信，用 call() 就是每个点等一次超时，注入延迟立刻变成秒级。
     bool send_only(const xpc::Value &request, std::string &err);
 
+    /// 原始收信：不套 CoreDevice 那层 feature 信封，回信原样交出。
+    ///
+    /// 为什么不能用 call()：RemotePairing 的控制通道不是一发一收的形状——设备可能
+    /// 先回一条 `awaitingUserConsent` 再回数据（两条回信对一次发送），也可能干脆
+    /// 不回（iOS 27 的 verify 探针就是这样，docs §25.6）。发与等必须能分开调，
+    /// 发那一半用上面的 `send_only`（参考实现在这条通道上也不带 WANTING_REPLY）。
+    /// Timeout 与 Broken 分开交出来，理由同 `Channel::wait`。
+    Channel::Wait wait_message(xpc::Value &out, int timeout_ms, std::string &err);
+
     /// 流式 feature：一次请求、**多条**回信，直到设备发 finishStreaming。
     ///
     /// 为什么要有它：`listapps` 把全部 App 一次性装进一个回信，在这台设备上是几 MB，

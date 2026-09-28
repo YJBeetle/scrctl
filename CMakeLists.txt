@@ -128,6 +128,7 @@ add_library(scrctl_core STATIC
         src/remote/Pasteboard.cpp
         src/remote/DisplayInfo.cpp
         src/remote/App.cpp
+        src/remote/PairingChannel.cpp
         src/bitstream/AnnexB.cpp
         src/hid/Hid.cpp
         src/wifi/Crypto.cpp

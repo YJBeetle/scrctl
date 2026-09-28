@@ -2494,13 +2494,13 @@ share with this Mac.」——文案里写死了 27.0。至此这个边界有两�
 - **Wi-Fi / pair-setup 不在这一轮**：按用户指示留到其 iPhone 上做（协议栈与版本门槛无关，
   媒体流的 9021 不影响隧道那一层；且给借来的设备写配对记录不合适）。
 
-## 25. pair-setup：代码写完了，但 iOS 27 的设备不收（实测，iPhone13 mini / iOS 27.0 / 两条控制面）
+## 25. pair-setup：iOS 27 上被设备拒收的追查（已解决，答案在 25.8：门在传输层）
 
-这一节记的是"做完了哪几段、被什么挡住、挡住的证据是什么"。结论先行：**pair-setup 的实现
-（SRP-3072 + OPACK + M1..M6 + createRemoteUnlockKey）与离线判据都齐了，但在这台 iOS 27.0
-的真机上，设备在收到 setup 的 M1 后立刻掐掉连接，两条控制面都一样；参考实现（pymobiledevice3
-最新版）在同一台设备上症状完全相同**——所以挡住我们的不是我们的字节，是设备侧的一个我们还没
-找到的前置条件。
+这一节记的是"做完了哪几段、被什么挡住、挡住的证据是什么、最后怎么通的"。结论先行：
+**pair-setup 的实现（SRP-3072 + OPACK + M1..M6 + createRemoteUnlockKey）与离线判据一直是齐的，
+挡住的从来不是我们的字节，而是载体**——iOS 27 只在 RemoteXPC 入口上受理 pair-setup，字节流
+入口一律在 M1 就把连接 invalidate 掉。把同一套信封改由 XPC 字典承载之后当场走通（25.8）。
+25.1–25.7 保留为追查记录：那十一条被逐条否证的假设正是"门在传输层"这个答案的证据链。
 
 ### 25.1 已经落地的部分
 
@@ -2619,3 +2619,57 @@ pair-setup 要通，得把配对通道搬上 RemoteXPC 入口：lockdown StartSe
 （名字待枚举），复用 `src/http2` + `src/xpc` + `src/remote/RemoteXpc.cpp` 那套栈（#48 读 RSD 用的
 就是它），RPPairing 的 JSON 信封改由 xpc 消息承载。代码侧本轮已把协议层改对（kind 可配、
 verify 探针用真钥匙、M2-ERROR 的正确收尾），离线判据 100 条仍全绿；差的只是这层传输。
+
+### 25.8 通了：载体搬上 RemoteXPC，字段一个没改（实测，2026-09-29 05:31，同一台设备）
+
+**结果**：`wifi_probe --pair-setup-xpc --pairing-kind setupManualPairing` 全程走通，记录落盘
+`~/.local/share/scrctl/remote-00008110_000429000209801E.pair`，随后**另开一条控制面**用这条新
+记录 pair-verify 通过。设备侧 `remotepairingdeviced` 的钥匙串条目从 1 条变 2 条，并且能按我们的
+identifier 查到（日志原话 `Found paired peer matching query`）——macOS/Xcode 自己那条（identifier
+`15C2DCDC-…`）没被动过，这正是 identifier 加 `.scrctl` 后缀想要的效果。
+
+**入口在哪**：不在 lockdown 的服务名里，而在**隧道内的 RSD 服务表**里。`--usb-services` 打出 85 个
+服务，唯一与配对相关的字节流入口是 `com.apple.dt.remotepairingdeviced.lockdown.shim.remote`
+（UsesRemoteXPC=false，就是 25.3 里被掐的那条）；真正的 RemoteXPC 入口是
+`com.apple.internal.dt.coredevice.untrusted.tunnelservice`（UsesRemoteXPC=true，entitlement
+`com.apple.dt.coredevice.tunnelservice.client`，端口每次变：实测 61615/61703/61797/61885）。路径是
+USB lockdown → `com.apple.internal.devicecompute.CoreDeviceProxy` → 包隧道 → 用户态栈 → RSD →
+该服务的 RemoteXPC 连接。
+
+**载体长什么样**（量出来的，来自参考实现 + 真机往返）：
+- 连上后设备**先自报一句** `{ServiceVersion: 2}`，要在发 handshake 之前消费掉；
+- 每条信封裹进 XPC 字典 `{mangledTypeName: "RemotePairing.ControlChannelMessageEnvelope",
+  value: <信封>}`，发送**不带** WANTING_REPLY，回信照样来；
+- 类型规则三处：`pairingData._0.data` 与 `message.streamEncrypted._0` 必须是 **XPC data**
+  （字节流载体上它们是 base64 文本），`sequenceNumber` 必须是 XPC uint64，
+  `wireProtocolVersion` 是 int64；回信方向 data→base64、uint64→整数、UUID→8-4-4-4-12 文本，
+  于是两种载体交给上层的形状完全一致，`pair_setup()`/`pair_verify()` 一行没改。
+
+**kind 决定要不要"授权"**（两条都是设备原话）：
+- `upgradeNonAutomationLockdownPairing`（Xcode 成功样本用的那个）→ `pairingRejectedWithError:
+  This host is not authorized to complete promptless pairing`。同一趟 handshake 里设备自报
+  `allowsPromptlessAutomationPairingUpgrade=是`，所以这不是设备能力开关，而是**按主机授权**：
+  Xcode/macOS 有资格走免提示升级，我们没有。
+- `setupManualPairing` → 设备回 `awaitingUserConsent`、屏幕上弹提示、点了之后三轮 SRP →
+  `SRP 双向证明通过` → M5/M6 → `authenticated`。
+
+**同意窗口约 29 秒**（量出来的）：`awaitingUserConsent` 之后设备在 ~29s 自己写下
+`The notification was cancelled`，14 毫秒后 `Lockdown tunnel connection receive error`，整条面拆掉。
+第一趟就是这么死的——当时误以为"是不是谁点了不要"，日志证明是超时。所以探针里的音效要绑在
+"设备说在等同意"那一刻响，而不是绑在进程启动那一刻。
+
+**那张提示不是 lockdownd 的「信任此电脑？」**（用户观察 + 推断）：苹果自己那条是中文的，我们这条
+渲染成英文。结合日志里的进程名，推断它来自 `remotepairingdeviced`/CoreDevice 那层的开发者配对
+提示，与 lockdown 的信任 sheet 是两套 UI。这一条只是解释现象，不影响实现。
+
+**这台设备在该面上自报的 handshake**：`wireProtocolVersion=26`（我们仍发 19，设备接受）；
+`deviceOptions`: allowsFreePairing=否、allowsIncomingTunnelConnections=是、allowsPairSetup=是、
+allowsPinlessPairing=是、allowsPromptlessAutomationPairingUpgrade=是、allowsSharingSensitiveInfo=是；
+设备自报 identifier 尾 4 位 = `801E`（就是它 UDID 的尾巴）。
+
+**代码侧的形状**：`Rppairing` 底下抽出 `EnvelopeCarrier`（`write_envelope`/`read_envelope`/
+`wait_readable`），字节流帧成为 `FramedCarrier`，RemoteXPC 成为 `remote::XpcPairingCarrier`
+（`src/remote/PairingChannel.*`，含 JSON↔XPC 转换与那三条类型规则）。离线判据从 100 条增到 113 条
+（新增的全部针对转换器：三条类型规则、往返等价、UUID 文本化、"别处的 data 不当二进制"）。
+25.6 那十一条已否证的字段假设一条都不用翻案：**门确实只在传输层**。
+

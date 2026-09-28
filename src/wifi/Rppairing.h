@@ -58,21 +58,50 @@ json::Value j_obj(std::vector<std::pair<std::string, json::Value>> kv);
 /// pair-verify 的 handshake 用的是同一条，所以放在这里共用。
 inline constexpr int64_t kWireProtocolVersion = 19;
 
-/// RemotePairing 控制通道：帧、信封、序号、主密钥。
+/// 信封的搬运工。同一套 RemotePairing 信封有两种载体：
+///   字节流上的 `"RPPairing" + u16 长度 + JSON 文本`（Wi-Fi 手动配对面 49152、
+///   lockdown 服务 `com.apple.dt.remotepairingdeviced.lockdown`）；
+///   RemoteXPC 上的一个 XPC 字典（隧道内的 untrusted.tunnelservice）。
+/// iOS 27 只在后者上收 pair-setup，前者一律 M1 即 invalidated（docs §25.6/§25.8），
+/// 所以配对的逻辑必须与载体解耦——这层就是那个缝。
+class EnvelopeCarrier {
+public:
+    virtual ~EnvelopeCarrier() = default;
+    /// 发一条完整信封（`{message, originatedBy, sequenceNumber}`）。
+    virtual bool write_envelope(const json::Value &envelope, std::string &err) = 0;
+    /// 收一条完整信封。
+    virtual std::optional<json::Value> read_envelope(std::string &err) = 0;
+    /// ms 毫秒内有没有回信可读。pair-setup 的 verify 探针要用它判"设备这次到底
+    /// 回不回话"（iOS 27 上签名有效但 identifier 未知时它**不回**，docs §25.6）。
+    virtual bool wait_readable(int ms, std::string &err) = 0;
+};
+
+inline constexpr std::string_view kRpPairingMagic = "RPPairing";
+
+/// 字节流载体：帧格式实测来自 iOS 27 上的往返，不是文档。
+class FramedCarrier final : public EnvelopeCarrier {
+public:
+    explicit FramedCarrier(ByteStream &io) : io_(io) {}
+    bool write_envelope(const json::Value &envelope, std::string &err) override;
+    std::optional<json::Value> read_envelope(std::string &err) override;
+    bool wait_readable(int ms, std::string &err) override { return io_.wait_readable(ms, err); }
+
+private:
+    ByteStream &io_;
+};
+
+/// RemotePairing 控制通道：信封、序号、主密钥。
 ///
-/// 帧格式（实测来自 iOS 27 上的往返，不是文档）：
-///   `"RPPairing"` + `长度:u16 大端` + 该长度的 JSON 文本。
 /// 信封有两种：`message.plain._0`（明文，里面再套 request/event/response）与
-/// `message.streamEncrypted._0`（base64 的一段 ChaCha20-Poly1305）。
+/// `message.streamEncrypted._0`（ChaCha20-Poly1305 的一段密文；字节流载体上是它的
+/// base64 文本，XPC 载体上是 XPC data）。
 ///
 /// 序号那一条规矩最容易写错：**只有明文发送会推进 `sequenceNumber`**，配对完成后的
 /// 加密请求全部沿用当时那个值不变。看着别扭，但对端按这个来——自己"顺手也加一"会
 /// 在 createListener 那一步被拒，而且症状像"权限不够"。
 class Rppairing {
 public:
-    static constexpr std::string_view kMagic = "RPPairing";
-
-    explicit Rppairing(ByteStream &io) : io_(io) {}
+    explicit Rppairing(EnvelopeCarrier &carrier) : carrier_(carrier) {}
 
     /// 装 pair-verify 得到的两条主密钥（各 32 字节），之后才能走加密往返。
     void install_main_keys(Bytes client_key, Bytes server_key);
@@ -94,7 +123,7 @@ public:
 
     /// ms 毫秒内有没有回信可读。pair-setup 的 verify 探针靠它区分"设备不回话"与
     /// "设备回了 Msg04"（iOS 27 上前者才是"没配对"的正常表现，docs §25.6）。
-    bool reply_pending(int ms, std::string &err) { return io_.wait_readable(ms, err); }
+    bool reply_pending(int ms, std::string &err) { return carrier_.wait_readable(ms, err); }
 
     [[nodiscard]] uint64_t sequence() const { return sequence_; }
     [[nodiscard]] uint64_t encrypted_sequence() const { return encrypted_sequence_; }
@@ -102,7 +131,7 @@ public:
 private:
     bool send_envelope(const json::Value &message, std::string &err);
 
-    ByteStream &io_;
+    EnvelopeCarrier &carrier_;
     uint64_t sequence_ = 0;
     uint64_t encrypted_sequence_ = 0;
     Bytes client_main_;

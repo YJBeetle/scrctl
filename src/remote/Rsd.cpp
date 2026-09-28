@@ -207,6 +207,14 @@ bool ServiceConnection::service(int timeout_ms, std::string &err) {
     return channel_->service(timeout_ms, err);
 }
 
+Channel::Wait ServiceConnection::wait_message(xpc::Value &out, int timeout_ms, std::string &err) {
+    if (channel_ == nullptr) {
+        err = "这条服务连接不是 RemoteXPC 服务";
+        return Channel::Wait::Broken;
+    }
+    return channel_->wait(out, timeout_ms, err);
+}
+
 namespace {
 
 /// 设备侧的失败写法是 CoreDevice.error = {code, userInfo.NSLocalizedDescription}。

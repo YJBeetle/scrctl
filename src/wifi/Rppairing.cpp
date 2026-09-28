@@ -47,19 +47,42 @@ void Rppairing::install_main_keys(Bytes client_key, Bytes server_key) {
     server_main_ = std::move(server_key);
 }
 
-bool Rppairing::send_envelope(const json::Value &message, std::string &err) {
-    const std::string text = json::write(message);
+bool FramedCarrier::write_envelope(const json::Value &envelope, std::string &err) {
+    const std::string text = json::write(envelope);
     if (text.size() > 0xFFFF) {
         err = "帧太长，u16 长度字段放不下";
         return false;
     }
     Bytes buf;
-    buf.reserve(kMagic.size() + 2 + text.size());
-    buf.insert(buf.end(), kMagic.begin(), kMagic.end());
+    buf.reserve(kRpPairingMagic.size() + 2 + text.size());
+    buf.insert(buf.end(), kRpPairingMagic.begin(), kRpPairingMagic.end());
     buf.push_back(static_cast<uint8_t>(text.size() >> 8));
     buf.push_back(static_cast<uint8_t>(text.size() & 0xFF));
     buf.insert(buf.end(), text.begin(), text.end());
     return io_.write_all(buf.data(), buf.size(), err);
+}
+
+std::optional<json::Value> FramedCarrier::read_envelope(std::string &err) {
+    uint8_t header[kRpPairingMagic.size() + 2];
+    if (!io_.read_exact(header, sizeof(header), err)) {
+        return std::nullopt;
+    }
+    if (std::memcmp(header, kRpPairingMagic.data(), kRpPairingMagic.size()) != 0) {
+        err = "帧头不是 RPPairing，说明我们对上了一个不对的端口或者流错位了";
+        return std::nullopt;
+    }
+    const size_t len = (static_cast<size_t>(header[kRpPairingMagic.size()]) << 8) |
+                       static_cast<size_t>(header[kRpPairingMagic.size() + 1]);
+    Bytes body(len);
+    if (!io_.read_exact(body.data(), len, err)) {
+        return std::nullopt;
+    }
+    return json::parse(std::string_view(reinterpret_cast<const char *>(body.data()), body.size()),  // NOLINT
+                       &err);
+}
+
+bool Rppairing::send_envelope(const json::Value &message, std::string &err) {
+    return carrier_.write_envelope(message, err);
 }
 
 bool Rppairing::send_plain(const json::Value &inner, std::string &err) {
@@ -78,29 +101,12 @@ bool Rppairing::send_plain(const json::Value &inner, std::string &err) {
 }
 
 std::optional<json::Value> Rppairing::receive(std::string &err) {
-    uint8_t header[kMagic.size() + 2];
-    if (!io_.read_exact(header, sizeof(header), err)) {
+    const std::optional<json::Value> envelope = carrier_.read_envelope(err);
+    if (!envelope) {
         return std::nullopt;
     }
-    if (std::memcmp(header, kMagic.data(), kMagic.size()) != 0) {
-        err = "帧头不是 RPPairing，说明我们对上了一个不对的端口或者流错位了";
-        return std::nullopt;
-    }
-    const size_t len = (static_cast<size_t>(header[kMagic.size()]) << 8) |
-                       static_cast<size_t>(header[kMagic.size() + 1]);
-    Bytes body(len);
-    if (!io_.read_exact(body.data(), len, err)) {
-        return std::nullopt;
-    }
-    json::Value envelope;
-    const std::optional<json::Value> parsed =
-        json::parse(std::string_view(reinterpret_cast<const char *>(body.data()), body.size()), &err);  // NOLINT
-    if (!parsed) {
-        return std::nullopt;
-    }
-    envelope = *parsed;
 
-    const json::Value *message = envelope.find("message");
+    const json::Value *message = envelope->find("message");
     if (message == nullptr) {
         err = "信封里没有 message 字段";
         return std::nullopt;

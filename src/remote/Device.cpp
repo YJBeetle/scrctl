@@ -199,7 +199,8 @@ std::optional<Device> Device::establish_wifi(const std::string &address,
         return std::nullopt;
     }
     wifi::SocketStream stream(*control);
-    wifi::Rppairing channel(stream);
+    wifi::FramedCarrier carrier(stream);
+    wifi::Rppairing channel(carrier);
     const wifi::PairVerifyResult verified = wifi::pair_verify(channel, record, err);
     if (verified.outcome != wifi::VerifyOutcome::Paired) {
         if (verified.outcome == wifi::VerifyOutcome::NotPaired) {
