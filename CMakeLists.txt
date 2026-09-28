@@ -109,6 +109,7 @@ add_library(scrctl_core STATIC
         src/media/MediaOffer.cpp
         src/media/StreamSession.cpp
         src/media/FramePump.cpp
+        src/media/ScreenshotSource.cpp
         src/media/AudioPump.cpp
         src/rt/RtpHevc.cpp
         src/rt/RtpSeq.cpp

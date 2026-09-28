@@ -8,6 +8,7 @@
 #include "media/AudioPump.h"
 #include "media/FramePump.h"
 #include "media/MediaOffer.h"
+#include "media/ScreenshotSource.h"
 #include "plist/Bplist.h"
 #include "util/Deflate.h"
 
@@ -359,6 +360,48 @@ int main() {
             }
         }
         check(stops == 0, "扫一遍次数：没到上限之前永远不会提前躺平");
+    }
+
+    // 兜底镜像的 PNG→BGRA 是纯函数，离线钉死：一张 4x2 的已知像素 PNG（PIL 现造的），
+    // 逐像素对 BGRA 字节。libav 没编进来的构建走另一臂：必须明说而不是默默给空帧。
+    {
+        static const uint8_t kTinyPng[] = {
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
+            0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x02, 0x08, 0x02,
+            0x00, 0x00, 0x00, 0xf0, 0xca, 0xea, 0x34, 0x00, 0x00, 0x00, 0x17, 0x49, 0x44,
+            0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0xc0, 0x00, 0xc6, 0xff, 0xff,
+            0xff, 0x67, 0x64, 0x64, 0x62, 0x86, 0x03, 0x00, 0x6c, 0x82, 0x06, 0x1d, 0xfc,
+            0xf3, 0xfd, 0xce, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42,
+            0x60, 0x82};
+        const std::vector<uint8_t> png(std::begin(kTinyPng), std::end(kTinyPng));
+        scrctl::Frame f;
+        std::string err;
+        const bool ok = scrctl::media::decode_png_bgra(png, f, err);
+#ifdef SCRCTL_HAVE_LIBAV
+        check(ok && f.width == 4 && f.height == 2 && f.row_pitch == 16,
+              "4x2 PNG 解出 4x2 BGRA（row_pitch=16）: " + err);
+        if (ok) {
+            const uint8_t want[8][4] = {{0, 0, 255, 255},   {0, 255, 0, 255}, {255, 0, 0, 255},
+                                        {255, 255, 255, 255}, {3, 2, 1, 255},  {6, 5, 4, 255},
+                                        {9, 8, 7, 255},      {12, 11, 10, 255}};
+            bool pixels_ok = f.pixels.size() == 32;
+            for (int i = 0; pixels_ok && i < 8; ++i) {
+                for (int c = 0; c < 4; ++c) {
+                    if (f.pixels[i * 4 + c] != want[i][c]) {
+                        pixels_ok = false;
+                    }
+                }
+            }
+            check(pixels_ok, "逐像素 BGRA 字节序（B 在前、A=255）要对");
+        }
+        std::vector<uint8_t> garbage(64, 0x5a);
+        scrctl::Frame g;
+        check(!scrctl::media::decode_png_bgra(garbage, g, err) && !err.empty(),
+              "非 PNG 字节要失败且给原因: " + err);
+#else
+        check(!ok && err.find("libav") != std::string::npos,
+              "没编 libav 的构建要明说缺后端: " + err);
+#endif
     }
 
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);

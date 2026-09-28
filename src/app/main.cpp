@@ -36,6 +36,7 @@
 #include "hid/Hid.h"
 #include "media/AudioPump.h"
 #include "media/FramePump.h"
+#include "media/ScreenshotSource.h"
 #include "media/StreamSession.h"
 #include "remote/App.h"
 #include "remote/Device.h"
@@ -56,6 +57,9 @@ struct Options {
     bool no_control = false;  ///< scrcpy 的 --no-control：只看不动
     std::string title = "scrctl";
     bool stats = false;
+    /// --video-source=stream|screenshot。默认 stream：媒体流被设备按版本拒时自动降到
+    /// screenshot（见 LiveSource::start 的兜底门）；显式给 screenshot 是强制走兜底。
+    std::string video_source = "stream";
     bool crop_set = false;
     int crop_w = 0, crop_h = 0, crop_x = 0, crop_y = 0;
     double scale = 1.0;   ///< 窗口相对裁剪尺寸的缩放
@@ -173,6 +177,9 @@ void usage(const char *argv0) {
         "                     256KB，装不下的帧会被丢掉并重起会话\n"
         "  --title TITLE        窗口标题\n"
         "  --stats              每秒打印帧率统计\n"
+        "  --video-source NAME  画面从哪来：stream（默认，设备推的实时媒体流）或 screenshot\n"
+        "                     （截图轮询兜底，约 2 fps）。媒体流被设备按版本拒（iOS 27 以下）\n"
+        "                     时会自动降到 screenshot 并打一行说明；这条是强制指定\n"
         "  --exit-after N       渲染 N 帧后退出\n"
         "  --verify N FILE      渲染到第 N 帧时把窗口内容回读存为 BMP\n"
         "  --test-touch X0,Y0,X1,Y1\n"
@@ -300,6 +307,12 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.scale_given = true;
         } else if (a == "--stats") {
             o.stats = true;
+        } else if (a == "--video-source") {
+            o.video_source = next("--video-source");
+            if (o.video_source != "stream" && o.video_source != "screenshot") {
+                std::fprintf(stderr, "--video-source 只认 stream / screenshot\n");
+                return false;
+            }
         } else if (a == "--exit-after") {
             o.exit_after = std::atoi(next("--exit-after"));
         } else if (a == "--verify") {
@@ -1002,7 +1015,7 @@ public:
     /// `audio_buffer_ms` = `--audio-buffer`：缓冲想维持的水位。
     bool start(const std::string &serial, const std::string &wifi, const std::string &record_path,
                bool hw_decode, bool watch_display, bool want_audio, int audio_buffer_ms,
-               std::string &err);
+               const std::string &video_source, std::string &err);
 
     /// 打开声卡。要和 `start()` 分开的唯一原因：`start()` 跑在 `SDL_Init` 之前
     /// （窗口还没建就得先有源），而 SDL 的音频子系统在那之后才有。
@@ -1035,6 +1048,9 @@ public:
     }
 
     bool next(scrctl::Frame &out, int timeout_ms) override {
+        if (shot_ != nullptr) {
+            return shot_->latest(out, shot_serial_, timeout_ms);
+        }
         if (pump_ == nullptr) {
             return false;
         }
@@ -1070,6 +1086,23 @@ public:
     /// 被当成每秒读数读了 16 秒，直接把结论带偏到"设备只编 12 帧"上——而它真正的
     /// 意思是这一段里我们一共只收到 110 包/秒。一个没有分母的数不是读数。
     void print_stats() override {
+        if (shot_ != nullptr) {
+            // 兜底路只有一把尺：截图张数。打速率不打累计（§20 那条教训：没有分母的
+            // 数不是读数），失败数单独给——它是"设备开始拒截图"的唯一信号。
+            const auto st = shot_->stats();
+            const uint64_t now = SDL_GetTicks64();
+            const double secs = last_stats_ms_ == 0
+                                    ? 1.0
+                                    : std::max(0.001, static_cast<double>(now - last_stats_ms_) / 1000.0);
+            std::printf("  兜底截图: 画面 %5.2f/s 累计 %llu 张 / %llu KB 失败 %llu\n",
+                        static_cast<double>(st.frames - last_shot_frames_) / secs,
+                        static_cast<unsigned long long>(st.frames),
+                        static_cast<unsigned long long>(st.bytes / 1024),
+                        static_cast<unsigned long long>(st.failures));
+            last_shot_frames_ = st.frames;
+            last_stats_ms_ = now;
+            return;
+        }
         if (pump_ == nullptr) {
             return;
         }
@@ -1214,6 +1247,7 @@ private:
     uint64_t last_audio_decoded_ = 0;
     uint64_t last_audio_delivered_ = 0;
     uint64_t last_stats_ms_ = 0;
+    uint64_t last_shot_frames_ = 0;
     /// 起流之前向设备要来的**可见区**尺寸（0/0 = 没问到）。见 `display_size()`。
     int display_w_ = 0;
     int display_h_ = 0;
@@ -1234,6 +1268,11 @@ private:
     std::unique_ptr<scrctl::hid::Buttons> buttons_;
     bool hid_unavailable_ = false;
     uint64_t serial_ = 0;
+
+    /// 截图轮询兜底源。媒体流被设备按版本拒（iOS 27 以下）时顶上：画面约 2 fps，
+    /// 但触摸/按键注入走的是同一条 HID 路，不受影响。与 pump_ 互斥（一个会话只有一条画面路）。
+    std::unique_ptr<scrctl::media::ScreenshotSource> shot_;
+    uint64_t shot_serial_ = 0;
 };
 
 namespace {
@@ -1271,7 +1310,8 @@ LiveSource::~LiveSource() = default;
 
 bool LiveSource::start(const std::string &serial, const std::string &wifi,
                        const std::string &record_path, bool hw_decode, bool watch_display,
-                       bool want_audio, int audio_buffer_ms, std::string &err) {
+                       bool want_audio, int audio_buffer_ms, const std::string &video_source,
+                       std::string &err) {
     auto dev = open_device(serial, wifi, err);
     if (!dev) {
         return false;
@@ -1341,16 +1381,61 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
 
     pump_ = scrctl::media::FramePump::start(*device_, options, err);
     if (pump_ == nullptr) {
+        // 兜底门：媒体流被设备按版本拒（iOS 27 以下，code 9021，设备原话里带
+        // "requires iOS"）时改走截图轮询。只在**这一种**失败上自动降级——别的失败
+        // （比如另一客户端占着流）自动降到 2 fps 会把真问题盖住；想强制就用
+        // --video-source=screenshot。
+        const bool version_gate = err.find("requires iOS") != std::string::npos;
+        if (version_gate || video_source == "screenshot") {
+            const std::string stream_err = err;
+            std::string serr;
+            auto shot = scrctl::media::ScreenshotSource::start(*device_, serr);
+            if (shot != nullptr) {
+                std::printf("媒体流不可用：%s\n", stream_err.c_str());
+                std::printf("改用截图轮询兜底：实测一次截图约 0.5 秒，画面约 2 fps——能看能操作，"
+                            "不是能看视频；触摸/按键注入走同一条 HID 路，不受影响\n");
+                shot_ = std::move(shot);
+                err.clear();
+            } else if (video_source == "screenshot") {
+                err = "截图兜底也起不来: " + serr;
+                return false;
+            }
+        }
+    }
+    if (pump_ == nullptr && shot_ == nullptr) {
         return false;
     }
     scrctl::Frame first;
-    if (!pump_->latest(first, 5000)) {
+    if (shot_ != nullptr) {
+        uint64_t s = 0;
+        if (!shot_->latest(first, s, 5000)) {
+            err = "兜底路 5 秒内没拿到第一张截图";
+            shot_.reset();
+            return false;
+        }
+        shot_serial_ = 0;  // 首帧留给主循环去渲染：这里取它只为读尺寸与打日志
+        // 截图的像素尺寸就是可见区尺寸（没有 HEVC 的 CU 填充），而且它已按界面方向
+        // 摆正。iOS 18 上 deviceinfo 服务不在目录里，问几何那一问必然空手，这里补上。
+        if (display_w_ == 0) {
+            display_w_ = static_cast<int>(first.width);
+            display_h_ = static_cast<int>(first.height);
+            display_id_ = options.display_id;
+            display_name_ = "截图即可见区";
+            degrees_ = 0;
+        }
+    } else if (!pump_->latest(first, 5000)) {
         err = "5 秒内没解出第一帧";
         return false;
     }
-    std::printf("流已建立：%s / iOS %s，收流端口=%u PT=%u，首帧 %ux%u\n",
-                device_->property("ProductType").c_str(), device_->property("OSVersion").c_str(),
-                pump_->receiver_port(), pump_->payload_type(), first.width, first.height);
+    if (shot_ != nullptr) {
+        std::printf("兜底镜像已建立：%s / iOS %s，截图 %ux%u（约 2 fps）\n",
+                    device_->property("ProductType").c_str(), device_->property("OSVersion").c_str(),
+                    first.width, first.height);
+    } else {
+        std::printf("流已建立：%s / iOS %s，收流端口=%u PT=%u，首帧 %ux%u\n",
+                    device_->property("ProductType").c_str(), device_->property("OSVersion").c_str(),
+                    pump_->receiver_port(), pump_->payload_type(), first.width, first.height);
+    }
     // 打在这里而不是打在 `resolve_crop` 里，是因为控制单元那条路根本没有窗口：
     // "几何到底是设备报的还是那张兜底表"必须是**任何**跑法都能一眼看到的读数。
     if (display_w_ > 0) {
@@ -1359,7 +1444,11 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
                     display_name_.c_str(), degrees_, first.width, first.height);
     }
     if (!record_path.empty()) {
-        std::printf("录制到 %s\n", record_path.c_str());
+        if (shot_ != nullptr) {
+            std::printf("兜底路不录 Annex-B（没有码流可录），--record 这次忽略\n");
+        } else {
+            std::printf("录制到 %s\n", record_path.c_str());
+        }
     }
 
     // 音频腿排在视频腿之后：它要一个 RPC 来回（实测 80~100ms），而窗口的第一帧不该
@@ -1368,7 +1457,10 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     //
     // 起不来只打一行、不改返回值：`--no-audio` 之外的失败（设备拒了、非 Apple 平台
     // 没有后端）都不该让整个镜像退出。
-    if (want_audio) {
+    if (want_audio && shot_ != nullptr) {
+        std::printf("兜底路没有音频腿：设备系统输出那一路和媒体流同属被版本拒的一族，不再去撞\n");
+    }
+    if (want_audio && shot_ == nullptr) {
         if (!scrctl::kHaveAudioDecoder) {
             std::fprintf(stderr, "%s\n", scrctl::kNoAudioDecoderMessage);
         } else {
@@ -1536,7 +1628,7 @@ int main(int argc, char **argv) {
         auto made = std::make_unique<LiveSource>();
         std::string err;
         if (!made->start(o.serial, o.wifi, o.record, o.hw_decode, !o.no_window && o.orientation < 0,
-                         !o.no_audio, o.audio_buffer_ms, err)) {
+                         !o.no_audio, o.audio_buffer_ms, o.video_source, err)) {
             std::fprintf(stderr, "起流失败: %s\n", err.c_str());
             // 设备在通话中会直接拒绝起流（code 9022）。实测这时它的会话表是空的
             // （getmediastreamserverstatus 回 sessions: []），所以不是"有条旧流占着"，
