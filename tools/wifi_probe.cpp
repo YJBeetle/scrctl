@@ -258,12 +258,17 @@ bool open_plane(const PlaneSpec &spec, bool verbose, PairingPlane &out, std::str
 /// 密钥才算数；而设备认不认，只有拿落盘的记录再握一次手才问得出来。
 int finish_pair_setup(const PlaneSpec &spec, std::string udid,
                       const std::string &host_id_override, bool verbose, bool save,
-                      bool probe_verify_first) {
+                      bool probe_verify_first, const std::string &host_name_override) {
     std::string err;
-    const std::string hostname = scrctl::wifi::local_hostname();
+    std::string hostname = scrctl::wifi::local_hostname();
     if (hostname.empty()) {
         std::fprintf(stderr, "取不到本机主机名\n");
         return 1;
+    }
+    if (!host_name_override.empty()) {
+        // sendingHost 是设备做"同一主机"判定的名字（docs §25）：换一个新名字可以绕开
+        // 按主机名的冷却/撤销策略，也是把这条策略单独 isolating 出来的判据。
+        hostname = host_name_override;
     }
     // identifier 默认**不**用苹果那个 uuid3(hostname)。理由值得记一句：identifier 相同
     // 在设备那边就是同一条配对记录，pair-setup 会把 Xcode/macOS 自己那把 Ed25519 顶掉
@@ -342,7 +347,7 @@ int finish_pair_setup(const PlaneSpec &spec, std::string udid,
 ///       出来的，见 docs），所以这条路只用来复现那个症状。
 int run_pair_setup(const std::string &address, int port, const std::string &udid_filter,
                    const std::string &host_id_override, bool verbose, bool save,
-                   bool probe_verify_first) {
+                   bool probe_verify_first, const std::string &host_name_override) {
     std::string err;
     PlaneSpec spec;
     spec.address = address;
@@ -400,7 +405,7 @@ int run_pair_setup(const std::string &address, int port, const std::string &udid
         spec.use_tls = endpoint->requires_tls;
         spec.identity = lockdown->identity();
         return finish_pair_setup(spec, device.udid, host_id_override, verbose, save,
-                                 probe_verify_first);
+                                 probe_verify_first, host_name_override);
     }
 
     // Wi-Fi 面：连接本身不带 UDID，落盘的文件名要它——插着一台 USB 设备就当是它
@@ -429,7 +434,8 @@ int run_pair_setup(const std::string &address, int port, const std::string &udid
         }
     }
     std::printf("控制面 %s:%d（Wi-Fi 手动配对面）\n", address.c_str(), port);
-    return finish_pair_setup(spec, udid, host_id_override, verbose, save, probe_verify_first);
+    return finish_pair_setup(spec, udid, host_id_override, verbose, save, probe_verify_first,
+                             host_name_override);
 }
 
 }  // namespace
@@ -442,6 +448,7 @@ int main(int argc, char **argv) {
     bool want_pair_setup = false;
     bool save_record_to_disk = true;
     bool probe_verify_first = true;
+    std::string host_name_override;
     int port = 49152;
     for (int i = 1; i < argc; ++i) {
         auto next = [&](std::string &dst) {
@@ -478,6 +485,8 @@ int main(int argc, char **argv) {
             save_record_to_disk = false;
         } else if (std::strcmp(argv[i], "--no-verify-probe") == 0) {
             probe_verify_first = false;
+        } else if (std::strcmp(argv[i], "--host-name") == 0) {
+            next(host_name_override);
         } else {
             std::fprintf(stderr, "未知参数 %s\n", argv[i]);
             return 2;
@@ -485,7 +494,7 @@ int main(int argc, char **argv) {
     }
     if (want_pair_setup) {
         return run_pair_setup(address, port, udid, host_id, verbose, save_record_to_disk,
-                              probe_verify_first);
+                              probe_verify_first, host_name_override);
     }
     if (address.empty()) {
         std::fprintf(stderr,
