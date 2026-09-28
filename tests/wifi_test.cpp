@@ -818,6 +818,37 @@ void test_record_listing() {
         scrctl::wifi::list_record_udids((root / "nope").string(), err);
     check(none.empty(), "目录不存在要当成'一条都没有'，不是错误");
     std::filesystem::remove_all(root, ec);
+
+    {
+        // 父目录不存在时也要能落盘：设备那头已经点过「信任」，这一步失败意味着整趟
+        // 配对白跑（记录没落盘，下次还得再点一次 29 秒的弹窗）。
+        const auto deep_root = std::filesystem::temp_directory_path(ec) / "scrctl-record-mkdir";
+        std::filesystem::remove_all(deep_root, ec);
+        const auto deep = deep_root / "a" / "b";
+        scrctl::wifi::PairRecord rec;
+        rec.udid = "UDID";
+        rec.host_private_key = Bytes(32, 0x11);
+        rec.host_public_key = Bytes(32, 0x22);
+        const std::string deep_path = (deep / "remote-X.pair").string();
+        check(scrctl::wifi::save_record(deep_path, rec, err),
+              "父目录不存在时要逐层建出来再落盘");
+        const auto back = scrctl::wifi::load_record(deep_path, err);
+        check(back.has_value() && back->host_private_key == rec.host_private_key,
+              "逐层建出来的目录里记录要能读回原样");
+#ifndef _WIN32
+        // 叶子 0700 是头文件里的承诺；中间层（~/.local、~/.local/share 那类）是共享
+        // 路径，权限必须与系统默认一致——收紧会弄坏别的程序，放宽会漏手柄。
+        const auto perms = std::filesystem::status(deep).permissions();
+        check((perms & std::filesystem::perms::group_all) == std::filesystem::perms::none,
+              "叶子目录维持 0700（里面是能让对方在设备上打字的手柄）");
+        const auto control = deep_root / "ctrl" / "leaf";
+        std::filesystem::create_directories(control, ec);
+        check(std::filesystem::status(deep_root / "a").permissions() ==
+                  std::filesystem::status(deep_root / "ctrl").permissions(),
+              "中间层权限与系统默认一致（拿同一次 create_directories 当对照，不吃 umask）");
+#endif
+        std::filesystem::remove_all(deep_root, ec);
+    }
 }
 
 void test_pairing_xpc() {

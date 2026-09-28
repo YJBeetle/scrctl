@@ -228,11 +228,19 @@ bool save_record(const std::string &path, const PairRecord &record, std::string 
     const size_t slash = path.find_last_of('/');
     if (slash != std::string::npos && slash > 0) {
         const std::string dir = path.substr(0, slash);
-        if (::mkdir(dir.c_str(), 0700) != 0 && errno != EEXIST) {
-            // 父目录不存在时mkdir只补一层，所以先试一次、失败就明确报出来，
-            // 不要写出一个"保存成功但其实写到了别处"的结果。
-            err = "建目录失败 " + dir;
+        // 逐层建：新机器上 ~/.local/share 可能根本不存在，而设备那头已经点过「信任」——
+        // 这一步失败意味着整趟配对白跑（记录没落盘，下次还得再点一次 29 秒的弹窗）。
+        std::error_code ec;
+        const bool existed = std::filesystem::is_directory(dir, ec);
+        std::filesystem::create_directories(dir, ec);
+        if (ec) {
+            err = "建目录失败 " + dir + ": " + ec.message();
             return false;
+        }
+        if (!existed) {
+            // 记录目录里是一把能让对方在设备上打字的手柄，叶子这一层维持 0700 的承诺
+            // （见头文件）。中间层（~/.local、~/.local/share）是共享路径，**不能**动权限。
+            std::filesystem::permissions(dir, std::filesystem::perms::owner_all, ec);
         }
     }
     return write_file(path, format_record(record), err);
