@@ -4,7 +4,9 @@
 #include <openssl/pem.h>
 #include <openssl/x509.h>
 
+#include <csignal>
 #include <cstring>
+#include <mutex>
 #include <utility>
 
 namespace scrctl::transport {
@@ -125,7 +127,25 @@ void TlsChannel::release() {
     }
 }
 
+namespace {
+#if !defined(SO_NOSIGPIPE) && !defined(_WIN32)
+// OpenSSL 的 socket BIO 用它自己的 write() 往我们的 fd 上写字节（SSL_read 途中的握手
+// 回写也算），那条路拿不到我们 send 上的 MSG_NOSIGNAL；Linux 又没有 SO_NOSIGPIPE 可以
+// 按 fd 关。于是对端 RST 之后 OpenSSL 那一次写就是 SIGPIPE、默认动作杀进程（审查 P1：
+// 上一轮的防护只盖住了 Socket::write_all，隧道的 TLS 写绕过了它）。
+// macOS/BSD 那边 fd 上开了 SO_NOSIGPIPE，OpenSSL 写同一个 fd 同样受保护，所以只在没有
+// 那个选项的平台上把 SIGPIPE 忽略掉——进程级、一次。
+void ignore_sigpipe_once() {
+    static std::once_flag once;
+    std::call_once(once, [] { ::signal(SIGPIPE, SIG_IGN); });
+}
+#else
+void ignore_sigpipe_once() {}
+#endif
+}  // namespace
+
 bool TlsChannel::handshake(Socket &sock, const PemIdentity &id, std::string &err) {
+    ignore_sigpipe_once();
     release();
     ctx_ = SSL_CTX_new(TLS_client_method());
     if (ctx_ == nullptr) {
@@ -196,6 +216,7 @@ bool TlsChannel::handshake(Socket &sock, const PemIdentity &id, std::string &err
 }
 
 bool TlsChannel::handshake_psk(Socket &sock, const std::vector<uint8_t> &psk, std::string &err) {
+    ignore_sigpipe_once();
     release();
     if (psk.empty()) {
         err = "PSK 是空的，握不上";
