@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "wifi/Crypto.h"
+#include "wifi/Srp.h"
 #include "wifi/PairRecord.h"
 #include "wifi/PairVerify.h"
 #include "wifi/Rppairing.h"
@@ -171,6 +172,58 @@ void test_crypto() {
     check(fresh.has_value() && fresh->pub != fresh->priv, "临时密钥对生成得出来");
     const std::optional<scrctl::wifi::X25519KeyPair> fresh2 = scrctl::wifi::x25519_keypair(err);
     check(fresh2.has_value() && fresh->pub != fresh2->pub, "每次生成的临时公钥要不一样");
+}
+
+/// ---- 1b. SRP-6a(3072, SHA-512) ----
+void test_srp() {
+    const auto from_hex = [](const char *h) {
+        Bytes out;
+        for (const char *p = h; p[0] && p[1]; p += 2) {
+            out.push_back(static_cast<uint8_t>(std::stoi(std::string(p, 2), nullptr, 16)));
+        }
+        return out;
+    };
+    // oracle：参考实现 pair-setup 用的那套 srptools（同一条公式链），固定私钥/盐/B 现算。
+    // 设备手里的服务端认的就是这套填充——差一个前导 0，M1 就对不上。
+    const Bytes salt = from_hex("000102030405060708090a0b0c0d0e0f");
+    const Bytes B = from_hex(
+        "7bb0e27952068343ce27c513d1de76f44c900cb3c455162f1fe6e46d8024a2d2f363b2ef4c9bb58001bcea2be8892004"
+        "06c3e69b84a2cc263cca1b710ad2bdcc788138e2b5fd36ffee1dfdf9e2e86d70b825b52185d54b39ab09381c632d7a19"
+        "ccaf7ef37c890ee6e699a5845c373e36d5c557071e741bca9e01bec0ed8f6de8d6f4d2ed9d852af6252117dbb19ca7b2"
+        "362710dd552708d484e28b80c115f0fcf24217aa68632d3a561b27ee8a41f8df7e6f52cf52fd2b53a1ca154206fe4f2e"
+        "27aa03c3c41956d5dd1b0b80c815efad10bb028e62a8b0b1b3f5c82d29fce74f7e805740517582d41f37f9fc9ed118c4"
+        "52429009f96f870e12f75dc7f788395b657a6232c9ba4c58a63293c03aff353ac059c2a3f84cb5ca2c5de1c93c4e1b01"
+        "f13b5587601a7486955353e6c3dac0f45162426d7b2109cdfe6b8b1bcb851f71c22484a0a75b113a30f6cd53f49f36c0"
+        "1fbfe6dde88264e885fb51f3b14a9fbad7c91b42f614733c5c9af98714b755f706ab10ad5280dbc8181da0917db11e53");
+    scrctl::wifi::SrpClient srp("Pair-Setup", "000000",
+                                "abababababababababababababababababababababababababababababababab");
+    std::string err;
+    check(srp.process(salt, B, err), ("SRP process 要成功: " + err).c_str());
+    check(to_hex(srp.client_public()) ==
+              "26b65994a9146042a74c1a4439b43114ca79c2420955d8cad49ffdfab89e5bfa3e7f9241b23ee3bf85746a025d206e9bf"
+              "cda31c8c0e695f4a848bff61599c24c3b6550c0ddaf7c5511bbc5cd79134683c2b0c52abf7fd90dc7501b3061b5156f0"
+              "cfdd73ea4e979d252a50a37e2d2a324af6ee57e213522f103402ca1b744978d1ef3dada01bd636512f3ba75046010bc5"
+              "3f8055049aad33cf0eeea4c404a6a2bd2bc7344b11f2306dfe07b97f0ae15e7ea1932fcba81f8fe34d46da54703b662a1"
+              "f30d7271ff3692198b61172ac3886eacf3e61af1f33232c3b6402363d7fffa4783e81542df9e4c3a81c8026a3a4bdd239"
+              "572e83d8fae91873d11a9b1ec0ed482a7651bbf9dcfb3534eff1055a497a779d08f82478ce02ec934eff7a9c773ee92f0"
+              "59e906a36c63f118ec5fe076a3b6d18104a257dd945a255237267d62dc5d510d41607f06be7c921efddb8ee454a61b5aa"
+              "37408127479db34e1f669221c8704d06cac2af1dc79c892a49fbc73a0019ee5464e25ebeb62be9eb86900c32e7c",
+          "A 与 oracle 逐字节一致");
+    check(to_hex(srp.session_key()) ==
+              "9f26786a70eb90396c14f88f919919471f4b3c12cf59b46079d1fec46f98ee47dcdd12cd44d352af965e10fb3b42c2aa"
+              "368dfa08804cb306c3e025ccae1672a7",
+          "会话键 K 与 oracle 一致");
+    check(to_hex(srp.client_proof()) ==
+              "b3045fb6c763873a1b41ac5fae20e8f2565451b82e924757c8b0ad1c93f859bae28506245376c4b18ac57ccbc8463ac8"
+              "802b074c731697b3011a044f5f3c5e44",
+          "M1 与 oracle 一致");
+    const Bytes m2 = from_hex(
+        "06c43f139eac5e0f614ea41bb6af6de080c586d4ae44ae29fa87788023b44029329a7fc6b3f113fc369a6f420a193f7e"
+        "fc805d59abb04f840d5c01818661a92a");
+    check(srp.verify_server_proof(m2), "M2 要验得过");
+    Bytes wrong = m2;
+    wrong[0] ^= 0xff;
+    check(!srp.verify_server_proof(wrong), "改一个字节的 M2 要验不过");
 }
 
 /// ---- 2. TLV ----
@@ -527,6 +580,7 @@ void test_pair_verify_shape() {
 
 int main() {
     test_crypto();
+    test_srp();
     test_tlv();
     test_pair_record();
     test_rppairing();
