@@ -10,10 +10,15 @@
 namespace scrctl::transport {
 
 /// 极简 RAII socket。
+///
+/// 接管 fd 的那一刻就把 SIGPIPE 按 fd 关掉（有 SO_NOSIGPIPE 的平台上）。放在这里是
+/// 因为**每一条**外连 fd 都会经过它：usbmux 那条 AF_UNIX 隧道、TcpConnect 的局域网
+/// socket，之后还可能被交给 OpenSSL 的 socket BIO（`SSL_set_fd` 用它自己的 write()，
+/// 拿不到我们 send 上的 MSG_NOSIGNAL）。逐个建连点去设就是等着漏掉一个。
 class Socket {
 public:
     Socket() = default;
-    explicit Socket(int fd) : fd_(fd) {}
+    explicit Socket(int fd);
     Socket(Socket &&other) noexcept;
     Socket &operator=(Socket &&other) noexcept;
     Socket(const Socket &) = delete;

@@ -276,6 +276,12 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(net_test PRIVATE scrctl_core)
     add_test(NAME net COMMAND net_test)
 
+    # SIGPIPE 那一路离线就能判：socketpair 关掉一端再写，防护缺失时测试进程会被信号
+    # 打死（ctest 报 crashed），比在真机上拔线猜"为什么无声退出"便宜得多。
+    add_executable(transport_test tests/transport_test.cpp)
+    target_link_libraries(transport_test PRIVATE scrctl_core)
+    add_test(NAME transport COMMAND transport_test)
+
     add_executable(media_test tests/media_test.cpp)
     target_link_libraries(media_test PRIVATE scrctl_core)
     add_test(NAME media COMMAND media_test)

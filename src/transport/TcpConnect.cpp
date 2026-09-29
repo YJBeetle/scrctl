@@ -36,13 +36,8 @@ std::optional<Socket> connect_tcp(const std::string &host, uint16_t port, int ti
             last_error = std::strerror(errno);
             continue;
         }
-#ifdef SO_NOSIGPIPE
-        // 对端半关闭之后一次 write 就会把整个进程带走（SIGPIPE）。usbmux 那条路
-        // 上从没遇到，是因为 usbmuxd 总是干净地关掉连接；局域网里设备睡觉、路由器
-        // 重启都会给一个 RST，所以这里必须开。
-        const int one = 1;
-        ::setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
-#endif
+        // SIGPIPE 不在这里关：交出去的 Socket 会按 fd 设（见 Usbmux.cpp 的
+        // disable_sigpipe），一处管全部建连点。
         // 非阻塞 + poll：connect 卡住的原因（ARP 丢包、设备睡眠、防火墙静默丢）
         // 从现象上都看不出区别，所以一定要能超时。
         const int flags = ::fcntl(fd, F_GETFL, 0);

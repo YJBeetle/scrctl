@@ -128,13 +128,27 @@ void TlsChannel::release() {
 }
 
 namespace {
-#if !defined(SO_NOSIGPIPE) && !defined(_WIN32)
+#ifdef SIGPIPE
 // OpenSSL 的 socket BIO 用它自己的 write() 往我们的 fd 上写字节（SSL_read 途中的握手
-// 回写也算），那条路拿不到我们 send 上的 MSG_NOSIGNAL；Linux 又没有 SO_NOSIGPIPE 可以
-// 按 fd 关。于是对端 RST 之后 OpenSSL 那一次写就是 SIGPIPE、默认动作杀进程（审查 P1：
-// 上一轮的防护只盖住了 Socket::write_all，隧道的 TLS 写绕过了它）。
-// macOS/BSD 那边 fd 上开了 SO_NOSIGPIPE，OpenSSL 写同一个 fd 同样受保护，所以只在没有
-// 那个选项的平台上把 SIGPIPE 忽略掉——进程级、一次。
+// 回写也算），那条路拿不到我们 send 上的 MSG_NOSIGNAL。对端 RST 之后 OpenSSL 那一次写
+// 就是 SIGPIPE，默认动作杀进程（审查 P1：早先的防护只盖住了 Socket::write_all，隧道的
+// TLS 写绕过了它）。
+//
+// 一共两层，都要，**不再按平台二选一**：
+//   * fd 级 `SO_NOSIGPIPE` 由 Socket 接管 fd 时统一设（Usbmux.cpp 的 disable_sigpipe）。
+//     曾经只在 TcpConnect 里设，usbmux 自己建的那条 AF_UNIX 隧道就漏了，而
+//     lockdown→TLS 用的正是它。
+//   * 进程级 `SIG_IGN` 兜住"fd 那层没设上"的情形。这不是假想：实测 macOS 上对端已经
+//     关掉时 `setsockopt(SO_NOSIGPIPE)` 直接 EINVAL，而那种 fd 恰恰最需要防护；将来
+//     再有绕过 Socket 造 fd 的路也是同一个缺口，而且是静默的（没有日志，只是拔线时
+//     进程消失）。Linux 本来也只有这一层可用（没有 fd 级选项）。
+// 这一层原先写成"只在没有 SO_NOSIGPIPE 的平台上编进来"，而那个判断在本 TU 里根本
+// 读不到 SO_NOSIGPIPE（Usbmux.h 不含 <sys/socket.h>），所以 macOS 上它其实一直是
+// 生效的——靠巧合。任何人给这里或 Usbmux.h 加一个 <sys/socket.h>，macOS 的防护就
+// 会无声消失。现在条件只看 SIGPIPE 存不存在，不再依赖宏可见性。
+// 代价说清楚：SIG_IGN 是进程级的，scrctl 当库被链进别的进程时（MaaFW 控制单元）会
+// 一并改掉宿主的 SIGPIPE 处置。scrcpy 也是这么做的；网络代码里这个信号本来就没有
+// 可用的默认语义。
 void ignore_sigpipe_once() {
     static std::once_flag once;
     std::call_once(once, [] { ::signal(SIGPIPE, SIG_IGN); });

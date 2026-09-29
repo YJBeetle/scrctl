@@ -59,9 +59,32 @@ DeviceRecord parse_record(const plist::Value &rec) {
     return d;
 }
 
+/// 按 fd 关掉 SIGPIPE（有这个选项的平台）。不设的话，对端 RST/半关闭之后**一次写就
+/// 把整个进程带走**——默认动作是杀进程，不是返回 EPIPE。局域网里设备睡觉、路由器重启
+/// 都会给 RST；USB 这条也一样，拔线时 usbmuxd 未必总是干净地 FIN。
+///
+/// 为什么挂在 Socket 上而不是逐个建连点：同一个 fd 之后可能被交给 OpenSSL 的 socket
+/// BIO（`SSL_set_fd` 用它自己的 write()），那条路拿不到我们 `send` 上的 MSG_NOSIGNAL，
+/// 只有 fd 上的选项盖得住。曾经只在 TcpConnect 里设过，结果 usbmux 交出去的那条
+/// AF_UNIX 隧道（lockdown→TLS 用的正是它）一直是裸的（审查 P1）。
+void disable_sigpipe(int fd) {
+#ifdef SO_NOSIGPIPE
+    const int one = 1;
+    ::setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+#else
+    (void)fd;
+#endif
+}
+
 }  // namespace
 
 // ------------------------------------------------------------ Socket ------
+
+Socket::Socket(int fd) : fd_(fd) {
+    if (fd_ >= 0) {
+        disable_sigpipe(fd_);
+    }
+}
 
 Socket::Socket(Socket &&other) noexcept : fd_(other.fd_) { other.fd_ = -1; }
 
@@ -79,6 +102,9 @@ Socket::~Socket() { close(); }
 void Socket::reset(int fd) {
     close();
     fd_ = fd;
+    if (fd_ >= 0) {
+        disable_sigpipe(fd_);
+    }
 }
 
 void Socket::close() {
@@ -89,9 +115,8 @@ void Socket::close() {
 }
 
 #if defined(MSG_NOSIGNAL)
-// Linux 没有 SO_NOSIGPIPE：对端 RST/半关闭之后一次 send 就是 SIGPIPE，默认动作是
-// **杀进程**——无线那条路上设备睡觉、路由器重启都会给 RST，所以不能靠"没遇到"。
-// macOS/BSD 那边建连时开了 SO_NOSIGPIPE（TcpConnect），这里给剩下的平台按次禁掉。
+// Linux 没有 SO_NOSIGPIPE 可以按 fd 关，只能按次给 send 带上 MSG_NOSIGNAL。这一层盖的
+// 是我们自己的写；OpenSSL 的 socket BIO 绕过它，那边靠 TlsChannel 里的进程级 SIG_IGN。
 constexpr int kNoSigPipe = MSG_NOSIGNAL;
 #else
 constexpr int kNoSigPipe = 0;
