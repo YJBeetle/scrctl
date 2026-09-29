@@ -50,9 +50,19 @@ public:
     /// 不提供会 join 的版本是有意的：调用点（切回实时流）在渲染线程上，而 worker 可能
     /// 正卡在一次截图 RPC 里，join 会把窗口冻到 RPC 上限（kCaptureTimeoutMs）。join
     /// 只发生在析构里，所以"退下来但先不销毁"的对象（产品的 retired_）能把这次等待
-    /// 挪到 teardown。worker 最迟在一次 RPC 结束后退出，期间它仍然只用 `device_` 与
-    /// 本对象的成员——因此**析构必须比它引用的 Device 先发生**。
+    /// 挪出热路径——之后由 `worker_done()` + `app::reap_finished` 逐步回收。
+    /// worker 最迟在一次 RPC 结束后退出，期间它仍然只用 `device_` 与本对象的成员——
+    /// 因此**析构必须比它引用的 Device 先发生**。
     void request_stop();
+
+    /// worker 是否已经退出（`loop()` 的最后一行置位）。**只报信、不等**：切回实时流的
+    /// 那一刻不能 join（渲染线程会被一次截图 RPC 冻住），所以退下来的源先挂在调用方的
+    /// 退役表里，由 `app::reap_finished` 在后续帧里逐个回收——每个都揣着一整张解码好的
+    /// BGRA 画面，挂到 teardown 就是按切换次数堆内存（审查 P2）。
+    /// 返回 true 之后销毁它是安全的，那次 join 立刻返回。
+    [[nodiscard]] bool worker_done() const {
+        return worker_done_.load(std::memory_order_acquire);
+    }
 
     struct Stats {
         uint64_t frames = 0;
@@ -73,6 +83,9 @@ private:
     remote::Device &device_;
     std::thread worker_;
     std::atomic<bool> stopping_{false};
+    /// worker 跑完 `loop()` 的最后一行置位。与 `stopping_` 分开是因为两件事不同：
+    /// 一个是"我叫它停"，一个是"它真的停了"，回收只能按后者判（见 `worker_done()`）。
+    std::atomic<bool> worker_done_{false};
 
     mutable std::mutex mu_;
     std::condition_variable cv_;

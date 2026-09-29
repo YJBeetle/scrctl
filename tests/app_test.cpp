@@ -5,9 +5,11 @@
 // specified in the launch options."——照着这句话去找"该给哪个 url 键"会一路找错，
 // 因为真正缺的是顶层的 applicationSpecifier。所以形状只能钉在这里。
 #include <cstdio>
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "app/Reap.h"
 #include "app/SourcePick.h"
 #include "plist/Plist.h"
 #include "remote/App.h"
@@ -146,6 +148,61 @@ int main() {
           "起流就降级且截图源也曾失败：它活着就继续用它");
     check(pick_picture_source(false, false, false, kNever) == SourcePick::kStayStream,
           "两条路都没有：交给调用方判空，不在这里编一个来源");
+
+    // 退役截图源的回收规则（审查 P2，第四轮）。切回实时流时不能 join（渲染线程会被一次
+    // 截图 RPC 冻到上限），退下来的源先挂着；但每个都揣着一整张解码好的 BGRA 画面，
+    // 挂到 teardown 就是按切换次数堆内存。真机上打不响"反复降级"这个触发器，所以规则
+    // 离线跑全。两条判据缺一不可：**没退的绝不能被销毁**（那次析构里的 join 就是等待，
+    // 等于把 P3 又请回来），**退了的要当场就销毁**（否则内存还是没还）。
+    {
+        struct Fake {
+            Fake(int id, bool done, int &destroyed)
+                : id_(id), done_(done), destroyed_(destroyed) {}
+            ~Fake() { ++destroyed_; }
+            [[nodiscard]] bool worker_done() const { return done_; }
+            int id_;
+            bool done_;
+            int &destroyed_;
+        };
+        const auto reap = [](std::vector<std::unique_ptr<Fake>> &v) {
+            return scrctl::app::reap_finished(v, [](const Fake &f) { return f.worker_done(); });
+        };
+        const auto ids = [](const std::vector<std::unique_ptr<Fake>> &v) {
+            std::string s;
+            for (const auto &p : v) {
+                s += std::to_string(p->id_);
+            }
+            return s;
+        };
+        int destroyed = 0;
+        std::vector<std::unique_ptr<Fake>> retired;
+        // 按 id 标记而不是按下标：这条规则一旦回归成"不看 done 全销毁"，表就空了，
+        // 按下标写会先越界把测试自己搞崩（实测 exit 139），而崩溃比一行 FAIL 难读得多。
+        const auto mark_done = [&retired](int id) {
+            for (const auto &p : retired) {
+                if (p->id_ == id) {
+                    p->done_ = true;
+                }
+            }
+        };
+
+        check(reap(retired) == 0 && retired.empty() && destroyed == 0, "空表：摘 0 个，不炸");
+
+        retired.emplace_back(std::make_unique<Fake>(1, false, destroyed));
+        retired.emplace_back(std::make_unique<Fake>(2, false, destroyed));
+        retired.emplace_back(std::make_unique<Fake>(3, false, destroyed));
+        check(reap(retired) == 0 && retired.size() == 3 && destroyed == 0,
+              "worker 都还没退：一个都不摘，也一个都不销毁");
+
+        mark_done(2);
+        check(reap(retired) == 1 && ids(retired) == "13" && destroyed == 1,
+              "中间那个退了：只摘它，剩下的顺序不变，而且摘掉就是真销毁了");
+
+        mark_done(1);
+        mark_done(3);
+        check(reap(retired) == 2 && retired.empty() && destroyed == 3, "都退了：清空");
+        check(reap(retired) == 0 && destroyed == 3, "再跑一趟幂等（不会重复销毁）");
+    }
 
     std::printf(Failures == 0 ? "\n全部通过\n" : "\n%d 项失败\n", Failures);
     return Failures == 0 ? 0 : 1;

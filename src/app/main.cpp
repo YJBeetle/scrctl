@@ -28,6 +28,7 @@
 #include <utility>
 #include <vector>
 
+#include "app/Reap.h"
 #include "app/RenderPanel.h"
 #include "app/SourcePick.h"
 #include "app/ViewGeom.h"
@@ -1060,6 +1061,14 @@ public:
         // 四格状态账在 pick_picture_source 里、离线跑全组合（tests/app_test.cpp）；语义与
         // MaaFW 控制单元一致（ScrctlSession 每次取帧都问同一个标志）。两条路的序号各记各的
         // （serial_ / shot_serial_），来回切不会把截图的号喂给泵当"since"。
+        // 先回收上一轮退下来的截图源：判据是"worker 自己说它退了"，所以这一趟不阻塞。
+        // 不收的话每个都揣着一整张解码好的 BGRA 画面（1125×2436 约 11 MB）挂到 teardown，
+        // 反复降级/回升就按切换次数堆内存（审查 P2）。还没退的留到下一帧再看——它最迟
+        // 一次截图 RPC（上限 5 秒）后就退，所以表里同时存在的个数是有界的。
+        scrctl::app::reap_finished(retired_,
+                                   [](const scrctl::media::ScreenshotSource &src) {
+                                       return src.worker_done();
+                                   });
         const uint64_t now_ticks = SDL_GetTicks64();
         const uint64_t since_shot_fail = shot_failed_ ? now_ticks - shot_fail_ms_ : UINT64_MAX;
         switch (scrctl::app::pick_picture_source(pump_ != nullptr,
@@ -1341,9 +1350,11 @@ private:
     /// 冷却一过再试——一次失败不判永久，否则本次会话就一路停在旧画面上（审查 P2）。
     bool shot_failed_ = false;
     uint64_t shot_fail_ms_ = 0;
-    /// 切回实时流时退下来的截图源：stop() 已叫过，join 留给 teardown。渲染线程上 join
-    /// 一个可能卡在截图 RPC 里的线程会把窗口冻到 RPC 上限（审查 P3）。声明在 device_
-    /// 之后，所以先于 device_ 析构（截图源持有 Device&）。
+    /// 切回实时流时退下来的截图源：`request_stop()` 已叫过，销毁（= join）由 next() 每帧
+    /// 跑一趟 `app::reap_finished` 逐步做，worker 还没退的就留到下一帧。渲染线程上直接
+    /// join 一个可能卡在截图 RPC 里的线程会把窗口冻到 RPC 上限（审查 P3），而一路留到
+    /// teardown 又会按切换次数堆内存——每个都揣着一整张 BGRA 画面（审查 P2，第四轮）。
+    /// 声明在 device_ 之后，所以先于 device_ 析构（截图源持有 Device&）。
     std::vector<std::unique_ptr<scrctl::media::ScreenshotSource>> retired_;
 };
 

@@ -198,6 +198,9 @@ void ScreenshotSource::loop() {
         }
         cv_.notify_all();
     }
+    // 报"我真的退了"，给调用方回收用（app::reap_finished）。release 与 worker_done()
+    // 的 acquire 配对：读到 true 的人随后销毁本对象，那次 join 立刻返回。
+    worker_done_.store(true, std::memory_order_release);
 }
 
 bool ScreenshotSource::latest(scrctl::Frame &out, uint64_t &serial, int timeout_ms) {
