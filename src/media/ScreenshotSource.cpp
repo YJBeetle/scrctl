@@ -25,10 +25,10 @@ constexpr const char *kAction = "com.apple.coredevice.action.capturescreenshot";
 /// 截图失败后的退避。不能贴着失败猛重试：设备拒一次（比如屏幕睡了的某些状态）
 /// 就是一句语义错误，猛重试只会把日志刷满而不会变好。
 constexpr int kRetryBackoffMs = 250;
-/// 单次截图 RPC 的上限。实测 0.2~0.6 秒（MaaFW 侧静态 84ms），5 秒已是 8~25 倍余量；
-/// 这个数同时是"切换画面源时渲染线程最多冻多久"与"teardown join 最多等多久"的上限
-/// （审查 P3）。原先的 30 秒换来的只是"设备真卡死时晚 25 秒放弃"，而那一档本来也由
-/// worker 的退避重试兜着。
+/// 单次截图 RPC 的上限。实测 0.2~0.6 秒（MaaFW 侧静态 84ms），5 秒已是 8~25 倍余量。
+/// 这个数现在是**两件事的上限**：worker 收到停止请求后最多还要多久才退出（即 teardown
+/// 那次 join 最多等多久），以及起流就降级那条路同步拿第一张时最多冻多久。原先的 30 秒
+/// 换来的只是"设备真卡死时晚 25 秒放弃"，而那一档本来也由 worker 的退避重试兜着。
 constexpr int kCaptureTimeoutMs = 5000;
 
 }  // namespace
@@ -97,7 +97,16 @@ bool decode_png_bgra(const std::vector<uint8_t> &png, scrctl::Frame &out, std::s
 
 ScreenshotSource::ScreenshotSource(remote::Device &device) : device_(device) {}
 
-ScreenshotSource::~ScreenshotSource() { stop(); }
+ScreenshotSource::~ScreenshotSource() {
+    request_stop();
+    // join 只在这里：调用 request_stop() 的地方（切回实时流）在渲染线程上，等一个可能
+    // 正卡在截图 RPC 里的 worker 会把窗口冻住；产品那边把退下来的对象挪进 retired_，
+    // 于是这次等待落在 teardown（审查 P3：上一轮把析构挪走了，但 stop() 自己还在 join，
+    // 等于没挪）。
+    if (worker_.joinable()) {
+        worker_.join();
+    }
+}
 
 std::unique_ptr<ScreenshotSource> ScreenshotSource::start(remote::Device &device,
                                                           std::string &err, bool capture_first) {
@@ -141,8 +150,9 @@ bool ScreenshotSource::capture_once(std::vector<uint8_t> &png, std::string &err)
     xpc::dict_set(input, "displayUniqueID", xpc::make_null());
     xpc::dict_set(input, "requestedFormat", xpc::make_string("png"));
     xpc::Value out;
-    // 30 秒上限：截图 RPC 实测半秒级，给到 30 秒是防"设备某次卡住"把泵线程永久挂住；
-    // 真卡到那份上这一路本来也没救了，下一轮退避后重试。
+    // 上限的意义是"设备某次卡住时不要把 worker 永久挂住"：真卡到那份上这一路本来就
+    // 没救了，下一轮退避后重试。数值取多少见 kCaptureTimeoutMs 上的说明（它同时是
+    // teardown 那次 join 的上限）。
     if (conn->invoke(kFeature, kAction, input, out, kCaptureTimeoutMs, err) !=
         remote::CallResult::Ok) {
         return false;
@@ -203,14 +213,11 @@ bool ScreenshotSource::latest(scrctl::Frame &out, uint64_t &serial, int timeout_
     return true;
 }
 
-void ScreenshotSource::stop() {
-    if (stopping_.exchange(true)) {
-        return;
-    }
+void ScreenshotSource::request_stop() {
+    // 幂等：置标志 + 唤醒等在 latest() 上的人。不做 join（见析构里的说明），也不因为
+    // "已经置过了"就跳过 notify——第二遍调用时可能正有新的等待者。
+    stopping_ = true;
     cv_.notify_all();
-    if (worker_.joinable()) {
-        worker_.join();
-    }
 }
 
 ScreenshotSource::Stats ScreenshotSource::stats() const {

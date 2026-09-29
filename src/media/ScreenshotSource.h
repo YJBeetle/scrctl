@@ -42,9 +42,17 @@ public:
     ScreenshotSource(const ScreenshotSource &) = delete;
     ScreenshotSource &operator=(const ScreenshotSource &) = delete;
 
-    /// 等一张比 `serial` 新的画面（serial 是进出参）。超时或被 stop 唤醒返回 false。
+    /// 等一张比 `serial` 新的画面（serial 是进出参）。超时或被 request_stop 唤醒返回 false。
     bool latest(scrctl::Frame &out, uint64_t &serial, int timeout_ms);
-    void stop();
+
+    /// 叫 worker 停下来，**不 join**：置标志 + 唤醒等待者就返回。
+    ///
+    /// 不提供会 join 的版本是有意的：调用点（切回实时流）在渲染线程上，而 worker 可能
+    /// 正卡在一次截图 RPC 里，join 会把窗口冻到 RPC 上限（kCaptureTimeoutMs）。join
+    /// 只发生在析构里，所以"退下来但先不销毁"的对象（产品的 retired_）能把这次等待
+    /// 挪到 teardown。worker 最迟在一次 RPC 结束后退出，期间它仍然只用 `device_` 与
+    /// 本对象的成员——因此**析构必须比它引用的 Device 先发生**。
+    void request_stop();
 
     struct Stats {
         uint64_t frames = 0;

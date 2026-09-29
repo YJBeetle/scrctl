@@ -1094,11 +1094,13 @@ public:
                 break;
             }
             case scrctl::app::SourcePick::kToStream:
-                // 别在渲染线程上析构：~ScreenshotSource 会 join 那个可能正卡在截图 RPC
-                // 里的 worker（审查 P3）。stop() 只置标志+唤醒，对象挪进 retired_，
-                // join 留给 teardown（不在热路径上）。
+                // 别在渲染线程上等 worker：request_stop() 只置标志+唤醒，join 在析构里，
+                // 而对象挪进 retired_ 之后析构发生在 teardown（审查 P3 的第二次修复——
+                // 上一轮把析构挪走了，但那时 stop() 自己还会 join，等于没挪）。
+                // worker 最迟在一次截图 RPC（上限 5 秒）结束后退出，这期间它只用 device_，
+                // 而 retired_ 声明在 device_ 之后、先于它析构。
                 std::printf("媒体流又能解出画面了，切回实时流\n");
-                shot_->stop();
+                shot_->request_stop();
                 retired_.push_back(std::move(shot_));
                 shot_.reset();
                 break;
