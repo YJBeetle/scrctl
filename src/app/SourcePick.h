@@ -1,6 +1,10 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdlib>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace scrctl::app {
 
@@ -39,6 +43,70 @@ inline SourcePick pick_picture_source(bool has_pump, bool video_dead, bool has_s
         return SourcePick::kToShot;
     }
     return SourcePick::kStayStream;
+}
+
+/// `--test-degrade` 的时刻表：把 "4,8,12" 这种逗号分隔的**秒**换成相对起点的毫秒。
+///
+/// 为什么产品里会有一个测试开关：上面那本状态账里"跑着跑着解不出画面"这一格，在真机上
+/// **打不响**——要画面复杂到编码器交出超过解码后端上限的帧，或者连续三次重起都拿不到
+/// 关键帧。而连着三轮审查的修复（切换、序号、回收）全在这一格上，没有触发器就只能一直
+/// 交"离线判据 + 代码论证"。所以给一个时刻表，让**同一段状态机**在真机上跑起来：它不改
+/// 状态机本身，只是把 `video_dead` 那一个入参顶成真。
+inline bool degrade_forced(uint64_t now_ms, const std::vector<uint64_t> &marks) {
+    std::size_t passed = 0;
+    for (const uint64_t m : marks) {
+        if (now_ms < m) {
+            break;
+        }
+        ++passed;
+    }
+    // 从第一个时刻起交替：[m0,m1) 强制降级、[m1,m2) 放开、……没给时刻就永远不强制。
+    return passed % 2 == 1;
+}
+
+/// 解析 `--test-degrade` 的规格。格式错就返回 false 并把原因写进 `err`——这条旗标的
+/// 用途是打判据，静默忽略一个写错的规格等于让人对着一个从没生效的开关读日志。
+inline bool parse_degrade_marks(std::string_view spec, std::vector<uint64_t> &out,
+                                std::string &err) {
+    out.clear();
+    const std::string text(spec);
+    const char *p = text.c_str();
+    while (*p != '\0') {
+        char *end = nullptr;
+        const double secs = std::strtod(p, &end);
+        if (end == p) {
+            err = std::string("有一段不是数字：\"") + p + "\"";
+            return false;
+        }
+        if (secs < 0) {
+            err = "时刻不能是负数";
+            return false;
+        }
+        const auto ms = static_cast<uint64_t>(secs * 1000.0);
+        if (!out.empty() && ms < out.back()) {
+            err = "时刻要按升序给（这一段比前一个早）";
+            return false;
+        }
+        out.push_back(ms);
+        p = end;
+        if (*p == ',') {
+            ++p;
+            if (*p == '\0') {
+                err = "尾巴上多了个逗号";
+                return false;
+            }
+            continue;
+        }
+        if (*p != '\0') {
+            err = std::string("有认不出的字符：\"") + p + "\"";
+            return false;
+        }
+    }
+    if (out.empty()) {
+        err = "时刻表是空的（至少要给一个时刻）";
+        return false;
+    }
+    return true;
 }
 
 }  // namespace scrctl::app

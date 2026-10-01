@@ -204,6 +204,42 @@ int main() {
         check(reap(retired) == 0 && destroyed == 3, "再跑一趟幂等（不会重复销毁）");
     }
 
+    // `--test-degrade` 那本时刻表。它存在的理由是真机上打不响"跑着跑着解不出画面"，而
+    // 连着三轮审查的修复全在那一格上；所以这条旗标自己的判据必须先离线钉死——一个把
+    // "放开"判成"强制"的开关，会让人对着日志读出完全反的结论。
+    {
+        const std::vector<uint64_t> none;
+        check(!scrctl::app::degrade_forced(0, none) &&
+                  !scrctl::app::degrade_forced(999999, none),
+              "没给时刻表：永远不强制（产品路径就是这一格）");
+
+        std::vector<uint64_t> marks;
+        std::string perr;
+        check(scrctl::app::parse_degrade_marks("4,8,12", marks, perr) && marks.size() == 3 &&
+                  marks[0] == 4000 && marks[1] == 8000 && marks[2] == 12000,
+              "\"4,8,12\" -> 4000/8000/12000 毫秒: " + perr);
+        check(scrctl::app::parse_degrade_marks("0.5", marks, perr) && marks.size() == 1 &&
+                  marks[0] == 500,
+              "小数秒也认（0.5 -> 500 毫秒）: " + perr);
+
+        scrctl::app::parse_degrade_marks("4,8,12", marks, perr);
+        check(!scrctl::app::degrade_forced(3999, marks), "第一个时刻之前不强制");
+        check(scrctl::app::degrade_forced(4000, marks), "到点即强制（含边界那一毫秒）");
+        check(scrctl::app::degrade_forced(7999, marks), "段内一直是强制");
+        check(!scrctl::app::degrade_forced(8000, marks), "第二个时刻起放开");
+        check(scrctl::app::degrade_forced(12000, marks), "第三个时刻再强制：来回切靠的是交替");
+        check(scrctl::app::degrade_forced(UINT64_MAX, marks),
+              "最后一个时刻之后停在强制段（奇数个时刻的语义就是\"切过去不再回来\"）");
+
+        check(!scrctl::app::parse_degrade_marks("", marks, perr) && !perr.empty(),
+              "空规格要报错而不是当成\"没有时刻\": " + perr);
+        check(!scrctl::app::parse_degrade_marks("8,4", marks, perr), "降序要报错: " + perr);
+        check(!scrctl::app::parse_degrade_marks("4,,8", marks, perr), "中间空一段要报错: " + perr);
+        check(!scrctl::app::parse_degrade_marks("4,", marks, perr), "尾巴上多个逗号要报错: " + perr);
+        check(!scrctl::app::parse_degrade_marks("4x", marks, perr), "认不出的字符要报错: " + perr);
+        check(!scrctl::app::parse_degrade_marks("-1", marks, perr), "负数要报错: " + perr);
+    }
+
     std::printf(Failures == 0 ? "\n全部通过\n" : "\n%d 项失败\n", Failures);
     return Failures == 0 ? 0 : 1;
 }

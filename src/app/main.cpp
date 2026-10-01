@@ -79,6 +79,10 @@ struct Options {
     std::string test_button;
     /// 起流后往设备敲一段 ASCII（要有文本框正获得焦点）。
     std::string test_type;
+    /// `--test-degrade 4,8,12`：从起流那一刻算起，到点交替"强制判媒体流解不出画面 /
+    /// 放开"。运行中降级这一格在真机上打不响（要画面复杂到超出解码后端上限），而
+    /// 切换/序号/回收那几条修复全在这一格上——没有开关就只能一直交离线判据。
+    std::string test_degrade;
     /// scrcpy 的 --start-app=name：起流之后把某个 App 拉到前台。名字里可以带两个
     /// 前缀，语义照 scrcpy：`+` = 先杀掉在跑的实例再冷启动，`?` = 按 App 名字前缀
     /// 匹配（大小写不敏感）而不是按 bundle id 精确匹配。
@@ -189,6 +193,10 @@ void usage(const char *argv0) {
         "  --test-button NAME 起流后按一次硬件按键（home/lock/volup/voldn/mute），\n"
         "                     再照常镜像，配 --verify 才能看见瞬时效果\n"
         "  --test-type TEXT   起流后往设备敲一段 ASCII（需要已聚焦的文本框）\n"
+        "  --test-degrade T1,T2,...\n"
+        "                     从起流那一刻算起，到这些秒数就交替「强制判媒体流解不出画面 /\n"
+        "                     放开」，用来在真机上跑运行中降级那条路（画面不够复杂时那个\n"
+        "                     触发器打不响）。只顶 video_dead 一个入参，状态机本身不改\n"
         "  --list-apps        列出设备上安装的 App（bundle id 与名字）后退出\n"
         "  --start-app=NAME   起流后把某个 App 拉到前台。NAME 是 bundle id；\n"
         "                     前缀 ? 改成按 App 名字前缀匹配（大小写不敏感），\n"
@@ -326,6 +334,8 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.test_button = next("--test-button");
         } else if (a == "--test-type") {
             o.test_type = next("--test-type");
+        } else if (a == "--test-degrade") {
+            o.test_degrade = next("--test-degrade");
         } else if (a == "--copy") {
             o.copy_text = next("--copy");
         } else if (a == "--paste") {
@@ -1017,7 +1027,7 @@ public:
     /// `audio_buffer_ms` = `--audio-buffer`：缓冲想维持的水位。
     bool start(const std::string &serial, const std::string &wifi, const std::string &record_path,
                bool hw_decode, bool watch_display, bool want_audio, int audio_buffer_ms,
-               const std::string &video_source, std::string &err);
+               const std::string &video_source, const std::string &test_degrade, std::string &err);
 
     /// 打开声卡。要和 `start()` 分开的唯一原因：`start()` 跑在 `SDL_Init` 之前
     /// （窗口还没建就得先有源），而 SDL 的音频子系统在那之后才有。
@@ -1062,18 +1072,24 @@ public:
         // MaaFW 控制单元一致（ScrctlSession 每次取帧都问同一个标志）。两条路的序号各记各的
         // （serial_ / shot_serial_），来回切不会把截图的号喂给泵当"since"。
         // 先回收上一轮退下来的截图源：判据是"worker 自己说它退了"，所以这一趟不阻塞。
-        // 不收的话每个都揣着一整张解码好的 BGRA 画面（1125×2436 约 11 MB）挂到 teardown，
-        // 反复降级/回升就按切换次数堆内存（审查 P2）。还没退的留到下一帧再看——它最迟
-        // 一次截图 RPC（上限 5 秒）后就退，所以表里同时存在的个数是有界的。
+        // 不收的话每个都揣着一整张解码好的 BGRA 画面（本机实测 1125×2436×4 = 10.5 MiB）
+        // 挂到 teardown，反复降级/回升就按切换次数堆内存（审查 P2）。还没退的留到下一帧
+        // 再看——它最迟一次截图 RPC（上限 5 秒）后就退，所以表里同时存在的个数是有界的。
         scrctl::app::reap_finished(retired_,
                                    [](const scrctl::media::ScreenshotSource &src) {
                                        return src.worker_done();
                                    });
         const uint64_t now_ticks = SDL_GetTicks64();
+        // --test-degrade：把 `video_dead` 这一个入参顶成真，好让运行中降级那条路在真机上
+        // 跑起来（真触发器要画面复杂到超出解码后端上限，静止画面上打不响）。状态机本身
+        // 一行没改，所以这里跑出来的读数对真降级同样成立。
+        const bool forced_dead =
+            scrctl::app::degrade_forced(now_ticks - degrade_t0_, degrade_marks_);
         const uint64_t since_shot_fail = shot_failed_ ? now_ticks - shot_fail_ms_ : UINT64_MAX;
         switch (scrctl::app::pick_picture_source(pump_ != nullptr,
-                                                  pump_ != nullptr && pump_->video_unusable(),
-                                                  shot_ != nullptr, since_shot_fail)) {
+                                                 (pump_ != nullptr && pump_->video_unusable()) ||
+                                                     forced_dead,
+                                                 shot_ != nullptr, since_shot_fail)) {
             case scrctl::app::SourcePick::kToShot: {
                 std::string serr;
                 // 首张**不同步拿**：这一切换发生在渲染线程上，同步拿会把窗口冻到一次
@@ -1356,6 +1372,11 @@ private:
     /// teardown 又会按切换次数堆内存——每个都揣着一整张 BGRA 画面（审查 P2，第四轮）。
     /// 声明在 device_ 之后，所以先于 device_ 析构（截图源持有 Device&）。
     std::vector<std::unique_ptr<scrctl::media::ScreenshotSource>> retired_;
+
+    /// `--test-degrade` 的时刻表（毫秒，相对 `degrade_t0_`）与起点。空表 = 这条旗标没给，
+    /// `next()` 里那次判断恒为假，产品路径一点不受影响。
+    std::vector<uint64_t> degrade_marks_;
+    uint64_t degrade_t0_ = 0;
 };
 
 namespace {
@@ -1414,7 +1435,14 @@ LiveSource::~LiveSource() = default;
 bool LiveSource::start(const std::string &serial, const std::string &wifi,
                        const std::string &record_path, bool hw_decode, bool watch_display,
                        bool want_audio, int audio_buffer_ms, const std::string &video_source,
-                       std::string &err) {
+                       const std::string &test_degrade, std::string &err) {
+    // 规格写错就在碰设备之前失败：这条旗标是用来打判据的，静默忽略一个写错的规格
+    // 等于让人对着一个从没生效的开关读日志。
+    if (!test_degrade.empty() &&
+        !scrctl::app::parse_degrade_marks(test_degrade, degrade_marks_, err)) {
+        err = "--test-degrade 规格不对：" + err;
+        return false;
+    }
     auto dev = open_device(serial, wifi, err);
     if (!dev) {
         return false;
@@ -1587,6 +1615,17 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             }
         }
     }
+    if (!degrade_marks_.empty()) {
+        // 起点取"起流完成这一刻"：这条旗标要复现的是**运行中**降级，计时不该把建隧道/
+        // 起流那几秒算进去（那段时间本来就没有画面可降）。
+        degrade_t0_ = SDL_GetTicks64();
+        std::printf("--test-degrade：从现在起");
+        for (std::size_t i = 0; i < degrade_marks_.size(); ++i) {
+            std::printf(" %.1f 秒%s", static_cast<double>(degrade_marks_[i]) / 1000.0,
+                        i % 2 == 0 ? "强制降级" : "放开");
+        }
+        std::printf("（只顶 video_dead 一个入参，状态机本身没改）\n");
+    }
     return true;
 }
 
@@ -1737,7 +1776,7 @@ int main(int argc, char **argv) {
         auto made = std::make_unique<LiveSource>();
         std::string err;
         if (!made->start(o.serial, o.wifi, o.record, o.hw_decode, !o.no_window && o.orientation < 0,
-                         !o.no_audio, o.audio_buffer_ms, o.video_source, err)) {
+                         !o.no_audio, o.audio_buffer_ms, o.video_source, o.test_degrade, err)) {
             std::fprintf(stderr, "起流失败: %s\n", err.c_str());
             // 设备在通话中会直接拒绝起流（code 9022）。实测这时它的会话表是空的
             // （getmediastreamserverstatus 回 sessions: []），所以不是"有条旧流占着"，
