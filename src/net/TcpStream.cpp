@@ -160,18 +160,23 @@ bool TcpStream::handle_segment(const uint8_t *l4, std::size_t len, std::string &
             }
             rx_.insert(rx_.end(), l4 + tcp_hdr, l4 + len);
             rcv_nxt_ += static_cast<uint32_t>(payload_len);
+            // 账记在栈上：这条连接可能马上就被销毁（截图那条路每张图一条新连接），
+            // 记在自己身上等于没人能读到。
+            stack_.note_tcp_recv(payload_len);
             std::vector<uint8_t> empty;
             if (!send_segment(kAck | kPsh, empty, err)) {
                 return false;
             }
         } else {
             // 序号落在期望之外：不缓存、不重排，丢掉并回一个期望序号的 ACK
-            // （等价于重复 ACK，催对端重传）。计数是为了让"HTTP/2 帧长过大"
-            // 这种字节流缺段的症状能被立刻归因到这里，而不是留给人猜。
-            ++dropped_segments_;
-            dropped_bytes_ += payload_len;
-            std::fprintf(stderr, "    !! TCP 段序号不连续：期望 %u 收到 %u 长度 %zu，已丢弃\n",
-                         rcv_nxt_, seq, payload_len);
+            // （等价于重复 ACK，催对端重传）。逐段那行日志默认不打——Wi-Fi 上重排是
+            // 常态，实测兜底截图 8 秒刷 5 行，而聚合读数已经进了 --stats（占比才是
+            // "要不要加乱序重组"的判据）；要查具体卡在哪一段时开 --debug-net。
+            stack_.note_tcp_drop(payload_len);
+            if (stack_.net_debug()) {
+                std::fprintf(stderr, "    !! TCP 段序号不连续：期望 %u 收到 %u 长度 %zu，已丢弃\n",
+                             rcv_nxt_, seq, payload_len);
+            }
             std::vector<uint8_t> empty;
             send_segment(kAck, empty, err);
         }

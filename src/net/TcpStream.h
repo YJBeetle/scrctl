@@ -44,11 +44,11 @@ public:
 
     [[nodiscard]] bool connected() const { return established_; }
 
-    /// 收到的"序号不连续"的段数与字节数。本实现不重排也不缓存：落在期望序号
-    /// 之外的数据报会被丢掉（同时回一个重复 ACK 催对端重传）。排查"HTTP/2 说
-    /// 帧长过大"这类症状时第一个要看的数就是这里——那是字节流缺了一段的表现。
-    [[nodiscard]] uint64_t dropped_segments() const { return dropped_segments_; }
-    [[nodiscard]] uint64_t dropped_bytes() const { return dropped_bytes_; }
+    /// 收到的"序号不连续"的段数与字节数记在**栈**上（`Stack::tcp_counters()`），不在
+    /// 这里：本实现不重排也不缓存，落在期望序号之外的段会被丢掉（同时回一个重复 ACK
+    /// 催对端重传），而这条连接随时可能被销毁——兜底截图那条路每截一张就新建一条，
+    /// 记在自己身上等于没人读得到。排查"HTTP/2 说帧长过大"这类症状时第一个要看的
+    /// 就是那个聚合读数：它是字节流缺了一段的表现。
 
 private:
     struct Segment {
@@ -84,8 +84,6 @@ private:
 
     std::vector<uint8_t> rx_;
     size_t rx_pos_ = 0;
-    uint64_t dropped_segments_ = 0;
-    uint64_t dropped_bytes_ = 0;
     /// 处理段时可能要从 on_segment（无返回值）里往外传错误：复用层只负责分发，
     /// 真正的失败要由正在等这条连接的人看到。
     std::string pending_err_;

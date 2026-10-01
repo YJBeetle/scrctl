@@ -67,6 +67,9 @@ public:
     /// 隧道协商出来的两个地址与 RSD 端口。起流时要把自己的地址报给设备。
     [[nodiscard]] const transport::TunnelParams &tunnel_params() const { return tunnel_->params(); }
     [[nodiscard]] const Rsd &rsd() const { return *rsd_; }
+    /// 隧道之上那条用户态栈（USB 与 Wi-Fi 两条路都有）。给 `--stats` 读隧道内 TCP 的
+    /// 收/丢账、给 `--debug-net` 打开逐段日志。会话没建成时可能为空，所以交指针。
+    [[nodiscard]] net::Stack *stack() { return stack_.get(); }
     [[nodiscard]] const std::string &udid() const { return udid_; }
     /// USB 还是 Wi-Fi 之类，来自 usbmux 的连接类型。
     [[nodiscard]] const std::string &connection_type() const { return connection_type_; }

@@ -97,6 +97,43 @@ public:
     /// 位置报"帧长过大"，看起来像它自己的 bug。
     [[nodiscard]] uint64_t bad_checksums() const { return bad_checksums_; }
 
+    /// 隧道内 TCP 的收/丢账。
+    ///
+    /// **记在栈上而不是每条连接上**：兜底截图那条路每截一张就新建一条连接（这条服务
+    /// 一条连接只服务一次请求），连接级的计数会跟着对象一起消失，跑到 --stats 那里
+    /// 永远是 0。
+    ///
+    /// `dropped_*` 是本实现"不缓存、不重排"那条取舍的读数：序号不在期望上的段被丢掉、
+    /// 回一个重复 ACK 催对端重传。USB 那条路上它恒为 0（usbmuxd 是本地 AF_UNIX，
+    /// 不重排）；Wi-Fi 上它是**阵发**的——实测链路干净时 60 秒收 124.55 MB 丢弃 0 段，
+    /// 而同一台设备在链路差的那几分钟里（`.lan` 解析的 ping 丢一半）8 秒丢 5 段。
+    /// 所以它是"要不要给这个栈加乱序重组"的唯一判据：看
+    /// dropped_bytes / (recv_bytes + dropped_bytes) 的占比，别看行数。
+    struct TcpCounters {
+        uint64_t recv_bytes = 0;        ///< 按序收下、交给上层的载荷字节
+        uint64_t dropped_segments = 0;  ///< 序号不在期望上的段数
+        uint64_t dropped_bytes = 0;     ///< 那些段里的载荷字节
+    };
+    [[nodiscard]] TcpCounters tcp_counters() const {
+        return {tcp_recv_bytes_.load(std::memory_order_relaxed),
+                tcp_dropped_segments_.load(std::memory_order_relaxed),
+                tcp_dropped_bytes_.load(std::memory_order_relaxed)};
+    }
+    /// 给 TcpStream 记账用（泵线程调）。
+    void note_tcp_recv(uint64_t bytes) {
+        tcp_recv_bytes_.fetch_add(bytes, std::memory_order_relaxed);
+    }
+    void note_tcp_drop(uint64_t bytes) {
+        tcp_dropped_segments_.fetch_add(1, std::memory_order_relaxed);
+        tcp_dropped_bytes_.fetch_add(bytes, std::memory_order_relaxed);
+    }
+
+    /// 逐段的"序号不连续"日志开关（`--debug-net`）。默认关：链路差的那几分钟里它会
+    /// 刷屏（实测 8 秒 5 行），而聚合读数已经进了 --stats；只有要查"具体卡在哪一段"
+    /// 时才需要序号本身。
+    void set_net_debug(bool on) { net_debug_ = on; }
+    [[nodiscard]] bool net_debug() const { return net_debug_.load(std::memory_order_relaxed); }
+
     /// 隧道里收到过多少个 ICMPv6 包，以及最后一条的一行摘要（没有则空串）。
     ///
     /// 为什么要有这一位：20 秒断流的根因是设备侧 `lastReceivedPacketTime:nan`
@@ -137,6 +174,11 @@ private:
     std::map<uint16_t, UdpEndpoint *> udp_;
 
     uint64_t bad_checksums_ = 0;
+    /// 泵线程写、应用线程（--stats）读，所以是 atomic 而不是裸 uint64。
+    std::atomic<uint64_t> tcp_recv_bytes_{0};
+    std::atomic<uint64_t> tcp_dropped_segments_{0};
+    std::atomic<uint64_t> tcp_dropped_bytes_{0};
+    std::atomic<bool> net_debug_{false};
     uint32_t flow_label_ = 0;
     uint64_t icmp_seen_ = 0;
     uint64_t echo_replies_ = 0;

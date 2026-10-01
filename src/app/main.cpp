@@ -67,6 +67,9 @@ struct Options {
     double scale = 1.0;   ///< 窗口相对裁剪尺寸的缩放
     bool scale_given = false;  ///< 显式给过 --scale 就别再自动缩进屏幕
     bool debug_input = false;  ///< 把每次鼠标事件的原始坐标与算出的归一化值都打出来
+    /// 把隧道内 TCP 的逐段"序号不连续"日志打开。默认关：链路差的那几分钟里它刷屏
+    /// （实测 8 秒 5 行），而聚合读数（收到的字节、丢弃占比）已经在 --stats 里。
+    bool debug_net = false;
     int exit_after = 0;   ///< 渲染多少帧后退出（0=不限）
     int verify_at = 0;    ///< 渲染到第 N 帧时回读窗口内容
     std::string verify_path;
@@ -170,6 +173,8 @@ void usage(const char *argv0) {
         "  --window-title TEXT  窗口标题（--title 同义）\n"
         "  --window-width N / --window-height N  显式窗口尺寸，默认按屏幕自动缩\n"
         "  --debug-input        打印每次鼠标的原始坐标与换算结果（定坐标问题时用）\n"
+        "  --debug-net          打印隧道内 TCP 每一个序号不连续的段（默认只把收/丢的\n"
+        "                     字节数聚合进 --stats；链路差时逐段打会刷屏）\n"
         "  --crop WxH+X+Y       裁剪区域（也吃 scrcpy 的 W:H:X:Y；默认自动裁 CTU 填充）\n"
         "  --display-orientation=auto|0|90|180|270\n"
         "                       画面顺时针转多少度（--orientation 同义）。默认 auto：\n"
@@ -312,6 +317,8 @@ bool parse_args(int argc, char **argv, Options &o) {
             o.hw_decode = true;
         } else if (a == "--debug-input") {
             o.debug_input = true;
+        } else if (a == "--debug-net") {
+            o.debug_net = true;
         } else if (a == "--scale") {
             o.scale = std::atof(next("--scale"));
             o.scale_given = true;
@@ -1174,6 +1181,43 @@ public:
     /// 被当成每秒读数读了 16 秒，直接把结论带偏到"设备只编 12 帧"上——而它真正的
     /// 意思是这一段里我们一共只收到 110 包/秒。一个没有分母的数不是读数。
     void print_stats() override {
+        // 隧道内 TCP 的账打在两个分支之前，因为它与"画面从哪条路来"无关——而兜底截图
+        // 那条路恰恰最容易撞见重排（每张图一条新连接、每次回复几 MB）。
+        //
+        // 什么时候打：丢过东西就打；此外**第一段一定打一次**，--debug-net 时每段都打。
+        // 那一次不是噪音，是自证——"丢弃 0"与"账根本没接到这条栈上"在日志里长得一模
+        // 一样，只有把分母（收到的字节）也打出来一次才分得清。占比是"要不要给这个栈加
+        // 乱序重组"的判据，所以它必须带分母（§20：没有分母的数不是读数）。
+        if (device_ != nullptr && device_->stack() != nullptr) {
+            const auto c = device_->stack()->tcp_counters();
+            const bool verbose = device_->stack()->net_debug();
+            if (c.dropped_bytes > 0 || verbose || !tcp_line_printed_) {
+                const uint64_t now = SDL_GetTicks64();
+                const double tcp_secs =
+                    last_tcp_ms_ == 0
+                        ? 1.0
+                        : std::max(0.001, static_cast<double>(now - last_tcp_ms_) / 1000.0);
+                const uint64_t recv_delta =
+                    c.recv_bytes >= last_tcp_recv_ ? c.recv_bytes - last_tcp_recv_ : 0;
+                const uint64_t drop_delta =
+                    c.dropped_bytes >= last_tcp_drop_ ? c.dropped_bytes - last_tcp_drop_ : 0;
+                const uint64_t total = c.recv_bytes + c.dropped_bytes;
+                std::printf("  隧道TCP: 收 %6.1f KB/s 乱序丢弃 %5.1f KB/s｜全程 收 %.2f MB 丢 %llu 段 / "
+                            "%.2f MB，占 %.2f%%（不重排，靠重传补）\n",
+                            static_cast<double>(recv_delta) / 1024.0 / tcp_secs,
+                            static_cast<double>(drop_delta) / 1024.0 / tcp_secs,
+                            static_cast<double>(c.recv_bytes) / (1024.0 * 1024.0),
+                            static_cast<unsigned long long>(c.dropped_segments),
+                            static_cast<double>(c.dropped_bytes) / (1024.0 * 1024.0),
+                            total == 0 ? 0.0
+                                       : 100.0 * static_cast<double>(c.dropped_bytes) /
+                                             static_cast<double>(total));
+                tcp_line_printed_ = true;
+                last_tcp_ms_ = now;
+                last_tcp_recv_ = c.recv_bytes;
+                last_tcp_drop_ = c.dropped_bytes;
+            }
+        }
         if (shot_ != nullptr) {
             // 兜底路只有一把尺：截图张数。打速率不打累计（§20 那条教训：没有分母的
             // 数不是读数），失败数单独给——它是"设备开始拒截图"的唯一信号。
@@ -1341,6 +1385,13 @@ private:
     uint64_t last_audio_delivered_ = 0;
     uint64_t last_stats_ms_ = 0;
     uint64_t last_shot_frames_ = 0;
+    /// 隧道内 TCP 那一行自己的尺（不与 `last_stats_ms_` 共用：那一把在两个画面源分支里
+    /// 各自更新，而这一行与画面从哪来无关，且只在真丢过东西时才打）。
+    uint64_t last_tcp_ms_ = 0;
+    uint64_t last_tcp_recv_ = 0;
+    uint64_t last_tcp_drop_ = 0;
+    /// 那一行打过没有：第一段一定打一次，好让"丢弃 0"与"账没接上"分得清。
+    bool tcp_line_printed_ = false;
     /// 起流之前向设备要来的**可见区**尺寸（0/0 = 没问到）。见 `display_size()`。
     int display_w_ = 0;
     int display_h_ = 0;
@@ -1798,6 +1849,11 @@ int main(int argc, char **argv) {
             return 1;
         }
         live = made.get();
+        if (o.debug_net) {
+            if (auto *st = live->device().stack()) {
+                st->set_net_debug(true);
+            }
+        }
         source = std::move(made);
     }
     if (live == nullptr && !o.start_app.empty()) {
