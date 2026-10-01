@@ -238,6 +238,27 @@ int main() {
         check(!scrctl::app::parse_degrade_marks("4,", marks, perr), "尾巴上多个逗号要报错: " + perr);
         check(!scrctl::app::parse_degrade_marks("4x", marks, perr), "认不出的字符要报错: " + perr);
         check(!scrctl::app::parse_degrade_marks("-1", marks, perr), "负数要报错: " + perr);
+
+        // 非有限数与装不下的数（审查 P2，第五轮）。`strtod` 认 nan/inf，也认 "1e400"
+        // （溢出成 inf），而解析器下一步就 `static_cast<uint64_t>(secs * 1000.0)`——
+        // **从 NaN 或超出目标类型的浮点值转整数是未定义行为**，UBSan 会报 runtime
+        // error。负数那一关拦不住它们：nan 与任何数比较都是 false。
+        // 这条旗标的用途是打判据，一个静默变成天文数字（或 0）的时刻表比直接报错更糟：
+        // 它会让人对着一个从没按预期生效的开关读日志。
+        check(!scrctl::app::parse_degrade_marks("nan", marks, perr), "nan 要报错: " + perr);
+        check(!scrctl::app::parse_degrade_marks("inf", marks, perr), "inf 要报错: " + perr);
+        check(!scrctl::app::parse_degrade_marks("-inf", marks, perr),
+              "-inf 要报错（这一条今天靠负数那关就拦住了，留着当回归）: " + perr);
+        check(!scrctl::app::parse_degrade_marks("4,nan", marks, perr),
+              "夹在中间的非有限数也要报错: " + perr);
+        check(!scrctl::app::parse_degrade_marks("1e400", marks, perr),
+              "strtod 溢出成 inf 也要报错: " + perr);
+        check(!scrctl::app::parse_degrade_marks("1e18", marks, perr),
+              "乘 1000 之后装不进 uint64 的要报错: " + perr);
+        // 反面：装得下的大数仍然要认。别把"大"当成错——它只是永远到不了那一刻，
+        // 而多设一个上限就等于多一条要解释的规矩。
+        check(scrctl::app::parse_degrade_marks("1e9", marks, perr) && marks.size() == 1,
+              "1e9 秒（换算成毫秒装得下）照收: " + perr);
     }
 
     std::printf(Failures == 0 ? "\n全部通过\n" : "\n%d 项失败\n", Failures);

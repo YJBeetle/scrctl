@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <string>
@@ -78,8 +79,25 @@ inline bool parse_degrade_marks(std::string_view spec, std::vector<uint64_t> &ou
             err = std::string("有一段不是数字：\"") + p + "\"";
             return false;
         }
+        // 非有限数与装不下的数都要当场拒（审查 P2）。`strtod` 认 "nan"/"inf"，也认
+        // "1e400"（溢出成 inf），而下面那道负数关拦不住 nan——它与任何数比较都是
+        // false。从 NaN 或超出目标类型的浮点值转整数是**未定义行为**，UBSan 实测报
+        // `nan is outside the range of representable values of type 'unsigned long long'`。
+        // 这条旗标的用途是打判据，所以一个静默变成垃圾数的时刻表比直接报错更糟：它会
+        // 让人对着一个从没按预期生效的开关读日志。
+        if (!std::isfinite(secs)) {
+            err = std::string("时刻不是有限数：\"") + std::string(p, static_cast<std::size_t>(end - p)) + "\"";
+            return false;
+        }
         if (secs < 0) {
             err = "时刻不能是负数";
+            return false;
+        }
+        // 只有"乘完还装得下"的转换才是有定义的。这里**不设人为上限**：1e9 秒这种装得下
+        // 的大数照收，它只是永远到不了那一刻，而多设一个上限就多一条要解释的规矩。
+        constexpr double kMaxMs = static_cast<double>(UINT64_MAX);  // 向上取整到 2^64
+        if (secs * 1000.0 >= kMaxMs) {
+            err = std::string("时刻太大，换算成毫秒装不进 uint64：\"") + std::string(p, static_cast<std::size_t>(end - p)) + "\"";
             return false;
         }
         const auto ms = static_cast<uint64_t>(secs * 1000.0);
