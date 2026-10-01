@@ -1,5 +1,11 @@
 # 范围与分期
 
+> ⚠️ **这份是立项时的范围与分期，部分已与现状脱节**（例：M5 那行写"+ quiche"，而实测
+> iOS 17.4+ 两条隧道都不需要 QUIC，Wi-Fi 走的是 TLS-PSK；`--record` 那行写"加 libav mux"，
+> 而音轨受 AAC-ELD 所限另有取舍）。**当前待办、暂缓项与各自的判据层级看
+> [ROADMAP.md](ROADMAP.md)**；这份留着是为了记"为什么功能面以 scrcpy 为基准"与下面那三条
+> 实现约束、依赖策略——那几条仍然有效。
+
 功能面以 **scrcpy** 为基准（不是 pymobiledevice3 —— 它太宽，VNC/Web/DVT/文件系统/定位/备份等一概不做）。协议实现参考 pymobiledevice3，但只做减法。
 
 ## 分期

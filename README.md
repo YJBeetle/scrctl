@@ -45,7 +45,8 @@ scrctl 走 DeviceHub 底下的那条路（CoreDevice DDI 开发者服务），�
   回去。这条必须客户端做——设备编码出来的帧**永远不跟着转**（界面 rot270 时码流
   仍是 1136x2464 竖幅），协议里没有任何地方替我们转正。真机判据见 docs §16.1
 
-完整调研记录、设备侧服务清单、以及踩过的坑见 **[docs/coredevice.md](docs/coredevice.md)**。
+完整调研记录、设备侧服务清单、以及踩过的坑见 **[docs/coredevice.md](docs/coredevice.md)**；
+还没做的、暂缓的和它们的判据见 **[docs/ROADMAP.md](docs/ROADMAP.md)**。
 
 ## 技术栈
 
@@ -121,8 +122,8 @@ Ubuntu 各一格跑 `ctest`，另有一格 ASan+UBSan），但它只覆盖不需
 | Linux | **构建与离线自检在 CI 的 Ubuntu 格上真跑过**（配置、链接、`scrctl --help` 起得来、15 项 ctest 全绿，2026-09-27 起这一格是门槛不是探针）。但这只覆盖"不需要手机的那一半"：libusb、DDI 挂载、隧道建立**没有一次对着真机跑过**，写这些代码的机器上没有 Linux。音频那一路在 Linux 上**没有可解的后端**（见上） |
 | Windows | 只有计划。`transport/Usbmux.cpp` 用的是 POSIX 套接字，要走 AMDS 得先换掉那一层，现在连编译都过不去 |
 
-剩下的主要是工程化收尾：Linux 那一半要有真机才能判（CI 只覆盖不需要手机的部分）、
-`--record` 带上音轨（视频现在是裸 Annex-B，加音轨要先有容器）、以及 Windows 那一层。
+剩下的主要是工程化收尾。**待办、暂缓项与各自的判据层级都写在 [docs/ROADMAP.md](docs/ROADMAP.md)**
+（接手的人从那儿看，别从这份 README 猜现状）。
 
 ## 探针工具（研究用）
 
