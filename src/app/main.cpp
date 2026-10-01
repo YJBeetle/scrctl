@@ -1107,6 +1107,9 @@ public:
                     // 就是等 3 分钟），期间窗口停在媒体流最后一帧上——症状与这条修复要
                     // 解决的"永久停住"几乎没区别（审查 P1）。
                     shot_serial_ = 0;
+                    // 同一族的账还有一本：--stats 的截图速率是拿"上一次打印时的累计张数"
+                    // 做差，新源从 0 重数，不归零那一次做差就下溢（真机打过 1.8e19/s）。
+                    last_shot_frames_ = 0;
                 } else {
                     // 冷却期（kShotRetryMs）内不再撞，冷却一过再试：一次失败不判永久，
                     // 否则截图 RPC 只是暂时不通时，本次会话就一路停在旧画面上（审查 P2）。
@@ -1179,8 +1182,13 @@ public:
             const double secs = last_stats_ms_ == 0
                                     ? 1.0
                                     : std::max(0.001, static_cast<double>(now - last_stats_ms_) / 1000.0);
+            // 换源会让这个计数从零重数（每次降级都新建一个源）。装上新的源时已经把
+            // `last_shot_frames_` 归零，这里再挡一道，规矩与下面设备侧累计数那条一样：
+            // 真机上打出过 `画面 18156244167036960768.00/s`（uint64 做差下溢）。
+            const uint64_t shot_frames =
+                st.frames >= last_shot_frames_ ? st.frames - last_shot_frames_ : 0;
             std::printf("  兜底截图: 画面 %5.2f/s 累计 %llu 张 / %llu KB 失败 %llu\n",
-                        static_cast<double>(st.frames - last_shot_frames_) / secs,
+                        static_cast<double>(shot_frames) / secs,
                         static_cast<unsigned long long>(st.frames),
                         static_cast<unsigned long long>(st.bytes / 1024),
                         static_cast<unsigned long long>(st.failures));
@@ -1358,9 +1366,10 @@ private:
     /// 解码后端解不出关键帧（FramePump::video_unusable，见 next()）。画面约 2 fps，但
     /// 触摸/按键注入走的是同一条 HID 路，不受影响。任一时刻与 pump_ 只有一条在出画面。
     std::unique_ptr<scrctl::media::ScreenshotSource> shot_;
-    /// 「已经取到 shot_ 的第几张」。**不变量：每次给 shot_ 换一个新源，这个数必须归零**
-    /// （新源从 0 起算，而 latest() 只接受大于它的序号）。两个赋值点各自归零：起流就
-    /// 降级那条在 start() 之后，运行中降级那条在 next() 里。
+    /// 「已经取到 shot_ 的第几张」。**不变量：每次给 shot_ 换一个新源，凡是"按源记的账"
+    /// 都要归零**——这个数（新源从 0 起算，而 latest() 只接受大于它的序号）与
+    /// `last_shot_frames_`（--stats 拿它做差算速率，不归零就下溢）。两个赋值点各自归零：
+    /// 起流就降级那条在 start() 之后，运行中降级那条在 next() 里。
     uint64_t shot_serial_ = 0;
     /// 运行中降级时截图源起失败的时间点（SDL 时钟）：冷却期（kShotRetryMs）内不再撞，
     /// 冷却一过再试——一次失败不判永久，否则本次会话就一路停在旧画面上（审查 P2）。
