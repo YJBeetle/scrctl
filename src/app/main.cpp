@@ -729,6 +729,9 @@ public:
     virtual bool next(scrctl::Frame &out, int timeout_ms) = 0;
 
     [[nodiscard]] virtual bool finished() const { return false; }
+    /// `finished()` 为真时打给用户的最后一句。默认那句适合文件回放；实时源要说清
+    /// **为什么**结束（拔线与"截图暂时失败"对用户是两件完全不同的事）。
+    [[nodiscard]] virtual std::string end_reason() const { return "源已结束"; }
     /// 文件回放要自己按标称帧率追节拍；实时流的到达节奏就是设备的节奏。
     [[nodiscard]] virtual bool paces_itself() const { return false; }
     /// 打一段读数。实现方自己按调用间隔算速率，所以调用方只管按秒催。
@@ -1155,6 +1158,25 @@ public:
         }
         serial_ = got;
         return true;
+    }
+
+    /// 设备走了就**别再重试**，走正常退出路径（停流、关会话），与 --time-limit 同一条。
+    ///
+    /// 这是把两件事分开：截图/取帧失败一次是常事（RPC 偶发不通、屏幕睡了），下一轮退避
+    /// 后会自愈；而隧道死了永远不会自愈。改之前两者在代码里是同一个失败，于是拔线之后
+    /// 实测一路退避重试到 --time-limit（60 秒里 193 次失败、0 张新图），窗口模式下用户
+    /// 看到的就是"画面停住、没有一句解释"（docs §28）。
+    ///
+    /// 判据用栈自己的 `pump_error()`：它只在泵线程因**读失败**退出时置位（超时不算），
+    /// 是个结构性事实。**故意不匹配错误文本**——文本会随实现变，而"泵已经停了"不会。
+    [[nodiscard]] bool finished() const override {
+        return device_ != nullptr && device_->stack() != nullptr &&
+               !device_->stack()->pump_error().empty();
+    }
+    [[nodiscard]] std::string end_reason() const override {
+        const std::string why =
+            device_ != nullptr && device_->stack() != nullptr ? device_->stack()->pump_error() : "";
+        return "设备断开了（隧道已死：" + why + "），走正常退出路径";
     }
 
     [[nodiscard]] bool has_audio() const { return audio_ != nullptr; }
@@ -2088,7 +2110,7 @@ int main(int argc, char **argv) {
         // 50ms：再长一点，等帧期间窗口对关闭/移动的反应就开始发木。
         if (!source->next(f, 50)) {
             if (source->finished()) {
-                std::printf("源已结束\n");
+                std::printf("%s\n", source->end_reason().c_str());
                 break;
             }
             // 没帧可画也要让窗口活着——此刻基本都是在等下一帧到达，而等帧的时候
