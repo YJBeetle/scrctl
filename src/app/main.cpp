@@ -31,6 +31,7 @@
 #include "app/Reap.h"
 #include "app/RenderPanel.h"
 #include "app/SourcePick.h"
+#include "app/StatsWindow.h"
 #include "app/ViewGeom.h"
 #include "bitstream/AnnexB.h"
 #include "decode/AudioDecoder.h"
@@ -1120,6 +1121,9 @@ public:
                     // 同一族的账还有一本：--stats 的截图速率是拿"上一次打印时的累计张数"
                     // 做差，新源从 0 重数，不归零那一次做差就下溢（真机打过 1.8e19/s）。
                     last_shot_frames_ = 0;
+                    // 那本账的尺也在这里起表：第一次结算的分母就是"这个源活了多久"，
+                    // 而不是一个假的 1.0 秒（审查 P2）。
+                    last_shot_ms_ = SDL_GetTicks64();
                 } else {
                     // 冷却期（kShotRetryMs）内不再撞，冷却一过再试：一次失败不判永久，
                     // 否则截图 RPC 只是暂时不通时，本次会话就一路停在旧画面上（审查 P2）。
@@ -1245,21 +1249,20 @@ public:
             // 数不是读数），失败数单独给——它是"设备开始拒截图"的唯一信号。
             const auto st = shot_->stats();
             const uint64_t now = SDL_GetTicks64();
-            const double secs = last_stats_ms_ == 0
-                                    ? 1.0
-                                    : std::max(0.001, static_cast<double>(now - last_stats_ms_) / 1000.0);
+            // 这一本账自己的尺。以前它与下面媒体那本共用 `last_stats_ms_`，而两本的
+            // 计数基线各更新各的：切回实时流后第一段 --stats 会把兜底期间的增量除以
+            // 约 1 秒（审查 P2）。
+            const double secs = scrctl::app::settle_window(now, last_shot_ms_);
             // 换源会让这个计数从零重数（每次降级都新建一个源）。装上新的源时已经把
-            // `last_shot_frames_` 归零，这里再挡一道，规矩与下面设备侧累计数那条一样：
-            // 真机上打出过 `画面 18156244167036960768.00/s`（uint64 做差下溢）。
+            // `last_shot_frames_` 归零，这里再挡一道：真机上打出过
+            // `画面 18156244167036960768.00/s`（uint64 做差下溢）。
             const uint64_t shot_frames =
-                st.frames >= last_shot_frames_ ? st.frames - last_shot_frames_ : 0;
+                scrctl::app::counter_delta(st.frames, last_shot_frames_);
             std::printf("  兜底截图: 画面 %5.2f/s 累计 %llu 张 / %llu KB 失败 %llu\n",
                         static_cast<double>(shot_frames) / secs,
                         static_cast<unsigned long long>(st.frames),
                         static_cast<unsigned long long>(st.bytes / 1024),
                         static_cast<unsigned long long>(st.failures));
-            last_shot_frames_ = st.frames;
-            last_stats_ms_ = now;
             return;
         }
         if (pump_ == nullptr) {
@@ -1267,9 +1270,7 @@ public:
         }
         const auto st = pump_->stats();
         const uint64_t now = SDL_GetTicks64();
-        const double secs = last_stats_ms_ == 0
-                                ? 1.0
-                                : std::max(0.001, static_cast<double>(now - last_stats_ms_) / 1000.0);
+        const double secs = scrctl::app::settle_window(now, last_stream_ms_);
         const auto rate = [&](uint64_t now_value, uint64_t before) {
             return static_cast<double>(now_value - before) / secs;
         };
@@ -1350,16 +1351,23 @@ public:
                     static_cast<unsigned long long>(st.pli_sent));
         if (audio_ != nullptr) {
             const auto as = audio_->stats();
-            // 和上面同一把尺：速率除以这次打印窗口，累计数标"全程"。音频腿的分母
-            // 天生比视频稳——设备在没有声音的时候**照发**包（实测 100 包/秒、20 秒
-            // 一秒不多），所以这一行的"包"是平的，一旦它掉到 0 就是流死了。
+            // 音频是**第三本账**，也得有自己的尺：兜底那段时间里音频腿照收照解（它是
+            // 独立会话、独立线程），共用媒体那把尺的话，切回来这一段会把整段兜底期间
+            // 的增量除以约 1 秒。分母的规矩与上面一致——速率除以自己这本账的窗口，
+            // 累计数标"全程"。音频腿的分母天生比视频稳：设备在没有声音的时候**照发**包
+            // （实测 100 包/秒、20 秒一秒不少），所以这一行的"包"是平的，一旦它掉到 0
+            // 就是流死了。
+            const double audio_secs = scrctl::app::settle_window(now, last_audio_ms_);
+            const auto arate = [&](uint64_t now_value, uint64_t before) {
+                return static_cast<double>(now_value - before) / audio_secs;
+            };
             std::printf("  音频: 包 %6.0f/s 解出 %6.0f/s 交付 %6.0f 帧/s（出口=%s）\n",
-                        rate(as.packets, last_audio_packets_),
-                        rate(as.decoded, last_audio_decoded_),
-                        rate(audio_out_.delivered(), last_audio_delivered_),
+                        arate(as.packets, last_audio_packets_),
+                        arate(as.decoded, last_audio_decoded_),
+                        arate(audio_out_.delivered(), last_audio_delivered_),
                         audio_out_.dev_open() ? SDL_GetCurrentAudioDriver() : "未开");
             std::printf("      全程 解败 %llu 真丢 %llu 迟到 %llu 丢旧 %llu 调速 %llu 补静音 %llu "
-                        "RR %llu/%llu 重起 %llu 缓冲 %zu 帧\n",
+                        "RR %llu/%llu 重起 %llu 缓冲 %zu 帧｜分母 %.1fs\n",
                         static_cast<unsigned long long>(as.decode_failed),
                         static_cast<unsigned long long>(as.seq_lost),
                         static_cast<unsigned long long>(as.out_of_order),
@@ -1369,7 +1377,7 @@ public:
                         static_cast<unsigned long long>(as.rtcp_sent),
                         static_cast<unsigned long long>(as.rtcp_failed),
                         static_cast<unsigned long long>(as.restarts),
-                        audio_->buffered_frames());
+                        audio_->buffered_frames(), audio_secs);
             last_audio_packets_ = as.packets;
             last_audio_decoded_ = as.decoded;
             last_audio_delivered_ = audio_out_.delivered();
@@ -1383,7 +1391,6 @@ public:
         }
         last_aus_ = st.aus;
         last_decoded_ = st.decoded;
-        last_stats_ms_ = now;
     }
 
 private:
@@ -1405,10 +1412,17 @@ private:
     uint64_t last_audio_packets_ = 0;
     uint64_t last_audio_decoded_ = 0;
     uint64_t last_audio_delivered_ = 0;
-    uint64_t last_stats_ms_ = 0;
+    /// **一本账一把尺**（审查 P2）。以前这三本共用一个 `last_stats_ms_`，而计数基线
+    /// 各自更新：截图分支每秒推尺，媒体泵与音频的基线却只在媒体分支里动。兜底那 30 秒
+    /// 里两条腿都还在计数，切回实时流后第一段 --stats 就把整段增量除以约 1 秒，速率
+    /// 虚高几十倍——而打印出来的分母写着 1.0s，看起来完全自洽。
+    /// 三把尺都在**各自的源建好时**起表（见 start() 与 next() 里的赋值点），所以第一次
+    /// 结算的分母是真实经过的时间，不是 `settle_window` 里那个 1.0 的兜底。
+    uint64_t last_stream_ms_ = 0;
+    uint64_t last_shot_ms_ = 0;
+    uint64_t last_audio_ms_ = 0;
     uint64_t last_shot_frames_ = 0;
-    /// 隧道内 TCP 那一行自己的尺（不与 `last_stats_ms_` 共用：那一把在两个画面源分支里
-    /// 各自更新，而这一行与画面从哪来无关，且只在真丢过东西时才打）。
+    /// 隧道内 TCP 那一行自己的尺（与画面从哪来无关，且只在真丢过东西时才打）。
     uint64_t last_tcp_ms_ = 0;
     uint64_t last_tcp_recv_ = 0;
     uint64_t last_tcp_drop_ = 0;
@@ -1440,9 +1454,10 @@ private:
     /// 触摸/按键注入走的是同一条 HID 路，不受影响。任一时刻与 pump_ 只有一条在出画面。
     std::unique_ptr<scrctl::media::ScreenshotSource> shot_;
     /// 「已经取到 shot_ 的第几张」。**不变量：每次给 shot_ 换一个新源，凡是"按源记的账"
-    /// 都要归零**——这个数（新源从 0 起算，而 latest() 只接受大于它的序号）与
-    /// `last_shot_frames_`（--stats 拿它做差算速率，不归零就下溢）。两个赋值点各自归零：
-    /// 起流就降级那条在 start() 之后，运行中降级那条在 next() 里。
+    /// 都要归零/起表**——这个数（新源从 0 起算，而 latest() 只接受大于它的序号）、
+    /// `last_shot_frames_`（--stats 拿它做差算速率，不归零就下溢）与 `last_shot_ms_`
+    /// （那本账的尺，不起表则第一次结算的分母是个假的 1.0 秒）。两个赋值点各自处理：
+    /// 起流就降级那条在 start() 里，运行中降级那条在 next() 里。
     uint64_t shot_serial_ = 0;
     /// 运行中降级时截图源起失败的时间点（SDL 时钟）：冷却期（kShotRetryMs）内不再撞，
     /// 冷却一过再试——一次失败不判永久，否则本次会话就一路停在旧画面上（审查 P2）。
@@ -1597,6 +1612,11 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     const bool force_screenshot = video_source == "screenshot";
     if (!force_screenshot) {
         pump_ = scrctl::media::FramePump::start(*device_, options, err);
+        if (pump_ != nullptr) {
+            // 媒体那本账的尺在泵建好这一刻起表：第一段 --stats 的分母就是真实经过的
+            // 时间，而不是 `settle_window` 里那个 1.0 秒的兜底（审查 P2）。
+            last_stream_ms_ = SDL_GetTicks64();
+        }
     }
     if (pump_ == nullptr) {
         // 兜底门：媒体流被设备按版本拒（iOS 27 以下，code 9021，设备原话里带
@@ -1614,6 +1634,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
                 std::printf("改用截图轮询兜底：实测一次截图约 0.5 秒，画面约 2 fps——能看能操作，"
                             "不是能看视频；触摸/按键注入走同一条 HID 路，不受影响\n");
                 shot_ = std::move(shot);
+                last_shot_ms_ = SDL_GetTicks64();  // 兜底那本账的尺，与 next() 里那处同规矩
                 err.clear();
             } else if (force_screenshot) {
                 err = "截图兜底也起不来: " + serr;
@@ -1691,6 +1712,10 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
                 std::fprintf(stderr, "音频腿起不来: %s（画面照常，只是没有声音）\n",
                              aerr.c_str());
             } else {
+                // 音频那本账的尺也在这里起表。它在运行中降级那一段**照收照解**（独立
+                // 会话、独立线程，与画面从哪来无关），所以切回实时流后它的分母同样
+                // 必须是整段兜底时长，而不是媒体分支那把尺剩下的约 1 秒（审查 P2）。
+                last_audio_ms_ = SDL_GetTicks64();
                 std::printf("音频腿已建立：收流端口=%u PT=%u 后端=%s\n",
                             audio_->receiver_port(), audio_->payload_type(),
                             audio_->backend_name().c_str());

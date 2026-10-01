@@ -11,6 +11,7 @@
 
 #include "app/Reap.h"
 #include "app/SourcePick.h"
+#include "app/StatsWindow.h"
 #include "plist/Plist.h"
 #include "remote/App.h"
 #include "xpc/XpcValue.h"
@@ -259,6 +260,69 @@ int main() {
         // 而多设一个上限就等于多一条要解释的规矩。
         check(scrctl::app::parse_degrade_marks("1e9", marks, perr) && marks.size() == 1,
               "1e9 秒（换算成毫秒装得下）照收: " + perr);
+    }
+
+    // 一本账一把尺（审查 P2，第五轮）。场景是真机上跑过的那个形状：媒体流解不出画面
+    // → 降级到截图兜底 30 秒 → 泵回升、切回实时流。兜底那 30 秒里**媒体泵仍在后台收包**
+    // （音频腿也照收照解），只是 print_stats 走的是截图分支、只结算截图那本账。
+    //
+    // 这段同时跑两种接法，把"共用一把尺"当负对照钉在这里：共用尺被截图分支每秒推一次，
+    // 于是切回来那一段的分母只剩约 1 秒，3100 个包的增量被读成 3100/s（真实 100/s）；
+    // 分账尺的分母是整段 31 秒，读数回到 100/s。**哪天有人把三把尺合回一把，这里的
+    // 断言会先红给他看**——那条路的读数长什么样，不必再等真机重现一次。
+    {
+        using scrctl::app::counter_delta;
+        using scrctl::app::settle_window;
+        const uint64_t kPerSec = 100;  // 泵的收包速率（实测空闲时也是 100 包/秒量级）
+        const uint64_t t0 = 1000000;   // 非零起点：0 是"还没起表"的哨兵
+        uint64_t packets = 0;          // 泵的累计收包，全程只增，兜底期间照涨
+
+        uint64_t shared_ms = t0;  // 旧接法：两个分支共用一把尺
+        uint64_t stream_ms = t0;  // 新接法：媒体那本账自己的尺
+        uint64_t base_shared = 0;
+        uint64_t base_split = 0;
+        auto settle_both = [&](uint64_t t, double &shared_rate, double &split_rate) {
+            const uint64_t d1 = counter_delta(packets, base_shared);
+            const double s1 = settle_window(t, shared_ms);
+            shared_rate = static_cast<double>(d1) / s1;
+            const uint64_t d2 = counter_delta(packets, base_split);
+            const double s2 = settle_window(t, stream_ms);
+            split_rate = static_cast<double>(d2) / s2;
+        };
+
+        double shared_rate = 0, split_rate = 0;
+        // 实时流上跑 3 秒：两种接法都该读出真实速率
+        for (uint64_t t = t0 + 1000; t <= t0 + 3000; t += 1000) {
+            packets += kPerSec;
+            settle_both(t, shared_rate, split_rate);
+        }
+        check(shared_rate == 100.0 && split_rate == 100.0,
+              "实时流上每秒结算：两种接法都读 100/s");
+
+        // 降级到截图兜底 30 秒：print_stats 走截图分支，只有共用尺被推
+        uint64_t shot_ms = t0 + 3000;  // 截图那本账的尺，起流就降级那一刻起表
+        for (uint64_t t = t0 + 4000; t <= t0 + 33000; t += 1000) {
+            packets += kPerSec;
+            (void)settle_window(t, shot_ms);  // 截图那本账自己结算（张数那一路，这里不关心）
+            (void)settle_window(t, shared_ms);  // 旧接法：同一把尺被截图分支推掉
+        }
+        // 泵回升，切回实时流：媒体那本账第一次结算
+        packets += kPerSec;
+        settle_both(t0 + 34000, shared_rate, split_rate);
+        check(split_rate == 100.0, "分账尺：切回来那一段仍是 100/s（分母是整段 31 秒）");
+        check(shared_rate == 3100.0,
+              "负对照：共用尺把那 3100 个包除以约 1 秒，读出 3100/s——虚高 31 倍");
+
+        // 尺本身的三条边界
+        uint64_t fresh = 0;
+        check(settle_window(t0 + 5000, fresh) == 1.0 && fresh == t0 + 5000,
+              "没起表的尺：第一段回退成 1.0 秒并就此起表（正常路径不该走到，源建好时就起表）");
+        uint64_t same = t0;
+        settle_window(t0, same);
+        check(settle_window(t0, same) == 0.001, "同一毫秒内结算两次：分母下限 0.001，不会除零");
+        uint64_t base = 100;
+        check(counter_delta(5, base) == 0 && base == 5,
+              "累计数倒退（换源/重起会话会从 0 重数）按 0 算，不下溢成天文数字");
     }
 
     std::printf(Failures == 0 ? "\n全部通过\n" : "\n%d 项失败\n", Failures);
