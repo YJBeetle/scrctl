@@ -43,7 +43,7 @@ scrctl 是独立产品，也是设备协议与恢复行为的验证项目。MaaF
 1. 对接 lwIP 自定义 netif 的可行性验证：覆盖隧道内 TCP 重传、乱序、连接关闭及多连接。
 2. 验证 nghttp2 与 RemoteXPC 空 HEADERS、双向流、流控和文件传输的兼容性。
    nghttp2 是 MIT 许可，旧注释写成 LGPL 已纠正；本轮尚未引入它。
-3. 决定 plist 的依赖与分发策略；XML 库不能替代 binary plist 的编解码。
+3. SDL 初始化、早退和信号处理的生命周期收敛。
 
 这些替换必须各自建立协议判据，再切换实现，不能只凭一次握手成功判断完整兼容。
 
@@ -53,3 +53,17 @@ scrctl 是独立产品，也是设备协议与恢复行为的验证项目。MaaF
 这些测试不证明真机上的持续音画、触摸落地、反复断流恢复或 Wi-Fi 重连。
 真机回归应覆盖 USB / Wi-Fi 握手、实时流与强制截图、旋转、音频、输入、录制和
 `--test-degrade` 的反复切换与退出。
+
+## 第二轮：XML plist / Base64
+
+- XML plist 的语法和转义交给 pugixml 1.16（MIT）。项目保留 plist 类型映射、
+  单根结构校验、8 MiB 输入和 64 层值嵌套上限；不把非验证 XML 解析器当成完整 XML 校验器。
+- binary plist 编解码保持原实现，共享 Value 移到 PlistValue.cpp。
+- XML 输出的缩进和空元素拼写由库决定。数值尾部垃圾和非有限 real 现在直接拒绝。
+- plist 和无线协议的 Base64 共用 OpenSSL EVP；保留 MIME 换行及省略尾部 padding 的支持，
+  拒绝错误字符、长度和 padding。
+- 真机短测：USB 截图 6 张、实时流 12 秒 222 帧；热点 Wi-Fi 截图 5 张、
+  实时流 12 秒 222 帧。两条实时路径各完成两轮强制截图降级和恢复，正常退出。
+- USB 手动 RemoteXPC 配对成功，新记录重新 pair-verify 通过，再使用该记录建立 Wi-Fi 会话。
+  USB 免确认升级配对被设备拒绝；热点 RemotePairing 端口不接受直接 pair-setup。
+- 本轮未验证长时间运行、物理断线、音频、输入、旋转和录制。强制切换测试也不等同于真实断网恢复。

@@ -103,8 +103,9 @@ endif()
 # ------------------------------------------------------------- core lib -----
 add_library(scrctl_core STATIC
         src/json/Json.cpp
-        src/util/Base64.cpp
         src/plist/Plist.cpp
+        src/plist/PlistValue.cpp
+        src/util/Base64.cpp
         src/plist/Bplist.cpp
         src/xpc/XpcValue.cpp
         src/http2/Framing.cpp
@@ -145,6 +146,7 @@ add_library(scrctl_core STATIC
         src/wifi/RemotePairing.cpp)
 target_include_directories(scrctl_core PUBLIC src)
 target_link_libraries(scrctl_core PUBLIC ScrctlAppleFrameworks OpenSSL::SSL OpenSSL::Crypto nlohmann_json::nlohmann_json)
+target_link_libraries(scrctl_core PRIVATE pugixml::pugixml)
 target_compile_options(scrctl_core PRIVATE -Wall -Wextra)
 
 # 解码后端按平台与依赖挑：平台后端在 Apple 上是 VideoToolbox，别处只能借用软解；

@@ -3,6 +3,7 @@
 // 输入样本按 usbmuxd 真实响应的结构构造，但序列号是假的——真实抓包含设备
 // UDID，不入库。
 #include <cstdio>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -181,6 +182,37 @@ void test_edge_cases() {
     auto e10 = scrctl::plist::parse("<plist><real>1.5</real></plist>");
     check(e10.has_value() && e10->kind == scrctl::plist::Kind::Real && e10->real == 1.5,
           "real 类型解析");
+    auto unicode = scrctl::plist::parse(
+        "<plist><string><![CDATA[中文<&]]><!-- c -->尾</string></plist>");
+    check(unicode && unicode->string == "中文<&尾",
+          "CDATA、Unicode 和注释组成标量文本");
+    for (const auto *invalid :
+         {"<plist><true/></plist><plist><false/></plist>",
+          "<plist><true/></plist>garbage", "<plist><dict>garbage</dict></plist>",
+          "<plist><dict><key>x</key></dict></plist>",
+          "<plist><string><true/></string></plist>",
+          "<plist><integer>42oops</integer></plist>",
+          "<plist><integer>9223372036854775808</integer></plist>",
+          "<plist><real>nan</real></plist>", "<plist><real>inf</real></plist>",
+          "<plist><true>no</true></plist>"}) {
+      check(!scrctl::plist::parse(invalid, &err) && !err.empty(),
+            std::string("拒绝非法 plist 结构或数值: ") + invalid);
+    }
+    std::string nul = "<plist><string>prefix";
+    nul += '\0';
+    nul += "suffix</string></plist>";
+    check(!scrctl::plist::parse(nul), "拒绝 NUL 而非截断输入");
+    bool rejected_nul = false;
+    try {
+      (void)scrctl::plist::write(
+          scrctl::plist::Value::Str(std::string("a\0b", 3)));
+    } catch (const std::invalid_argument &) {
+      rejected_nul = true;
+    }
+    check(rejected_nul, "序列化拒绝 NUL 而非静默丢弃后续文本");
+    check(!scrctl::plist::parse(std::string((8u << 20) + 1, ' ')),
+          "拒绝超过 8 MiB 的输入");
+
 }
 
 }  // namespace

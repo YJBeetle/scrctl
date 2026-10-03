@@ -78,10 +78,11 @@ ctest --test-dir build-cmake              # 离线自检，不需要真机（项
 ./build-cmake/scrctl --help
 ```
 
-JSON 与命令行解析使用 nlohmann/json（>= 3.12.0）和 CLI11（>= 2.5.0），分别为 MIT 和 BSD-3-Clause 许可。
+JSON、命令行和 XML plist 解析分别使用 nlohmann/json（>= 3.12.0）、CLI11（>= 2.5.0）和 pugixml（>= 1.16），许可依次为 MIT、BSD-3-Clause、MIT。
 CMake 优先找系统包，缺失时下载固定版本并校验 SHA256；首次配置需要网络。
-离线构建可以安装这两个库并设置 `-DSCRCTL_FETCH_DEPENDENCIES=OFF`，或者通过
-`FETCHCONTENT_SOURCE_DIR_NLOHMANN_JSON` / `FETCHCONTENT_SOURCE_DIR_CLI11` 指定已有源码目录。
+离线构建可以安装这三个库并设置 `-DSCRCTL_FETCH_DEPENDENCIES=OFF`，或者通过
+`FETCHCONTENT_SOURCE_DIR_NLOHMANN_JSON` / `FETCHCONTENT_SOURCE_DIR_CLI11` /
+`FETCHCONTENT_SOURCE_DIR_PUGIXML` 指定已有源码目录。
 第三方许可证位于对应依赖源码中，分发时应保留其许可声明。
 
 应用模块的职责与后续替换边界见 [重构说明](docs/REFACTOR.md)。

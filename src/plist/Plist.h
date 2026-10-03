@@ -10,10 +10,7 @@ namespace scrctl::plist {
 
 enum class Kind { Bool, Int, Real, String, Data, Array, Dict };
 
-/// XML plist 的限定子集实现。
-///
-/// 不引 libplist 是刻意的：它是 LGPL-2.1，静态链接会给 Apache-2.0 的本项目
-/// 施加组合作品义务；而 usbmux / lockdown 实际只需要下面这几种类型。
+/// XML 与 binary plist 共用的协议值类型。XML 编解码使用 pugixml。
 ///
 /// dict 用 keys/values 平行数组而不是 vector<pair<string, Value>>：后者要在
 /// Value 尚不完整时实例化 pair，标准库不保证支持。平行数组同时保留插入顺序。
