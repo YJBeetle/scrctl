@@ -167,6 +167,7 @@ scrcpy 4.1 的权威 record 列表（`scrcpy --help` 抄的）：`-r, --record=f
   午全绿、半夜变红。放仓库外的 `../fixtures/`，并保留运行期 Skipped。
 - 构建小坑：ninja 在源文件与目标文件**同一秒时间戳**时会跳过重建，做负对照前 `touch` 一下；macOS
   没有 `timeout`，用 `perl -e 'alarm N; exec @ARGV' --`。
-- **依赖红线**：不 vendor / 不依赖 pymobiledevice3（GPL-3.0）、libplist、nghttp2（LGPL）。plist、
-  HTTP/2 帧层、SRP、OPACK、bplist、用户态 IP/TCP 栈都是自己写的，理由见 `docs/SCOPE.md` 的
-  "依赖策略"。pymobiledevice3 只当**黑盒仪器**用（`tools/probe/`）。
+- **依赖策略**：pymobiledevice3（GPL-3.0）仍只作为研究仪器，不作为运行依赖。
+  JSON 与 CLI 已采用 nlohmann/json（MIT）/ CLI11（BSD-3-Clause）。nghttp2 也是 MIT，旧文档将它
+  写成 LGPL 的判断有误。HTTP/2、用户态 TCP 和 plist 的替换需分别验证协议适配与
+  分发要求；当前阶段与验收边界见 `docs/REFACTOR.md`。

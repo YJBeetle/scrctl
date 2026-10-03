@@ -12,9 +12,8 @@
 /// 回信通道），XPC 载荷走 DATA 帧。设备回给我们的 HEADERS 我们不需要看懂，
 /// 跳过其载荷即可。少一整套表 + 哈夫曼码表，是这条链路上最值得的一次减法。
 ///
-/// 为什么不用 nghttp2：它是 LGPL，且整个「会话/优先级/流控/HPACK」状态机
-/// 对我们是负资产——这里只用到 6 种帧类型。RFC 7540 的帧头是 9 字节，自己
-/// 收发反而能把边界检查写死。
+/// 当前保留 RemoteXPC 使用的帧子集。nghttp2 是 MIT 许可；后续替换需要验证
+/// 空 HEADERS、双向流及文件传输流与它的会话模型能否兼容。
 namespace scrctl::http2 {
 
 inline constexpr std::size_t kFrameHeaderSize = 9;

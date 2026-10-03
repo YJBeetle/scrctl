@@ -66,6 +66,10 @@ M1 阶段用采集工具拿到了实证：噪点（相邻像素差）从第 1 �
 
 ## 依赖策略
 
+下列条目记录早期里程碑的取舍。当前 JSON / CLI 依赖及重构进展以
+`CMakeLists.txt`、`README.md` 和 `docs/REFACTOR.md` 为准；保留自写实现并非长期约束。
+
+
 - **SDL2**：`find_package` 优先（系统/brew），失败则 FetchContent 固定 tag
 - **M1 不引入 FFmpeg**：macOS 用 VideoToolbox 原生硬解，零外部依赖；libav 作为后续平台的兜底后端
 - **lwIP / quiche**：M2 / M5 才引入

@@ -65,7 +65,8 @@ src/app/         C++ + SDL2 —— 原生窗口、鼠标→触摸、按键映射
 
 跨平台是硬要求，因此**不能**只依赖 macOS 的 `remotepairingd` 捷径（虽然那条路最省事：无 TUN、无 QUIC、无用户态栈，且能与 Xcode 共存）。它作为 macOS 上的可选快速路径保留。
 
-给 MaaFramework 的复用目前是**直接链接 `scrctl_core` 静态库、用 C++ 类**（`MaaIOSControlUnit/Session/ScrctlSession`），还没有包一层稳定的 C ABI。
+MaaFramework 中已有直接链接 `scrctl_core` 的实验接入。后续方向倾向于参考这里验证过的
+协议独立实现；scrctl 同时作为独立产品发展，当前重构不以稳定 SDK / C ABI 为目标。
 
 ## 构建
 
@@ -76,6 +77,14 @@ cmake --build build-cmake -j
 ctest --test-dir build-cmake              # 离线自检，不需要真机（项数用 `ctest -N` 数）
 ./build-cmake/scrctl --help
 ```
+
+JSON 与命令行解析使用 nlohmann/json（>= 3.12.0）和 CLI11（>= 2.5.0），分别为 MIT 和 BSD-3-Clause 许可。
+CMake 优先找系统包，缺失时下载固定版本并校验 SHA256；首次配置需要网络。
+离线构建可以安装这两个库并设置 `-DSCRCTL_FETCH_DEPENDENCIES=OFF`，或者通过
+`FETCHCONTENT_SOURCE_DIR_NLOHMANN_JSON` / `FETCHCONTENT_SOURCE_DIR_CLI11` 指定已有源码目录。
+第三方许可证位于对应依赖源码中，分发时应保留其许可声明。
+
+应用模块的职责与后续替换边界见 [重构说明](docs/REFACTOR.md)。
 
 ffmpeg 是**默认解码后端**，`-DSCRCTL_LIBAV=OFF` 可以关掉，但关掉之后会退回
 VideoToolbox，而它只吃 2 字节的 NAL 长度前缀（上限 65535）——真机主屏的关键帧实测
