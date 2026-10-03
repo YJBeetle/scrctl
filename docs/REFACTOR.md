@@ -12,9 +12,10 @@ scrctl 是独立产品，也是设备协议与恢复行为的验证项目。MaaF
 | main 职责拆分 | 主要拆分已完成，入口 5 行 | Application 的应用命令、LiveSource 的统计仍可继续收敛 |
 | XML / binary plist | XML 已使用 pugixml，binary 仍自实现 | binary plist 库方案尚未评估、替换 |
 | IPv6 / TCP / UDP 用户态栈 | 仍自实现 | lwIP netif 适配可行性及重传、乱序、关闭、多连接验证尚未开始 |
-| HTTP/2 | 仍自实现，已纠正 nghttp2 许可证注释 | nghttp2 对 RemoteXPC 空 HEADERS、双向流、流控和文件传输的兼容验证尚未开始 |
+| HTTP/2 | 已完成 nghttp2 第一轮评估，生产仍自实现 | 控制流和内联大回复兼容；偶数文件流存在限制，真机 FileTransfer 子流尚未触发 |
 | 基础资源管理 | Base64 使用 OpenSSL；SDL 和系统 TCP 建连已收敛 | 本轮系统 socket 建连不替代隧道内 TCP 栈 |
 | 恢复策略和旧 review 问题 | 保留恢复策略，简化截图源状态并完成强制切换短测 | 旧问题尚未完成整体逐项复审；长时间、物理断线和真实无线重连仍待验证 |
+| 注释与命令行文案 | 新增文字改用简洁、直接的表达 | 现有注释与输出尚未全文重写，后续独立处理 |
 | MaaFramework | 按用户安排暂缓 | 后续参考 scrctl 验证过的实现，当前未修改 MaaFramework |
 
 XPC、OPACK、Apple 配对和控制语义、SRP 的 Apple 适配、Deflate 小工具暂时保留。
@@ -58,8 +59,10 @@ XPC、OPACK、Apple 配对和控制语义、SRP 的 Apple 适配、Deflate 小�
 ## 后续阶段
 
 1. 对接 lwIP 自定义 netif 的可行性验证：覆盖隧道内 TCP 重传、乱序、连接关闭及多连接。
-2. 验证 nghttp2 与 RemoteXPC 空 HEADERS、双向流、流控和文件传输的兼容性。
-   nghttp2 是 MIT 许可，旧注释写成 LGPL 已纠正；本轮尚未引入它。
+2. 评估 binary plist 的库方案及接口兼容性。
+
+nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客户端会话，暂不替换生产实现。
+详情见 [nghttp2 适配验证](NGHTTP2_COMPATIBILITY.md)。
 
 这些替换必须各自建立协议判据，再切换实现，不能只凭一次握手成功判断完整兼容。
 
@@ -128,3 +131,14 @@ XPC、OPACK、Apple 配对和控制语义、SRP 的 Apple 适配、Deflate 小�
   未专门注入 fcntl 失败或 poll EINTR。
 - 构建和 20 项离线测试通过；热点 Wi-Fi 完成配对验证、隧道与目录建立，实时流 5 秒输出
   153 帧，正常退出。本轮未验证真实断网重连。
+
+## 第七轮：nghttp2 验证
+
+新增默认关闭的独立探针，覆盖空 HEADERS、双向 DATA、发送和接收流控及记录重放。
+真机握手、服务调用和约 4 MiB 内联截图成功。偶数文件流与库会话模型的限制已由
+离线探针复现；当前设备没有返回 FileTransfer，真机文件子流仍未验证。
+生产实现保持原状。详细结果、限制和复现步骤见 NGHTTP2_COMPATIBILITY.md。
+
+后续单独重写现有注释和命令行输出：输出说明结果、原因和必要的下一步。注释可以详细
+解释设计背景、协议约束、推理、失败模式和验证依据。重点改善表达方式，避免夸张、拟人
+和含混的措辞，不以缩短注释为目标。

@@ -1,8 +1,6 @@
-// 探针：走 screencaptureservice 抓一张设备屏幕，同时验证 XPC 文件传输这条路。
-//
-// 截图回信里 `image` 不放消息本体，而是一个 FileTransfer 说明大小、真字节由设备
-// 在另一条 HTTP/2 流上推。这条路必须单独验：它和视频流一样是「设备反向推数据」，
-// 收不满字节就会卡住后面的所有调用。
+// 获取一张设备截图，验证 XPC 大回复接收和 PNG 内容。
+// image 可直接包含 Data，也可通过 FileTransfer 在独立流上交付；具体形式由设备决定。
+// 2026-10-03 的 iOS 27 实测返回约 4 MiB 的内联 Data。
 #include <cstdio>
 #include <string>
 #include <vector>

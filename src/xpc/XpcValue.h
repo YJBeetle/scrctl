@@ -33,7 +33,7 @@ enum class Type : uint32_t {
     Array = 0x0000E000,
     Dict = 0x0000F000,
     /// 大载荷不进消息本体：字典里放一个 FileTransfer 说明大小，真正的字节由设备
-    /// 在另一条 HTTP/2 流上推。截图这类返回值全靠它。
+    /// 在另一条 HTTP/2 流上推。截图也可能直接返回内联 Data，不能据返回值用途判断类型。
     FileTransfer = 0x0001A000,
 };
 

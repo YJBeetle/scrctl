@@ -246,9 +246,23 @@ target_link_libraries(restart_gap_probe PRIVATE scrctl_core)
 add_executable(bitrate_probe tools/bitrate_probe.cpp)
 target_link_libraries(bitrate_probe PRIVATE scrctl_core)
 
+# 独立的 nghttp2 兼容性验证，不给 scrctl_core / scrctl_app 引入依赖。
+option(SCRCTL_NGHTTP2_PROBE "构建 nghttp2 适配验证探针（需要系统 libnghttp2）" OFF)
+if(SCRCTL_NGHTTP2_PROBE)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(NGHTTP2 REQUIRED IMPORTED_TARGET libnghttp2>=1.50)
+    add_executable(nghttp2_probe tools/nghttp2_probe.cpp)
+    target_link_libraries(nghttp2_probe PRIVATE scrctl_app PkgConfig::NGHTTP2)
+    target_compile_options(nghttp2_probe PRIVATE -Wall -Wextra)
+endif()
+
 # ---------------------------------------------------------------- tests -----
 if(SCRCTL_BUILD_TESTS)
     enable_testing()
+    if(SCRCTL_NGHTTP2_PROBE)
+        add_test(NAME nghttp2_compat COMMAND nghttp2_probe)
+        set_tests_properties(nghttp2_compat PROPERTIES TIMEOUT 10)
+    endif()
 
     add_executable(cli_test tests/cli_test.cpp)
     target_link_libraries(cli_test PRIVATE scrctl_app)
