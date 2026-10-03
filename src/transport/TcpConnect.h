@@ -14,7 +14,7 @@ namespace scrctl::transport {
 /// 普通 TCP 端口，没有 usbmuxd 参与。分开写，也是为了让"哪些字节是走系统协议栈
 /// 出去的、哪些是走我们自己那个隧道内用户态栈出去的"这件事在文件层次上看得出来。
 ///
-/// `timeout_ms` 覆盖的是连接阶段。给 0 表示不超时（不建议：设备睡眠时 ARP 会静默
+/// `timeout_ms` 按每个候选地址限制 connect 等待，不包含 DNS 解析。给 <= 0 表示不超时（不建议：设备睡眠时 ARP 会静默
 /// 丢包，无限等就变成一个看不出原因的卡死）。
 std::optional<Socket> connect_tcp(const std::string &host, uint16_t port, int timeout_ms,
                                   std::string &err);

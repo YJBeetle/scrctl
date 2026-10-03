@@ -305,6 +305,11 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(transport_test PRIVATE scrctl_core)
     add_test(NAME transport COMMAND transport_test)
 
+    add_executable(tcp_connect_test tests/tcp_connect_test.cpp)
+    target_link_libraries(tcp_connect_test PRIVATE scrctl_core)
+    add_test(NAME tcp_connect COMMAND tcp_connect_test)
+    set_tests_properties(tcp_connect PROPERTIES TIMEOUT 10)
+
     add_executable(media_test tests/media_test.cpp)
     target_link_libraries(media_test PRIVATE scrctl_core)
     add_test(NAME media COMMAND media_test)
