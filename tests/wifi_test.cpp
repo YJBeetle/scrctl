@@ -173,6 +173,19 @@ void test_crypto() {
     std::string bad_b64;
     check(!scrctl::wifi::b64_decode("aGVsbG9***", bad_b64), "base64 非法字符要报错，不能默默吞");
 
+    for (const auto *encoded : {"aA==", "aA", " aA==\r\n"}) {
+      const auto decoded = scrctl::wifi::b64_decode(encoded, err);
+      check(decoded && std::string(bv(*decoded)) == "h",
+            "base64 一字节与可省略 padding");
+    }
+    const auto empty = scrctl::wifi::b64_decode(" \t\r\n", err);
+    check(empty && empty->empty(), "base64 空白输入解码为空");
+    for (const auto *invalid :
+         {"a", "aA=", "a===", "====", "aA==Z", "aA=A", "aA==="}) {
+      check(!scrctl::wifi::b64_decode(invalid, err) && !err.empty(),
+            "base64 拒绝错误长度/padding");
+    }
+
     const std::optional<scrctl::wifi::X25519KeyPair> fresh = scrctl::wifi::x25519_keypair(err);
     check(fresh.has_value() && fresh->pub != fresh->priv, "临时密钥对生成得出来");
     const std::optional<scrctl::wifi::X25519KeyPair> fresh2 = scrctl::wifi::x25519_keypair(err);

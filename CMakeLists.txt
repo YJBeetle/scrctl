@@ -103,6 +103,7 @@ endif()
 # ------------------------------------------------------------- core lib -----
 add_library(scrctl_core STATIC
         src/json/Json.cpp
+        src/util/Base64.cpp
         src/plist/Plist.cpp
         src/plist/Bplist.cpp
         src/xpc/XpcValue.cpp

@@ -1,4 +1,5 @@
 #include "wifi/Crypto.h"
+#include "util/Base64.h"
 
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
@@ -289,69 +290,10 @@ std::optional<Bytes> chacha_open(std::string_view key, std::string_view nonce, c
     return out;
 }
 
-namespace {
-constexpr char kB64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-}
-
-std::string b64_encode(std::string_view data) {
-    std::string out;
-    out.reserve((data.size() + 2) / 3 * 4);
-    size_t i = 0;
-    for (; i + 3 <= data.size(); i += 3) {
-        const uint32_t v = (static_cast<uint8_t>(data[i]) << 16) |
-                           (static_cast<uint8_t>(data[i + 1]) << 8) |
-                           static_cast<uint8_t>(data[i + 2]);
-        out += kB64[(v >> 18) & 63];
-        out += kB64[(v >> 12) & 63];
-        out += kB64[(v >> 6) & 63];
-        out += kB64[v & 63];
-    }
-    const size_t rem = data.size() - i;
-    if (rem == 1) {
-        const uint32_t v = static_cast<uint8_t>(data[i]) << 16;
-        out += kB64[(v >> 18) & 63];
-        out += kB64[(v >> 12) & 63];
-        out += "==";
-    } else if (rem == 2) {
-        const uint32_t v = (static_cast<uint8_t>(data[i]) << 16) |
-                           (static_cast<uint8_t>(data[i + 1]) << 8);
-        out += kB64[(v >> 18) & 63];
-        out += kB64[(v >> 12) & 63];
-        out += kB64[(v >> 6) & 63];
-        out += '=';
-    }
-    return out;
-}
-
-std::string b64_encode(const Bytes &data) {
-    return b64_encode(
-        std::string_view(reinterpret_cast<const char *>(data.data()), data.size()));  // NOLINT
-}
-
+std::string b64_encode(std::string_view data) { return util::base64_encode(data); }
+std::string b64_encode(const Bytes &data) { return util::base64_encode(data); }
 std::optional<Bytes> b64_decode(std::string_view text, std::string &err) {
-    Bytes out;
-    uint32_t acc = 0;
-    int bits = 0;
-    for (const char c : text) {
-        if (c == '=') {
-            break;
-        }
-        const auto *pos = std::strchr(kB64, c);
-        if (pos == nullptr) {
-            if (c == '\n' || c == '\r' || c == ' ' || c == '\t') {
-                continue;  // 对端可能按 MIME 折行
-            }
-            err = "base64 里有非法字符";
-            return std::nullopt;
-        }
-        acc = (acc << 6) | static_cast<uint32_t>(pos - kB64);
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out.push_back(static_cast<uint8_t>((acc >> bits) & 0xFF));
-        }
-    }
-    return out;
+    return util::base64_decode(text, err);
 }
 
 }  // namespace scrctl::wifi
