@@ -6,7 +6,6 @@
 #include "app/ViewGeom.h"
 #include <algorithm>
 #include <cstdio>
-#include <functional>
 
 namespace scrctl::app {
 
@@ -109,15 +108,12 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
         if (version_gate || force_screenshot) {
             const std::string stream_err = err;
             std::string serr;
-            auto shot = scrctl::media::ScreenshotSource::start(*device_, serr);
-            if (shot != nullptr) {
+            if (start_screenshot(/*capture_first=*/true, serr)) {
                 if (!stream_err.empty()) {
                     std::printf("媒体流不可用：%s\n", stream_err.c_str());
                 }
                 std::printf("改用截图轮询兜底：实测一次截图约 0.5 秒，画面约 2 fps——能看能操作，"
                             "不是能看视频；触摸/按键注入走同一条 HID 路，不受影响\n");
-                shot_ = std::move(shot);
-                last_shot_ms_ = SDL_GetTicks64(); // 兜底那本账的尺，与 next() 里那处同规矩
                 err.clear();
             } else if (force_screenshot) {
                 err = "截图兜底也起不来: " + serr;
@@ -125,18 +121,18 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             }
         }
     }
-    if (pump_ == nullptr && shot_ == nullptr) {
+    if (pump_ == nullptr && screenshot_.source == nullptr) {
         return false;
     }
     scrctl::Frame first;
-    if (shot_ != nullptr) {
+    if (screenshot_.source != nullptr) {
         uint64_t s = 0;
-        if (!shot_->latest(first, s, 5000)) {
+        if (!screenshot_.source->latest(first, s, 5000)) {
             err = "兜底路 5 秒内没拿到第一张截图";
-            shot_.reset();
+            screenshot_.source.reset();
             return false;
         }
-        shot_serial_ = 0; // 首帧留给主循环去渲染：这里取它只为读尺寸与打日志
+        // 使用局部序号读首帧，让主循环仍能取得这张图。
         // 截图的像素尺寸就是可见区尺寸（没有 HEVC 的 CU 填充），而且它已按界面方向
         // 摆正。iOS 18 上 deviceinfo 服务不在目录里，问几何那一问必然空手，这里补上。
         if (display_w_ == 0) {
@@ -150,7 +146,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
         err = "5 秒内没解出第一帧";
         return false;
     }
-    if (shot_ != nullptr) {
+    if (screenshot_.source != nullptr) {
         std::printf("兜底镜像已建立：%s / iOS %s，截图 %ux%u（约 2 fps）\n",
                     device_->property("ProductType").c_str(),
                     device_->property("OSVersion").c_str(), first.width, first.height);
@@ -169,7 +165,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             display_name_.c_str(), degrees_, first.width, first.height);
     }
     if (!record_path.empty()) {
-        if (shot_ != nullptr) {
+        if (screenshot_.source != nullptr) {
             std::printf("兜底路不录 Annex-B（没有码流可录），--record 这次忽略\n");
         } else {
             std::printf("录制到 %s\n", record_path.c_str());
@@ -182,10 +178,10 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     //
     // 起不来只打一行、不改返回值：`--no-audio` 之外的失败（设备拒了、非 Apple 平台
     // 没有后端）都不该让整个镜像退出。
-    if (want_audio && shot_ != nullptr) {
+    if (want_audio && screenshot_.source != nullptr) {
         std::printf("兜底路没有音频腿：设备系统输出那一路和媒体流同属被版本拒的一族，不再去撞\n");
     }
-    if (want_audio && shot_ == nullptr) {
+    if (want_audio && screenshot_.source == nullptr) {
         if (!scrctl::kHaveAudioDecoder) {
             std::fprintf(stderr, "%s\n", scrctl::kNoAudioDecoderMessage);
         } else {
@@ -277,9 +273,9 @@ void LiveSource::display_size(int &width, int &height) const {
 }
 
 int LiveSource::orientation_degrees() const {
-    if (shot_ != nullptr) {
+    if (screenshot_.source != nullptr) {
         // 截图服务给的是设备合成好的正立图（docs §24），再按朝向转就转歪。起流就降级
-        // 的那条路靠 degrees_=0 兜住，运行中切过来也得生效，所以判据挂在 shot_ 上。
+        // 的那条路靠 degrees_=0 兜住，运行中切过来也得生效，所以判据挂在 screenshot_.source 上。
         return 0;
     }
     if (watcher_ != nullptr) {
@@ -291,80 +287,57 @@ int LiveSource::orientation_degrees() const {
     return degrees_;
 }
 
-bool LiveSource::next(scrctl::Frame &out, int timeout_ms) {
-    // 运行中的降级与回升：FramePump 连续重起仍解不出关键帧时置 video_unusable_ 并喊
-    // "取帧方请改走截图服务"，真解出关键帧后又清掉。起流那一刻的兜底门只覆盖"起流就
-    // 失败"，这一条覆盖"跑着跑着解不出来"——不接的话窗口永久停在旧画面上（审查 P1）。
-    // 四格状态账在 pick_picture_source 里、离线跑全组合（tests/app_test.cpp）；语义与
-    // MaaFW 控制单元一致（ScrctlSession 每次取帧都问同一个标志）。两条路的序号各记各的
-    // （serial_ / shot_serial_），来回切不会把截图的号喂给泵当"since"。
-    // 先回收上一轮退下来的截图源：判据是"worker 自己说它退了"，所以这一趟不阻塞。
-    // 不收的话每个都揣着一整张解码好的 BGRA 画面（本机实测 1125×2436×4 = 10.5 MiB）
-    // 挂到 teardown，反复降级/回升就按切换次数堆内存（审查 P2）。还没退的留到下一帧
-    // 再看——它最迟一次截图 RPC（上限 5 秒）后就退，所以表里同时存在的个数是有界的。
+bool LiveSource::start_screenshot(bool capture_first, std::string &err) {
+    auto source = scrctl::media::ScreenshotSource::start(*device_, err, capture_first);
+    if (!source) {
+        return false;
+    }
+    // 新源从序号 0 起算；统计基线和时钟必须一起换，防止漏帧、无符号下溢或速率虚高。
+    screenshot_ = ScreenshotState{std::move(source), 0, SDL_GetTicks64(), 0, std::nullopt};
+    return true;
+}
+
+void LiveSource::update_picture_source() {
+    // 只回收已退出的 worker，避免在渲染线程上等待截图 RPC；未退出的源仍持有 Device。
     scrctl::app::reap_finished(
         retired_, [](const scrctl::media::ScreenshotSource &src) { return src.worker_done(); });
-    const uint64_t now_ticks = SDL_GetTicks64();
-    // --test-degrade：把 `video_dead` 这一个入参顶成真，好让运行中降级那条路在真机上
-    // 跑起来（真触发器要画面复杂到超出解码后端上限，静止画面上打不响）。状态机本身
-    // 一行没改，所以这里跑出来的读数对真降级同样成立。
-    const bool forced_dead = scrctl::app::degrade_forced(now_ticks - degrade_t0_, degrade_marks_);
-    const uint64_t since_shot_fail = shot_failed_ ? now_ticks - shot_fail_ms_ : UINT64_MAX;
-    switch (scrctl::app::pick_picture_source(
+    const uint64_t now = SDL_GetTicks64();
+    const bool forced_dead = scrctl::app::degrade_forced(now - degrade_t0_, degrade_marks_);
+    const uint64_t since_failure = screenshot_.failed_at ? now - *screenshot_.failed_at : UINT64_MAX;
+    const auto action = scrctl::app::pick_picture_source(
         pump_ != nullptr, (pump_ != nullptr && pump_->video_unusable()) || forced_dead,
-        shot_ != nullptr, since_shot_fail)) {
+        screenshot_.source != nullptr, since_failure);
+    switch (action) {
     case scrctl::app::SourcePick::kToShot: {
-        std::string serr;
-        // 首张**不同步拿**：这一切换发生在渲染线程上，同步拿会把窗口冻到一次
-        // 截图 RPC 的上限（审查 P3）。worker 起来后约半秒就有第一张，这期间窗口
-        // 继续显示媒体流的最后一帧——与"永久停住"的区别是它自己在往前走。
-        auto shot = scrctl::media::ScreenshotSource::start(*device_, serr,
-                                                           /*capture_first=*/false);
-        if (shot != nullptr) {
+        std::string err;
+        // 运行中切换异步取首张，窗口继续显示最后一帧；启动时则同步取得尺寸。
+        if (start_screenshot(/*capture_first=*/false, err)) {
             std::printf("媒体流当前解不出画面，改走截图轮询兜底（约 2 fps）；"
                         "泵在后台按退避继续试，解出来会切回来\n");
-            shot_ = std::move(shot);
-            // 序号跟着源一起换：`shot_serial_` 是"上一个截图源交到第几张"，而
-            // 新源从 0 起算，latest() 只接受**大于**它的序号。不归零的话第二次
-            // 降级要空等"上一轮一共取了多少张"那么久才出画面（第一轮跑了 3 分钟
-            // 就是等 3 分钟），期间窗口停在媒体流最后一帧上——症状与这条修复要
-            // 解决的"永久停住"几乎没区别（审查 P1）。
-            shot_serial_ = 0;
-            // 同一族的账还有一本：--stats 的截图速率是拿"上一次打印时的累计张数"
-            // 做差，新源从 0 重数，不归零那一次做差就下溢（真机打过 1.8e19/s）。
-            last_shot_frames_ = 0;
-            // 那本账的尺也在这里起表：第一次结算的分母就是"这个源活了多久"，
-            // 而不是一个假的 1.0 秒（审查 P2）。
-            last_shot_ms_ = SDL_GetTicks64();
         } else {
-            // 冷却期（kShotRetryMs）内不再撞，冷却一过再试：一次失败不判永久，
-            // 否则截图 RPC 只是暂时不通时，本次会话就一路停在旧画面上（审查 P2）。
-            std::fprintf(stderr, "想降级到截图兜底但它起不来: %s（%llu 秒后再试）\n", serr.c_str(),
+            screenshot_.failed_at = now;
+            std::fprintf(stderr, "想降级到截图兜底但它起不来: %s（%llu 秒后再试）\n", err.c_str(),
                          static_cast<unsigned long long>(scrctl::app::kShotRetryMs / 1000));
-            shot_failed_ = true;
-            shot_fail_ms_ = now_ticks;
         }
         break;
     }
     case scrctl::app::SourcePick::kToStream:
-        // 别在渲染线程上等 worker：request_stop() 只置标志+唤醒，join 在析构里，
-        // 而对象挪进 retired_ 之后析构发生在 teardown（审查 P3 的第二次修复——
-        // 上一轮把析构挪走了，但那时 stop() 自己还会 join，等于没挪）。
-        // worker 最迟在一次截图 RPC（上限 5 秒）结束后退出，这期间它只用 device_，
-        // 而 retired_ 声明在 device_ 之后、先于它析构。
         std::printf("媒体流又能解出画面了，切回实时流\n");
-        shot_->request_stop();
-        retired_.push_back(std::move(shot_));
-        shot_.reset();
+        screenshot_.source->request_stop();
+        retired_.push_back(std::move(screenshot_.source));
         break;
     case scrctl::app::SourcePick::kStayShot:
     case scrctl::app::SourcePick::kStayStream:
         break;
     }
-    if (shot_ != nullptr) {
-        return shot_->latest(out, shot_serial_, timeout_ms);
+}
+
+bool LiveSource::next(scrctl::Frame &out, int timeout_ms) {
+    update_picture_source();
+    if (screenshot_.source) {
+        return screenshot_.source->latest(out, screenshot_.serial, timeout_ms);
     }
-    if (pump_ == nullptr) {
+    if (!pump_) {
         return false;
     }
     const uint64_t got = pump_->newer(out, serial_, timeout_ms);
@@ -425,19 +398,19 @@ void LiveSource::print_stats() {
             last_tcp_drop_ = c.dropped_bytes;
         }
     }
-    if (shot_ != nullptr) {
+    if (screenshot_.source != nullptr) {
         // 兜底路只有一把尺：截图张数。打速率不打累计（§20 那条教训：没有分母的
         // 数不是读数），失败数单独给——它是"设备开始拒截图"的唯一信号。
-        const auto st = shot_->stats();
+        const auto st = screenshot_.source->stats();
         const uint64_t now = SDL_GetTicks64();
         // 这一本账自己的尺。以前它与下面媒体那本共用 `last_stats_ms_`，而两本的
         // 计数基线各更新各的：切回实时流后第一段 --stats 会把兜底期间的增量除以
         // 约 1 秒（审查 P2）。
-        const double secs = scrctl::app::settle_window(now, last_shot_ms_);
+        const double secs = scrctl::app::settle_window(now, screenshot_.stats_ms);
         // 换源会让这个计数从零重数（每次降级都新建一个源）。装上新的源时已经把
-        // `last_shot_frames_` 归零，这里再挡一道：真机上打出过
+        // `screenshot_.frames_base` 归零，这里再挡一道：真机上打出过
         // `画面 18156244167036960768.00/s`（uint64 做差下溢）。
-        const uint64_t shot_frames = scrctl::app::counter_delta(st.frames, last_shot_frames_);
+        const uint64_t shot_frames = scrctl::app::counter_delta(st.frames, screenshot_.frames_base);
         std::printf("  兜底截图: 画面 %5.2f/s 累计 %llu 张 / %llu KB 失败 %llu\n",
                     static_cast<double>(shot_frames) / secs,
                     static_cast<unsigned long long>(st.frames),

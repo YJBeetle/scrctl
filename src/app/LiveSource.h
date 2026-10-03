@@ -9,13 +9,9 @@
 #include "media/StreamSession.h"
 #include "remote/Device.h"
 #include "remote/DisplayInfo.h"
-#include <atomic>
-#include <chrono>
-#include <condition_variable>
 #include <memory>
-#include <mutex>
+#include <optional>
 #include <string>
-#include <thread>
 #include <vector>
 
 namespace scrctl::app {
@@ -94,6 +90,9 @@ class LiveSource final : public FrameSource {
     void print_stats() override;
 
   private:
+    bool start_screenshot(bool capture_first, std::string &err);
+    void update_picture_source();
+
     std::unique_ptr<scrctl::remote::Device> device_;
     std::unique_ptr<scrctl::media::FramePump> pump_;
     /// 音频腿与声卡出口。它们都引用 `Device&` / `AudioPump`，所以**必须声明在
@@ -119,9 +118,7 @@ class LiveSource final : public FrameSource {
     /// 三把尺都在**各自的源建好时**起表（见 start() 与 next() 里的赋值点），所以第一次
     /// 结算的分母是真实经过的时间，不是 `settle_window` 里那个 1.0 的兜底。
     uint64_t last_stream_ms_ = 0;
-    uint64_t last_shot_ms_ = 0;
     uint64_t last_audio_ms_ = 0;
-    uint64_t last_shot_frames_ = 0;
     /// 隧道内 TCP 那一行自己的尺（与画面从哪来无关，且只在真丢过东西时才打）。
     uint64_t last_tcp_ms_ = 0;
     uint64_t last_tcp_recv_ = 0;
@@ -149,20 +146,14 @@ class LiveSource final : public FrameSource {
     bool hid_unavailable_ = false;
     uint64_t serial_ = 0;
 
-    /// 截图轮询兜底源。两种顶上方式：起流就被设备按版本拒（iOS 27 以下），或者跑着跑着
-    /// 解码后端解不出关键帧（FramePump::video_unusable，见 next()）。画面约 2 fps，但
-    /// 触摸/按键注入走的是同一条 HID 路，不受影响。任一时刻与 pump_ 只有一条在出画面。
-    std::unique_ptr<scrctl::media::ScreenshotSource> shot_;
-    /// 「已经取到 shot_ 的第几张」。**不变量：每次给 shot_ 换一个新源，凡是"按源记的账"
-    /// 都要归零/起表**——这个数（新源从 0 起算，而 latest() 只接受大于它的序号）、
-    /// `last_shot_frames_`（--stats 拿它做差算速率，不归零就下溢）与 `last_shot_ms_`
-    /// （那本账的尺，不起表则第一次结算的分母是个假的 1.0 秒）。两个赋值点各自处理：
-    /// 起流就降级那条在 start() 里，运行中降级那条在 next() 里。
-    uint64_t shot_serial_ = 0;
-    /// 运行中降级时截图源起失败的时间点（SDL 时钟）：冷却期（kShotRetryMs）内不再撞，
-    /// 冷却一过再试——一次失败不判永久，否则本次会话就一路停在旧画面上（审查 P2）。
-    bool shot_failed_ = false;
-    uint64_t shot_fail_ms_ = 0;
+    // 截图源的序号和统计随每次新源一起重置，只由 start_screenshot 安装。
+    struct ScreenshotState {
+        std::unique_ptr<scrctl::media::ScreenshotSource> source;
+        uint64_t serial = 0;
+        uint64_t stats_ms = 0;
+        uint64_t frames_base = 0;
+        std::optional<uint64_t> failed_at;
+    } screenshot_;
     /// 切回实时流时退下来的截图源：`request_stop()` 已叫过，销毁（= join）由 next() 每帧
     /// 跑一趟 `app::reap_finished` 逐步做，worker 还没退的就留到下一帧。渲染线程上直接
     /// join 一个可能卡在截图 RPC 里的线程会把窗口冻到 RPC 上限（审查 P3），而一路留到
