@@ -26,7 +26,7 @@ bool to_xpc(const json::Value &value, std::string_view key, std::string_view par
 
 bool to_xpc_children(const json::Value &value, std::string_view key, std::string_view parent,
                      xpc::Value &out, std::string &err) {
-    for (const auto &item : value.array) {
+    for (const auto &item : value) {
         xpc::Value child;
         // 数组元素没有键名，所以它的"上一级"就是这个数组自己的键。
         if (!to_xpc(item, "", key, parent, child, err)) {
@@ -39,27 +39,37 @@ bool to_xpc_children(const json::Value &value, std::string_view key, std::string
 
 bool to_xpc(const json::Value &value, std::string_view key, std::string_view parent,
             std::string_view grandparent, xpc::Value &out, std::string &err) {
-    switch (value.kind) {
-        case json::Kind::Null:
+    switch (value.type()) {
+        case json::Value::value_t::null:
             out = xpc::make_null();
             return true;
-        case json::Kind::Bool:
-            out = xpc::make_bool(value.boolean);
+        case json::Value::value_t::boolean:
+            out = xpc::make_bool(value.get<bool>());
             return true;
-        case json::Kind::Double:
-            out = xpc::make_double(value.real);
+        case json::Value::value_t::number_float:
+            out = xpc::make_double(value.get<double>());
             return true;
-        case json::Kind::Int:
-            out = key == "sequenceNumber"
-                      ? xpc::make_uint64(static_cast<uint64_t>(value.integer))
-                      : xpc::make_int64(value.integer);
-            return true;
-        case json::Kind::String: {
-            if (!is_binary_field(key, parent, grandparent)) {
-                out = xpc::make_string(value.string);
+        case json::Value::value_t::number_unsigned:
+            if (key == "sequenceNumber") {
+                out = xpc::make_uint64(value.get<uint64_t>());
                 return true;
             }
-            const auto bytes = wifi::b64_decode(value.string, err);
+            if (value.get<uint64_t>() > static_cast<uint64_t>(INT64_MAX)) {
+                err = "JSON 整数超出 XPC int64 范围";
+                return false;
+            }
+            [[fallthrough]];
+        case json::Value::value_t::number_integer:
+            out = key == "sequenceNumber"
+                      ? xpc::make_uint64(static_cast<uint64_t>(value.get<int64_t>()))
+                      : xpc::make_int64(value.get<int64_t>());
+            return true;
+        case json::Value::value_t::string: {
+            if (!is_binary_field(key, parent, grandparent)) {
+                out = xpc::make_string(value.get_ref<const std::string &>());
+                return true;
+            }
+            const auto bytes = wifi::b64_decode(value.get_ref<const std::string &>(), err);
             if (!bytes) {
                 err = "字段 " + std::string(key) + " 该是二进制的 base64，解不出来: " + err;
                 return false;
@@ -67,19 +77,20 @@ bool to_xpc(const json::Value &value, std::string_view key, std::string_view par
             out = xpc::make_data(std::move(*bytes));
             return true;
         }
-        case json::Kind::Array_:
+        case json::Value::value_t::array:
             out = xpc::make_array();
             return to_xpc_children(value, key, parent, out, err);
-        case json::Kind::Object_:
+        case json::Value::value_t::object:
             out = xpc::make_dict();
-            for (const auto &kv : value.object) {
+            for (const auto &kv : value.items()) {
                 xpc::Value child;
-                if (!to_xpc(kv.second, kv.first, key, parent, child, err)) {
+                if (!to_xpc(kv.value(), kv.key(), key, parent, child, err)) {
                     return false;
                 }
-                xpc::dict_set(out, kv.first, std::move(child));
+                xpc::dict_set(out, kv.key(), std::move(child));
             }
             return true;
+        default: break;
     }
     err = "未知的 JSON 值类型";
     return false;
@@ -116,14 +127,10 @@ bool from_xpc(const xpc::Value &value, json::Value &out, std::string &err) {
             out = wifi::j_int(value.int64);
             return true;
         case xpc::Type::UInt64:
-            // JSON 这边只有有符号整数。配对信封里的无符号值都是序号与端口，
-            // 远够不到 int64 的上界，直接转过来。
-            out = wifi::j_int(static_cast<int64_t>(value.uint64));
+            out = value.uint64;
             return true;
         case xpc::Type::Double:
-            out = json::Value{};
-            out.kind = json::Kind::Double;
-            out.real = value.real;
+            out = value.real;
             return true;
         case xpc::Type::Date:
             out = wifi::j_int(static_cast<int64_t>(value.uint64));
@@ -152,7 +159,7 @@ bool from_xpc(const xpc::Value &value, json::Value &out, std::string &err) {
                 if (!from_xpc(item, child, err)) {
                     return false;
                 }
-                out.array.push_back(std::move(child));
+                out.push_back(std::move(child));
             }
             return true;
         case xpc::Type::Dict:
@@ -162,7 +169,7 @@ bool from_xpc(const xpc::Value &value, json::Value &out, std::string &err) {
                 if (!from_xpc(entry.value, child, err)) {
                     return false;
                 }
-                out.object.emplace(entry.key, std::move(child));
+                out.emplace(entry.key, std::move(child));
             }
             return true;
         case xpc::Type::FileTransfer:

@@ -5,40 +5,13 @@
 
 namespace scrctl::wifi {
 
-json::Value j_str(std::string_view s) {
-    json::Value v;
-    v.kind = json::Kind::String;
-    v.string = s;
-    return v;
-}
-
-json::Value j_int(int64_t v) {
-    json::Value out;
-    out.kind = json::Kind::Int;
-    out.integer = v;
-    return out;
-}
-
-json::Value j_bool(bool v) {
-    json::Value out;
-    out.kind = json::Kind::Bool;
-    out.boolean = v;
-    return out;
-}
-
-json::Value j_arr(std::vector<json::Value> items) {
-    json::Value out;
-    out.kind = json::Kind::Array_;
-    out.array = std::move(items);
-    return out;
-}
-
+json::Value j_str(std::string_view s) { return std::string(s); }
+json::Value j_int(int64_t v) { return v; }
+json::Value j_bool(bool v) { return v; }
+json::Value j_arr(std::vector<json::Value> items) { return json::Value(std::move(items)); }
 json::Value j_obj(std::vector<std::pair<std::string, json::Value>> kv) {
-    json::Value out;
-    out.kind = json::Kind::Object_;
-    for (auto &[k, v] : kv) {
-        out.object.emplace(std::move(k), std::move(v));
-    }
+    auto out = json::Value::object();
+    for (auto &[k, v] : kv) out.emplace(std::move(k), std::move(v));
     return out;
 }
 
@@ -106,25 +79,25 @@ std::optional<json::Value> Rppairing::receive(std::string &err) {
         return std::nullopt;
     }
 
-    const json::Value *message = envelope->find("message");
+    const json::Value *message = json::find(*envelope, "message");
     if (message == nullptr) {
         err = "信封里没有 message 字段";
         return std::nullopt;
     }
-    if (const json::Value *plain = message->find("plain")) {
-        const json::Value *inner = plain->find("_0");
+    if (const json::Value *plain = json::find(*message, "plain")) {
+        const json::Value *inner = json::find(*plain, "_0");
         if (inner == nullptr) {
             err = "plain 里没有 _0";
             return std::nullopt;
         }
         return *inner;
     }
-    const json::Value *encrypted = message->find("streamEncrypted");
+    const json::Value *encrypted = json::find(*message, "streamEncrypted");
     if (encrypted == nullptr) {
         err = "信封既不是 plain 也不是 streamEncrypted";
         return std::nullopt;
     }
-    const json::Value *payload = encrypted->find("_0");
+    const json::Value *payload = json::find(*encrypted, "_0");
     if (payload == nullptr || !payload->is_string()) {
         err = "streamEncrypted 的 _0 不是字符串";
         return std::nullopt;
@@ -133,7 +106,7 @@ std::optional<json::Value> Rppairing::receive(std::string &err) {
         err = "收到加密帧，但主密钥/nonce 还没就绪（配对没走通就发东西了）";
         return std::nullopt;
     }
-    const std::optional<Bytes> sealed = b64_decode(payload->as_string_or(), err);
+    const std::optional<Bytes> sealed = b64_decode(json::as_string_or(*payload), err);
     if (!sealed) {
         return std::nullopt;
     }
@@ -147,23 +120,23 @@ std::optional<json::Value> Rppairing::receive(std::string &err) {
     if (!decrypted) {
         return std::nullopt;
     }
-    const json::Value *response = decrypted->find("response");
+    const json::Value *response = json::find(*decrypted, "response");
     if (response == nullptr) {
         err = "解密出来的不是 response";
         return std::nullopt;
     }
-    const json::Value *body_of_response = response->find("_1");
+    const json::Value *body_of_response = json::find(*response, "_1");
     if (body_of_response == nullptr) {
         err = "response 里没有 _1";
         return std::nullopt;
     }
     // 设备把错误也塞在加密回复里：不挑出来的话，调用方会拿一个没有期待字段的对象
     // 去报"缺字段"，把一个本来很直白的拒绝变成看不懂的话。
-    if (const json::Value *extended = body_of_response->find("errorExtended")) {
-        const json::Value *info = extended->find("_0");
-        const json::Value *user = info != nullptr ? info->find("userInfo") : nullptr;
-        const json::Value *why = user != nullptr ? user->find("NSLocalizedDescription") : nullptr;
-        err = "设备拒绝: " + (why != nullptr ? why->as_string_or() : std::string("(没有描述)"));
+    if (const json::Value *extended = json::find(*body_of_response, "errorExtended")) {
+        const json::Value *info = json::find(*extended, "_0");
+        const json::Value *user = info != nullptr ? json::find(*info, "userInfo") : nullptr;
+        const json::Value *why = user != nullptr ? json::find(*user, "NSLocalizedDescription") : nullptr;
+        err = "设备拒绝: " + (why != nullptr ? json::as_string_or(*why) : std::string("(没有描述)"));
         return std::nullopt;
     }
     return *body_of_response;
@@ -208,24 +181,24 @@ std::optional<Bytes> pairing_data_roundtrip(Rppairing &channel, const Bytes &tlv
         if (!reply) {
             return std::nullopt;
         }
-        const json::Value *event = reply->find("event");
+        const json::Value *event = json::find(*reply, "event");
         if (event == nullptr) {
             err = "配对过程中设备回的不是 event";
             return std::nullopt;
         }
-        const json::Value *zero = event->find("_0");
+        const json::Value *zero = json::find(*event, "_0");
         if (zero == nullptr) {
             err = "event 里没有 _0";
             return std::nullopt;
         }
-        if (const json::Value *rejected = zero->find("pairingRejectedWithError")) {
-            const json::Value *wrapped = rejected->find("wrappedError");
-            const json::Value *user = wrapped != nullptr ? wrapped->find("userInfo") : nullptr;
-            const json::Value *why = user != nullptr ? user->find("NSLocalizedDescription") : nullptr;
-            err = "设备拒绝: " + (why != nullptr ? why->as_string_or() : std::string("(没有描述)"));
+        if (const json::Value *rejected = json::find(*zero, "pairingRejectedWithError")) {
+            const json::Value *wrapped = json::find(*rejected, "wrappedError");
+            const json::Value *user = wrapped != nullptr ? json::find(*wrapped, "userInfo") : nullptr;
+            const json::Value *why = user != nullptr ? json::find(*user, "NSLocalizedDescription") : nullptr;
+            err = "设备拒绝: " + (why != nullptr ? json::as_string_or(*why) : std::string("(没有描述)"));
             return std::nullopt;
         }
-        if (zero->find("awaitingUserConsent") != nullptr) {
+        if (json::find(*zero, "awaitingUserConsent") != nullptr) {
             if (!consent_pending) {
                 err = "设备连着两次说要等用户同意";
                 return std::nullopt;
@@ -236,17 +209,17 @@ std::optional<Bytes> pairing_data_roundtrip(Rppairing &channel, const Bytes &tlv
             }
             continue;
         }
-        const json::Value *data = zero->find("pairingData");
-        const json::Value *inner_data = data != nullptr ? data->find("_0") : nullptr;
-        const json::Value *bytes = inner_data != nullptr ? inner_data->find("data") : nullptr;
+        const json::Value *data = json::find(*zero, "pairingData");
+        const json::Value *inner_data = data != nullptr ? json::find(*data, "_0") : nullptr;
+        const json::Value *bytes = inner_data != nullptr ? json::find(*inner_data, "data") : nullptr;
         if (bytes == nullptr || !bytes->is_string()) {
             err = "event 里没有 pairingData._0.data，实际字段：";
-            for (const auto &kv : zero->object) {
-                err += " " + kv.first;
+            for (const auto &kv : zero->items()) {
+                err += " " + kv.key();
             }
             return std::nullopt;
         }
-        return b64_decode(bytes->as_string_or(), err);
+        return b64_decode(json::as_string_or(*bytes), err);
     }
 }
 

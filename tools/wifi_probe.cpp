@@ -22,7 +22,7 @@
 #include <string>
 #include <vector>
 
-#include "jsonlite/Jsonlite.h"
+#include "json/Json.h"
 #include "net/Stack.h"
 #include "remote/PairingChannel.h"
 #include "remote/RemoteXpc.h"
@@ -64,10 +64,7 @@ std::optional<std::string> read_file(const std::string &path) {
 }
 
 scrctl::json::Value j_arr(std::vector<scrctl::json::Value> items) {
-    scrctl::json::Value out;
-    out.kind = scrctl::json::Kind::Array_;
-    out.array = std::move(items);
-    return out;
+    return scrctl::json::Value(std::move(items));
 }
 
 /// 读另一套实现的配对记录（只为互操作判据，产品里不会走这条路）。
@@ -95,25 +92,25 @@ std::optional<scrctl::wifi::PairRecord> from_foreign_record(const std::string &t
 }
 
 void print_handshake(const scrctl::json::Value &device_handshake) {
-    const scrctl::json::Value *version = device_handshake.find("wireProtocolVersion");
+    const scrctl::json::Value *version = scrctl::json::find(device_handshake, "wireProtocolVersion");
     std::printf("  设备报的 wireProtocolVersion = %lld\n",
-                static_cast<long long>(version != nullptr ? version->as_int_or(0) : 0));
-    const scrctl::json::Value *options = device_handshake.find("deviceOptions");
+                static_cast<long long>(version != nullptr ? scrctl::json::as_int_or(*version, 0) : 0));
+    const scrctl::json::Value *options = scrctl::json::find(device_handshake, "deviceOptions");
     if (options != nullptr) {
         std::printf("  deviceOptions:");
-        for (const auto &key : options->object) {
-            std::printf(" %s=%s", key.first.c_str(),
-                        key.second.kind == scrctl::json::Kind::Bool
-                            ? (key.second.boolean ? "是" : "否")
+        for (const auto &key : options->items()) {
+            std::printf(" %s=%s", key.key().c_str(),
+                        key.value().is_boolean()
+                            ? (key.value().get<bool>() ? "是" : "否")
                             : "?");
         }
         std::printf("\n");
     }
-    const scrctl::json::Value *peer = device_handshake.find("peerDeviceInfo");
+    const scrctl::json::Value *peer = scrctl::json::find(device_handshake, "peerDeviceInfo");
     if (peer != nullptr) {
-        const scrctl::json::Value *identifier = peer->find("identifier");
+        const scrctl::json::Value *identifier = scrctl::json::find(*peer, "identifier");
         std::printf("  设备在这条面上自报的 identifier = %s\n",
-                    identifier != nullptr ? mask(identifier->as_string_or()).c_str() : "(没给)");
+                    identifier != nullptr ? mask(scrctl::json::as_string_or(*identifier)).c_str() : "(没给)");
     }
 }
 
@@ -811,29 +808,29 @@ int main(int argc, char **argv) {
         std::fprintf(stderr, "  createListener 失败: %s\n", err.c_str());
         return 1;
     }
-    const scrctl::json::Value *created = reply->find("createListener");
-    const scrctl::json::Value *listener_port = created != nullptr ? created->find("port") : nullptr;
+    const scrctl::json::Value *created = scrctl::json::find(*reply, "createListener");
+    const scrctl::json::Value *listener_port = created != nullptr ? scrctl::json::find(*created, "port") : nullptr;
     if (listener_port == nullptr) {
         std::fprintf(stderr, "  回信里没有 createListener.port，实际字段：");
-        for (const auto &kv : reply->object) {
-            std::fprintf(stderr, " %s", kv.first.c_str());
+        for (const auto &kv : reply->items()) {
+            std::fprintf(stderr, " %s", kv.key().c_str());
         }
         std::fprintf(stderr, "\n");
         return 1;
     }
     std::printf("  createListener 给了端口 %lld\n",
-                static_cast<long long>(listener_port->as_int_or(0)));
+                static_cast<long long>(scrctl::json::as_int_or(*listener_port, 0)));
 
     if (!want_tunnel) {
         const auto probe = scrctl::transport::connect_tcp(
-            address, static_cast<uint16_t>(listener_port->as_int_or(0)), 3000, err);
+            address, static_cast<uint16_t>(scrctl::json::as_int_or(*listener_port, 0)), 3000, err);
         std::printf("  那个端口连得上吗: %s\n", probe ? "连得上" : err.c_str());
         return 0;
     }
 
     // --tunnel：真的把隧道起起来。这一步同时是 pair-verify 那把共享密钥的判据——
     // 隧道监听器只认这把 PSK，密钥派生错一个字节就握不上。
-    const uint16_t tunnel_port = static_cast<uint16_t>(listener_port->as_int_or(0));
+    const uint16_t tunnel_port = static_cast<uint16_t>(scrctl::json::as_int_or(*listener_port, 0));
     auto tunnel_sock = scrctl::transport::connect_tcp(address, tunnel_port, 5000, err);
     if (!tunnel_sock) {
         std::fprintf(stderr, "  连隧道端口 %u 失败: %s\n", tunnel_port, err.c_str());

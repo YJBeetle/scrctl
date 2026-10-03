@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-#include "jsonlite/Jsonlite.h"
+#include "json/Json.h"
 
 namespace scrctl::transport {
 namespace {
@@ -92,20 +92,7 @@ std::optional<PacketTunnel> PacketTunnel::establish_psk(Socket &&sock,
 }
 
 bool PacketTunnel::client_handshake(std::string &err) {
-    json::Value req;
-    req.kind = json::Kind::Object_;
-    req.object["type"] = [] {
-        json::Value v;
-        v.kind = json::Kind::String;
-        v.string = "clientHandshakeRequest";
-        return v;
-    }();
-    req.object["mtu"] = [] {
-        json::Value v;
-        v.kind = json::Kind::Int;
-        v.integer = kRequestedMtu;
-        return v;
-    }();
+    const json::Value req = {{"type", "clientHandshakeRequest"}, {"mtu", kRequestedMtu}};
     const std::string body = json::write(req);
 
     std::vector<uint8_t> frame(kControlHeaderLen + body.size());
@@ -136,21 +123,16 @@ bool PacketTunnel::client_handshake(std::string &err) {
         err = "隧道握手回复不是合法 JSON";
         return false;
     }
-    const auto *cp = parsed->find("clientParameters");
-    const json::Value *cp_mtu = nullptr;
-    if (cp != nullptr) {
-        params_.client_address = cp->find("address") ? cp->find("address")->as_string_or("")
-                                                       : "";
-        // MTU 在 clientParameters 里，不在顶层——顶层取会拿到 0。
-        cp_mtu = cp->find("mtu");
-    }
-    params_.server_address =
-        parsed->find("serverAddress") ? parsed->find("serverAddress")->as_string_or("") : "";
-    params_.rsd_port =
-        static_cast<uint16_t>(parsed->find("serverRSDPort") ? parsed->find("serverRSDPort")->as_int_or(0) : 0);
-    const auto *top_mtu = parsed->find("mtu");
-    params_.mtu = static_cast<uint16_t>(
-        cp_mtu != nullptr ? cp_mtu->as_int_or(0) : (top_mtu != nullptr ? top_mtu->as_int_or(0) : 0));
+    const auto *cp = json::find(*parsed, "clientParameters");
+    const auto *address = cp ? json::find(*cp, "address") : nullptr;
+    const auto *server = json::find(*parsed, "serverAddress");
+    const auto *port = json::find(*parsed, "serverRSDPort");
+    const auto *mtu = cp ? json::find(*cp, "mtu") : nullptr;
+    if (!mtu) mtu = json::find(*parsed, "mtu");
+    params_.client_address = address ? json::as_string_or(*address) : "";
+    params_.server_address = server ? json::as_string_or(*server) : "";
+    params_.rsd_port = static_cast<uint16_t>(port ? json::as_int_or(*port) : 0);
+    params_.mtu = static_cast<uint16_t>(mtu ? json::as_int_or(*mtu) : 0);
 
     if (params_.client_address.empty() || params_.server_address.empty() ||
         params_.rsd_port == 0) {

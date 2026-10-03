@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "jsonlite/Jsonlite.h"
+#include "json/Json.h"
 #include "transport/Usbmux.h"
 #include "wifi/Crypto.h"
 
@@ -46,7 +46,7 @@ private:
     transport::Socket &sock_;
 };
 
-/// 组 JSON 用的小工厂（`json::Value` 是个聚合体，逐个字段赋值读起来太吵）。
+/// 配对消息构造辅助函数；值存储使用 nlohmann/json。
 json::Value j_str(std::string_view s);
 json::Value j_int(int64_t v);
 json::Value j_bool(bool v);

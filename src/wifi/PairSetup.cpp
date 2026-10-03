@@ -60,10 +60,10 @@ std::optional<json::Value> do_handshake(Rppairing &channel, bool attempt_verify,
     if (!reply) {
         return std::nullopt;
     }
-    const json::Value *response = reply->find("response");
-    const json::Value *one = response != nullptr ? response->find("_1") : nullptr;
-    const json::Value *handshake = one != nullptr ? one->find("handshake") : nullptr;
-    const json::Value *zero = handshake != nullptr ? handshake->find("_0") : nullptr;
+    const json::Value *response = json::find(*reply, "response");
+    const json::Value *one = response != nullptr ? json::find(*response, "_1") : nullptr;
+    const json::Value *handshake = one != nullptr ? json::find(*one, "handshake") : nullptr;
+    const json::Value *zero = handshake != nullptr ? json::find(*handshake, "_0") : nullptr;
     if (zero == nullptr) {
         err = "handshake 回信里没有 response._1.handshake._0";
         return std::nullopt;
@@ -95,9 +95,9 @@ std::optional<std::map<uint8_t, Bytes>> parse_reply(const Bytes &raw, const char
 /// 必须在**发任何 pairingData 之前**问：不问的话症状是"M1 发出去就没有然后了"，与
 /// "字段不对"长得一模一样，我们为此逐条否证过十一条假设（25.1–25.7）。
 bool plane_allows_pair_setup(const json::Value &handshake, std::string &err) {
-    const json::Value *options = handshake.find("deviceOptions");
-    const json::Value *allowed = options != nullptr ? options->find("allowsPairSetup") : nullptr;
-    if (allowed != nullptr && allowed->kind == json::Kind::Bool && !allowed->boolean) {
+    const json::Value *options = json::find(handshake, "deviceOptions");
+    const json::Value *allowed = options != nullptr ? json::find(*options, "allowsPairSetup") : nullptr;
+    if (allowed != nullptr && allowed->is_boolean() && !allowed->get<bool>()) {
         err = "这条控制面不接受 pair-setup（设备自报 deviceOptions.allowsPairSetup=否）；"
               "iOS 27 上只有 RemoteXPC 入口收（wifi_probe --pair-setup-xpc）";
         return false;
@@ -173,9 +173,9 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
         if (!plane_allows_pair_setup(*device_handshake, err)) {
             return fail();
         }
-        if (const json::Value *peer = device_handshake->find("peerDeviceInfo")) {
-            if (const json::Value *identifier = peer->find("identifier")) {
-                advertised = identifier->as_string_or();
+        if (const json::Value *peer = json::find(*device_handshake, "peerDeviceInfo")) {
+            if (const json::Value *identifier = json::find(*peer, "identifier")) {
+                advertised = json::as_string_or(*identifier);
             }
         }
         // verify 探针。签名必须用**真钥匙**：全零钥匙的签名在密码学上无效，设备会走错误
@@ -275,9 +275,9 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
         if (!plane_allows_pair_setup(*device_handshake, err)) {
             return fail();
         }
-        if (const json::Value *peer = device_handshake->find("peerDeviceInfo")) {
-            if (const json::Value *identifier = peer->find("identifier")) {
-                advertised = identifier->as_string_or();
+        if (const json::Value *peer = json::find(*device_handshake, "peerDeviceInfo")) {
+            if (const json::Value *identifier = json::find(*peer, "identifier")) {
+                advertised = json::as_string_or(*identifier);
             }
         }
         if (progress) {
@@ -470,10 +470,10 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
         j_obj({{"request", j_obj({{"_0", j_obj({{"createRemoteUnlockKey", j_obj({})}})}})}});
     const std::optional<json::Value> unlock = channel.encrypted_roundtrip(unlock_request, unlock_err);
     if (unlock) {
-        const json::Value *created = unlock->find("createRemoteUnlockKey");
-        const json::Value *host_key_field = created != nullptr ? created->find("hostKey") : nullptr;
+        const json::Value *created = json::find(*unlock, "createRemoteUnlockKey");
+        const json::Value *host_key_field = created != nullptr ? json::find(*created, "hostKey") : nullptr;
         if (host_key_field != nullptr) {
-            record.remote_unlock_host_key = host_key_field->as_string_or();
+            record.remote_unlock_host_key = json::as_string_or(*host_key_field);
         }
     } else if (progress) {
         progress(std::string("createRemoteUnlockKey 没成（") + unlock_err + "），不影响配对本身");

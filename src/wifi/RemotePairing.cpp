@@ -22,19 +22,19 @@ std::optional<uint16_t> request_tcp_listener(Rppairing &channel, const Bytes &tu
     if (!reply) {
         return std::nullopt;
     }
-    const json::Value *created = reply->find("createListener");
-    const json::Value *port = created != nullptr ? created->find("port") : nullptr;
+    const json::Value *created = json::find(*reply, "createListener");
+    const json::Value *port = created != nullptr ? json::find(*created, "port") : nullptr;
     if (port == nullptr) {
         // 把实际收到的键打出来：设备在"配好了但不肯给你隧道"的时候回的东西是有名字的，
         // 只说"没有 port"的话，下一次还是要从头猜。
         std::string keys;
-        for (const auto &entry : reply->object) {
-            keys += " " + entry.first;
+        for (const auto &entry : reply->items()) {
+            keys += " " + entry.key();
         }
         err = "createListener 回信里没有 port（实际字段:" + keys + "）";
         return std::nullopt;
     }
-    const int64_t value = port->as_int_or(0);
+    const int64_t value = json::as_int_or(*port, 0);
     if (value <= 0 || value > 0xFFFF) {
         err = "createListener 给的端口不像话: " + std::to_string(value);
         return std::nullopt;

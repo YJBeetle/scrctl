@@ -17,6 +17,8 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
+include(cmake/Dependencies.cmake)
+
 option(SCRCTL_BUILD_TESTS "构建无头自检" ON)
 option(SCRCTL_FETCH_SDL2 "用 FetchContent 拉取 SDL2，而不是找系统安装" OFF)
 
@@ -100,7 +102,7 @@ endif()
 
 # ------------------------------------------------------------- core lib -----
 add_library(scrctl_core STATIC
-        src/jsonlite/Jsonlite.cpp
+        src/json/Json.cpp
         src/plist/Plist.cpp
         src/plist/Bplist.cpp
         src/xpc/XpcValue.cpp
@@ -141,7 +143,7 @@ add_library(scrctl_core STATIC
         src/wifi/PairSetup.cpp
         src/wifi/RemotePairing.cpp)
 target_include_directories(scrctl_core PUBLIC src)
-target_link_libraries(scrctl_core PUBLIC ScrctlAppleFrameworks OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(scrctl_core PUBLIC ScrctlAppleFrameworks OpenSSL::SSL OpenSSL::Crypto nlohmann_json::nlohmann_json)
 target_compile_options(scrctl_core PRIVATE -Wall -Wextra)
 
 # 解码后端按平台与依赖挑：平台后端在 Apple 上是 VideoToolbox，别处只能借用软解；
@@ -290,9 +292,9 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(bplist_test PRIVATE scrctl_core)
     add_test(NAME bplist COMMAND bplist_test)
 
-    add_executable(jsonlite_test tests/jsonlite_test.cpp)
-    target_link_libraries(jsonlite_test PRIVATE scrctl_core)
-    add_test(NAME jsonlite COMMAND jsonlite_test)
+    add_executable(json_test tests/json_test.cpp)
+    target_link_libraries(json_test PRIVATE scrctl_core)
+    add_test(NAME json COMMAND json_test)
 
     # 无线那一套（密码学 / TLV / 记录 / 帧）离线就能判，不需要设备。
     add_executable(wifi_test tests/wifi_test.cpp)
@@ -334,6 +336,7 @@ if(SCRCTL_BUILD_TESTS)
 endif()
 
 install(TARGETS scrctl RUNTIME DESTINATION bin)
+install(FILES THIRD_PARTY_NOTICES.md DESTINATION share/doc/scrctl)
 
 add_executable(feature_schema_probe tools/feature_schema_probe.cpp)
 target_link_libraries(feature_schema_probe PRIVATE scrctl_core)

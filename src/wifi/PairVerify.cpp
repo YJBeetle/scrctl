@@ -24,10 +24,10 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
         result.error = err;
         return result;
     }
-    if (const json::Value *response = handshake->find("response")) {
-        const json::Value *one = response->find("_1");
-        const json::Value *hs = one != nullptr ? one->find("handshake") : nullptr;
-        const json::Value *zero = hs != nullptr ? hs->find("_0") : nullptr;
+    if (const json::Value *response = json::find(*handshake, "response")) {
+        const json::Value *one = json::find(*response, "_1");
+        const json::Value *hs = one != nullptr ? json::find(*one, "handshake") : nullptr;
+        const json::Value *zero = hs != nullptr ? json::find(*hs, "_0") : nullptr;
         if (zero != nullptr) {
             result.device_handshake = *zero;
         }

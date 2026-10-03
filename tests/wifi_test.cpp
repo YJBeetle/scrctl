@@ -456,12 +456,12 @@ void test_rppairing() {
     const auto reply = channel.receive(err);
     check(reply.has_value(), "收一条明文回信");
     if (reply) {
-        const auto *response = reply->find("response");
-        const auto *one = response != nullptr ? response->find("_1") : nullptr;
-        const auto *hs = one != nullptr ? one->find("handshake") : nullptr;
-        const auto *zero = hs != nullptr ? hs->find("_0") : nullptr;
-        const auto *version = zero != nullptr ? zero->find("wireProtocolVersion") : nullptr;
-        check(version != nullptr && version->as_int_or(0) == 26, "握手回信里的设备版本号要取得到");
+        const auto *response = scrctl::json::find(*reply, "response");
+        const auto *one = response != nullptr ? scrctl::json::find(*response, "_1") : nullptr;
+        const auto *hs = one != nullptr ? scrctl::json::find(*one, "handshake") : nullptr;
+        const auto *zero = hs != nullptr ? scrctl::json::find(*hs, "_0") : nullptr;
+        const auto *version = zero != nullptr ? scrctl::json::find(*zero, "wireProtocolVersion") : nullptr;
+        check(version != nullptr && scrctl::json::as_int_or(*version, 0) == 26, "握手回信里的设备版本号要取得到");
     }
 
     // 帧头不对的那一条要**单独一个流**：坏帧后面那些字节是没人消费的，
@@ -486,9 +486,9 @@ void test_rppairing() {
         j_obj({{"request", j_obj({{"_0", j_obj({{"createListener", j_obj({})}})}})}}), err);
     check(listener.has_value(), "加密往返要成功");
     if (listener) {
-        const auto *created = listener->find("createListener");
-        const auto *port = created != nullptr ? created->find("port") : nullptr;
-        check(port != nullptr && port->as_int_or(0) == 55830, "解出来的端口要对得上");
+        const auto *created = scrctl::json::find(*listener, "createListener");
+        const auto *port = created != nullptr ? scrctl::json::find(*created, "port") : nullptr;
+        check(port != nullptr && scrctl::json::as_int_or(*port, 0) == 55830, "解出来的端口要对得上");
     }
     const std::string enc_sent = io.take_written();
     check(enc_sent.find("\"sequenceNumber\":2") != std::string::npos,
@@ -595,8 +595,8 @@ void test_pair_verify_shape() {
         check(result.outcome == scrctl::wifi::VerifyOutcome::Paired,
               "回信里没有 ERROR 就该判成已配对");
         check(result.shared_secret.size() == 32, "共享密钥 32 字节");
-        check(result.device_handshake.find("wireProtocolVersion") != nullptr &&
-                  result.device_handshake.find("wireProtocolVersion")->as_int_or(0) == 26,
+        check(scrctl::json::find(result.device_handshake, "wireProtocolVersion") != nullptr &&
+                  scrctl::json::as_int_or(*scrctl::json::find(result.device_handshake, "wireProtocolVersion"), 0) == 26,
               "设备握手里那个 26 要留档（它是设备的版本，不是我们该发的）");
 
         // 三条发出去的帧：handshake 请求、PV-Msg01、PV-Msg03。
@@ -787,7 +787,7 @@ void test_pair_setup() {
 /// json::Value 只有 find（返回指针），链式取值读起来太吵；测试里用这个。
 const scrctl::json::Value &jat(const scrctl::json::Value &value, std::string_view key) {
     static const scrctl::json::Value kMissing{};
-    const auto *found = value.find(key);
+    const auto *found = scrctl::json::find(value, key);
     return found != nullptr ? *found : kMissing;
 }
 
@@ -933,9 +933,9 @@ void test_pairing_xpc() {
         scrctl::xpc::dict_set(dict, "port", scrctl::xpc::make_uint64(49152));
         const auto j = scrctl::remote::xpc_to_json(dict, err);
         check(j.has_value(), "XPC 字典要能转成 JSON");
-        check(j && jat(*j, "identifier").as_string_or() == "ac106655-9e9f-3445-96b3-075257af1912",
+        check(j && scrctl::json::as_string_or(jat(*j, "identifier")) == "ac106655-9e9f-3445-96b3-075257af1912",
               "UUID 要还原成 8-4-4-4-12 文本");
-        check(j && jat(*j, "port").as_int_or() == 49152, "uint64 要变成 JSON 整数");
+        check(j && scrctl::json::as_int_or(jat(*j, "port")) == 49152, "uint64 要变成 JSON 整数");
     }
 }
 
