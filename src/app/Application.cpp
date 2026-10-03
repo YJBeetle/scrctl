@@ -2,9 +2,7 @@
 
 #include <SDL.h>
 #include <algorithm>
-#include <atomic>
 #include <cctype>
-#include <csignal>
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -16,6 +14,7 @@
 #include "app/FileSource.h"
 #include "app/LiveSource.h"
 #include "app/Presenter.h"
+#include "app/SdlRuntime.h"
 #include "media/StreamSession.h"
 #include "remote/App.h"
 #include "remote/Pasteboard.h"
@@ -23,18 +22,6 @@
 namespace scrctl::app {
 
 namespace {
-/// Ctrl-C 与 `kill` 应当让进程走正常退出路径（停流、关会话），而不是只能被 SIGKILL。
-/// 这件事在 SDL 之后才成立：SDL 初始化时会接管 SIGINT/SIGTERM，而它接管之后没有任何
-/// 东西转达给这个循环——实测 `kill -TERM`、`kill -INT` 和 Ctrl-C 都动不了它（进程照跑，
-/// 最后只能 kill -9）。后果不只是"退不出去"：它一边跑一边占着设备那条媒体会话，而同一台
-/// 设备同时只容得下一条（第二条 startmediastream 会把第一条顶掉，docs §13），于是两个
-/// scrctl 互相拆对方的流——实测就是这样刷出"每 2.5 秒被设备结束一次流"的假象，而设备
-/// 什么都没做错。
-std::atomic<bool> g_stop_requested{false};
-
-void on_stop_signal(int) {
-    g_stop_requested = true;
-}
 /// 首帧到手后定下"看哪一块"。
 ///
 /// 可见区尺寸的**来源顺序**是这条路径的重点：
@@ -150,6 +137,8 @@ int run(int argc, char **argv) {
         return rc;
     }
 
+    // 逆序析构：窗口 -> 媒体源（包含声卡）-> SDL。所有提前返回也遵守此顺序。
+    SdlRuntime runtime;
     std::unique_ptr<FrameSource> source;
     LiveSource *live = nullptr;
     if (!o.path.empty()) {
@@ -258,7 +247,7 @@ int run(int argc, char **argv) {
         // 没初始化视频就是个静默的不做事——那比不起窗口更骗人。
         sdl_flags |= SDL_INIT_VIDEO;
     }
-    if (SDL_Init(sdl_flags) != 0) {
+    if (!runtime.initialize(sdl_flags)) {
         std::fprintf(stderr, "SDL 初始化失败: %s\n", SDL_GetError());
         return 1;
     }
@@ -274,10 +263,6 @@ int run(int argc, char **argv) {
     } else if (live != nullptr && live->has_audio() && o.no_audio_playback) {
         std::printf("--no-audio-playback：音频腿在收与解，只是不在本机放\n");
     }
-    // 必须在 SDL_Init **之后**：signal() 是抢椅子，谁最后装谁说了算，先装会被它盖掉
-    // （而 sdl2-compat 没有提供 SDL_HINT_NO_SIGNALS 可以让它别接）。
-    std::signal(SIGINT, on_stop_signal);
-    std::signal(SIGTERM, on_stop_signal);
     if (o.disable_screensaver) {
         SDL_DisableScreenSaver();
     }
@@ -381,7 +366,7 @@ int run(int argc, char **argv) {
             std::printf("达到 --time-limit %d 秒\n", o.time_limit);
             break;
         }
-        if (g_stop_requested.load()) {
+        if (runtime.stop_requested()) {
             std::printf("收到退出信号，走正常退出路径（要把设备侧那条流停掉）\n");
             break;
         }
@@ -490,13 +475,6 @@ int run(int argc, char **argv) {
     }
 
     std::printf("完成：渲染 %d 帧\n", rendered);
-    presenter.reset();
-    // 关声卡必须在 SDL_Quit 之前：Quit 把音频子系统拆了之后再去
-    // SDL_CloseAudioDevice，操作的就是一个已经不存在的上下文。
-    if (live != nullptr) {
-        live->stop_playback();
-    }
-    SDL_Quit();
     return 0;
 }
 

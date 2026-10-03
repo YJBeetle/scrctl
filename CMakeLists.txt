@@ -174,6 +174,7 @@ endif()
 # ----------------------------------------------------------------- app ------
 add_library(scrctl_app STATIC
         src/app/Application.cpp
+        src/app/SdlRuntime.cpp
         src/app/Presenter.cpp
         src/app/AudioOut.cpp
         src/app/FileSource.cpp
@@ -252,6 +253,10 @@ if(SCRCTL_BUILD_TESTS)
     add_executable(cli_test tests/cli_test.cpp)
     target_link_libraries(cli_test PRIVATE scrctl_app)
     add_test(NAME cli COMMAND cli_test)
+
+    add_executable(app_lifecycle_test tests/app_lifecycle_test.cpp)
+    target_link_libraries(app_lifecycle_test PRIVATE scrctl_app)
+    add_test(NAME app_lifecycle COMMAND app_lifecycle_test)
 
     add_executable(annexb_test tests/annexb_test.cpp)
     target_link_libraries(annexb_test PRIVATE scrctl_core)

@@ -41,8 +41,6 @@ class LiveSource final : public FrameSource {
     /// （窗口还没建就得先有源），而 SDL 的音频子系统在那之后才有。
     bool start_playback(std::string &err);
 
-    void stop_playback() { audio_out_.close(); }
-
     /// 起流前向设备要来的可见区尺寸（问不到是 0/0，见 `resolve_crop` 的顺序）。
     void display_size(int &width, int &height) const override;
 
