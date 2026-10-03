@@ -169,11 +169,20 @@ else()
 endif()
 
 # ----------------------------------------------------------------- app ------
+add_library(scrctl_app STATIC
+        src/app/Application.cpp
+        src/app/Presenter.cpp
+        src/app/AudioOut.cpp
+        src/app/FileSource.cpp
+        src/app/Cli.cpp
+        src/app/DeviceConnection.cpp
+        src/app/LiveSource.cpp)
+target_link_libraries(scrctl_app PUBLIC scrctl_core Scrctl::SDL2 PRIVATE CLI11::CLI11)
+target_compile_options(scrctl_app PRIVATE -Wall -Wextra)
+target_compile_definitions(scrctl_app PRIVATE SCRCTL_VERSION_STRING="${PROJECT_VERSION}")
 add_executable(scrctl src/app/main.cpp)
-target_link_libraries(scrctl PRIVATE scrctl_core Scrctl::SDL2)
+target_link_libraries(scrctl PRIVATE scrctl_app)
 target_compile_options(scrctl PRIVATE -Wall -Wextra)
-# `--version` 印的那个数只能有一个来源：上面 `project(... VERSION)`。
-target_compile_definitions(scrctl PRIVATE SCRCTL_VERSION_STRING="${PROJECT_VERSION}")
 
 # 需要真机在线的手工探针，不进 ctest。
 add_executable(usbmux_probe tools/usbmux_probe.cpp)
@@ -236,6 +245,10 @@ target_link_libraries(bitrate_probe PRIVATE scrctl_core)
 # ---------------------------------------------------------------- tests -----
 if(SCRCTL_BUILD_TESTS)
     enable_testing()
+
+    add_executable(cli_test tests/cli_test.cpp)
+    target_link_libraries(cli_test PRIVATE scrctl_app)
+    add_test(NAME cli COMMAND cli_test)
 
     add_executable(annexb_test tests/annexb_test.cpp)
     target_link_libraries(annexb_test PRIVATE scrctl_core)
