@@ -1,6 +1,9 @@
 #include "app/Cli.h"
+#include "hid/Hid.h"
 #include <CLI/CLI.hpp>
+#include <algorithm>
 #include <charconv>
+#include <map>
 #include <cmath>
 #include <cstdio>
 #include <vector>
@@ -24,8 +27,15 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.add_option("--video-source", o.video_source,
                    "stream 实时流或 screenshot 截图轮询，默认 stream")
         ->check(CLI::IsMember({"stream", "screenshot"}));
-    app.add_option("--test-touch", o.test_touch, "注入直线 X0,Y0,X1,Y1 后退出（归一化坐标）");
-    app.add_option("--test-button", o.test_button, "注入 home/lock/volup/voldn/mute");
+    app.add_option("--test-touch", o.test_touch, "注入直线 X0,Y0,X1,Y1 后退出（归一化坐标）")
+        ->delimiter(',')->expected(4);
+    const std::map<std::string, uint16_t> button_codes = {
+        {"home", hid::button::kHome}, {"lock", hid::button::kLock},
+        {"volup", hid::button::kVolumeUp}, {"voldn", hid::button::kVolumeDown},
+        {"mute", hid::button::kMute},
+    };
+    app.add_option("--test-button", o.test_button, "注入 home/lock/volup/voldn/mute")
+        ->check(CLI::IsMember(button_codes));
     app.add_option("--test-type", o.test_type, "注入 ASCII 文本（设备需已聚焦文本框）");
     app.add_option("--test-degrade", o.test_degrade, "按 T1,T2,... 秒交替强制降级与恢复");
     app.add_option("--copy", o.copy_text, "写入设备剪贴板后退出（支持中文）");
@@ -66,6 +76,14 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.add_option("--verify", verify, "第 N 帧回读窗口为 BMP：N FILE（需要窗口）")->expected(2);
     try {
         app.parse(argc, argv);
+        if (!std::all_of(o.test_touch.begin(), o.test_touch.end(), [](double value) {
+                return std::isfinite(value) && value >= 0 && value <= 1;
+            })) {
+            throw CLI::ValidationError("--test-touch", "坐标必须是 [0, 1] 内的有限数");
+        }
+        if (!o.test_button.empty()) {
+            o.test_button_code = button_codes.at(o.test_button);
+        }
         o.scale_given = scale->count() != 0;
         if (!std::isfinite(o.scale) || o.scale <= 0) {
             throw CLI::ValidationError("--scale", "需要有限正数");

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace scrctl::app {
 
@@ -34,10 +35,11 @@ struct Options {
     /// 注入一条直线后退出：`--test-touch x0,y0,x1,y1`。
     /// 窗口与鼠标不在场时也要能验证输入通路，理由同 --verify：日志说"注入
     /// 调用返回成功"证明不了设备上真的收到了触摸。
-    std::string test_touch;
+    std::vector<double> test_touch; ///< 空或四个 [0, 1] 内的有限坐标，由 CLI11 校验
     /// 起流后按一次硬件按键（home/lock/volup/voldn/mute），然后照常镜像。
     /// 按键效果是瞬时的，所以它要能和 --verify 组合：按完等第 N 帧回读窗口。
     std::string test_button;
+    uint16_t test_button_code = 0; ///< 参数层将按键名称映射成 HID usage
     /// 起流后往设备敲一段 ASCII（要有文本框正获得焦点）。
     std::string test_type;
     /// `--test-degrade 4,8,12`：从起流那一刻算起，到点交替"强制判媒体流解不出画面 /

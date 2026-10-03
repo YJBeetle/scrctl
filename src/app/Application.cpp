@@ -270,12 +270,8 @@ int run(int argc, char **argv) {
     // 输入通路的无头自检：注入一条直线就退出。用直线而不是点一下，是因为
     // "画布被拖走一段"在截图上可判定，而一次点击在多数应用里没有可见后果。
     if (live != nullptr && !o.test_touch.empty()) {
-        float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
-        if (std::sscanf(o.test_touch.c_str(), "%f,%f,%f,%f", &x0, &y0, &x1, &y1) != 4) {
-            std::fprintf(stderr, "--test-touch 格式应为 X0,Y0,X1,Y1，收到 %s\n",
-                         o.test_touch.c_str());
-            return 2;
-        }
+        const double x0 = o.test_touch[0], y0 = o.test_touch[1];
+        const double x1 = o.test_touch[2], y1 = o.test_touch[3];
         std::string cerr;
         bool ok = true;
         for (int i = 0; i <= 20 && ok; ++i) {
@@ -294,25 +290,8 @@ int run(int argc, char **argv) {
     // 所以这里只负责"按下去"，看效果交给同一进程里已经在跑的镜像——
     // 配 --verify N 回读第 N 帧，HUD 就在那一帧里。
     if (live != nullptr && !o.test_button.empty()) {
-        static const std::pair<const char *, uint16_t> kCodes[] = {
-            {"home", scrctl::hid::button::kHome},      {"lock", scrctl::hid::button::kLock},
-            {"volup", scrctl::hid::button::kVolumeUp}, {"voldn", scrctl::hid::button::kVolumeDown},
-            {"mute", scrctl::hid::button::kMute},
-        };
-        uint16_t code = 0;
-        for (const auto &e : kCodes) {
-            if (o.test_button == e.first) {
-                code = e.second;
-                break;
-            }
-        }
-        if (code == 0) {
-            std::fprintf(stderr, "不认识按键 %s（可用：home/lock/volup/voldn/mute）\n",
-                         o.test_button.c_str());
-            return 2;
-        }
         std::string berr;
-        if (live->button(scrctl::hid::button::kUsagePageConsumer, code, berr)) {
+        if (live->button(scrctl::hid::button::kUsagePageConsumer, o.test_button_code, berr)) {
             std::printf("--test-button %s: 已按下\n", o.test_button.c_str());
         } else {
             std::fprintf(stderr, "--test-button %s 失败: %s\n", o.test_button.c_str(),

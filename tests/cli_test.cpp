@@ -41,7 +41,26 @@ int main() {
     Options empty;
     check(parse({"scrctl", "--title", ""}, empty) == ParseResult::Run && empty.title.empty(),
           "explicit empty string argument");
+    Options input;
+    check(parse({"scrctl", "--test-touch", "0,.25,.75,1", "--test-button", "home"}, input) ==
+              ParseResult::Run && input.test_touch == std::vector<double>({0, .25, .75, 1}) &&
+              input.test_button_code != 0, "typed input coordinates and HID button");
+    for (const char *name : {"home", "lock", "volup", "voldn", "mute"}) {
+        Options button;
+        check(parse({"scrctl", "--test-button", name}, button) == ParseResult::Run &&
+                  button.test_button == name && button.test_button_code != 0,
+              "all supported button names");
+    }
     const std::vector<std::vector<std::string>> invalid = {
+        {"--test-touch", ""},
+        {"--test-touch", "0,0,1"},
+        {"--test-touch", "0,0,1,1,1"},
+        {"--test-touch", "0,0,1,1junk"},
+        {"--test-touch", "0,0,nan,1"},
+        {"--test-touch", "0,0,inf,1"},
+        {"--test-touch", "0,0,1.01,1"},
+        {"--test-touch", "-.1,0,1,1"},
+        {"--test-button", "invalid-button"},
         {"--window-width"},
         {"--window-width", "abc"},
         {"--time-limit", "3junk"},
