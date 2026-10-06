@@ -3,11 +3,12 @@
 #include "util/Base64.h"
 
 #include <openssl/evp.h>
-#include <openssl/hmac.h>
+#include <openssl/kdf.h>
 #include <openssl/rand.h>
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <memory>
 
 namespace scrctl::wifi {
@@ -44,18 +45,6 @@ PkeyUp raw_key(int pkey_type, std::string_view data, bool as_private, std::strin
         err = as_private ? SCRCTL_TR("Failed to create private key (invalid length or unsupported platform)") : SCRCTL_TR("Failed to create public key (invalid length or unsupported platform)");
     }
     return p;
-}
-
-bool hmac_sha512(const Bytes &key, const Bytes &data, Bytes &out, std::string &err) {
-    out.assign(EVP_MD_size(EVP_sha512()), 0);
-    unsigned int len = 0;
-    if (HMAC(EVP_sha512(), key.data(), static_cast<int>(key.size()), data.data(), data.size(),
-            out.data(), &len) == nullptr) {
-        err = SCRCTL_TR("HMAC-SHA512 failed");
-        return false;
-    }
-    out.resize(len);
-    return true;
 }
 
 /// ChaCha20-Poly1305（12 字节 nonce，16 字节标签附在密文尾部）。
@@ -249,27 +238,41 @@ std::optional<Bytes> ed25519_sign(std::string_view seed, const Bytes &msg, std::
 
 std::optional<Bytes> hkdf_sha512(const Bytes &ikm, std::string_view salt, std::string_view info,
                                  size_t out_len, std::string &err) {
-    // 手写 extract+expand 而不是 EVP_KDF：后者要 OpenSSL 3，而这条路径还要在
-    // 老版本 OpenSSL 的发行版上编得出来。HMAC 一次调用哪版都有。
-    static constexpr size_t kHashLen = 64;
-    Bytes salt_bytes = salt.empty() ? Bytes(kHashLen, 0) : Bytes(salt.begin(), salt.end());
-    Bytes prk;
-    if (!hmac_sha512(salt_bytes, ikm, prk, err)) {
+    // EVP_PKEY_HKDF 在 OpenSSL 1.1.1 已提供，不要求 EVP_KDF 的 OpenSSL 3 API。
+    // 统一采用旧接口的 info 上限；当前配对标签远小于此限制。
+    constexpr size_t kMaxOutput = 255 * 64;
+    constexpr size_t kMaxInfo = 1024;
+    if (out_len > kMaxOutput || info.size() > kMaxInfo ||
+        ikm.size() > static_cast<size_t>(std::numeric_limits<int>::max()) ||
+        salt.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        err = SCRCTL_TR("HKDF-SHA512 input or output exceeds supported limits");
         return std::nullopt;
     }
-    Bytes info_bytes(info.begin(), info.end());
-    Bytes out, t;
-    uint8_t counter = 1;
-    while (out.size() < out_len) {
-        Bytes input = t;
-        input.insert(input.end(), info_bytes.begin(), info_bytes.end());
-        input.push_back(counter++);
-        if (!hmac_sha512(prk, input, t, err)) {
-            return std::nullopt;
-        }
-        out.insert(out.end(), t.begin(), t.end());
+    if (out_len == 0) {
+        err.clear();
+        return Bytes{};
     }
-    out.resize(out_len);
+    PctxUp ctx(EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, nullptr));
+    const uint8_t empty = 0;
+    const auto *key = ikm.empty() ? &empty : ikm.data();
+    if (!ctx || EVP_PKEY_derive_init(ctx.get()) <= 0 ||
+        EVP_PKEY_CTX_hkdf_mode(ctx.get(), EVP_PKEY_HKDEF_MODE_EXTRACT_AND_EXPAND) <= 0 ||
+        EVP_PKEY_CTX_set_hkdf_md(ctx.get(), EVP_sha512()) <= 0 ||
+        EVP_PKEY_CTX_set1_hkdf_key(ctx.get(), key, static_cast<int>(ikm.size())) <= 0 ||
+        (!salt.empty() && EVP_PKEY_CTX_set1_hkdf_salt(
+            ctx.get(), u8(salt), static_cast<int>(salt.size())) <= 0) ||
+        (!info.empty() && EVP_PKEY_CTX_add1_hkdf_info(
+            ctx.get(), u8(info), static_cast<int>(info.size())) <= 0)) {
+        err = SCRCTL_TR("Failed to initialize HKDF-SHA512");
+        return std::nullopt;
+    }
+    Bytes out(out_len);
+    size_t written = out_len;
+    if (EVP_PKEY_derive(ctx.get(), out.data(), &written) <= 0 || written != out_len) {
+        err = SCRCTL_TR("HKDF-SHA512 derivation failed");
+        return std::nullopt;
+    }
+    err.clear();
     return out;
 }
 

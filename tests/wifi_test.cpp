@@ -102,6 +102,27 @@ void test_crypto() {
     check(empty_salt.has_value() && to_hex(*empty_salt) == "9f8aa265911271e6d6e90daf564d82b5",
           "HKDF 的空 salt 等于全零盐（主密钥那条路）[对拍]");
 
+    // 独立 Python hmac/hashlib 生成的多块向量，包含内嵌 NUL。
+    const auto nul = scrctl::wifi::hkdf_sha512(ikm2, std::string_view("a\0b", 3),
+                                             std::string_view("c\0d", 3), 80, err);
+    check(nul && to_hex(*nul) ==
+        "16bcf3c1f4b64d64baff41a29b6c7e35045d0e29799302d136db19eba38cc1b1cd1b"
+        "df9b1c8aed3bfdaa11544be57a434b931a0cd04cef8d5c04de79b12de6f5248bb8a8"
+        "3baa1139c70e5f29afaaf4da", "HKDF preserves embedded NUL and expands multiple blocks");
+    const auto longest = scrctl::wifi::hkdf_sha512(ikm2, "", "ClientEncrypt-main", 255 * 64, err);
+    check(longest && longest->size() == 255 * 64 &&
+              to_hex(Bytes(longest->end() - 32, longest->end())) ==
+              "754cc43181d179d74f94645ed88435119814c6bb8960bddde17477f848c83b7f",
+          "HKDF maximum output matches independent reference");
+    check(!scrctl::wifi::hkdf_sha512(ikm2, "", "", 255 * 64 + 1, err),
+          "HKDF rejects counter wrap beyond RFC output limit");
+    check(scrctl::wifi::hkdf_sha512(ikm2, "", std::string(1024, 'x'), 16, err).has_value(),
+          "HKDF accepts supported info boundary");
+    check(!scrctl::wifi::hkdf_sha512(ikm2, "", std::string(1025, 'x'), 16, err),
+          "HKDF rejects oversized info before calling OpenSSL");
+    const auto zero = scrctl::wifi::hkdf_sha512({}, "", "", 0, err);
+    check(zero && zero->empty() && err.empty(), "HKDF empty output succeeds and clears error");
+
     const Bytes pt = sb("Ladies and Gentlemen of the class of '99: If I could offer you only one "
                         "tip for the future, sunscreen would be it.");
     // nonce 以 NUL 开头，所以**不能**用 `string_view("…")`——那会按 strlen 截成零长。

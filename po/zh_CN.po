@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 02:56+0800\n"
+"POT-Creation-Date: 2026-10-07 03:06+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -99,10 +99,10 @@ msgid "(code "
 msgstr "（code "
 
 #: src/remote/Rsd.cpp:232 src/media/ScreenshotSource.cpp:72
-#: src/media/FramePump.cpp:484 src/transport/Usbmux.cpp:168
-#: src/net/Stack.cpp:350 src/net/UdpSocket.cpp:104 src/net/UdpSocket.cpp:130
-#: src/net/TcpStream.cpp:41 src/net/TcpStream.cpp:118 src/net/TcpStream.cpp:122
-#: src/wifi/RemotePairing.cpp:35
+#: src/media/FramePump.cpp:480 src/net/Stack.cpp:350 src/net/TcpStream.cpp:41
+#: src/net/TcpStream.cpp:118 src/net/TcpStream.cpp:122
+#: src/net/UdpSocket.cpp:104 src/net/UdpSocket.cpp:130
+#: src/transport/Usbmux.cpp:168 src/wifi/RemotePairing.cpp:35
 msgid ")"
 msgstr "）"
 
@@ -608,7 +608,7 @@ msgstr "设备目录缺少服务："
 msgid "Screenshot response missing image data"
 msgstr "截图响应缺少 image 数据"
 
-#: src/media/FramePump.cpp:71
+#: src/media/FramePump.cpp:68
 #, c-format
 msgid ""
 "Software decoder (libavcodec) is not included; continuing with the platform "
@@ -622,45 +622,45 @@ msgstr ""
 "会话，可能暂时无新画面。\n"
 "请安装 FFmpeg 开发包并重新配置、构建项目。\n"
 
-#: src/media/FramePump.cpp:108
+#: src/media/FramePump.cpp:106
 msgid "Cannot open recording file "
 msgstr "打不开录制文件 "
 
-#: src/media/FramePump.cpp:134
+#: src/media/FramePump.cpp:132
 #, c-format
 msgid ""
 "Failed to stop device video session (device will release it when the lease "
 "expires): %s\n"
 msgstr "停止设备视频会话失败（设备端将在租期到期后释放）: %s\n"
 
-#: src/media/FramePump.cpp:152
+#: src/media/FramePump.cpp:150
 #, c-format
 msgid "Failed to stop previous video session (still attempting restart): %s\n"
 msgstr "停止旧视频会话失败（仍尝试重建）: %s\n"
 
-#: src/media/FramePump.cpp:178
+#: src/media/FramePump.cpp:176
 #, c-format
 msgid "Video session recreated, receive port=%u\n"
 msgstr "视频会话已重建，收流端口=%u\n"
 
-#: src/media/FramePump.cpp:239
+#: src/media/FramePump.cpp:237
 #, c-format
 msgid "Failed to send PLI: %s\n"
 msgstr "PLI 发送失败: %s\n"
 
-#: src/media/FramePump.cpp:259
+#: src/media/FramePump.cpp:257
 #, c-format
 msgid ""
 "Sequence gap or discarded fragment detected: requesting keyframe, wait limit "
 "%d ms\n"
 msgstr "检测到序号缺口或丢弃分片：请求关键帧，等待上限 %d ms\n"
 
-#: src/media/FramePump.cpp:293
+#: src/media/FramePump.cpp:287
 #, c-format
 msgid "Decoder switched to %s\n"
 msgstr "解码后端已切换为 %s\n"
 
-#: src/media/FramePump.cpp:331
+#: src/media/FramePump.cpp:325
 #, c-format
 msgid ""
 "After %d restarts, NALs still exceed the decoder limit. Video is "
@@ -669,94 +669,94 @@ msgstr ""
 "连续 %d 次重建仍因 NAL 超过后端长度上限而无画面输出。视频暂不可用，将每 %llu "
 "秒重试；调用方可切换至截图服务。\n"
 
-#: src/media/FramePump.cpp:385
+#: src/media/FramePump.cpp:379
 #, c-format
 msgid "Test: injected keyframe decode failure (%s)\n"
 msgstr "测试：注入关键帧解码失败（%s）\n"
 
-#: src/media/FramePump.cpp:386
+#: src/media/FramePump.cpp:380
 msgid "further PLI disabled"
 msgstr "后续禁止 PLI"
 
-#: src/media/FramePump.cpp:387
+#: src/media/FramePump.cpp:381
 msgid "PLI continues"
 msgstr "继续发送 PLI"
 
-#: src/media/FramePump.cpp:475
+#: src/media/FramePump.cpp:471
 #, c-format
 msgid ""
 "%s: no data for %llu ms; device reports session alive, continuing to wait\n"
 msgstr "%s：%llu ms 未收到数据，设备报告会话仍运行，继续等待\n"
 
-#: src/media/FramePump.cpp:480
+#: src/media/FramePump.cpp:476
 #, c-format
 msgid "%s: no data for %llu ms, %s; recreating video session\n"
 msgstr "%s：%llu ms 未收到数据，%s，重建视频会话\n"
 
-#: src/media/FramePump.cpp:483
+#: src/media/FramePump.cpp:479
 msgid "device session ended"
 msgstr "设备会话已结束"
 
-#: src/media/FramePump.cpp:484
+#: src/media/FramePump.cpp:480
 msgid "session status query failed ("
 msgstr "查询会话状态失败（"
 
-#: src/media/FramePump.cpp:487 src/media/FramePump.cpp:500
+#: src/media/FramePump.cpp:483 src/media/FramePump.cpp:496
 #, c-format
 msgid "Failed to recreate video session: %s\n"
 msgstr "重建视频会话失败: %s\n"
 
-#: src/media/FramePump.cpp:515
+#: src/media/FramePump.cpp:511
 #, c-format
 msgid ""
 "%s: no data for %llu ms; recovery threshold exceeded, recreating video "
 "session\n"
 msgstr "%s：%llu ms 未收到数据，超过恢复阈值，重建视频会话\n"
 
-#: src/media/FramePump.cpp:536
+#: src/media/FramePump.cpp:532
 #, c-format
 msgid "Failed to recreate video session: %s (retry in 1 second)\n"
 msgstr "重建视频会话失败: %s（1 秒后再试）\n"
 
-#: src/media/FramePump.cpp:566
+#: src/media/FramePump.cpp:562
 #, c-format
 msgid "Failed to send RTCP keepalive: %s\n"
 msgstr "RTCP 保活包发送失败: %s\n"
 
-#: src/media/FramePump.cpp:571
+#: src/media/FramePump.cpp:567
 msgid "Input or frame request"
 msgstr "收到操作"
 
-#: src/media/FramePump.cpp:579
+#: src/media/FramePump.cpp:575
 #, c-format
 msgid "Video fallback active for %llu seconds; retrying video session\n"
 msgstr "视频降级已满 %llu 秒，重试视频会话\n"
 
-#: src/media/FramePump.cpp:586
+#: src/media/FramePump.cpp:582
 #, c-format
 msgid "%s; recreating video session to obtain a keyframe\n"
 msgstr "%s，重建视频会话以取得关键帧\n"
 
-#: src/media/FramePump.cpp:587
+#: src/media/FramePump.cpp:583
 msgid "Scheduled video retry after fallback"
 msgstr "视频降级后的定时重试"
 
-#: src/media/FramePump.cpp:588
+#: src/media/FramePump.cpp:584
 msgid "NAL exceeds platform decoder length limit"
 msgstr "NAL 超过平台后端长度上限"
 
-#: src/media/FramePump.cpp:622
+#: src/media/FramePump.cpp:620
 #, c-format
 msgid "Keyframe wait reached %d ms; recreating video session\n"
 msgstr "等待关键帧达到 %d ms，重建视频会话\n"
 
-#: src/media/FramePump.cpp:637
+#: src/media/FramePump.cpp:635
 #, c-format
 msgid ""
 "No keyframe output after %llu seconds; recreating video session (%d/%d)\n"
 msgstr "启动 %llu 秒仍无关键帧输出，重建视频会话 (%d/%d)\n"
 
-#: src/media/FramePump.cpp:645
+#: src/media/FramePump.cpp:643
 #, c-format
 msgid ""
 "No keyframe output after %d restarts. Video is unavailable; callers can use "
@@ -765,11 +765,11 @@ msgstr ""
 "连续 %d 次重建仍未输出关键帧，视频暂不可用。调用方可切换至截图服务；将每 "
 "%llu 秒重试视频会话。\n"
 
-#: src/media/FramePump.cpp:668
+#: src/media/FramePump.cpp:666
 msgid "Receive silence timeout"
 msgstr "静默超时"
 
-#: src/media/FramePump.cpp:707
+#: src/media/FramePump.cpp:705
 #, c-format
 msgid "Test: dropped video packet %d to inject a sequence gap\n"
 msgstr "测试：丢弃第 %d 个视频包以注入序号缺口\n"
@@ -2466,104 +2466,100 @@ msgstr "TLV 头被截断"
 msgid "TLV length exceeds buffer"
 msgstr "TLV 长度超出缓冲区"
 
-#: src/wifi/Crypto.cpp:44
+#: src/wifi/Crypto.cpp:45
 msgid "Failed to create private key (invalid length or unsupported platform)"
 msgstr "构造私钥失败（长度或平台不支持）"
 
-#: src/wifi/Crypto.cpp:44
+#: src/wifi/Crypto.cpp:45
 msgid "Failed to create public key (invalid length or unsupported platform)"
 msgstr "构造公钥失败（长度或平台不支持）"
 
-#: src/wifi/Crypto.cpp:54
-msgid "HMAC-SHA512 failed"
-msgstr "HMAC-SHA512 失败"
-
-#: src/wifi/Crypto.cpp:70
+#: src/wifi/Crypto.cpp:59
 msgid "ChaCha20-Poly1305 requires a 32-byte key and 12-byte nonce"
 msgstr "ChaCha20-Poly1305 要 32 字节密钥 + 12 字节 nonce"
 
-#: src/wifi/Crypto.cpp:74
+#: src/wifi/Crypto.cpp:63
 msgid "Ciphertext shorter than Poly1305 tag"
 msgstr "密文比 Poly1305 标签还短"
 
-#: src/wifi/Crypto.cpp:79
+#: src/wifi/Crypto.cpp:68
 msgid "Failed to allocate EVP_CIPHER_CTX"
 msgstr "分配 EVP_CIPHER_CTX 失败"
 
-#: src/wifi/Crypto.cpp:87
+#: src/wifi/Crypto.cpp:76
 msgid "ChaCha20-Poly1305 initialization failed; check OpenSSL cipher support"
 msgstr "ChaCha20-Poly1305 初始化失败；请检查 OpenSSL 算法支持"
 
-#: src/wifi/Crypto.cpp:96
+#: src/wifi/Crypto.cpp:85
 msgid "ChaCha20-Poly1305 update failed"
 msgstr "ChaCha20-Poly1305 更新失败"
 
-#: src/wifi/Crypto.cpp:103
+#: src/wifi/Crypto.cpp:92
 msgid "Failed to set Poly1305 tag"
 msgstr "设 Poly1305 标签失败"
 
-#: src/wifi/Crypto.cpp:107
+#: src/wifi/Crypto.cpp:96
 msgid ""
 "Poly1305 authentication failed; check key derivation and frame boundaries"
 msgstr "Poly1305 认证失败；请检查密钥派生和帧边界"
 
-#: src/wifi/Crypto.cpp:114
+#: src/wifi/Crypto.cpp:103
 msgid "ChaCha20-Poly1305 finalization failed"
 msgstr "ChaCha20-Poly1305 收尾失败"
 
-#: src/wifi/Crypto.cpp:120
+#: src/wifi/Crypto.cpp:109
 msgid "Failed to get Poly1305 tag"
 msgstr "取 Poly1305 标签失败"
 
-#: src/wifi/Crypto.cpp:132
+#: src/wifi/Crypto.cpp:121
 msgid "Failed to initialize X25519 key generation"
 msgstr "初始化 X25519 密钥生成失败"
 
-#: src/wifi/Crypto.cpp:137
+#: src/wifi/Crypto.cpp:126
 msgid "Failed to generate X25519 key"
 msgstr "生成 X25519 密钥失败"
 
-#: src/wifi/Crypto.cpp:145
+#: src/wifi/Crypto.cpp:134
 msgid "Failed to get X25519 public key"
 msgstr "取 X25519 公钥失败"
 
-#: src/wifi/Crypto.cpp:151
+#: src/wifi/Crypto.cpp:140
 msgid "Failed to get X25519 private key"
 msgstr "取 X25519 私钥失败"
 
-#: src/wifi/Crypto.cpp:160
+#: src/wifi/Crypto.cpp:149
 msgid "Failed to obtain cryptographic random bytes"
 msgstr "无法取得密码学随机字节"
 
-#: src/wifi/Crypto.cpp:180
+#: src/wifi/Crypto.cpp:169
 msgid "Failed to get Ed25519 public key"
 msgstr "取 Ed25519 公钥失败"
 
-#: src/wifi/Crypto.cpp:188
+#: src/wifi/Crypto.cpp:177
 msgid "Peer X25519 public key must be 32 bytes"
 msgstr "对端 X25519 公钥长度不是 32"
 
-#: src/wifi/Crypto.cpp:206 src/wifi/Crypto.cpp:211
+#: src/wifi/Crypto.cpp:195 src/wifi/Crypto.cpp:200
 msgid "X25519 shared secret computation failed"
 msgstr "X25519 共享密钥计算失败"
 
-#: src/wifi/Crypto.cpp:217
+#: src/wifi/Crypto.cpp:206
 msgid "X25519 shared secret is all zero (low-order peer public key)"
 msgstr "X25519 共享密钥全零（对端公钥是低阶点）"
 
-#: src/wifi/Crypto.cpp:225
+#: src/wifi/Crypto.cpp:214
 msgid "Ed25519 private key seed must be 32 bytes"
 msgstr "Ed25519 私钥种子长度不是 32"
 
-#: src/wifi/Crypto.cpp:234
+#: src/wifi/Crypto.cpp:223
 msgid "Failed to initialize Ed25519 signing"
 msgstr "初始化 Ed25519 签名失败"
 
-#: src/wifi/Crypto.cpp:239
+#: src/wifi/Crypto.cpp:228
 msgid "Failed to get Ed25519 signature length"
 msgstr "取 Ed25519 签名长度失败"
 
-#: src/wifi/Crypto.cpp:244
+#: src/wifi/Crypto.cpp:233
 msgid "Ed25519 signing failed"
 msgstr "Ed25519 签名失败"
 
@@ -2853,3 +2849,15 @@ msgstr "根元素必须是单个 <plist>"
 #: src/plist/Plist.cpp:170
 msgid "plist root must contain a single value"
 msgstr "plist 根必须包含单个值"
+
+#: src/wifi/Crypto.cpp:248
+msgid "HKDF-SHA512 input or output exceeds supported limits"
+msgstr "HKDF-SHA512 输入或输出超过支持的限制"
+
+#: src/wifi/Crypto.cpp:266
+msgid "Failed to initialize HKDF-SHA512"
+msgstr "HKDF-SHA512 初始化失败"
+
+#: src/wifi/Crypto.cpp:272
+msgid "HKDF-SHA512 derivation failed"
+msgstr "HKDF-SHA512 密钥派生失败"

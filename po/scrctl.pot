@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 02:56+0800\n"
+"POT-Creation-Date: 2026-10-07 03:06+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -104,10 +104,10 @@ msgid "(code "
 msgstr ""
 
 #: src/remote/Rsd.cpp:232 src/media/ScreenshotSource.cpp:72
-#: src/media/FramePump.cpp:484 src/transport/Usbmux.cpp:168
-#: src/net/Stack.cpp:350 src/net/UdpSocket.cpp:104 src/net/UdpSocket.cpp:130
-#: src/net/TcpStream.cpp:41 src/net/TcpStream.cpp:118 src/net/TcpStream.cpp:122
-#: src/wifi/RemotePairing.cpp:35
+#: src/media/FramePump.cpp:480 src/net/Stack.cpp:350 src/net/TcpStream.cpp:41
+#: src/net/TcpStream.cpp:118 src/net/TcpStream.cpp:122
+#: src/net/UdpSocket.cpp:104 src/net/UdpSocket.cpp:130
+#: src/transport/Usbmux.cpp:168 src/wifi/RemotePairing.cpp:35
 msgid ")"
 msgstr ""
 
@@ -602,7 +602,7 @@ msgstr ""
 msgid "Screenshot response missing image data"
 msgstr ""
 
-#: src/media/FramePump.cpp:71
+#: src/media/FramePump.cpp:68
 #, c-format
 msgid ""
 "Software decoder (libavcodec) is not included; continuing with the platform "
@@ -612,150 +612,150 @@ msgid ""
 "Install FFmpeg development packages and reconfigure the build.\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:108
+#: src/media/FramePump.cpp:106
 msgid "Cannot open recording file "
 msgstr ""
 
-#: src/media/FramePump.cpp:134
+#: src/media/FramePump.cpp:132
 #, c-format
 msgid ""
 "Failed to stop device video session (device will release it when the lease "
 "expires): %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:152
+#: src/media/FramePump.cpp:150
 #, c-format
 msgid "Failed to stop previous video session (still attempting restart): %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:178
+#: src/media/FramePump.cpp:176
 #, c-format
 msgid "Video session recreated, receive port=%u\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:239
+#: src/media/FramePump.cpp:237
 #, c-format
 msgid "Failed to send PLI: %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:259
+#: src/media/FramePump.cpp:257
 #, c-format
 msgid ""
 "Sequence gap or discarded fragment detected: requesting keyframe, wait limit "
 "%d ms\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:293
+#: src/media/FramePump.cpp:287
 #, c-format
 msgid "Decoder switched to %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:331
+#: src/media/FramePump.cpp:325
 #, c-format
 msgid ""
 "After %d restarts, NALs still exceed the decoder limit. Video is "
 "unavailable; retrying every %llu seconds. Callers can use screenshots.\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:385
+#: src/media/FramePump.cpp:379
 #, c-format
 msgid "Test: injected keyframe decode failure (%s)\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:386
+#: src/media/FramePump.cpp:380
 msgid "further PLI disabled"
 msgstr ""
 
-#: src/media/FramePump.cpp:387
+#: src/media/FramePump.cpp:381
 msgid "PLI continues"
 msgstr ""
 
-#: src/media/FramePump.cpp:475
+#: src/media/FramePump.cpp:471
 #, c-format
 msgid ""
 "%s: no data for %llu ms; device reports session alive, continuing to wait\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:480
+#: src/media/FramePump.cpp:476
 #, c-format
 msgid "%s: no data for %llu ms, %s; recreating video session\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:483
+#: src/media/FramePump.cpp:479
 msgid "device session ended"
 msgstr ""
 
-#: src/media/FramePump.cpp:484
+#: src/media/FramePump.cpp:480
 msgid "session status query failed ("
 msgstr ""
 
-#: src/media/FramePump.cpp:487 src/media/FramePump.cpp:500
+#: src/media/FramePump.cpp:483 src/media/FramePump.cpp:496
 #, c-format
 msgid "Failed to recreate video session: %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:515
+#: src/media/FramePump.cpp:511
 #, c-format
 msgid ""
 "%s: no data for %llu ms; recovery threshold exceeded, recreating video "
 "session\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:536
+#: src/media/FramePump.cpp:532
 #, c-format
 msgid "Failed to recreate video session: %s (retry in 1 second)\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:566
+#: src/media/FramePump.cpp:562
 #, c-format
 msgid "Failed to send RTCP keepalive: %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:571
+#: src/media/FramePump.cpp:567
 msgid "Input or frame request"
 msgstr ""
 
-#: src/media/FramePump.cpp:579
+#: src/media/FramePump.cpp:575
 #, c-format
 msgid "Video fallback active for %llu seconds; retrying video session\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:586
+#: src/media/FramePump.cpp:582
 #, c-format
 msgid "%s; recreating video session to obtain a keyframe\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:587
+#: src/media/FramePump.cpp:583
 msgid "Scheduled video retry after fallback"
 msgstr ""
 
-#: src/media/FramePump.cpp:588
+#: src/media/FramePump.cpp:584
 msgid "NAL exceeds platform decoder length limit"
 msgstr ""
 
-#: src/media/FramePump.cpp:622
+#: src/media/FramePump.cpp:620
 #, c-format
 msgid "Keyframe wait reached %d ms; recreating video session\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:637
+#: src/media/FramePump.cpp:635
 #, c-format
 msgid ""
 "No keyframe output after %llu seconds; recreating video session (%d/%d)\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:645
+#: src/media/FramePump.cpp:643
 #, c-format
 msgid ""
 "No keyframe output after %d restarts. Video is unavailable; callers can use "
 "screenshots. Retrying every %llu seconds.\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:668
+#: src/media/FramePump.cpp:666
 msgid "Receive silence timeout"
 msgstr ""
 
-#: src/media/FramePump.cpp:707
+#: src/media/FramePump.cpp:705
 #, c-format
 msgid "Test: dropped video packet %d to inject a sequence gap\n"
 msgstr ""
@@ -2422,104 +2422,100 @@ msgstr ""
 msgid "TLV length exceeds buffer"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:44
+#: src/wifi/Crypto.cpp:45
 msgid "Failed to create private key (invalid length or unsupported platform)"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:44
+#: src/wifi/Crypto.cpp:45
 msgid "Failed to create public key (invalid length or unsupported platform)"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:54
-msgid "HMAC-SHA512 failed"
-msgstr ""
-
-#: src/wifi/Crypto.cpp:70
+#: src/wifi/Crypto.cpp:59
 msgid "ChaCha20-Poly1305 requires a 32-byte key and 12-byte nonce"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:74
+#: src/wifi/Crypto.cpp:63
 msgid "Ciphertext shorter than Poly1305 tag"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:79
+#: src/wifi/Crypto.cpp:68
 msgid "Failed to allocate EVP_CIPHER_CTX"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:87
+#: src/wifi/Crypto.cpp:76
 msgid "ChaCha20-Poly1305 initialization failed; check OpenSSL cipher support"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:96
+#: src/wifi/Crypto.cpp:85
 msgid "ChaCha20-Poly1305 update failed"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:103
+#: src/wifi/Crypto.cpp:92
 msgid "Failed to set Poly1305 tag"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:107
+#: src/wifi/Crypto.cpp:96
 msgid ""
 "Poly1305 authentication failed; check key derivation and frame boundaries"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:114
+#: src/wifi/Crypto.cpp:103
 msgid "ChaCha20-Poly1305 finalization failed"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:120
+#: src/wifi/Crypto.cpp:109
 msgid "Failed to get Poly1305 tag"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:132
+#: src/wifi/Crypto.cpp:121
 msgid "Failed to initialize X25519 key generation"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:137
+#: src/wifi/Crypto.cpp:126
 msgid "Failed to generate X25519 key"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:145
+#: src/wifi/Crypto.cpp:134
 msgid "Failed to get X25519 public key"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:151
+#: src/wifi/Crypto.cpp:140
 msgid "Failed to get X25519 private key"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:160
+#: src/wifi/Crypto.cpp:149
 msgid "Failed to obtain cryptographic random bytes"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:180
+#: src/wifi/Crypto.cpp:169
 msgid "Failed to get Ed25519 public key"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:188
+#: src/wifi/Crypto.cpp:177
 msgid "Peer X25519 public key must be 32 bytes"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:206 src/wifi/Crypto.cpp:211
+#: src/wifi/Crypto.cpp:195 src/wifi/Crypto.cpp:200
 msgid "X25519 shared secret computation failed"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:217
+#: src/wifi/Crypto.cpp:206
 msgid "X25519 shared secret is all zero (low-order peer public key)"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:225
+#: src/wifi/Crypto.cpp:214
 msgid "Ed25519 private key seed must be 32 bytes"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:234
+#: src/wifi/Crypto.cpp:223
 msgid "Failed to initialize Ed25519 signing"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:239
+#: src/wifi/Crypto.cpp:228
 msgid "Failed to get Ed25519 signature length"
 msgstr ""
 
-#: src/wifi/Crypto.cpp:244
+#: src/wifi/Crypto.cpp:233
 msgid "Ed25519 signing failed"
 msgstr ""
 
@@ -2806,4 +2802,16 @@ msgstr ""
 
 #: src/plist/Plist.cpp:170
 msgid "plist root must contain a single value"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:248
+msgid "HKDF-SHA512 input or output exceeds supported limits"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:266
+msgid "Failed to initialize HKDF-SHA512"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:272
+msgid "HKDF-SHA512 derivation failed"
 msgstr ""

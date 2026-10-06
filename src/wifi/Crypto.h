@@ -51,7 +51,9 @@ std::optional<Bytes> x25519_shared(const std::array<uint8_t, 32> &priv, std::str
 /// Ed25519 签名（64 字节）。`seed` 是 32 字节的私钥种子，不是 PEM、不是 DER。
 std::optional<Bytes> ed25519_sign(std::string_view seed, const Bytes &msg, std::string &err);
 
-/// HKDF-SHA512。`salt` 为空串时按 RFC 5869 用全零盐（与对端实现一致）。
+/// OpenSSL HKDF-SHA512。空 salt 与 RFC 5869 的全零盐等价。
+/// 输出最多 255 * 64 字节，info 最多 1024 字节，输入需可表示为 int 长度。
+/// 成功时清空 err；零长度输出返回空 Bytes。
 std::optional<Bytes> hkdf_sha512(const Bytes &ikm, std::string_view salt, std::string_view info,
                                  size_t out_len, std::string &err);
 
