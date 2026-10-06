@@ -5,20 +5,18 @@
 #include <string>
 #include <vector>
 
-/// HTTP/2 帧层，只到「帧」为止，不含 HPACK。
+/// RemoteXPC 使用的 HTTP/2 帧子集，不实现 HPACK。
 ///
-/// 为什么不实现 HPACK：RemoteXPC 的 HEADERS 帧是**空的**——建流只发一个带
-/// END_HEADERS 的 9 字节帧头，路由信息全在 stream id 里（1 是主通道，3 是
-/// 回信通道），XPC 载荷走 DATA 帧。设备回给我们的 HEADERS 我们不需要看懂，
-/// 跳过其载荷即可。少一整套表 + 哈夫曼码表，是这条链路上最值得的一次减法。
+/// 客户端建立流时发送空 HEADERS + END_HEADERS，路由由流号决定：
+/// 1 为主通道、3 为回信通道，XPC 消息放在 DATA 帧。当前适配不消费入站 header block。
 ///
-/// 当前保留 RemoteXPC 使用的帧子集。nghttp2 是 MIT 许可；后续替换需要验证
-/// 空 HEADERS、双向流及文件传输流与它的会话模型能否兼容。
+/// nghttp2 使用 MIT 许可，已完成适配验证。控制流可用，偶数文件流与其客户端
+/// 会话模型不兼容，因此生产保留该帧层。验证范围见 docs/NGHTTP2_COMPATIBILITY.md。
 namespace scrctl::http2 {
 
 inline constexpr std::size_t kFrameHeaderSize = 9;
-/// 实现侧允许的单帧上限。RFC 允许 16 MiB，但那是外部输入能声明的数字，
-/// 我们不预备这么大的缓冲；超了这个值就按协议错误处理。
+/// 本实现接收单帧最多 4 MiB。协议长度字段为 24 位，可表示到 16 MiB - 1；
+/// 本地上限用于限制外部输入的缓冲分配。
 inline constexpr std::size_t kMaxFrameSize = 1u << 22;
 /// 双方未通过 SETTINGS 协商前的默认值（RFC 7540 §6.5.2 / §6.9.2）。
 inline constexpr uint32_t kDefaultInitialWindowSize = 65535;
@@ -41,10 +39,8 @@ enum Type : uint8_t {
     kContinuation = 0x9,
 };
 
-/// 帧标志。统一带 kFlag 前缀：标志位和帧类型共享同一批小整数，不加前缀就会
-/// 撞名（kPriority 同时是帧类型 0x2 和标志位 0x20）。另外 kFlagAck 与
-/// kFlagEndStream 同值但互不冲突——前者只出现在 SETTINGS/PING 上，后者只出现
-/// 在 DATA/HEADERS 上。
+/// 标志位使用 kFlag 前缀，与帧类型名称区分。ACK 和 END_STREAM 的值均为 0x1，
+/// 含义由帧类型决定：ACK 用于 SETTINGS / PING，END_STREAM 用于 DATA / HEADERS。
 enum Flag : uint8_t {
     kFlagEndStream = 0x1,
     kFlagAck = 0x1,
@@ -98,17 +94,13 @@ enum class Status { Ok, NeedMore, Malformed };
                                               uint8_t extra_flags = 0);
 [[nodiscard]] std::vector<uint8_t> ping_frame(uint64_t opaque_data, bool ack);
 
-// ---------------------------------------------------------------- 解析 ------
-/// 从缓冲区开头取出一整帧。`consumed` 仅在 Ok 时为帧长（可能小于 buf.size()，
-/// 一包里可能粘了多帧）。
-///
-/// NeedMore 与 Malformed 分开返回：前者要继续收，后者说明字节流已经错位，
-/// 再收只会更错——把两者混在一起，半帧会被当成协议错误而白白拆掉连接。
+// 从缓冲开头解析一帧，Ok 时 consumed 为帧长度，缓冲可能还包含后续帧。
+// NeedMore 表示应继续接收；Malformed 表示长度等输入不满足本实现约束。
 Status parse_frame(std::span<const uint8_t> buf, Frame &out, std::size_t &consumed,
                    std::string &err);
 
-/// DATA 载荷：按 PADDED 剥掉首字节的 Pad Length 与尾部填充。其余标志未定义，
-/// 按规范忽略（不是「未知就跳过」的敷衍——把未定义标志当可选字段读，会吃掉真载荷）。
+/// 解析 DATA 的 PADDED 字段，移除 Pad Length 字节及尾部填充。
+/// DATA 未定义的标志位忽略，不将其他帧的可选字段当作 DATA 前缀。
 bool data_payload(const Frame &f, std::span<const uint8_t> &out, std::string &err);
 
 /// SETTINGS 载荷 -> (标识符, 值) 列表；`ack` 回带 ACK 标志。
@@ -121,7 +113,7 @@ bool parse_window_update(const Frame &f, uint32_t &increment, std::string &err);
 struct GoAway {
     uint32_t last_stream_id = 0;
     uint32_t error_code = 0;
-    std::string debug_data;  ///< 设备常在这里写人话，比如 "Invalid or missing remote ..."
+    std::string debug_data;  // 对端提供的调试文本（解析时过滤控制字符）。
 };
 bool parse_goaway(const Frame &f, GoAway &out, std::string &err);
 

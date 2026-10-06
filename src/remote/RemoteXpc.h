@@ -16,50 +16,43 @@
 
 namespace scrctl::remote {
 
-/// 我方在 RSD 上申报的身份。
+/// RSD 使用的客户端身份。
 ///
-/// UUID 不是可以随手生成的装饰：iOS 27.2 起设备只保留「每条隧道一个 RSD 连接」，
-/// 新连接一来就把旧的换掉，并且**记住被换掉那个 peer 的 UUID**。若来客的 UUID
-/// 与记忆不符，设备会把整台机器重新 attach 一遍——已公布的服务监听全部关闭、
-/// 端口拒绝连接。所以同一隧道内跨进程、跨次运行必须用同一个 UUID，UUID 一旦
-/// 定了就得持久化保存。
+/// 已有设备测试中，更换 UUID 可能触发 peer 重新 attach，使已公布的服务端口失效。
+/// 调用方应复用配对记录中的稳定身份；不要为每个服务连接临时生成 UUID。
+/// 这是当前适配的设备行为，不能据此推定所有 iOS 版本的连接策略。
 struct PeerIdentity {
     std::array<uint8_t, 16> uuid{};
-    /// 0x0100000000000006 = 现代（非 legacy）RemoteXPC 客户。不给这个值，
-    /// 设备会回 "Invalid or missing remote device connection version flags"。
+    /// 当前 RemoteXPC 握手使用的版本标志。缺失或不兼容时，设备可返回
+    /// "Invalid or missing remote device connection version flags"。
     uint64_t version_flags = 0x0100000000000006ULL;
     uint64_t messaging_protocol_version = 7;
 };
 
-/// 把 8-4-4-4-12 形式的 UUID 文本转成 XPC 里那种 16 字节大端布局。
-/// 文本形态的 UUID 前两位对应第一个字节，所以是「按数字对折半字节」依次左移，
-/// 而不是按字符串下标切段——搞反会让设备认为我们是一个从未见过的 peer。
+/// 解析 UUID 的 32 个十六进制数字，按文本顺序每两个数字组成一个字节。
+/// 允许连字符；不按平台 UUID 结构中的字段端序重排。
 [[nodiscard]] std::optional<std::array<uint8_t, 16>> parse_uuid_text(std::string_view text);
 
-/// 隧道内一条 RemoteXPC 控制通道：HTTP/2 帧 + 帧里装的 XPC 消息。
-///
-/// 生命周期与一条 TCP 连接一致。设备上的每个 DDI 服务在 RSD 表里都有自己的端口，
-/// 起服务时要另开一条 TCP 连接、再各走一遍这里的握手，所以这个类要能廉价地
-/// 反复构造。
+/// 一条 TCP 连接上的 RemoteXPC 通道，负责 HTTP/2 帧和 XPC 消息。
+/// 每个 DDI 服务在 RSD 中有独立端口，需要建立自己的连接并完成握手。
+/// ByteStream 由调用方持有，必须比 Channel 活得更久。
 class Channel {
 public:
-    /// 在已建立的连接上跑完 HTTP/2 层握手（建流 + 等对端 SETTINGS 并 ACK）。
+    /// 完成 HTTP/2 握手，建立流并等待对端 SETTINGS。
     ///
-    /// 帧顺序是有约束的，不是随便排：设备侧 RemoteServiceDiscovery 会校验顺序，
-    /// 主通道 (stream 1) 的 HEADERS 必须先于终止帧、回信通道 (stream 3) 的
-    /// HEADERS 必须先于它的 INIT_HANDSHAKE 帧，否则直接被 xpc_connection_cancel()
-    /// 拆掉。顺序照 Apple 自家工具抓包的结果来。
+    /// 当前设备要求 stream 1 的 HEADERS 先于 TermChannel，stream 3 的 HEADERS
+    /// 先于 InitHandshake。顺序依据已验证的 RemoteXPC 握手，不能按普通 HTTP 请求重排。
     static std::optional<Channel> open(net::ByteStream &socket, std::string &err,
                                        bool verbose = false);
 
-    /// 申报身份并读回 peer_info。**只有 RSD 控制通道需要这一步**，服务连接上
-    /// 设备不期望它，发了会被当成一次普通请求处理。
+    /// 在 RSD 通道申报身份并读取 peer_info。服务连接不执行身份申报，
+    /// 其首条 XPC 消息应是服务自身的请求。
     bool announce_device(const PeerIdentity &identity, std::string &err);
 
-    /// 发一个请求。`want_reply` 置起 WANTING_REPLY 标志。
+    /// 发送请求；want_reply 决定是否携带 WANTING_REPLY 标志。
     bool send_request(const xpc::Value &body, bool want_reply, std::string &err);
 
-    /// `receive` 的三种结局。
+    /// 区分已收到消息、等待超时和连接或协议错误。
     enum class Wait { Message, Timeout, Broken };
 
     /// 取回下一条带字典载荷的消息（心跳、空载荷帧、控制帧会被跳过）。
@@ -67,22 +60,16 @@ public:
         return wait(out, timeout_ms, err) == Wait::Message;
     }
 
-    /// 与 `receive()` 同一条路，只是把"这一轮没等到"与"等坏了"分开交出来。
-    ///
-    /// 为什么必须分：一次性调用里两者都是失败，换条连接重来就行；而**常驻订阅**
-    /// 等不到消息是常态（`displayinfoupdates` 实测订阅后 21 秒可以一条都不推），
-    /// 只有"坏了"才需要重连。混成一个 bool 的话，要么每次空等都重连一遍
-    /// （每秒一条新连接去敲设备的门），要么真断了还在原地等。
+    /// 等待非空字典消息。Timeout 表示本轮未收到消息；Broken 表示连接或协议失败。
+    /// 常驻订阅可能长期没有更新，调用方应仅在 Broken 时按恢复策略重连。
     Wait wait(xpc::Value &out, int timeout_ms, std::string &err);
 
     /// 一次往返。
     bool call(const xpc::Value &request, xpc::Value &reply, int timeout_ms, std::string &err);
 
-    /// 没人发消息的时候也要有人读这条连接：设备的 HTTP/2 层会发 PING，也要收回我们
-    /// 对 WINDOW_UPDATE 的处理，没人应答它就把整条 xpc_connection 取消掉。
-    ///
-    /// 返回 false 只在"链路真的断了"（对端关闭/GOAWAY/帧错位）；单纯读超时算有进展，
-    /// 语义和 pump 一致。
+    /// 处理连接上的 HTTP/2 控制帧，即使当前没有业务消息也需调用。
+    /// 会应答 PING、处理 WINDOW_UPDATE，并缓冲收到的 XPC 数据。
+    /// 返回 true 表示未发现连接错误，包括读超时；不保证本轮有数据或进展。
     bool service(int timeout_ms, std::string &err) { return pump(timeout_ms, err); }
 
     /// 设备在握手时自报的身份：Model / OSVersion / Udid / Properties 等。
@@ -96,59 +83,53 @@ public:
     static constexpr uint32_t kRootStream = 1;
     static constexpr uint32_t kReplyStream = 3;
 
-    /// 公开只为 std::optional::emplace 能构造它——optional 的内部实现不在本类
-    /// 作用域里，私有构造函数它调不动。这样造出来的实例还没握手，别直接用，
-    /// 要可用的通道请走 open()。
+    /// 构造函数公开供 std::optional::emplace 使用。直接构造的对象尚未握手；
+    /// 建立可用通道应调用 open()。
     explicit Channel(net::ByteStream &socket) : socket_(socket) {}
 
 private:
     bool start(std::string &err);
     bool send_data(uint32_t stream_id, std::span<const uint8_t> payload, std::string &err);
-    /// 收一批字节并处理其中的完整帧；返回 false 表示超时、GOAWAY 或连接已终止。
+    /// 处理已缓冲的完整帧，或读取一批字节。连接、解析或控制帧处理失败返回 false；
+    /// 读超时返回 true，由调用方使用总 deadline 判断等待是否结束。
     bool pump(int timeout_ms, std::string &err);
     bool handle_frame(const http2::Frame &f, std::string &err);
-    /// 收一条文件传输：先在设备推来的那条流上表态接受，再读满 size 字节。
+    /// 接受设备文件流，并等待 size 字节；与业务回复共用同一 deadline。
     bool receive_file(uint32_t stream_id, uint64_t size,
                       std::chrono::steady_clock::time_point deadline, std::vector<uint8_t> &out,
                       std::string &err);
     /// 递归收集字典/数组里所有 FileTransfer 占位，顺序即流号顺序。
     static void collect_files(const xpc::Value &v, std::vector<xpc::Value *> &out);
-    /// 把回信字典里所有 FileTransfer 占位换成真字节。
+    /// 接收 FileTransfer 引用的文件，填入其 data 字段。
     bool materialize_files(xpc::Value &reply, std::chrono::steady_clock::time_point deadline,
                            std::string &err);
-    /// 从各流的缓冲里取一条完整回信，并把随信推来的文件字节填进去。
-    /// 取不到时返回 false 且 err 为空（表示"还得继续等"），err 非空才表示真的坏了。
+    /// 从各流缓冲中读取一条回复，并接收其引用的文件。
+    /// false 且 err 为空表示消息尚未收全；err 非空表示解析或文件接收失败。
     bool take_message(xpc::Value &out, std::chrono::steady_clock::time_point deadline,
                       std::string &err);
     void replenish_inbound_window(uint32_t stream_id);
-    /// 写一帧并在 verbose 下打出原始字节。协议对不上时，唯一有用的证据就是
-    /// 「我们究竟往线上写了什么」，靠推断排错在这里的性价比极低。
+    /// 发送完整帧；verbose 模式记录原始字节，供协议排查。
     bool send_bytes(std::span<const uint8_t> data, std::string &err);
 
     net::ByteStream &socket_;
     std::vector<uint8_t> rx_;  ///< 还没凑成一帧的原始字节
-    /// 这条连接一共进来过多少字节。和 `rx_.size()` 一减就是"当前这个帧头在流里的
-    /// 偏移"——诊断错位时这是唯一能把现场对回 dump 文件的坐标。
+    /// 累计接收字节数。减去 rx_.size() 得到当前缓冲开头在原始入流中的偏移，
+    /// 用于对照 SCRCTL_H2_DUMP 文件定位解析错误。
     uint64_t rx_total_ = 0;
-    /// SCRCTL_H2_DUMP=/前缀 时，把这条连接的原始入流字节按序另存一份
-    /// （/前缀.<n>.bin）。"帧长过大"这类错位光看缓冲区猜不出是谁错：把原始字节留下
-    /// 来就能离线重放一遍——文件自己帧对得上，就是我们消费错；对不上，就是链路与
-    /// 设备给的字节错。两种成因的修法完全不同，别靠猜。
-    /// 用 unique_ptr 管是因为 Channel 会被 move（`open()` 返回 optional<Channel>），
-    /// 裸 FILE* 会让两份对象指向同一个句柄。
+    /// SCRCTL_H2_DUMP 指定文件前缀；每条连接将原始入流保存为 <prefix>.<n>.bin。
+    /// 可配合解析错误中的流内偏移离线重放。文件内容可能包含设备及业务数据。
+    /// Channel 可移动，使用 unique_ptr 保证文件句柄只由一个对象关闭。
     struct FileCloser {
         int operator()(FILE* f) const { return std::fclose(f); }
     };
     std::unique_ptr<FILE, FileCloser> dump_ { nullptr };
-    /// dump 只在第一次 pump 时决定一次（每连接），不在每轮里翻环境变量。
+    /// 每条连接仅在第一次 pump 时读取 dump 配置。
     bool opened_dump_ = false;
     /// 开 dump 文件（见 `dump_`）。
     void maybe_open_dump();
-    /// 按流号分开缓冲：一条消息可能被拆成多个 DATA 帧，不同流的消息混在一个缓冲里
-    /// 拼，顺序一错就整条解不出来。
+    /// 按流号分别缓冲 XPC 字节；同一消息可能跨多个 DATA 帧。
     std::map<uint32_t, std::vector<uint8_t>> pending_;
-    /// 偶数号流（设备侧发起）上跑的不是 XPC 消息而是文件裸字节，不能混进
-    /// pending_ 里当消息解——那样每个字节都会被拿去当帧头/magic 校验一次。
+    /// 当前文件传输约定在偶数流发送原始文件字节，单独缓冲，不经过 XPC 解码。
     std::map<uint32_t, std::vector<uint8_t>> raw_;
     std::optional<xpc::Value> peer_info_;
     uint64_t next_message_id_ = 0;
@@ -161,9 +142,8 @@ private:
     uint64_t consumed_connection_ = 0;
     std::map<uint32_t, uint64_t> consumed_per_stream_;
 
-    /// 对端 SETTINGS 的原始条目。留着是因为「收到非 ACK 的 SETTINGS」这件事本身
-    /// 是握手能不能往下走的信号，而空 SETTINGS 也是合法值，不能用「条目非空」
-    /// 来判断收到了。
+    /// 保存对端 SETTINGS 内容。settings_received_ 单独记录是否收到非 ACK 帧，
+    /// 因为空 SETTINGS 也合法，不能使用条目数量判断握手完成。
     std::vector<std::pair<uint16_t, uint32_t>> peer_settings_;
     bool settings_received_ = false;
     bool terminated_ = false;

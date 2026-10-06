@@ -117,7 +117,7 @@ std::vector<uint8_t> window_update_frame(uint32_t stream_id, uint32_t increment)
 }
 
 std::vector<uint8_t> headers_frame(uint32_t stream_id) {
-    // 空 header block + END_HEADERS。RemoteXPC 就是这么建流的。
+    // RemoteXPC 通过空 header block 和 END_HEADERS 建立流。
     return serialize(kHeaders, kFlagEndHeaders, stream_id, {});
 }
 
@@ -163,15 +163,14 @@ Status parse_frame(std::span<const uint8_t> buf, Frame &out, std::size_t &consum
 
 bool data_payload(const Frame &f, std::span<const uint8_t> &out, std::string &err) {
     std::span<const uint8_t> body(f.payload.data(), f.payload.size());
-    // DATA 上只有 END_STREAM 和 PADDED 两个标志有定义，其余按 RFC 7540 §4.1
-    // 「未定义的标志必须忽略」。特别地，不能把 0x20 当优先级前缀剥掉 5 字节——
-    // 那是 HEADERS/PUSH_PROMISE 的字段，在 DATA 上这么读会吃掉真实载荷。
+    // DATA 仅定义 END_STREAM 和 PADDED；其余标志按 RFC 7540 §4.1 忽略。
+    // 0x20 的优先级字段属于 HEADERS，在 DATA 中不能据此移除载荷字节。
     if ((f.flags & kFlagPadded) != 0) {
         if (body.empty()) {
             err = SCRCTL_TR("PADDED DATA missing Pad Length byte");
             return false;
         }
-        // Pad Length 在载荷**最前**一个字节，填充字节本身在**最后**。
+        // Pad Length 为首字节，填充位于载荷尾部。
         const std::size_t padding = body[0];
         body = body.subspan(1);
         if (padding > body.size()) {

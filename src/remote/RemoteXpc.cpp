@@ -11,13 +11,13 @@
 namespace scrctl::remote {
 namespace {
 
-/// 一次授予的接收窗口。65535 是 RFC 默认值，服务目录本身就有几十 KB，
-/// 不提前放量设备写到一半就会卡在流控上不动。
+/// 每条流的初始接收窗口为 16 MiB。服务目录可能超过默认的 65535 字节，
+/// 较大的窗口减少接收大回复时的流控等待。
 constexpr uint32_t kGrantWindow = 16u << 20;
 constexpr uint32_t kWindowIncr = kGrantWindow - http2::kDefaultInitialWindowSize;
 
 
-/// 攒够这么多就补一次窗口。太小会把帧头开销放大成噪声，太大则要等。
+/// 累计消费 1 MiB 后补充窗口，减少 WINDOW_UPDATE 帧数量。
 constexpr uint64_t kReplenishThreshold = 1u << 20;
 
 bool write_all(net::ByteStream &sock, std::span<const uint8_t> data, std::string &err) {
@@ -29,8 +29,8 @@ bool write_all(net::ByteStream &sock, std::string_view data, std::string &err) {
     return sock.send(data, err);
 }
 
-/// 载荷里有没有内容决定 DATA_PRESENT。设备对这一位是有判断的：`{}` 这种空字典
-/// 走的是「有载荷但没数据」的形态，标志位只剩 ALWAYS_SET。
+/// 非空载荷设置 DATA_PRESENT。当前 RemoteXPC 约定中，空字典仅设置
+/// ALWAYS_SET；WANTING_REPLY 独立由调用方指定。
 uint32_t wrapper_flags(const xpc::Value *body, bool want_reply) {
     uint32_t flags = xpc::kFlagAlwaysSet;
     if (body != nullptr && (body->type != xpc::Type::Dict || !body->dict.empty())) {
@@ -51,7 +51,7 @@ xpc::Value build_handshake(const PeerIdentity &identity) {
                   xpc::make_uuid(std::span<const uint8_t>(identity.uuid.data(), identity.uuid.size())));
     auto props = xpc::make_dict();
     xpc::dict_set(props, "RemoteXPCVersionFlags", xpc::make_uint64(identity.version_flags));
-    // 不给这一位，设备会把带 entitlement 的服务从目录里默默摘掉。
+    // 请求展示敏感属性；已验证的服务发现路径依赖此标志。
     xpc::dict_set(props, "SensitivePropertiesVisible", xpc::make_bool(true));
     xpc::dict_set(d, "Properties", std::move(props));
     xpc::dict_set(d, "Services", xpc::make_dict());
@@ -92,8 +92,7 @@ std::optional<std::array<uint8_t, 16>> parse_uuid_text(std::string_view text) {
         if (v < 0) {
             return std::nullopt;
         }
-        // 先判界再写：写在后面的话，第 33 个十六进制字符会去动 out[16]——
-        // 那是数组外的第一个字节。
+        // 写入前检查数字数量，避免超过 16 字节数组。
         if (digits >= out.size() * 2) {
             return std::nullopt;
         }
@@ -125,9 +124,7 @@ bool Channel::start(std::string &err) {
         err = SCRCTL_TR("Failed to send HTTP/2 preface: ") + err;
         return false;
     }
-    // 2. 我们的 SETTINGS：一次把窗口和并发数放到宽，省掉后续来回。
-    //    实测多报一项 MAX_FRAME_SIZE 并不会改变设备的行为（下面那个 GOAWAY 照样
-    //    来），所以这里只报参考实现报的那两项，不发明设置。
+    // 2. 声明流级接收窗口和并发流数量，沿用已验证的 RemoteXPC 设置。
     if (!send_bytes(
             http2::settings_frame({{http2::kSettingMaxConcurrentStreams, 100},
                                    {http2::kSettingInitialWindowSize, kGrantWindow}}),
@@ -135,19 +132,16 @@ bool Channel::start(std::string &err) {
         err = SCRCTL_TR("Failed to send SETTINGS: ") + err;
         return false;
     }
-    // 3. 给对端放行 16 MiB 的接收窗口（连接级）。
-    //    我方发出去的可用量此刻仍是 RFC 默认的 65535，要等对端的
-    //    SETTINGS / WINDOW_UPDATE 来改。
+    // 3. 将连接级接收窗口增加到 16 MiB。
+    //    发送窗口仍使用默认值，直到对端 SETTINGS / WINDOW_UPDATE 更新。
     if (!send_bytes(http2::window_update_frame(0, kWindowIncr), err)) {
         err = SCRCTL_TR("Failed to send WINDOW_UPDATE: ") + err;
         return false;
     }
-    // 4–8. 建流与终止帧。顺序不能改，设备侧会校验。
+    // 4–8. 按设备要求建立主通道和回信通道。
     //
-    // 每个 XPC 消息都必须套在 DATA 帧里再写。少了帧头，设备会把 wrapper 的
-    // magic 0x29B00B92 当成帧头解析：长度读成 9572528、类型读成未定义的 0x29，
-    // 于是回一个 GOAWAY "too large frame size"——报错的位置离真正的错因很远，
-    // 光看错误信息完全猜不到是自家帧头没写。
+    // XPC wrapper 必须放入 DATA 帧。直接发送 wrapper 会使其 magic 被当作
+    // HTTP/2 帧头，可能表现为帧长度错误。
     if (!send_bytes(http2::headers_frame(kRootStream), err)) {
         err = SCRCTL_TR("Failed to send primary channel HEADERS: ") + err;
         return false;
@@ -238,11 +232,8 @@ bool Channel::pump(int timeout_ms, std::string &err) {
         }
         if (st == http2::Status::Malformed) {
             err = perr;
-            // 把错位现场的前后字节交出来。"帧长过大"这种错误光看数字猜不出成因
-            // ——是隧道包边界读歪了、上一帧的长度算少了、还是别的流的字节混进来
-            // ——三种情况在十六进制里一眼就能分辨，靠推理则三种都能"自洽"。
-            // 那个**流内偏移**（进来过多少减去手上还剩多少）是为了能和
-            // SCRCTL_H2_DUMP 留下的原始字节文件对上：有了它，这个现场就能离线重放。
+            // 记录缓冲前缀及流内偏移，便于与原始 dump 对照。
+            // 这些信息用于定位问题，不足以单独判断是设备、传输还是本地解析错误。
             std::fprintf(stderr,
                          SCRCTL_TR(
                              "    HTTP/2 parse failed: %s; buffered %zu bytes, stream offset %llu (total "
@@ -261,9 +252,8 @@ bool Channel::pump(int timeout_ms, std::string &err) {
         }
         break;  // 缓冲里只剩半帧，去收字节
     }
-    // 处理过帧就先交回控制权，让调用方看看有没有攒出完整消息，再去阻塞读。
-    // 不这样返回的话，「回信随最后一批字节到齐」这个最常见的时序会被读超时
-    // 吃掉：明明收到了，却报成没收到。
+    // 已处理完整帧时先交回控制权，让调用方读取可能已经收全的回复，
+    // 避免继续阻塞等待下一批数据。
     if (processed) {
         return true;
     }
@@ -272,9 +262,7 @@ bool Channel::pump(int timeout_ms, std::string &err) {
     bool timed_out = false;
     if (!socket_.recv(got, timeout_ms, err, &timed_out)) {
         if (timed_out) {
-            // 这一次 socket 读没等到字节，但链路是好的：返回"有进展"让调用方
-            // 按自己的总 deadline 决定继续等还是放弃。把它当断开，就会在设备
-            // 回信稍慢的时候报出"等设备回信时断开: 读超时"。
+            // 单次读取超时不判定为断连。调用方按自己的总 deadline 决定是否继续等待。
             return true;
         }
         return false;
@@ -288,9 +276,7 @@ bool Channel::pump(int timeout_ms, std::string &err) {
     return true;
 }
 
-/// 开 dump 文件。环境变量给的是前缀，每条连接一个序号——一次调用链上同时有好几条
-/// 服务连接（displayservice / screencaptureservice / indigo），混在一个文件里就没法
-/// 重放了。
+/// 每条连接使用独立 dump 序号，避免不同服务的字节混合。
 void Channel::maybe_open_dump() {
     if (dump_ != nullptr || opened_dump_) {
         return;
@@ -321,9 +307,8 @@ bool Channel::handle_frame(const http2::Frame &f, std::string &err) {
             for (const auto &[id, value] : peer_settings_) {
                 switch (id) {
                     case http2::kSettingInitialWindowSize: {
-                        // §6.9.2：这个设置只追溯地挪动**各条流**的窗口，连接级
-                        // 窗口不受它影响（那个只由 WINDOW_UPDATE 改）。把增量
-                        // 也加到连接窗口上，会让发出去的量超出对端实际允许的额度。
+                        // RFC 7540 §6.9.2：INITIAL_WINDOW_SIZE 的变化作用于各流的发送窗口，
+                        // 不修改连接级窗口；后者仅由 WINDOW_UPDATE 更新。
                         const int64_t delta =
                             static_cast<int64_t>(value) - static_cast<int64_t>(peer_initial_window_);
                         peer_initial_window_ = value;
@@ -360,7 +345,7 @@ bool Channel::handle_frame(const http2::Frame &f, std::string &err) {
             return true;
         }
         case http2::kPing:
-            // 对端的活性探测必须照样式 ACK 回去，不理它的话设备会在超时后拆连接。
+            // 非 ACK 的 PING 原样应答，维持设备的连接活性检查。
             if ((f.flags & http2::kFlagAck) != 0) {
                 return true;
             }
@@ -418,8 +403,8 @@ bool Channel::handle_frame(const http2::Frame &f, std::string &err) {
             return true;
         }
         default:
-            // HEADERS / CONTINUATION / PRIORITY 以及未定义的帧类型：载荷对我们
-            // 没有信息量（路由在流号里），整帧丢掉即可。
+            // 本适配不消费 HEADERS / CONTINUATION / PRIORITY 的载荷；
+            // RemoteXPC 根据流号路由 XPC 消息。未识别帧也按当前策略忽略。
             return true;
     }
 }
@@ -449,8 +434,8 @@ bool Channel::send_data(uint32_t stream_id, std::span<const uint8_t> payload, st
         const auto budget = std::min({outbound_connection_, stream_window,
                                       static_cast<int64_t>(peer_max_frame_)});
         if (budget <= 0) {
-            // 没有窗口就等对端补。这里只等得有限次：设备要是铁了心不放量，
-            // 无限等会变成挂死，不如报出来。
+            // 发送窗口耗尽后最多等待五轮，每轮读超时上限 1 秒。
+            // 这是轮数限制，实际总时长仍受底层读写耗时影响。
             if (++idle_rounds > 5) {
                 err = SCRCTL_TR("Peer did not replenish flow-control window; sent ") + std::to_string(off) + "/" +
                       std::to_string(payload.size()) + SCRCTL_TR(" bytes");
@@ -516,8 +501,8 @@ void Channel::collect_files(const xpc::Value &v, std::vector<xpc::Value *> &out)
 bool Channel::receive_file(uint32_t stream_id, uint64_t size,
                            std::chrono::steady_clock::time_point deadline,
                            std::vector<uint8_t> &out, std::string &err) {
-    // 设备在等我们表态才开推，所以先发接受帧：HEADERS 开流 + 一条只带
-    // FILE_TX_STREAM_RESPONSE 标志的空载荷帧。
+    // 按当前文件流约定，先发送 HEADERS 和 FILE_TX_STREAM_RESPONSE 接受帧，
+    // 再接收该流的原始文件数据。
     std::vector<uint8_t> frames = http2::headers_frame(stream_id);
     auto accept = xpc::encode_message(xpc::kFlagAlwaysSet | xpc::kFlagFileTxResponse, 0, nullptr);
     auto ack_frame = http2::data_frame(stream_id, accept);
@@ -559,8 +544,8 @@ bool Channel::materialize_files(xpc::Value &reply,
     if (files.empty()) {
         return true;
     }
-    // 第 i 个文件对应设备发起的第 i 条偶数流：2, 4, 6...。这个对应关系是"按
-    // 位置推定"的，所以把实际读到的流号也打出来，对不上时不至于摸黑。
+    // 按 FileTransfer 在回复中的遍历顺序分配偶数流 2、4、6……。
+    // 此映射仍需真机文件子流验证，verbose 日志记录请求接收的流号和长度。
     for (std::size_t i = 0; i < files.size(); ++i) {
       const auto stream_id = static_cast<uint32_t>((i + 1) * 2);
         if (files[i]->file_size == 0) {
@@ -590,17 +575,15 @@ bool Channel::take_message(xpc::Value &out,
                 return false;
             }
             if (st == xpc::Status::NeedMore) {
-                // "差多少字节"是判据本身：设备说它发完了而我们还在等，就是它那边
-                // 截断了；数字对得上却迟迟不来，才是流控或链路问题。
+                // verbose 记录消息欠缺字节数，便于结合原始入流排查未完成的回复。
+                // 仅凭本地缓冲不足不能断定对端是否已发完。
                 if (verbose_) {
                     std::fprintf(stderr, SCRCTL_TR("    Stream %u message incomplete: %s\n"), stream, derr.c_str());
                 }
                 break;
             }
             buf.erase(buf.begin(), buf.begin() + static_cast<std::ptrdiff_t>(used));
-            // 只有「非空字典」才算回信。设备对我们每个握手帧各回一个空字典或
-            // 空载荷帧当 ACK，把 `{}` 交上去的话调用方只看到一个没有 Services
-            // 的对象，而真正的回信还在后面排队。
+            // 跳过握手 ACK 使用的空载荷和空字典；仅向调用方返回非空字典消息。
             if (m.has_body && m.body.is_dict() && !m.body.dict.empty()) {
                 if (verbose_) {
                     std::fprintf(stderr, SCRCTL_TR("    => stream %u id=%llu %s\n"), stream,
@@ -622,7 +605,7 @@ Channel::Wait Channel::wait(xpc::Value &out, int timeout_ms, std::string &err) {
             return Wait::Message;
         }
         if (!err.empty()) {
-            return Wait::Broken;  // 畸形消息：字节流已经错位，再等只会更错
+            return Wait::Broken;  // 解析或文件接收失败。
         }
         const auto left = remaining_ms(deadline);
         if (left == 0) {
@@ -634,9 +617,8 @@ Channel::Wait Channel::wait(xpc::Value &out, int timeout_ms, std::string &err) {
             return Wait::Broken;
         }
         if (!pump(static_cast<int>(left), err)) {
-            // pump 失败常常只是这一次 socket 读超时，而上一轮处理帧时攒下的完整
-            // 消息还在缓冲里。不回头再看一眼，就会把已经收到的回信报成"没回信"——
-            // 真机上正是这个次序：回信到齐、读超时、于是报超时。
+            // 连接失败前可能已处理并缓冲一条完整回复，最后检查一次。
+            // 读超时由 pump 返回 true；这里处理的是其他连接或协议错误。
             if (take_message(out, deadline, err)) {
                 return Wait::Message;
             }
