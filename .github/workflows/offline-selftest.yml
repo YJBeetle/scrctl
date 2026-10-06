@@ -1,12 +1,6 @@
-# 离线自检：`ctest` 里那批不需要真机的用例。
-#
-# 为什么要单独有一份：真机验证一次要占住一台 iPhone（同一台设备同时只容得下一条流），
-# 而绝大多数回归——隧道里 IPv6/UDP 的拼包与校验和、RTCP 各包的形状、XPC / HTTP2 /
-# bplist 的编解码、窗口坐标到设备坐标的映射——在离开手机的机器上就能判对错。
-# 这批用例恰好就是这几个月所有"看着像设备的问题"最后翻案成我们自己的 bug 的地方。
-#
-# 项数不写在这里（README 里也不写死）：`ctest --test-dir build -N` 数得出来。
-# 带 `SCRCTL_TEST_STREAM` 的那两项（真机录制的码流）在 CI 上没有输入文件，会自动跳过。
+# 构建并运行不需要设备的回归测试：协议编解码、lwIP 传输、媒体状态和命令行。
+# 真机测试另外运行，避免 CI 依赖设备在线或占用同一设备的媒体会话。
+# 测试项以 ctest -N 为准；未配置录制码流时，不注册需要该输入的测试。
 name: offline-selftest
 
 on:
@@ -28,11 +22,7 @@ jobs:
             os: macos-latest
           - name: Ubuntu
             os: ubuntu-latest
-    # Ubuntu 这一格**已经是门槛**（2026-09-27 撤掉了 continue-on-error）。撤的理由不是
-    # "它绿了几轮"，而是去看了它到底跑没跑：日志里是 `100% tests passed, 0 tests failed
-    # out of 15`，`可执行文件冒烟` 那步也真起来了。continue-on-error 会把"这一步失败"
-    # 和"这一步从没跑过"折叠成同一个绿色，那种绿色没有信息量——要判它成活，得看步级结论
-    # 与日志里的计数，而不是看 job 的 conclusion。
+    # 两个平台都必须成功；构建、测试和可执行文件启动分别检查。
     steps:
       - uses: actions/checkout@v4
 

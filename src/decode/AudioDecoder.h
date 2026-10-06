@@ -34,13 +34,10 @@ std::unique_ptr<AudioDecoder> create_audio_decoder(int sample_rate, int channels
 /// 这个构建里到底有没有音频后端。与视频那边同一个道理：没有就要在起流之前说清楚，
 /// 而不是等第一帧音频到了才发现手里是空指针。
 ///
-/// 为什么 Apple 之外会是 false：设备那条音频腿发的是苹果专有的 AAC-ELD，而自由
-/// 实现里没有一个能解它——libavcodec 的原生 aac 解码器明确不支持 ELD（真机 dump
-/// 实测：按规范拼的 AudioSpecificConfig 连 `avcodec_open2` 都过不去，报 "AAC data
-/// resilience is not implemented"；换成苹果自己那份 cookie 打得开，1404 帧只出得来
-/// 109 帧、每帧 512 采样、峰值顶满，是解歪了的样子）。libav 里那个 AudioToolbox 壳
-/// `aac_at` 同一条 dump 也只出 109/1406。所以 macOS 直接对 AudioToolbox 的
-/// AudioConverter 说话，别处只能承认这一路是缺的。数字与判据在 docs §17.1。
+/// 当前项目只接入 macOS AudioToolbox。已测试的 FFmpeg 原生 AAC 解码器不能正确
+/// 处理这份设备 AAC-ELD 配置；这不表示 AAC-ELD 是 Apple 私有格式，或其他实现
+/// 都不支持。FDK AAC 提供 ELD 解码，但尚未验证本项目的设备载荷和配置。
+/// 当前测试样本和结果见 docs/ROADMAP.md；扩展后端前需用同一份 dump 比较 PCM。
 #if defined(__APPLE__)
 inline constexpr bool kHaveAudioDecoder = true;
 #else

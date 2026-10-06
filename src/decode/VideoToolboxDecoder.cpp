@@ -43,14 +43,10 @@ void output_callback(void *ref_con, void *source_frame_ref_con, OSStatus status,
     slot->pb = CVPixelBufferRetain(image_buffer);
 }
 
-/// NAL 长度前缀字节数。
-///
-/// 这里必须是 2，不是文档暗示可以选的 4。实测（macOS 26 / Apple Silicon）
-/// CMVideoFormatDescriptionCreateFromHEVCParameterSets 会正确把该参数写进
-/// hvcC 的 lengthSizeMinusOne（2 -> 1，4 -> 3），但 lengthSizeMinusOne=3 的
-/// 解码会话对每一个样本都回 kVTVideoDecoderBadDataErr(-12909)，出帧率 0%；
-/// 只有 2 字节前缀能 100% 工作。已用 create x write 的 2x2 矩阵排除是自己
-/// 组装写错。
+/// 当前适配器使用 2 字节 NAL 长度前缀。已有 macOS 26 / Apple Silicon
+/// 样本中，创建参数和写入前缀长度的 2×2 组合测试只有 2 字节组合成功；
+/// 4 字节会话返回 kVTVideoDecoderBadDataErr(-12909)。这项观察不代表
+/// 其他系统版本或码流也有相同限制。当前后端因此最多接受 65535 字节 NAL。
 constexpr int kNalLengthSize = 2;
 constexpr size_t kMaxNalSize = 0xFFFF;
 
@@ -209,8 +205,8 @@ private:
         }
     }
 
-    /// 2 字节前缀的硬上限。真机流实测最大 NAL 约 17KB，正常不会触发；
-    /// 一旦触发说明码流超出了本后端能力，需要改走软解（libav）。
+    /// 当前两字节前缀不能表示大于 65535 字节的 NAL。已有设备样本出现过
+    /// 超限关键帧，调用方需改用软件解码；不要依据某个小码流样本假定不会触发。
     static void warn_oversized(size_t n) {
         static bool warned = false;
         if (!warned) {
