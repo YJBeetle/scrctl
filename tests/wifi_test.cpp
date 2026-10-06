@@ -14,6 +14,8 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+#include <openssl/evp.h>
+#include <openssl/err.h>
 
 #include "remote/PairingChannel.h"
 #include "wifi/Crypto.h"
@@ -236,6 +238,7 @@ void test_srp() {
         "1fbfe6dde88264e885fb51f3b14a9fbad7c91b42f614733c5c9af98714b755f706ab10ad5280dbc8181da0917db11e53");
     scrctl::wifi::SrpClient srp("Pair-Setup", "000000",
                                 "abababababababababababababababababababababababababababababababab");
+    check(!srp.verify_server_proof({}), "SRP rejects empty proof before computation");
     std::string err;
     check(srp.process(salt, B, err), ("SRP process 要成功: " + err).c_str());
     check(to_hex(srp.client_public()) ==
@@ -263,6 +266,36 @@ void test_srp() {
     Bytes wrong = m2;
     wrong[0] ^= 0xff;
     check(!srp.verify_server_proof(wrong), "改一个字节的 M2 要验不过");
+    check(!srp.process(salt, Bytes{0}, err), "SRP rejects zero server public key");
+    check(srp.client_public().empty() && srp.session_key().empty() &&
+              srp.client_proof().empty() && !srp.verify_server_proof(m2),
+          "failed SRP retry clears previous key and proofs");
+    check(!srp.process(salt, Bytes(385, 0xff), err), "SRP rejects oversized server public key");
+    for (const char *private_value : {"0", "-1", "abcdjunk"}) {
+        scrctl::wifi::SrpClient invalid("Pair-Setup", "000000", private_value);
+        check(!invalid.process(salt, B, err) && invalid.session_key().empty(),
+              "SRP rejects invalid injected private key");
+    }
+    check(!srp.process(salt, {}, err), "SRP rejects empty server public key");
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+    // 使用临时线程默认上下文制造摘要不可用，随后恢复原上下文。
+    // 不修改进程原有 provider 配置，也不使用生产故障注入开关。
+    OSSL_LIB_CTX *isolated = OSSL_LIB_CTX_new();
+    check(isolated != nullptr, "SRP failure test creates isolated OpenSSL context");
+    if (isolated) {
+        OSSL_LIB_CTX *previous = OSSL_LIB_CTX_set0_default(isolated);
+        const bool configured = EVP_set_default_properties(nullptr, "provider=scrctl_test_missing") == 1;
+        const bool processed = srp.process(salt, B, err);
+        OSSL_LIB_CTX_set0_default(previous);
+        OSSL_LIB_CTX_free(isolated);
+        ERR_clear_error();
+        check(configured && !processed && err.find("EVP_DigestInit_ex") != std::string::npos &&
+                  srp.session_key().empty() && !srp.verify_server_proof(m2),
+              "SRP reports unavailable digest without publishing key or proof");
+    }
+#endif
+    check(srp.process(salt, B, err) && err.empty() && srp.verify_server_proof(m2),
+          "SRP succeeds after failed retry and clears old error");
 }
 
 

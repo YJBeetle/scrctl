@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 03:18+0800\n"
+"POT-Creation-Date: 2026-10-07 03:30+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -2767,9 +2767,22 @@ msgstr "尚未安装主密钥，无法发送加密帧"
 msgid "This stream does not support waiting for readability"
 msgstr "这条流不支持等可读"
 
-#: src/wifi/Srp.cpp:128
+#: src/wifi/Srp.cpp:113
+msgid "SRP server public key is empty or exceeds 384 bytes"
+msgstr "SRP 服务端公钥为空或超过 384 字节"
+
+#: src/wifi/Srp.cpp:119 src/wifi/Srp.cpp:143
+msgid ""
+"SRP private key must be a nonzero hexadecimal integer of at most 3072 bits"
+msgstr "SRP 私钥必须是非零十六进制整数，最多 3072 位"
+
+#: src/wifi/Srp.cpp:156
 msgid "SRP B is a multiple of N; rejected"
 msgstr "SRP 的 B 是 N 的倍数，拒收"
+
+#: src/wifi/Srp.cpp:196
+msgid "SRP cryptographic operation failed: "
+msgstr "SRP 密码运算失败："
 
 #: src/wifi/Tlv.cpp:30
 msgid "TLV header truncated"

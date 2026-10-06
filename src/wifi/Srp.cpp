@@ -2,9 +2,12 @@
 #include "wifi/Srp.h"
 
 #include <openssl/bn.h>
-#include <openssl/sha.h>
+#include <openssl/crypto.h>
+#include <openssl/evp.h>
 
-#include <cstring>
+#include <algorithm>
+#include <memory>
+#include <stdexcept>
 
 namespace scrctl::wifi {
 namespace {
@@ -24,49 +27,60 @@ constexpr const char *kPrimeHex =
     "D87602733EC86A64521F2B18177B200CBBE117577A615D6C770988C0BAD946E2"
     "08E24FA074E5AB3143DB5BFCE0FD108E4B82D120A93AD2CAFFFFFFFFFFFFFFFF";
 constexpr int kGenerator = 5;
+constexpr int kWidth = 384;
+constexpr size_t kHashSize = 64;
+
+void require(bool success, const char *operation) {
+    if (!success) throw std::runtime_error(operation);
+}
 
 struct Bn {
     BIGNUM *v = nullptr;
-    Bn() { v = BN_new(); }
-    ~Bn() { BN_free(v); }
+    Bn() {
+        v = BN_new();
+        require(v != nullptr, "BN_new");
+    }
+    ~Bn() { BN_clear_free(v); }
     Bn(const Bn &) = delete;
     Bn &operator=(const Bn &) = delete;
 };
 
 Bytes sha512(const std::vector<Bytes> &parts) {
-    SHA512_CTX ctx;
-    SHA512_Init(&ctx);
+    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
+    require(ctx != nullptr, "EVP_MD_CTX_new");
+    require(EVP_DigestInit_ex(ctx.get(), EVP_sha512(), nullptr) == 1, "EVP_DigestInit_ex");
     for (const auto &p : parts) {
-        SHA512_Update(&ctx, p.data(), p.size());
+        require(EVP_DigestUpdate(ctx.get(), p.data(), p.size()) == 1, "EVP_DigestUpdate");
     }
-    Bytes out(SHA512_DIGEST_LENGTH);
-    SHA512_Final(out.data(), &ctx);
+    Bytes out(kHashSize);
+    unsigned int written = 0;
+    require(EVP_DigestFinal_ex(ctx.get(), out.data(), &written) == 1 && written == kHashSize,
+            "EVP_DigestFinal_ex");
     return out;
 }
 
-/// 参考实现的 int_to_bytes：hex 串奇数位补 0 再 unhexlify——落到字节数组上与**最小大端**
-/// 完全等价（最小大端的首字节不可能是 0），所以就是 BN_bn2bin。第一版在这里多补了一个
-/// 前导 0 字节，K 对而 M1 不对，就是它。
+/// Apple 配对中用于哈希的最小大端整数编码，不添加符号字节或定长填充。
 Bytes bytes_of_bn(const BIGNUM *n) {
     const int len = BN_num_bytes(n);
     Bytes out(static_cast<size_t>(len));
-    BN_bn2bin(n, out.data());
+    require(BN_bn2bin(n, out.data()) == len, "BN_bn2bin");
     return out;
 }
 
 /// 384 字节定长大端（参考实现的 pad()）。
 Bytes pad_bn(const BIGNUM *n, int width) {
     Bytes out(static_cast<size_t>(width), 0);
-    BN_bn2binpad(n, out.data(), width);
+    require(BN_bn2binpad(n, out.data(), width) == width, "BN_bn2binpad");
     return out;
 }
 
-void bn_from_hex(const char *hex, BIGNUM *dst) { BN_hex2bn(&dst, hex); }
+void bn_from_hex(const std::string &hex, Bn &dst) {
+    require(BN_hex2bn(&dst.v, hex.c_str()) == static_cast<int>(hex.size()), "BN_hex2bn");
+}
 
 Bytes sha512_int(const BIGNUM *n) { return sha512({bytes_of_bn(n)}); }
 
-/// 两个哈希值（当作整数）的异或，再取最小大端字节——参考实现里是 Python 整数 xor，
-/// 所以前导零要去掉、奇数位 hex 还要补回一个前导 0（与 bytes_of_bn 同一套规矩）。
+/// 将哈希按整数异或，再取最小大端编码。去掉前导零，零值保留一个字节。
 Bytes xor_hashes(const Bytes &a, const Bytes &b) {
     Bytes r(std::max(a.size(), b.size()), 0);
     for (size_t i = 0; i < a.size(); ++i) {
@@ -89,101 +103,104 @@ SrpClient::SrpClient(std::string user, std::string password, std::string private
     : user_(std::move(user)), password_(std::move(password)), private_hex_(std::move(private_hex)) {}
 
 bool SrpClient::process(const Bytes &salt, const Bytes &server_public, std::string &err) {
-    Bn N;
-    bn_from_hex(kPrimeHex, N.v);
-    const int width = BN_num_bytes(N.v);
-    Bn g;
-    BN_set_word(g.v, kGenerator);
-
-    // k = H(N | PAD(g))
-    const Bytes k = sha512({bytes_of_bn(N.v), pad_bn(g.v, width)});
-    Bn kb;
-    BN_bin2bn(k.data(), static_cast<int>(k.size()), kb.v);
-
-    // a：私钥。离线自检要能注入，真机跑要真随机。
-    Bn a;
-    if (!private_hex_.empty()) {
-        bn_from_hex(private_hex_.c_str(), a.v);
-    } else {
-        BN_rand(a.v, 1024, -1, 0);
+    // 每次计算独立发布结果。失败后不暴露上一轮或本轮未完成的密钥与证明。
+    a_public_.clear();
+    k_.clear();
+    m1_.clear();
+    m2_.clear();
+    err.clear();
+    if (server_public.empty() || server_public.size() > kWidth) {
+        err = SCRCTL_TR("SRP server public key is empty or exceeds 384 bytes");
+        return false;
     }
-    // A = g^a mod N
-    Bn A;
-    {
-        BN_CTX *ctx = BN_CTX_new();
-        BN_mod_exp(A.v, g.v, a.v, N.v, ctx);
-        BN_CTX_free(ctx);
+    if (!private_hex_.empty() &&
+        (private_hex_.size() > kWidth * 2 ||
+         private_hex_.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)) {
+        err = SCRCTL_TR("SRP private key must be a nonzero hexadecimal integer of at most 3072 bits");
+        return false;
     }
-    a_public_ = bytes_of_bn(A.v);
+    try {
+        std::unique_ptr<BN_CTX, decltype(&BN_CTX_free)> ctx(BN_CTX_new(), BN_CTX_free);
+        require(ctx != nullptr, "BN_CTX_new");
+        Bn N;
+        bn_from_hex(kPrimeHex, N);
+        Bn g;
+        require(BN_set_word(g.v, kGenerator) == 1, "BN_set_word");
 
-    Bn B;
-    BN_bin2bn(server_public.data(), static_cast<int>(server_public.size()), B.v);
-    {
-        // BN_mod 要真 ctx，传空指针直接崩（第一版就崩在这里）。
-        BN_CTX *ctx = BN_CTX_new();
+        // k = H(N | PAD(g))
+        const Bytes k = sha512({bytes_of_bn(N.v), pad_bn(g.v, kWidth)});
+        Bn kb;
+        require(BN_bin2bn(k.data(), static_cast<int>(k.size()), kb.v) != nullptr, "BN_bin2bn(k)");
+
+        // 测试可注入固定私钥；正常配对使用 OpenSSL 生成随机 1024 位指数。
+        Bn a;
+        if (!private_hex_.empty()) {
+            bn_from_hex(private_hex_, a);
+        } else {
+            require(BN_rand(a.v, 1024, -1, 0) == 1, "BN_rand");
+        }
+        if (BN_is_zero(a.v)) {
+            err = SCRCTL_TR("SRP private key must be a nonzero hexadecimal integer of at most 3072 bits");
+            return false;
+        }
+        BN_set_flags(a.v, BN_FLG_CONSTTIME);
+        Bn A;
+        require(BN_mod_exp(A.v, g.v, a.v, N.v, ctx.get()) == 1, "BN_mod_exp(A)");
+
+        Bn B;
+        require(BN_bin2bn(server_public.data(), static_cast<int>(server_public.size()), B.v) != nullptr,
+                "BN_bin2bn(B)");
         Bn mod;
-        BN_mod(mod.v, B.v, N.v, ctx);
-        BN_CTX_free(ctx);
+        require(BN_mod(mod.v, B.v, N.v, ctx.get()) == 1, "BN_mod(B)");
         if (BN_is_zero(mod.v)) {
             err = SCRCTL_TR("SRP B is a multiple of N; rejected");
             return false;
         }
+
+        // x = H(s | H(I ":" P))
+        const Bytes inner = sha512({bytes_of(user_), Bytes{':'}, bytes_of(password_)});
+        const Bytes x = sha512({salt, inner});
+        Bn xb;
+        require(BN_bin2bn(x.data(), static_cast<int>(x.size()), xb.v) != nullptr, "BN_bin2bn(x)");
+        BN_set_flags(xb.v, BN_FLG_CONSTTIME);
+
+        // u = H(PAD(A) | PAD(B))
+        const Bytes u = sha512({pad_bn(A.v, kWidth), pad_bn(B.v, kWidth)});
+        Bn ub;
+        require(BN_bin2bn(u.data(), static_cast<int>(u.size()), ub.v) != nullptr, "BN_bin2bn(u)");
+        require(!BN_is_zero(ub.v), "SRP u == 0");
+
+        // v = g^x mod N; S = (B - k*v)^(a + u*x) mod N
+        Bn v, kv, base, ux, exponent, S;
+        require(BN_mod_exp(v.v, g.v, xb.v, N.v, ctx.get()) == 1, "BN_mod_exp(v)");
+        require(BN_mod_mul(kv.v, kb.v, v.v, N.v, ctx.get()) == 1, "BN_mod_mul");
+        require(BN_mod_sub(base.v, B.v, kv.v, N.v, ctx.get()) == 1, "BN_mod_sub");
+        require(BN_mul(ux.v, ub.v, xb.v, ctx.get()) == 1, "BN_mul");
+        require(BN_add(exponent.v, a.v, ux.v) == 1, "BN_add");
+        BN_set_flags(exponent.v, BN_FLG_CONSTTIME);
+        require(BN_mod_exp(S.v, base.v, exponent.v, N.v, ctx.get()) == 1, "BN_mod_exp(S)");
+
+        // Apple 适配使用最小大端编码：K = H(S)，M1 / M2 不对 A、B 做 PAD。
+        auto public_key = bytes_of_bn(A.v);
+        auto key = sha512({bytes_of_bn(S.v)});
+        const Bytes hxor = xor_hashes(sha512_int(N.v), sha512_int(g.v));
+        const Bytes huser = sha512({bytes_of(user_)});
+        auto proof = sha512({hxor, huser, salt, public_key, bytes_of_bn(B.v), key});
+        auto server_proof = sha512({public_key, proof, key});
+        a_public_ = std::move(public_key);
+        k_ = std::move(key);
+        m1_ = std::move(proof);
+        m2_ = std::move(server_proof);
+        return true;
+    } catch (const std::runtime_error &failure) {
+        err = SCRCTL_TR("SRP cryptographic operation failed: ") + std::string(failure.what());
+        return false;
     }
-
-    // x = H(s | H(I ":" P))
-    const Bytes inner = sha512({bytes_of(user_), Bytes { ':' }, bytes_of(password_)});
-    Bytes outer_input = salt;
-    outer_input.insert(outer_input.end(), inner.begin(), inner.end());
-    const Bytes x = sha512({outer_input});
-    Bn xb;
-    BN_bin2bn(x.data(), static_cast<int>(x.size()), xb.v);
-
-    // u = H(PAD(A) | PAD(B))
-    const Bytes u = sha512({pad_bn(A.v, width), pad_bn(B.v, width)});
-    Bn ub;
-    BN_bin2bn(u.data(), static_cast<int>(u.size()), ub.v);
-
-    // v = g^x mod N
-    Bn v;
-    {
-        BN_CTX *ctx = BN_CTX_new();
-        BN_mod_exp(v.v, g.v, xb.v, N.v, ctx);
-        BN_CTX_free(ctx);
-    }
-
-    // S = (B - k*v)^(a + u*x) mod N
-    Bn S;
-    {
-        BN_CTX *ctx = BN_CTX_new();
-        Bn kv;
-        BN_mod_mul(kv.v, kb.v, v.v, N.v, ctx);
-        Bn base;
-        BN_mod_sub(base.v, B.v, kv.v, N.v, ctx);
-        Bn ux;
-        BN_mul(ux.v, ub.v, xb.v, ctx);
-        Bn exp;
-        BN_add(exp.v, a.v, ux.v);
-        BN_mod_exp(S.v, base.v, exp.v, N.v, ctx);
-        BN_CTX_free(ctx);
-    }
-
-    // K = H(S)
-    k_ = sha512({bytes_of_bn(S.v)});
-
-    // M1 = H( (H(N) xor H(g)) | H(I) | s | A | B | K )
-    Bn hn;
-    BN_bin2bn(sha512_int(N.v).data(), SHA512_DIGEST_LENGTH, hn.v);
-    Bn hg;
-    BN_bin2bn(sha512_int(g.v).data(), SHA512_DIGEST_LENGTH, hg.v);
-    const Bytes hxor = xor_hashes(sha512_int(N.v), sha512_int(g.v));
-    const Bytes huser = sha512({bytes_of(user_)});
-    m1_ = sha512({hxor, huser, salt, bytes_of_bn(A.v), bytes_of_bn(B.v), k_});
-
-    // M2 = H(A | M1 | K)
-    m2_ = sha512({bytes_of_bn(A.v), m1_, k_});
-    return true;
 }
 
-bool SrpClient::verify_server_proof(const Bytes &m2) const { return m2 == m2_; }
+bool SrpClient::verify_server_proof(const Bytes &m2) const {
+    return m2_.size() == kHashSize && m2.size() == kHashSize &&
+           CRYPTO_memcmp(m2.data(), m2_.data(), kHashSize) == 0;
+}
 
 }  // namespace scrctl::wifi

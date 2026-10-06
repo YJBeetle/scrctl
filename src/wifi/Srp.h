@@ -8,26 +8,27 @@
 
 namespace scrctl::wifi {
 
-/// SRP-6a（3072 位模数、SHA-512）客户端，公式与参考实现逐条对齐——pair-setup 的
-/// M1/M3 两轮要和设备手里的服务端实现互认，差一个填充字节就握手失败。
+/// Apple pair-setup 使用的 SRP-6a 客户端（3072 位模数、SHA-512）。
+/// 大整数运算和摘要使用 OpenSSL；下面的编码规则是设备协议适配的一部分。
 ///
-/// 对齐点（都是量/读出来的，不是 SRP 论文的默认写法）：
-///  - 整数进哈希前是**最小大端字节、hex 奇数位时补一个前导 0**（不是定长填充）；
+/// 已有配对实现及离线向量验证的规则：
+///  - 整数进哈希前使用最小大端字节，不添加符号字节；
 ///    只有 u = H(PAD(A)|PAD(B)) 与 k = H(N|PAD(g)) 用 384 字节定长 PAD。
 ///  - x = H(s | H(I ":" P))，内层是字节、外层把 salt 原字节拼在前面。
 ///  - M1 = H( (H(N) xor H(g)) | H(I) | s | A | B | K )，M2 = H(A | M1 | K)。
 class SrpClient {
 public:
-    /// `private_hex` 非空时用它当私钥 a（离线自检注入 oracle 用）；空则随机 1024 位。
+    /// private_hex 仅供测试注入正整数私钥；空则生成随机 1024 位私钥。
     SrpClient(std::string user, std::string password, std::string private_hex = "");
 
-    /// 喂入设备 M2 里的 salt 与 B。B % N == 0 或 B 越界返回 false。
+    /// 输入设备 pair-setup M2 的 salt 与 B。B 必须为 1..384 字节且 B % N != 0。
+    /// 只有全部计算成功后才发布 A、K、M1、M2；失败时清除已有结果并通过 err 报告。
     bool process(const Bytes &salt, const Bytes &server_public, std::string &err);
 
     [[nodiscard]] const Bytes &client_public() const { return a_public_; }  // A
     [[nodiscard]] const Bytes &session_key() const { return k_; }           // K
     [[nodiscard]] const Bytes &client_proof() const { return m1_; }         // M1
-    /// 校验设备回的 proof（M2）。
+    /// 计算成功后校验设备的 64 字节证明 M2；未计算或失败后不接受任何证明。
     [[nodiscard]] bool verify_server_proof(const Bytes &m2) const;
 
 private:
