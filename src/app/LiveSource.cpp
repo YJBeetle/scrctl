@@ -401,7 +401,7 @@ void LiveSource::print_stats() {
     // 避免将旧会话的数据误算为当前会话丢包。
     const uint64_t mine_session =
         st.packets > st.session_packets_base ? st.packets - st.session_packets_base : 0;
-    std::printf("  视频：设备发送 %6.0f 包/s，本地接收 %6.0f 包/s，组帧 %5.1f/s，解码 %5.1f/s\n", dev_rate,
+    std::printf("  视频：设备视频包 %6.0f/s，本地数据报（含 RTCP）%6.0f/s，组帧 %5.1f/s，解码 %5.1f/s\n", dev_rate,
                 rate(st.packets, last_packets_), rate(st.aus, last_aus_),
                 rate(st.decoded, last_decoded_));
     // 设备速率按 SR 更新间隔计算，本地速率按打印间隔计算，两者时间窗口
@@ -412,9 +412,9 @@ void LiveSource::print_stats() {
         std::printf("      采样窗口：设备 %.1f s，本地 %.1f s（窗口不同，速率不能直接相减）\n",
                     dev_span_ms / 1000.0, secs);
     }
-    // 设备发送与本地接收累计都从当前会话起点计数；AU 和解码计数跨会话
-    // 累计，因此分别标明会话和全程范围。
-    std::printf("      当前会话：设备发送 %llu 包，本地接收 %llu 包；全程组帧 %llu，解码 %llu\n",
+    // 设备 SR 报告累计视频包，本地数据报计数含 RTCP，两者均按当前会话
+    // 显示但不能直接相减；AU 和解码计数跨会话累计。
+    std::printf("      当前会话：设备视频包 %llu，本地数据报（含 RTCP）%llu；全程组帧 %llu，解码 %llu\n",
                 static_cast<unsigned long long>(st.dev_sent_packets),
                 static_cast<unsigned long long>(mine_session),
                 static_cast<unsigned long long>(st.aus),

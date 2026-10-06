@@ -14,44 +14,24 @@
 namespace scrctl::media {
 namespace {
 
-/// 一秒钟一个 RR。这个节拍是从视频腿搬过来的同一条实测结论：设备的
-/// `RTCPTimeoutInterval` 是"距离上次收到我们 RTCP 多久"的空闲计时器，1Hz 的裸 RR
-/// 就能复位（docs §13）。音频腿是一条**独立的会话**，它自己也在倒数，所以这条腿也得
-/// 自己发——不能指望视频腿那份 RTCP 顺带把它救活。
+/// 每秒发送一个 RR，延长设备的 RTCP 空闲租期。音频会话独立计时，
+/// 不能依赖视频 RR 续期，验证见 docs/coredevice.md §13。
 constexpr uint64_t kRtcpPeriodMs = 1000;
 
-/// 每轮 `next_packet` 的等待上限。太短白烧 CPU（音频只有约 100 包/秒），太长会让
-/// 停止响应和 RTCP 节拍一起抖。
+/// 每轮收包的等待上限，兼顾 CPU 占用、停止响应和 RTCP 调度。
 constexpr int kPollTimeoutMs = 50;
 
-/// 环形缓冲容量的**下限** = 0.5 秒。它是"设备推得比我们取得快时能囤多久"的上限，而囤
-/// 下来的每一毫秒都是延迟。0.5 秒够跨过一次已知抖动（停+起重起约 300ms），又不至于把
-/// 音画差做成半秒。
-///
-/// 但它只是下限：容量实际由 `AudioPump::compute_waterline()` 跟着目标水位算，因为
-/// "容量写死 + 水位随便设"会让 `--audio-buffer 600` 变成一条永远静音的腿（见那里）。
+/// 环形缓冲容量至少为半秒，用于容纳短暂接收、消费抖动。
+/// 实际容量随目标水位增大，确保预滚阈值可达，见 compute_waterline()。
 constexpr std::size_t kMinRingCapacityFrames = 24000;
 
-/// 目标水位的上限（毫秒）。再高就不是缓冲而是"把声音存起来晚点放"了：镜像的价值在于
-/// 跟手，一秒钟的声音滞后配上 60fps 的画面，看口型已经对不上了。留这个顶还有个作用是
-/// 环容量跟着水位放大，不设顶就等于让一个命令行参数决定分配多少内存。
+/// 限制最大缓冲时长，控制实时播放延迟和命令行参数导致的内存分配。
 constexpr int kMaxTargetBacklogMs = 1000;
 
-/// 多久没收到任何音频包就去问一次设备"这条会话还在不在"。
-///
-/// 音频这一侧不需要像视频那样先分辨"画面静止"与"流死了"：实测承载的声音全零的那
-/// 28 秒里包照样按 100 个/秒不停地到（docs §17.2 ②），所以"没包"本身就是死讯。既然
-/// 一包 10ms、一秒该来 100 个，400ms 的空档就不是抖动而是死讯的征兆——这一档因此取
-/// 400，不像视频腿那样要留到两三个心跳的量级。
-///
-/// 但仍然**只拿它当去问一句的理由，不当直接重起的依据**：问一句实测 10~300ms，而
-/// 猜错一次重起的代价是白停白起一条流、外加等第一个包。
-///
-/// 这一档从 2000 降到 400 是因为量到了一次真实的连带伤害：**视频腿每一次重起都会把
-/// 音频会话一起带走**，而 2000 那档让音频掉了约 2.4 秒才自己爬起来。改到 400 之后
-/// 实测掉声 672~689ms（两臂各一次）。机制与那两条臂见 docs §17.2 ⑤——要点是这跟
-/// 我们发不发 `stopAll` 无关（一个 stop 都不发、直接起第二条视频会话，音频照样断），
-/// 所以别指望"少发一次 stop"能救回来，只能靠发现得快。
+/// 音频包静默超过此时长后查询设备会话状态。
+/// 实测静音内容仍约每秒发送 100 个包，故无音频包可作为查询理由，
+/// 但不能据此直接认定会话结束。视频重建也可能使音频会话结束，
+/// 400 ms 查询阈值用于缩短这种中断；对照见 docs/coredevice.md §17.2。
 constexpr uint64_t kQuietProbeMs = 400;
 
 uint64_t now_ms() {
@@ -76,13 +56,10 @@ AudioPump::Waterline AudioPump::compute_waterline(const Options &options) {
     const std::size_t rate =
         options.sample_rate > 0 ? static_cast<std::size_t>(options.sample_rate) : 48000;
     w.target_frames = static_cast<std::size_t>(ms) * rate / 1000;
-    // 四倍出头：留够"先撞到两倍那一档、还能继续收"的余量，让环顶的丢最旧成为最后手段
-    // 而不是常态（两档导向的分工见 read()）。
+    // 容量大于两倍水位，使 read() 的积压调节先于环满丢弃生效。
     w.capacity_frames =
         std::max<std::size_t>(kMinRingCapacityFrames, w.target_frames * 4 + w.target_frames / 4);
-    // 这一条兜的是"水位必须够得着"：出口那道闸门是 `buffered < preroll`，装不满就是
-    // 永远静音。上面的四倍关系已经保证了，这里只是让"以后有人改容量下限"时改不动这条
-    // 不变式。
+    // 保持预滚水位可达的约束，避免容量下限修改后无法开始播放。
     if (w.target_frames >= w.capacity_frames) {
         w.capacity_frames = w.target_frames * 4 + 1;
     }
@@ -91,11 +68,10 @@ AudioPump::Waterline AudioPump::compute_waterline(const Options &options) {
 
 std::unique_ptr<AudioPump> AudioPump::start(remote::Device &device, const Options &options,
                                            std::string &err, bool verbose) {
-    // 先算一次水位：`compute_waterline()` 是纯函数，这里和构造函数算出来的必须一样，
-    // 而"请求被收档"这件事要在起流之前就说出来，别等有人对着一个静音的腿找原因。
+    // 起流前计算并提示被限制的配置，与构造函数采用相同纯函数。
     const Waterline w = compute_waterline(options);
     if (w.clamped_to_ms != 0) {
-        std::printf("--audio-buffer %d 被收到 %d 毫秒（目标水位与环容量一起跟着变）\n",
+        std::printf("已将 --audio-buffer %d 限制为 %d ms，并按此配置缓冲容量\n",
                     options.target_backlog_ms, w.clamped_to_ms);
     }
     auto pump = std::unique_ptr<AudioPump>(new AudioPump(device, options));
@@ -110,8 +86,7 @@ std::unique_ptr<AudioPump> AudioPump::start(remote::Device &device, const Option
 AudioPump::~AudioPump() { stop(); }
 
 bool AudioPump::start_session(std::string &err) {
-    // 解码器先建再起流：反过来的话，建解码器失败会把一条已经建好的设备会话留在那儿
-    // 空转到租期结束，而这条路径是可用的（非 Apple 平台没有后端）。
+    // 先确认解码器可用再起流，避免构建缺少后端时占用设备媒体会话。
     if (decoder_ == nullptr) {
         decoder_ = create_audio_decoder(options_.sample_rate, options_.channels,
                                        options_.frame_length, err);
@@ -130,12 +105,11 @@ bool AudioPump::start_session(std::string &err) {
     }
     const auto &started = session->started();
     if (started.remote_ssrc == 0 || started.local_ssrc == 0) {
-        // 不致命：收流与解码都不依赖这两个数，只有回 RTCP 要。但它们为 0 说明 answer 的
-        // 形状和预期不符，而这时发出去的 RR 指认不到任何流——租期就会到点。把数打出来，
-        // 免得它变成"声音每 20 秒卡一次"这种查不出来源的症状。
+        // 缺少 SSRC 不影响当前收包和解码，但 RR 无法正确指向设备媒体源，
+        // 会话可能无法续期。输出协商值以便排查。
         std::fprintf(stderr,
-                     "音频腿 answer 里没给出 SSRC（RemoteSSRC=%u LocalSSRC=%u），"
-                     "这条会话可能到租期就被摘掉\n",
+                     "音频协商响应缺少 SSRC（RemoteSSRC=%u LocalSSRC=%u），"
+                     "音频会话可能无法续期\n",
                      started.remote_ssrc, started.local_ssrc);
     }
     session_ = std::move(session);
@@ -143,10 +117,8 @@ bool AudioPump::start_session(std::string &err) {
     return true;
 }
 
-/// 把当前会话的那几个标量抄成一份对外可见的快照。只在会话换了之后调。
-///
-/// 锁放在**最上面**而不是只包住最后那次赋值：`backend_name_` 也是这份快照的一部分，
-/// 它在锁外写就等于给 `backend_name()` 留了一个"读到半条字符串"的窗口。
+/// 会话变更后更新公开快照。backend_name_ 也在相同锁内写入，
+/// 与 backend_name() 的并发读取同步。
 void AudioPump::publish_live() {
     std::lock_guard<std::mutex> lock(live_mutex_);
     Live live;
@@ -174,12 +146,9 @@ void AudioPump::stop() {
     if (worker_.joinable()) {
         worker_.join();
     }
-    // 这里**故意不调** `session_->stop()`。`stopmediastream` 唯一的入参形状是
-    // `{stopAll: true}`，而它停的是设备上**所有**会话——音频腿退房会把视频腿一起掐掉，
-    // 现场表现是画面突然开始"设备已结束这条流，重起媒体会话"（docs §13 那条副作用）。
-    // 视频腿的 `~FramePump` 本来就会发一次 stopAll，那一下已经把两条腿都停了。真出现
-    // "只有音频腿"的用法时，这条会话最多活到它自己报的 20 秒租期——代价是电与一个端口，
-    // 比误杀视频流便宜。
+    // 此处不调用 session_->stop()：当前 stopmediastream 只支持
+    // stopAll，会同时结束视频会话。FramePump 停止时已负责 stopAll；
+    // 单独运行音频时依赖自身 RTCP 空闲租期释放设备会话。
     session_.reset();
     clear_live();
 }
@@ -195,13 +164,11 @@ void AudioPump::push(const std::vector<int16_t> &pcm) {
     if (ring_.empty()) {
         ring_.assign(capacity_frames_ * channels, 0);
     }
-    // 满了丢**最旧**的：这是实时流，攒着的旧声音放出来只会越来越对不上画面。
+    // 缓冲满时丢弃最旧音频，避免实时播放延迟持续增长。
     std::size_t from = 0;
     if (frames >= capacity_frames_) {
-        // 一次喂进来的比整个环还大（正常走不到：ELD 一帧 480）。这一支存在的理由是
-        // 守住"used_ 不超过容量"这条不变式——不单独处理的话下面那句 `used_ += `
-        // 会把它推成一个大于容量的数，之后每次 read 都在一个假水位上算取多少，
-        // 症状是"没声"而不是"这一帧丢了"。
+        // 输入超过整个环容量时仅保留最新部分，保持 used_ <= capacity。
+        // 正常 ELD 一帧 480 个采样点，此分支仍处理异常尺寸。
         stats_.dropped_stale += used_ + frames - capacity_frames_;
         used_ = 0;
         read_ = write_;
@@ -229,23 +196,15 @@ std::size_t AudioPump::read(int16_t *dst, std::size_t frames) {
     if (ring_.empty() || frames == 0) {
         return 0;
     }
-    // 水位导向：高出目标就多跳过几帧最旧的，把囤着的东西排掉。分两档，因为"差一点"
-    // 与"差一截"的正确修法不一样：
-    //
-    //   * 差一截（超过两倍目标）：**一次砍回目标**。这时候囤着的东西多半是"窗口还没
-    //     开、声音先攒了半秒"那种没人听过的旧内容，整段丢掉是对的，而慢慢调速要花
-    //     二十几秒（每秒只能悄悄排掉 800 帧），那二十几秒里播放速率是偏快的、
-    //     听感是变调。实测这一档把收敛从 27 秒压到一次调用。
-    //   * 差一点（两倍以内，也就是漂移那种量级）：每次悄悄跳几帧。跳 8 帧是 21ms
-    //     回调的 0.8%，等于把速率调快千分之几——听不出，但它能把每小时几十毫秒的
-    //     漂移持续排掉而永远不必做一次明显的剪切。
+    // 按积压程度跳过旧音频以控制延迟：超过两倍目标时一次降至目标，
+    // 适合消费方晚启动形成的大积压；目标与两倍之间则每次少量跳过，
+    // 用于渐进消除时钟漂移。该策略不做重采样，跳过的采样不会播放。
     std::size_t skip = 0;
     if (used_ > target_frames_ && used_ >= frames) {
-        // `used_ >= frames` 那一判不是啰嗦：不够给的时候 `used_ - frames` 会下溢成
-        // 一个巨大值，`skip` 反而被放行到上限。
+        // 先确认缓冲足够本次读取，再计算差值，避免无符号减法下溢。
         const std::size_t excess = used_ - target_frames_;
         skip = used_ > target_frames_ * 2 ? excess : std::min<std::size_t>(excess / 20, 8);
-        skip = std::min(skip, used_ - frames);  // 别把这次要给的帧也算进跳过里
+        skip = std::min(skip, used_ - frames);  // 保留本次需要输出的帧数。
     }
     if (skip > 0) {
         read_ = (read_ + skip) % capacity_frames_;
@@ -296,8 +255,8 @@ void AudioPump::loop() {
     uint64_t last_packet_ms = now_ms();
     uint64_t last_probe_ms = 0;
     scrctl::rt::RtpSeq seq;
-    /// `seq` 每换一条会话就归零（序号空间是新的），而 `stats_.seq_lost` 要的是整条腿
-    /// 开下来真丢了多少，所以旧会话的读数在 reset 之前搬到这里存着。
+    /// RTP 序号统计按会话重置；重置前将旧会话丢包值计入 lost_carry，
+    /// 供整个 AudioPump 生命周期的累计统计使用。
     uint64_t lost_carry = 0;
     uint64_t decode_failures_logged = 0;
 
@@ -311,7 +270,7 @@ void AudioPump::loop() {
                     std::lock_guard<std::mutex> lock(mutex_);
                     ++stats_.restarts;
                 }
-                std::printf("音频会话已重起，收流端口=%u\n", session_->receiver_port());
+                std::printf("音频会话已重建，收流端口=%u\n", session_->receiver_port());
                 last_packet_ms = now_ms();
                 next_rtcp_ms = last_packet_ms + kRtcpPeriodMs;
                 // 新会话的序号空间与上一条无关，不重置会把第一包判成大片缺口。
@@ -319,16 +278,16 @@ void AudioPump::loop() {
                 seq.reset();
                 continue;
             }
-            std::fprintf(stderr, "重起音频会话失败: %s（1 秒后再试）\n", rerr.c_str());
-            // 这 1 秒要睡得能响应停止：Ctrl-C 之后还硬睡，用户看到的就是"按了没反应"。
+            std::fprintf(stderr, "重建音频会话失败: %s（1 秒后再试）\n", rerr.c_str());
+            // 使用可取消的条件变量等待，停止请求无需等待退避期结束。
             for (int i = 0; i < 10 && !stopping_.load(); ++i) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
             continue;
         }
 
-        // 保活包：挂在墙上时钟而不是"取包超时"那条分支上（包连着来时 50ms 超时永远轮不到）。
-        // 追不上节拍就重新对齐，不要在一个停顿之后连发一串补账的 RR。
+        // 保活使用每轮检查的单调时钟，不依赖收包超时；错过周期时从当前
+        // 时间重新调度，不连续补发过期 RR。
         if (now >= next_rtcp_ms) {
             next_rtcp_ms = now + kRtcpPeriodMs;
             const auto rr = scrctl::rt::build_rr(session_->started().remote_ssrc,
@@ -344,9 +303,9 @@ void AudioPump::loop() {
                     failed_after = ++stats_.rtcp_failed;
                 }
             }
-            // 只报第一条：发不出去一般是会话已经没了，而上面的静默判据一会就会把它重起。
+            // 每个会话只输出第一次发送失败，后续由会话恢复策略处理。
             if (failed_after == 1) {
-                std::fprintf(stderr, "音频腿 RTCP 保活包发送失败: %s\n", serr.c_str());
+                std::fprintf(stderr, "音频 RTCP 保活包发送失败: %s\n", serr.c_str());
             }
         }
 
@@ -359,7 +318,7 @@ void AudioPump::loop() {
                 const auto state = StreamSession::probe(device_, session_->started().session_uuid,
                                                         perr, verbose_);
                 if (state == StreamSession::ServerState::Ended) {
-                    std::fprintf(stderr, "音频：设备已结束这条会话（静默 %llu ms），重起\n",
+                    std::fprintf(stderr, "音频：设备会话已结束（%llu ms 未收到音频），重建会话\n",
                                  static_cast<unsigned long long>(quiet));
                     session_.reset();
                     clear_live();
@@ -373,19 +332,14 @@ void AudioPump::loop() {
         if (!scrctl::rt::parse_rtp_header(std::span<const uint8_t>(datagram), info)) {
             continue;
         }
-        // PT 过滤必须在序号记账**之前**：设备的 RTCP SR 和视频/音频共用同一个 UDP 端口，
-        // 而 RTCP 头的第 3-4 字节是长度不是序号。把它当 RTP 记进序号序列，每来一个 SR
-        // 就造出两次"缺口"，而且跳的是 SR 长度那个小数（实测每 2 秒 4 次、累计"真丢"
-        // 两万多）——这条流一秒正好 100.75 个包、一个都没少，账却全错在 SR 上。
+        // 先按载荷类型过滤，再统计 RTP 序号。RTCP 头的第 3–4 字节是
+        // 长度而非 RTP 序号，将 SR 计入序号空间会产生虚假的缺口。
         if (info.payload_type != session_->started().payload_type) {
             std::lock_guard<std::mutex> lock(mutex_);
             ++stats_.other_payload;
             continue;
         }
-        // 记账走 `rt::RtpSeq`（与视频拆包器同一份，理由和那段 mod 2^16 的注释都在它
-        // 的头文件里）。这里以前是两份裸变量，而它们把水位更新成"最后**到达**的序号"：
-        // 100、102、101、103 这样一个都没丢的序列会被记成两次缺口——101 迟到把水位
-        // 从 102 拽回 101，103 于是"跳"了一格。
+        // 使用共享 rt::RtpSeq 处理序号回绕和乱序；最高序号不随迟到包回退。
         const auto verdict = seq.observe(info.sequence);
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -395,12 +349,11 @@ void AudioPump::loop() {
             } else if (verdict == scrctl::rt::RtpSeq::Verdict::kLate) {
                 ++stats_.out_of_order;
             }
-            // 取累计值而不是本地 `+=` 一个增量：迟到补齐要把缺口冲回去，而这里跨会话累加，
-            // 所以把上一会话的读数在 `seq.reset()` 之前收进 `lost_carry`。
+            // 使用当前未补齐缺口数，允许迟到包减少丢包读数；旧会话值已保存在
+            // lost_carry 中。
             stats_.seq_lost = lost_carry + seq.lost();
         }
-        // 分片重组与丢包重传对音频没有意义：ELD 一包就是一帧（10ms），丢一包就是少 10ms
-        // 声音，补不出来。所以这里只数缺口、不追包。
+        // 当前 ELD 每包承载一帧（10 ms），不做重组或重传，只统计序号缺口。
         const auto payload = std::span<const uint8_t>(datagram).subspan(info.payload_offset);
         std::vector<int16_t> pcm;
         std::string derr;
@@ -409,11 +362,10 @@ void AudioPump::loop() {
                 std::lock_guard<std::mutex> lock(mutex_);
                 ++stats_.decode_failed;
             }
-            // 只报前几条：解码器一旦不认这份参数就会每个包都失败，全打会把真正要看的
-            // 那几行日志盖掉。
+            // 解码错误只输出前几次，避免每包重复日志。
             if (decode_failures_logged < 3) {
                 ++decode_failures_logged;
-                std::fprintf(stderr, "音频包解不出（%zu 字节）: %s\n", payload.size(),
+                std::fprintf(stderr, "音频解码失败（载荷 %zu 字节）: %s\n", payload.size(),
                              derr.c_str());
             }
             continue;

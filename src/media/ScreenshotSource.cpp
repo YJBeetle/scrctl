@@ -22,13 +22,10 @@ constexpr const char *kService = "com.apple.coredevice.screencaptureservice";
 constexpr const char *kFeature = "com.apple.coredevice.feature.capturescreenshot";
 constexpr const char *kAction = "com.apple.coredevice.action.capturescreenshot";
 
-/// 截图失败后的退避。不能贴着失败猛重试：设备拒一次（比如屏幕睡了的某些状态）
-/// 就是一句语义错误，猛重试只会把日志刷满而不会变好。
+/// 截图失败后等待再重试，避免设备持续拒绝时频繁发请求。
 constexpr int kRetryBackoffMs = 250;
-/// 单次截图 RPC 的上限。实测 0.2~0.6 秒（MaaFW 侧静态 84ms），5 秒已是 8~25 倍余量。
-/// 这个数现在是**两件事的上限**：worker 收到停止请求后最多还要多久才退出（即 teardown
-/// 那次 join 最多等多久），以及起流就降级那条路同步拿第一张时最多冻多久。原先的 30 秒
-/// 换来的只是"设备真卡死时晚 25 秒放弃"，而那一档本来也由 worker 的退避重试兜着。
+/// 单次截图 invoke 的超时，限制设备无响应时的等待。
+/// 连接建立耗时另由传输层控制，因此不是整个 capture_once 或析构的总上限。
 constexpr int kCaptureTimeoutMs = 5000;
 
 }  // namespace
@@ -37,7 +34,7 @@ bool decode_png_bgra(const std::vector<uint8_t> &png, scrctl::Frame &out, std::s
 #ifdef SCRCTL_HAVE_LIBAV
     const AVCodec *codec = avcodec_find_decoder(AV_CODEC_ID_PNG);
     if (codec == nullptr) {
-        err = "这个 libav 里没有 PNG 解码器";
+        err = "FFmpeg 不提供 PNG 解码器";
         return false;
     }
     AVCodecContext *ctx = avcodec_alloc_context3(codec);
@@ -51,9 +48,8 @@ bool decode_png_bgra(const std::vector<uint8_t> &png, scrctl::Frame &out, std::s
             avcodec_receive_frame(ctx, frame) == 0) {
             const int w = frame->width;
             const int h = frame->height;
-            // 不白名单像素格式：设备回的 PNG 随画面内容变（纯色屏与画布屏解出来的
-            // format 就不一样，2026-09-28 真机撞过一次），一律 sws 转到 BGRA。
-            // libswscale 与 libavcodec 同在链接面里（CMake 的 pkg_check_modules 一起要的）。
+            // PNG 像素格式可能随内容变化，统一通过 libswscale 转换为 BGRA，
+            // 不将输入限定为单一格式。
             if (w > 0 && h > 0) {
                 SwsContext *sws = sws_getContext(w, h, static_cast<AVPixelFormat>(frame->format), w,
                                                  h, AV_PIX_FMT_BGRA, SWS_POINT, nullptr, nullptr,
@@ -70,18 +66,18 @@ bool decode_png_bgra(const std::vector<uint8_t> &png, scrctl::Frame &out, std::s
                     sws_freeContext(sws);
                     ok = true;
                 } else {
-                    err = "sws_getContext 建不了到 BGRA 的转换（format=" +
+                    err = "无法创建 BGRA 像素转换（format=" +
                           std::string(av_get_pix_fmt_name(static_cast<AVPixelFormat>(frame->format))) +
                           "）";
                 }
             } else {
-                err = "PNG 解出来的尺寸不是正数";
+                err = "PNG 图像尺寸必须为正数";
             }
         } else {
-            err = "libav 解这张 PNG 失败（字节可能不是 PNG）";
+            err = "FFmpeg 无法解码 PNG 图像";
         }
     } else {
-        err = "libav 分配解码上下文失败";
+        err = "无法分配 PNG 解码资源";
     }
     av_frame_free(&frame);
     av_packet_free(&pkt);
@@ -90,7 +86,7 @@ bool decode_png_bgra(const std::vector<uint8_t> &png, scrctl::Frame &out, std::s
 #else
     (void)png;
     (void)out;
-    err = "这个构建没编 libav（-DSCRCTL_LIBAV=OFF），兜底镜像没有 PNG 解码后端";
+    err = "构建未包含 FFmpeg，截图模式缺少 PNG 解码后端";
     return false;
 #endif
 }
@@ -99,10 +95,8 @@ ScreenshotSource::ScreenshotSource(remote::Device &device) : device_(device) {}
 
 ScreenshotSource::~ScreenshotSource() {
     request_stop();
-    // join 只在这里：调用 request_stop() 的地方（切回实时流）在渲染线程上，等一个可能
-    // 正卡在截图 RPC 里的 worker 会把窗口冻住；产品那边把退下来的对象挪进 retired_，
-    // 于是这次等待落在 teardown（审查 P3：上一轮把析构挪走了，但 stop() 自己还在 join，
-    // 等于没挪）。
+    // request_stop() 不等待可能正在 RPC 中的 worker，避免阻塞渲染线程。
+    // 调用方保留退役对象，在 worker_done 后或应用退出时析构并 join。
     if (worker_.joinable()) {
         worker_.join();
     }
@@ -111,13 +105,12 @@ ScreenshotSource::~ScreenshotSource() {
 std::unique_ptr<ScreenshotSource> ScreenshotSource::start(remote::Device &device,
                                                           std::string &err, bool capture_first) {
     if (!device.rsd().has_service(kService)) {
-        err = "设备目录里没有 " + std::string(kService);
+        err = "设备目录缺少服务：" + std::string(kService);
         return nullptr;
     }
     std::unique_ptr<ScreenshotSource> src(new ScreenshotSource(device));
-    // 第一张同步拿：兜底路如果连一张都拿不到，它就是空的，原因要直接交出去，
-    // 而不是起一个线程在里面默默失败。运行中降级那一路传 capture_first=false：那次
-    // 切换发生在渲染线程上，同步拿会把窗口冻到 kCaptureTimeoutMs（审查 P3）。
+    // capture_first 时同步取得首张截图，失败直接返回原因。
+    // 运行中的来源切换传 false，由工作线程取首帧，避免阻塞窗口。
     if (capture_first) {
         std::vector<uint8_t> png;
         if (!src->capture_once(png, err)) {
@@ -140,8 +133,7 @@ std::unique_ptr<ScreenshotSource> ScreenshotSource::start(remote::Device &device
 }
 
 bool ScreenshotSource::capture_once(std::vector<uint8_t> &png, std::string &err) {
-    // 每轮一条新连接：这条服务一条连接只服务一次请求（复用同一条时第二张开始全失败，
-    // 2026-09-28 真机量到）。建连接的开销算在实测那 0.5 秒里，不是额外代价。
+    // 每张截图使用新连接，真机观察到此服务复用连接后后续请求失败。
     auto conn = device_.connect(kService, err, false);
     if (conn == nullptr) {
         return false;
@@ -150,16 +142,14 @@ bool ScreenshotSource::capture_once(std::vector<uint8_t> &png, std::string &err)
     xpc::dict_set(input, "displayUniqueID", xpc::make_null());
     xpc::dict_set(input, "requestedFormat", xpc::make_string("png"));
     xpc::Value out;
-    // 上限的意义是"设备某次卡住时不要把 worker 永久挂住"：真卡到那份上这一路本来就
-    // 没救了，下一轮退避后重试。数值取多少见 kCaptureTimeoutMs 上的说明（它同时是
-    // teardown 那次 join 的上限）。
+    // 限制此次 invoke 的等待，失败后由工作循环退避重试。
     if (conn->invoke(kFeature, kAction, input, out, kCaptureTimeoutMs, err) !=
         remote::CallResult::Ok) {
         return false;
     }
     const auto *image = out.find("image");
     if (image == nullptr || image->data.empty()) {
-        err = "截图回信里没有 image 字节";
+        err = "截图响应缺少 image 数据";
         return false;
     }
     png = image->data;
@@ -198,8 +188,8 @@ void ScreenshotSource::loop() {
         }
         cv_.notify_all();
     }
-    // 报"我真的退了"，给调用方回收用（app::reap_finished）。release 与 worker_done()
-    // 的 acquire 配对：读到 true 的人随后销毁本对象，那次 join 立刻返回。
+    // 发布线程完成标记，供 app::reap_finished 回收。release 与
+    // worker_done() 的 acquire 配对；析构随后 join。
     worker_done_.store(true, std::memory_order_release);
 }
 
@@ -217,8 +207,7 @@ bool ScreenshotSource::latest(scrctl::Frame &out, uint64_t &serial, int timeout_
 }
 
 void ScreenshotSource::request_stop() {
-    // 幂等：置标志 + 唤醒等在 latest() 上的人。不做 join（见析构里的说明），也不因为
-    // "已经置过了"就跳过 notify——第二遍调用时可能正有新的等待者。
+    // 停止标记及唤醒可重复执行，始终通知 latest() 等待者，不在这里 join。
     stopping_ = true;
     cv_.notify_all();
 }

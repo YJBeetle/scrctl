@@ -14,96 +14,71 @@
 
 namespace scrctl::media {
 
-/// 音频腿：起流、收包、解码、攒进一个环形缓冲，等人来取 PCM。
-///
-/// 为什么必须自己一个线程，而不是让主循环顺手取一下：SDL 的音频回调是按固定节拍
-/// 被系统叫醒的，它不管画面有没有在动。而镜像的主循环是**帧驱动**的——屏幕静止时
-/// 设备一个视频包都不发，主循环就一直停在等帧上。音频挂在主循环上，结果就是
-/// "没人动屏幕 → 声音也停了"，那是个比没接音频更糟的假象。
+/// 独立接收并解码音频，使用环形缓冲向调用方提供 PCM。
+/// 音频工作线程与视频帧循环分离，避免静止画面阻塞音频接收。
 class AudioPump {
 public:
     struct Options {
-        /// 本腿的 `avcMediaStreamOptionClientSessionID`（16 字节 XPC UUID 原文）。
-        /// 空 = 设备协商时自己生成一个。
+        /// 音频会话的 avcMediaStreamOptionClientSessionID（16 字节 XPC UUID）。
+        /// 为空时由设备生成。
         ///
-        /// **产品路径留空，不要跟视频腿共用**，虽然苹果是两条腿同一个 UUID（抓包里两次
-        /// start 的都是同一个）。原因是 `StreamSession::probe()` 认的就是这个 UUID：设备
-        /// 的会话表按 ClientSessionID 查，共用时"查得到"只等于**至少有一条腿还活着**，
-        /// 于是视频腿那套"设备已结束这条流"的判据会被音频腿掩护掉——画面冻住而泵以为
-        /// 流好着。租期靠每条腿各自的 RR 已经能续住（docs §13 实测），不需要共用。
+        /// 应用默认不与视频共用 UUID。设备按 ClientSessionID 查询会话，
+        /// 共用时任一会话存活都可能让视频状态查询返回存活，掩盖视频已结束。
+        /// 音频和视频分别发送 RR 续期，无需为此共用 UUID。
         std::vector<uint8_t> client_session_uuid;
-        /// 这条会话的租期（秒）。理由与视频腿完全一样：设备那个
-        /// `RTCPTimeoutInterval` 是"距离上次收到我们 RTCP 多久"的空闲计时器。
+        /// 会话的 RTCP 空闲租期（秒），周期 RR 延长该期限。
         std::uint32_t lease_seconds = 20;
         int sample_rate = 48000;
         int channels = 2;
-        /// ELD 一帧的采样数。它同时是 ASBD 的 mFramesPerPacket——480 才是 ELD，
-        /// 1024 是 LC，写错这一位解码器会给出两倍的采样数（docs §17.1）。
+        /// ELD 每帧采样数，也是 ASBD.mFramesPerPacket。ELD 使用 480，
+        /// AAC-LC 的 1024 不适用；错误配置会改变解码输出长度，见 docs/coredevice.md §17.1。
         int frame_length = 480;
-        /// 环形缓冲想维持的水位（毫秒），也是"攒够这么多才开口放"的那个数。
+        /// 目标缓冲时长，也是开始播放前需要积累的音频量。
         ///
-        /// 默认 50 与 scrcpy 的 `--audio-buffer` 默认值同一个数（`scrcpy --help` 抄来的，
-        /// 不是猜的）。**上限 1000ms**，超了会被收到 1000 并打一行说明——理由在
-        /// `compute_waterline()`。
+        /// 默认 50 ms，上限 1000 ms。超出上限时限制到上限并告知调用方。
         ///
-        /// 为什么需要一个**目标水位**而不是"能囤多少囤多少"：生产与消费的标称速率
-        /// 相等（都是 48kHz），所以缓冲里囤着的东西**永远不会自己排掉**。而开局就有
-        /// 一段只进不出的时间（音频腿在起流路径里就起了，声卡要等 `SDL_Init` 之后才
-        /// 开，中间还隔着等第一帧），那一段攒下来的 100~300ms 会一路留着——镜像里
-        /// 的声音就比画面晚这么多，而且只涨不跌（时钟漂移每小时再涨约 0.5 秒，
-        /// 到环顶之后开始丢旧帧）。所以取的时候要按水位导向。
+        /// 目标水位限制实时播放延迟。启动时消费方可能晚于接收线程准备好，
+        /// 额外积累的音频不会在生产、消费速率相等时自动减少；read() 通过
+        /// 跳过旧采样控制积压，也用于缓解两个时钟的漂移。
         ///
-        /// 导向本身的判据臂是 `--realtime --late-open 4`（docs §17.2 ⑥）：开局按住消费方
-        /// 4 秒让默认那一档的环顶满（24000 帧），放开之后导向应当在**一次调用内**把它砍回
-        /// 目标量级（实测 24000 → 1840），之后稳定在 1000~2000 帧。
+        /// 延迟开放消费端的验证见 docs/coredevice.md §17.2：read() 应将
+        /// 超过两倍目标的积压在一次调用内降至目标附近，而后维持稳定水位。
         int target_backlog_ms = 50;
     };
 
-    /// 目标水位与环容量——这两个数是**一起**算出来的，不能各自定。
-    ///
-    /// 为什么单列成一个纯函数：它以前是"水位可填任意毫秒，容量恒为 24000 帧（500ms）"，
-    /// 于是 `--audio-buffer 600` 会让预滚闸门去等一个**环永远装不满**的水位，结果不是
-    /// "延迟大一点"而是**一整条腿不出声**（出口那里 `buffered < preroll` 恒成立）。
-    /// 现在容量跟着水位放大（留四倍空间，见下），并且水位封顶。
-    ///
-    /// 为什么容量要留到四倍而不是刚好两倍：导向的第二档判据是"超过两倍目标就一次砍回
-    /// 目标"，容量若只到两倍，那一档永远不会被撞到，环顶的"丢最旧"会先发生——而丢最旧
-    /// 是不可听的那种丢，调速是可控的那种。
+    /// 同时计算目标水位与环容量。容量必须大于预滚水位，避免开始播放的
+    /// 条件永远无法达到；容量留出四倍目标的余量，使 read() 的水位调节
+    /// 先于环满时的旧帧丢弃生效。
     struct Waterline {
         std::size_t target_frames = 0;
         std::size_t capacity_frames = 0;
-        /// 非 0 表示请求的毫秒数被收到了这一档（调用方要打一行说明，别让人以为设进去了）。
+        /// 非零表示请求时长被限制到此值，调用方应提示实际采用的配置。
         int clamped_to_ms = 0;
     };
 
-    /// 按 `options` 算出这对数。纯算术，不碰设备，所以离线测得到（tests/media_test）。
+    /// 根据选项计算水位及容量，不访问设备，可在 tests/media_test 离线验证。
     [[nodiscard]] static Waterline compute_waterline(const Options &options);
 
     struct Stats {
-        /// PT 对上音频腿的那个数的 RTP 包（不管解不解得开）。
+        /// 载荷类型与音频配置匹配的 RTP 包数，包括解码失败的包。
         std::uint64_t packets = 0;
-        /// 解出了非空 PCM 的包数。`packets - decoded` 就是解码器哑掉的量。
+        /// 输出非空 PCM 的包数，与 packets 的差值表示未输出 PCM 的包数。
         std::uint64_t decoded = 0;
         std::uint64_t decode_failed = 0;
-        /// 同端口上收到的非音频载荷（设备的 RTCP SR）。
+        /// 同端口收到的其他载荷类型，包括 RTCP SR。
         std::uint64_t other_payload = 0;
-        /// 序号**往前跳**的事件数（一次事件可能缺好几个包，看 seq_lost）。
+        /// 序号向前跳跃的事件数，一次事件可以跨过多个包。
         std::uint64_t seq_gaps = 0;
-        /// 按序号算出真正没到的包数。
-        ///
-        /// 为什么和 seq_gaps 分开数，也为什么"迟到"不能并进缺口里：这条流实测每
-        /// 10ms 一个包、20 秒 2015 个（=100.75/s，一秒不多一秒不少），而相邻序号
-        /// 不等式检查每 2 秒就报 4 次——那**不是**丢包，是包在隧道里换了个顺序到。
-        /// 把换序算成丢失会把"要不要为此做重传/缓冲"这个决定引到错误方向上。
+        /// 当前未补齐的序号数量，迟到的包可减少此值。
+        /// 缺口与迟到、重复分别统计，避免将乱序直接等同于永久丢包。
         std::uint64_t seq_lost = 0;
-        /// 比已见过的最大序号还晚到的包数（迟到或重复）。
+        /// 序号低于或等于已见最高值的包数，包括迟到和重复。
         std::uint64_t out_of_order = 0;
         std::uint64_t rtcp_sent = 0;
         std::uint64_t rtcp_failed = 0;
-        /// 缓冲满时被丢掉的**最旧帧**数（不是包数：一帧 = 一个声道采样点组）。
+        /// 缓冲满时丢弃的最旧音频帧数；一帧是 channels 个采样点。
         std::uint64_t dropped_stale = 0;
-        /// 水位导向多丢掉的帧数（见 `Options::target_backlog_ms`）。它涨得慢是正常
-        /// 的——那是漂移在收敛；它一路猛涨说明消费方跟不上，那时该看的是出口。
+        /// read() 为维持目标水位而跳过的音频帧数。
         std::uint64_t steered = 0;
         std::uint64_t restarts = 0;
     };
@@ -113,46 +88,37 @@ public:
     AudioPump(const AudioPump &) = delete;
     AudioPump &operator=(const AudioPump &) = delete;
 
-    /// 起音频腿并开线程。失败返回 nullptr 并给原因——**不致命**：没有音频的镜像
-    /// 仍然是可用的镜像，调用方打一行说明就该继续跑。
+    /// 建立音频会话并启动线程。失败返回 nullptr 并设置原因，调用方可继续
+    /// 提供不带音频的视频镜像。
     static std::unique_ptr<AudioPump> start(remote::Device &device, const Options &options,
                                             std::string &err, bool verbose = false);
 
-    /// 取 `frames` 帧（一帧 = channels 个交织 s16）到 dst，返回实际取到的帧数。
-    /// 不够就取多少给多少——调用方（音频回调）自己补静音并数一下欠载。
-    ///
-    /// **dst 必须容得下 `frames * channels()` 个 int16**。这里的单位是"帧"而不是
-    /// "采样数"，因为调用方（SDL 的回调）手里那个数就是帧；两者按 channels 换算，
-    /// 换错一次就是往缓冲区后面多写 channels 倍字节，而现场表现为"别的线程过一会儿
-    /// 崩在 malloc 里"（探针就这么栽过一次）。
+    /// 向 dst 写入最多 frames 帧交织 s16 PCM，返回实际帧数，不足部分
+    /// 由调用方补静音。dst 必须容纳 frames * channels() 个 int16_t。
+    /// 接口单位为音频帧，不能将单声道采样数或字节数直接作为 frames。
     std::size_t read(int16_t *dst, std::size_t frames);
 
-    /// 协商/解码用的采样率与声道数。出口（声卡、文件）要按这两个数开设备。
+    /// 协商及解码使用的采样率与声道数，播放设备应采用同样配置。
     [[nodiscard]] int sample_rate() const { return options_.sample_rate; }
     [[nodiscard]] int channels() const { return options_.channels; }
 
-    /// 缓冲里现在攒了多少帧。回调用它决定"先攒够再开始放"，否则起播的头几百毫秒
-    /// 会一直在欠载与补静音之间跳。
+    /// 当前缓冲音频帧数，供播放端判断是否达到预滚水位。
     [[nodiscard]] std::size_t buffered_frames() const;
 
-    /// 开口放之前要先攒够的帧数（= `target_backlog_ms` 换算）。出口用它，别自己
-    /// 再拿毫秒算一遍，否则两处换算会分家。
+    /// 开始播放前的预滚帧数，由目标毫秒数统一换算，避免调用方重复换算。
     [[nodiscard]] std::size_t preroll_frames() const { return target_frames_; }
 
     [[nodiscard]] Stats stats() const;
 
-    /// 这几个数描述的是"当前这条会话"，而会话归工作线程所有、会被它随时换掉。所以
-    /// 读的人拿到的是一份快照（`live_`），不是那条 `StreamSession` 本身——直接 deref
-    /// 一个别的线程正在 reset 的 unique_ptr，读到的是已经自由掉的内存。
+    /// 当前会话的信息快照。session_ 由工作线程重建，外部只访问 live_
+    /// 副本，避免跨线程读取正在 reset 的 unique_ptr。
     [[nodiscard]] std::uint16_t receiver_port() const;
     [[nodiscard]] std::uint8_t payload_type() const;
 
-    /// 实际在用的解码后端名。为什么要在意外面看得见它：这条路上"没声"的原因至少有
-    /// 三个（没起流、后端不认这份参数、缓冲一直被取空），而三者症状一模一样。
+    /// 返回实际解码后端名，便于区分会话、解码及播放缓冲的问题。
     [[nodiscard]] std::string backend_name() const;
 
-    /// 停线程并停掉设备侧那条会话。析构也会做，但显式调一次能让"先停流再退进程"
-    /// 这件事发生在调用点，而不是等到栈展开。
+    /// 停止工作线程并释放本地会话。设备停止策略见 stop()；析构也会调用。
     void stop();
 
 private:
@@ -163,7 +129,7 @@ private:
         capacity_frames_ = w.capacity_frames;
     }
 
-    /// 一条会话的、**别的线程需要看的**那几个数。全是标量，复制出去就是快照。
+    /// 供其他线程读取的当前会话快照，字段均为可复制标量。
     struct Live {
         std::uint16_t receiver_port = 0;
         std::uint8_t payload_type = 0;
@@ -182,15 +148,15 @@ private:
     Options options_;
     bool verbose_ = false;
     std::unique_ptr<AudioDecoder> decoder_;
-    /// **只有工作线程（和 join 之后的 `stop()`）碰得到它。**要往外传的东西一律走
-    /// `live_`，不要把这只指针交给别的线程——它每一次重起都会被 reset 再赋值。
+    /// 仅工作线程及 join 后的 stop() 访问 session_。对外信息经 live_
+    /// 快照提供，不能将重建时会被 reset 的指针交给其他线程。
     std::unique_ptr<StreamSession> session_;
     std::thread worker_;
     std::atomic<bool> stopping_ { false };
 
     mutable std::mutex live_mutex_;
     Live live_;
-    /// 后端名在建解码器时就有了，此后不变（重起路径只在解码器已存在时才走到）。
+    /// 解码器创建后后端名保持不变，重建只更换媒体会话。
     std::string backend_name_;
 
     mutable std::mutex mutex_;
@@ -199,8 +165,7 @@ private:
     std::size_t read_ = 0;
     std::size_t used_ = 0;
     std::size_t target_frames_ = 0;
-    /// 环容量（帧）。由 `compute_waterline()` 跟目标水位一起算出来，不是常量——
-    /// 常量容量配可变水位就是那条"设大 `--audio-buffer` 反而永久静音"的 bug。
+    /// 环容量（音频帧），与目标水位由 compute_waterline() 一起计算。
     std::size_t capacity_frames_ = 0;
     Stats stats_;
 };
