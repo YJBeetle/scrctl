@@ -53,4 +53,4 @@ for args in [['--lang=invalid', '--help'], ['--lang', 'invalid'], ['--lang']]:
 # 用户字符串不会被用于选择语言或翻译。
 result = run(['--title', 'zh-CN', '--lang', 'en', '--version'])
 assert result.returncode == 0
-print('locale priority, overrides, fallback, help ordering and numeric parsing passed')
+print('Auto default, locale priority, overrides, English fallback, help ordering and numeric parsing passed')

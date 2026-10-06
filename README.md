@@ -70,9 +70,9 @@ MaaFramework 中已有直接链接 `scrctl_core` 的实验接入。后续方向�
 
 ## 命令行语言
 
-支持英文和简体中文，注释保持中文。默认按首个非空的 `LC_ALL`、`LC_MESSAGES`、
-`LANG` 选择语言；`zh` 系列 locale 使用简体中文，其他语言、`C`、`POSIX` 或未设置时使用英文。
-`--lang en` / `--lang zh-CN` 显式覆盖环境，`--lang auto` 恢复自动选择。
+支持英文和简体中文，注释保持中文。默认 `--lang auto`，按首个非空的 `LC_ALL`、
+`LC_MESSAGES`、`LANG` 选择语言；`zh` 系列 locale 使用简体中文，其他语言、
+`C`、`POSIX` 或未设置时回退英文。`--lang en` / `--lang zh-CN` 显式覆盖环境。
 `LANGUAGE` 不参与 scrctl 的自动选择，避免与上述规则冲突。
 
 ```bash
