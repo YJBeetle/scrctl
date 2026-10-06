@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "transport/TlsChannel.h"
+#include "transport/PacketIo.h"
 #include "transport/Usbmux.h"
 
 namespace scrctl::transport {
@@ -28,7 +29,7 @@ struct TunnelParams {
 /// 一个必须遵守的约束：每个 IPv6 包要单独一次 write()，**不能合并写**。
 /// CoreDeviceProxy 的转发路径对读边界敏感，合并突发会破坏包边界——
 /// 实测 iOS 26.5/USB 上上传会塌到 ~1 MB/s 且隧道连接最终直接死掉。
-class PacketTunnel {
+class PacketTunnel : public PacketIo {
 public:
     PacketTunnel() = default;
     PacketTunnel(PacketTunnel &&) noexcept;
@@ -55,13 +56,15 @@ public:
     [[nodiscard]] bool valid() const { return sock_.valid(); }
 
     /// 发一个完整 IPv6 包（一次 write，不合并）。
-    bool send_ipv6(const uint8_t *packet, size_t len, std::string &err);
+    bool send_ipv6(const uint8_t *packet, size_t len, std::string &err) override;
     /// 收一个完整 IPv6 包。
-    bool recv_ipv6(std::vector<uint8_t> &out, std::string &err);
+    bool recv_ipv6(std::vector<uint8_t> &out, std::string &err) override;
 
     /// 是否有数据可读（TLS 下要先看 SSL 内部缓冲，否则会把已解密的字节等丢）。
     /// timed_out 用于区分正常的等待超时与传输错误。
-    bool wait_readable(int ms, std::string &err, bool *timed_out = nullptr);
+    bool wait_readable(int ms, std::string &err, bool *timed_out = nullptr) override;
+    uint16_t mtu() const override { return params_.mtu; }
+    void shutdown() override { sock_.interrupt(); }
 
 private:
     /// 发 clientHandshakeRequest 并解析回复。两条路（证书 TLS / PSK）共用这一段。

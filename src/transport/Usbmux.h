@@ -34,6 +34,8 @@ public:
     }
     void reset(int fd);
     void close();
+    // 保留 fd 的所有权，通过 shutdown 中断其他线程正在执行的 I/O。
+    void interrupt();
 
     bool write_all(const void *data, size_t len, std::string &err);
     bool read_exact(void *data, size_t len, std::string &err);

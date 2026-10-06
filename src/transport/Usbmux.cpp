@@ -183,6 +183,10 @@ bool Socket::set_read_timeout(int ms, std::string &err) {
     return true;
 }
 
+void Socket::interrupt() {
+    if (fd_ >= 0) ::shutdown(fd_, SHUT_RDWR);
+}
+
 bool Socket::wait_readable(int ms, std::string &err, bool *timed_out) {
     if (timed_out) *timed_out = false;
     if (fd_ < 0) {
