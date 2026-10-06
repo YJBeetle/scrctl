@@ -1,5 +1,7 @@
 #pragma once
 
+#include "i18n/Translation.h"
+
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -63,29 +65,29 @@ inline bool parse_degrade_marks(std::string_view spec, std::vector<uint64_t> &ou
         char *end = nullptr;
         const double secs = std::strtod(p, &end);
         if (end == p) {
-            err = std::string("存在无效数字：\"") + p + "\"";
+            err = std::string(SCRCTL_TR("Invalid number: \"")) + p + "\"";
             return false;
         }
         // 拒绝非有限值和超出转换范围的值。strtod 可接受 nan / inf，NaN 的比较
         // 无法被普通负数判断捕获；从非有限或越界浮点值转换整数是未定义行为。
         if (!std::isfinite(secs)) {
-            err = std::string("时刻不是有限数：\"") + std::string(p, static_cast<std::size_t>(end - p)) + "\"";
+            err = std::string(SCRCTL_TR("Time is not finite: \"")) + std::string(p, static_cast<std::size_t>(end - p)) + "\"";
             return false;
         }
         if (secs < 0) {
-            err = "时刻不能是负数";
+            err = SCRCTL_TR("Time cannot be negative");
             return false;
         }
         // 确认秒数换算为毫秒后可由 uint64_t 表示；不另加人为时间上限。
         // 下面的阈值向上取整到 2^64。
         constexpr double kMaxMs = static_cast<double>(UINT64_MAX);  // 向上取整到 2^64
         if (secs * 1000.0 >= kMaxMs) {
-            err = std::string("时刻超过 uint64 毫秒范围：\"") + std::string(p, static_cast<std::size_t>(end - p)) + "\"";
+            err = std::string(SCRCTL_TR("Time exceeds uint64 millisecond range: \"")) + std::string(p, static_cast<std::size_t>(end - p)) + "\"";
             return false;
         }
         const auto ms = static_cast<uint64_t>(secs * 1000.0);
         if (!out.empty() && ms < out.back()) {
-            err = "时刻必须按升序排列";
+            err = SCRCTL_TR("Times must be in ascending order");
             return false;
         }
         out.push_back(ms);
@@ -93,18 +95,18 @@ inline bool parse_degrade_marks(std::string_view spec, std::vector<uint64_t> &ou
         if (*p == ',') {
             ++p;
             if (*p == '\0') {
-                err = "末尾不能包含逗号";
+                err = SCRCTL_TR("Trailing comma is not allowed");
                 return false;
             }
             continue;
         }
         if (*p != '\0') {
-            err = std::string("存在无效字符：\"") + p + "\"";
+            err = std::string(SCRCTL_TR("Invalid character: \"")) + p + "\"";
             return false;
         }
     }
     if (out.empty()) {
-        err = "时刻表至少需要一个时刻";
+        err = SCRCTL_TR("Schedule requires at least one time");
         return false;
     }
     return true;

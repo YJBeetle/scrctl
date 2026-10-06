@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "decode/Decoder.h"
 
 // libav 的头是 C 头，自己不带 extern "C"，不包一层就会按 C++ 原型去找符号，
@@ -38,7 +39,7 @@ public:
 
         const AVCodec *codec = avcodec_find_decoder(AV_CODEC_ID_HEVC);
         if (codec == nullptr) {
-            std::fprintf(stderr, "libavcodec 里没有 HEVC 解码器\n");
+            std::fprintf(stderr, SCRCTL_TR("FFmpeg has no HEVC decoder\n"));
             return false;
         }
         ctx_ = avcodec_alloc_context3(codec);
@@ -54,7 +55,7 @@ public:
         // 所以要在这之前把 open 做完——open 之后才允许 send_packet。
         const int open_st = avcodec_open2(ctx_, codec, nullptr);
         if (open_st < 0) {
-            std::fprintf(stderr, "libavcodec 打开 HEVC 解码器失败: %s\n",
+            std::fprintf(stderr, SCRCTL_TR("Failed to open FFmpeg HEVC decoder: %s\n"),
                          av_strerr(open_st).c_str());
             teardown();
             return false;
@@ -107,7 +108,7 @@ public:
             static bool warned = false;
             if (!warned) {
                 warned = true;
-                std::fprintf(stderr, "libavcodec 收包失败: %s\n", av_strerr(send_st).c_str());
+                std::fprintf(stderr, SCRCTL_TR("FFmpeg rejected packet: %s\n"), av_strerr(send_st).c_str());
             }
             return false;
         }
@@ -153,7 +154,7 @@ private:
                                                                 : av_pix_fmt_desc_get(src);
         if (w <= 0 || h <= 0 || desc == nullptr ||
             (desc->flags & AV_PIX_FMT_FLAG_HWACCEL)) {
-            std::fprintf(stderr, "软解后端只认 CPU 帧，收到 format=%d %dx%d\n",
+            std::fprintf(stderr, SCRCTL_TR("Software decoder requires CPU frames; received format=%d %dx%d\n"),
                          static_cast<int>(src), w, h);
             return false;
         }

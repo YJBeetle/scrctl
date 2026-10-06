@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "net/UdpSocket.h"
 #include "net/LwipRuntime.h"
 #include <algorithm>
@@ -70,7 +71,7 @@ UdpSocket::UdpSocket(Stack &s, uint16_t port)
 UdpSocket::~UdpSocket() {
   auto s = impl_;
   LwipRuntime::instance().call([s] {
-    s->fail("UDP 端点已关闭");
+    s->fail(SCRCTL_TR("UDP endpoint closed"));
     s->stack.detach_endpoint(s.get());
   });
 }
@@ -100,7 +101,7 @@ bool UdpSocket::bind(std::string &err) {
   });
   return result == ERR_OK
              ? true
-             : (err = "UDP 绑定失败（lwIP " + std::to_string(result) + "）",
+             : (err = SCRCTL_TR("UDP bind failed (lwIP ") + std::to_string(result) + SCRCTL_TR(")"),
                 false);
 }
 bool UdpSocket::send(const std::vector<uint8_t> &payload, uint16_t port,
@@ -126,7 +127,7 @@ bool UdpSocket::send(const std::vector<uint8_t> &payload, uint16_t port,
   });
   return result == ERR_OK
              ? true
-             : (err = "UDP 发送失败（lwIP " + std::to_string(result) + "）",
+             : (err = SCRCTL_TR("UDP send failed (lwIP ") + std::to_string(result) + SCRCTL_TR(")"),
                 false);
 }
 bool UdpSocket::recv(std::vector<uint8_t> &payload, uint16_t &port,
@@ -137,7 +138,7 @@ bool UdpSocket::recv(std::vector<uint8_t> &payload, uint16_t &port,
   std::unique_lock lock(s->mutex);
   if (!s->cv.wait_for(lock, std::chrono::milliseconds(std::max(timeout_ms, 0)),
                       [&] { return !s->queue.empty() || !s->failure.empty(); }))
-    return err = "UDP 接收超时", false;
+    return err = SCRCTL_TR("UDP receive timed out"), false;
   if (s->queue.empty())
     return err = s->failure, false;
   auto packet = std::move(s->queue.front());

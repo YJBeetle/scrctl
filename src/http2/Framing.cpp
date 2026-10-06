@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "http2/Framing.h"
 
 #include <algorithm>
@@ -137,18 +138,18 @@ Status parse_frame(std::span<const uint8_t> buf, Frame &out, std::size_t &consum
                    std::string &err) {
     consumed = 0;
     if (buf.size() < kFrameHeaderSize) {
-        err = "帧头不足 9 字节";
+        err = SCRCTL_TR("Frame header shorter than 9 bytes");
         return Status::NeedMore;
     }
     const std::size_t len = static_cast<std::size_t>(buf[0]) << 16 |
                             static_cast<std::size_t>(buf[1]) << 8 | static_cast<std::size_t>(buf[2]);
     if (len > kMaxFrameSize) {
-        err = std::string("帧长过大: ") + std::to_string(len);
+        err = std::string(SCRCTL_TR("Frame length too large: ")) + std::to_string(len);
         return Status::Malformed;
     }
     const std::size_t total = kFrameHeaderSize + len;
     if (buf.size() < total) {
-        err = "还差 " + std::to_string(total - buf.size()) + " 字节";
+        err = SCRCTL_TR("Missing ") + std::to_string(total - buf.size()) + SCRCTL_TR(" bytes");
         return Status::NeedMore;
     }
     out.type = buf[3];
@@ -167,14 +168,14 @@ bool data_payload(const Frame &f, std::span<const uint8_t> &out, std::string &er
     // 那是 HEADERS/PUSH_PROMISE 的字段，在 DATA 上这么读会吃掉真实载荷。
     if ((f.flags & kFlagPadded) != 0) {
         if (body.empty()) {
-            err = "DATA 带 PADDED 却没有 Pad Length 字节";
+            err = SCRCTL_TR("PADDED DATA missing Pad Length byte");
             return false;
         }
         // Pad Length 在载荷**最前**一个字节，填充字节本身在**最后**。
         const std::size_t padding = body[0];
         body = body.subspan(1);
         if (padding > body.size()) {
-            err = "Pad Length 超过可用载荷: " + std::to_string(padding);
+            err = SCRCTL_TR("Pad Length exceeds available payload: ") + std::to_string(padding);
             return false;
         }
         body = body.subspan(0, body.size() - padding);
@@ -193,7 +194,7 @@ bool parse_settings(const Frame &f, std::vector<std::pair<uint16_t, uint32_t>> &
         return true;
     }
     if (f.payload.size() % 6 != 0) {
-        err = "SETTINGS 载荷不是 6 的倍数: " + std::to_string(f.payload.size());
+        err = SCRCTL_TR("SETTINGS payload length is not a multiple of 6: ") + std::to_string(f.payload.size());
         return false;
     }
     for (std::size_t i = 0; i + 6 <= f.payload.size(); i += 6) {
@@ -204,7 +205,7 @@ bool parse_settings(const Frame &f, std::vector<std::pair<uint16_t, uint32_t>> &
 
 bool parse_window_update(const Frame &f, uint32_t &increment, std::string &err) {
     if (f.payload.size() != 4) {
-        err = "WINDOW_UPDATE 载荷长度应为 4，实际 " + std::to_string(f.payload.size());
+        err = SCRCTL_TR("WINDOW_UPDATE payload must be 4 bytes; got ") + std::to_string(f.payload.size());
         return false;
     }
     increment = be32(f.payload.data()) & kStreamIdMask;
@@ -213,7 +214,7 @@ bool parse_window_update(const Frame &f, uint32_t &increment, std::string &err) 
 
 bool parse_goaway(const Frame &f, GoAway &out, std::string &err) {
     if (f.payload.size() < 8) {
-        err = "GOAWAY 载荷不足 8 字节";
+        err = SCRCTL_TR("GOAWAY payload shorter than 8 bytes");
         return false;
     }
     out.last_stream_id = be32(f.payload.data()) & kStreamIdMask;
@@ -230,7 +231,7 @@ bool parse_goaway(const Frame &f, GoAway &out, std::string &err) {
 
 bool parse_rst_stream(const Frame &f, uint32_t &error_code, std::string &err) {
     if (f.payload.size() != 4) {
-        err = "RST_STREAM 载荷长度应为 4，实际 " + std::to_string(f.payload.size());
+        err = SCRCTL_TR("RST_STREAM payload must be 4 bytes; got ") + std::to_string(f.payload.size());
         return false;
     }
     error_code = be32(f.payload.data());

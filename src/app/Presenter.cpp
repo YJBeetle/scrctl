@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "app/Presenter.h"
 
 #include "app/RenderPanel.h"
@@ -34,7 +35,7 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
         scrctl::app::fit_window(view_w_, view_h_, desk.w, desk.h - 60, scale, scale_given, win_w_,
                                 win_h_);
         if (!scale_given && win_w_ < view_w_) {
-            std::printf("屏幕 %dx%d 点，窗口自动缩放到 %dx%d（可用 --scale 指定比例）\n", desk.w, desk.h,
+            std::printf(SCRCTL_TR("Screen %dx%d points; window scaled to %dx%d (override with --scale)\n"), desk.w, desk.h,
                         win_w_, win_h_);
         }
     }
@@ -53,7 +54,7 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
     }
     window_ = SDL_CreateWindow(title.c_str(), spec.x, spec.y, win_w_, win_h_, win_flags);
     if (window_ == nullptr) {
-        std::fprintf(stderr, "创建窗口失败: %s\n", SDL_GetError());
+        std::fprintf(stderr, SCRCTL_TR("Failed to create window: %s\n"), SDL_GetError());
         return false;
     }
     if (spec.always_on_top) {
@@ -66,12 +67,12 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
         renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
     }
     if (renderer_ == nullptr) {
-        std::fprintf(stderr, "创建渲染器失败: %s\n", SDL_GetError());
+        std::fprintf(stderr, SCRCTL_TR("Failed to create renderer: %s\n"), SDL_GetError());
         return false;
     }
     SDL_RendererInfo info;
     if (SDL_GetRendererInfo(renderer_, &info) == 0) {
-        std::printf("渲染驱动: %s\n", info.name);
+        std::printf(SCRCTL_TR("Render driver: %s\n"), info.name);
     }
     // 设置 logical size 后由 SDL 处理 Retina 比例和窗口缩放；否则以窗口点数
     // 绘制到高 DPI 像素面，会只覆盖部分区域。
@@ -86,12 +87,13 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
     texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
                                  frame_w, frame_h);
     if (texture_ == nullptr) {
-        std::fprintf(stderr, "创建纹理失败: %s\n", SDL_GetError());
+        std::fprintf(stderr, SCRCTL_TR("Failed to create texture: %s\n"), SDL_GetError());
         return false;
     }
     SDL_SetTextureScaleMode(texture_, SDL_ScaleModeBest);
-    std::printf("窗口 %dx%d 点 / 绘制面 %dx%d 像素 / 视口 %dx%d（源帧 %dx%d，裁剪 %dx%d+%d+%d，"
-                "转正顺时针 %d°）\n",
+    std::printf(SCRCTL_TR(
+        "Window %dx%d points / drawable %dx%d pixels / viewport %dx%d (source %dx%d, "
+        "crop %dx%d+%d+%d, clockwise rotation %d degrees)\n"),
                 win_w_, win_h_, out_w, out_h, view_w_, view_h_, frame_w, frame_h, crop.w, crop.h,
                 crop.x, crop.y, degrees_);
     return true;
@@ -102,7 +104,7 @@ void Presenter::draw(const scrctl::Frame &f, const char *readback_path) {
     SDL_SetRenderDrawColor(renderer_, bg_[0], bg_[1], bg_[2], 255);
     SDL_RenderClear(renderer_);
     if (SDL_UpdateTexture(texture_, nullptr, f.pixels.data(), static_cast<int>(f.row_pitch)) != 0) {
-        std::fprintf(stderr, "上传纹理失败: %s\n", SDL_GetError());
+        std::fprintf(stderr, SCRCTL_TR("Failed to upload texture: %s\n"), SDL_GetError());
     }
     // 渲染使用逻辑坐标，由 SDL 处理 Retina 缩放和留边。旋转由 draw_rotated
     // 完成，该函数同时用于离线回读测试。
@@ -117,16 +119,16 @@ void Presenter::draw(const scrctl::Frame &f, const char *readback_path) {
 bool Presenter::readback(const std::string &path) {
     int out_w = 0, out_h = 0;
     if (SDL_GetRendererOutputSize(renderer_, &out_w, &out_h) != 0 || out_w <= 0 || out_h <= 0) {
-        std::fprintf(stderr, "查询绘制面尺寸失败: %s\n", SDL_GetError());
+        std::fprintf(stderr, SCRCTL_TR("Failed to query drawable dimensions: %s\n"), SDL_GetError());
         return false;
     }
     SDL_Surface *s = SDL_CreateRGBSurfaceWithFormat(0, out_w, out_h, 32, SDL_PIXELFORMAT_ARGB8888);
     if (s == nullptr) {
-        std::fprintf(stderr, "创建回读缓冲失败: %s\n", SDL_GetError());
+        std::fprintf(stderr, SCRCTL_TR("Failed to create readback buffer: %s\n"), SDL_GetError());
         return false;
     }
     if (SDL_LockSurface(s) != 0) {
-        std::fprintf(stderr, "锁定回读缓冲失败: %s\n", SDL_GetError());
+        std::fprintf(stderr, SCRCTL_TR("Failed to lock readback buffer: %s\n"), SDL_GetError());
         SDL_FreeSurface(s);
         return false;
     }
@@ -140,17 +142,17 @@ bool Presenter::readback(const std::string &path) {
     SDL_RenderSetLogicalSize(renderer_, view_w_, view_h_);
     SDL_UnlockSurface(s);
     if (rc != 0) {
-        std::fprintf(stderr, "回读失败: %s\n", SDL_GetError());
+        std::fprintf(stderr, SCRCTL_TR("Readback failed: %s\n"), SDL_GetError());
         SDL_FreeSurface(s);
         return false;
     }
     const int save = SDL_SaveBMP(s, path.c_str());
     SDL_FreeSurface(s);
     if (save != 0) {
-        std::fprintf(stderr, "存图失败: %s\n", SDL_GetError());
+        std::fprintf(stderr, SCRCTL_TR("Failed to save image: %s\n"), SDL_GetError());
         return false;
     }
-    std::printf("窗口回读已保存到 %s (%dx%d 像素)\n", path.c_str(), out_w, out_h);
+    std::printf(SCRCTL_TR("Window readback saved to %s (%dx%d pixels)\n"), path.c_str(), out_w, out_h);
     return true;
 }
 
@@ -159,8 +161,9 @@ void Presenter::report_input(int raw_x, int raw_y, double fx, double fy, const c
     SDL_GetWindowSize(window_, &pw, &ph);
     SDL_GetRendererOutputSize(renderer_, &ow, &oh);
     std::fprintf(stderr,
-                 "[input] %s 原始(%d,%d) 视口%d x%d（转%d°）/ 窗口%d x%d / 绘制面%d x%d -> (%.3f, "
-                 "%.3f)\n",
+                 SCRCTL_TR(
+                     "[input] %s raw(%d,%d) viewport %d x%d (rotation %d degrees) / window %d x%d / "
+                     "drawable %d x%d -> (%.3f, %.3f)\n"),
                  tag, raw_x, raw_y, view_w_, view_h_, degrees_, pw, ph, ow, oh, fx, fy);
 }
 
@@ -186,7 +189,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) 
                 dragging_ = true;
                 to_display(e.button.x, e.button.y, px, py);
                 if (debug_input_) {
-                    report_input(e.button.x, e.button.y, px, py, "按下");
+                    report_input(e.button.x, e.button.y, px, py, SCRCTL_TR("down"));
                 }
                 on_touch(px, py, true);
             }
@@ -195,7 +198,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) 
             if (dragging_ && on_touch) {
                 to_display(e.motion.x, e.motion.y, px, py);
                 if (debug_input_) {
-                    report_input(e.motion.x, e.motion.y, px, py, "移动");
+                    report_input(e.motion.x, e.motion.y, px, py, SCRCTL_TR("move"));
                 }
                 pending_move = true;
             }

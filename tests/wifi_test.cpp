@@ -124,7 +124,7 @@ void test_crypto() {
     tampered[10] ^= 0x01;
     std::string tamper_err;
     check(!scrctl::wifi::chacha_open(bv(ikm2), kNonce, tampered, tamper_err), "改一个字节必须解不开");
-    check(tamper_err.find("标签") != std::string::npos,
+    check(tamper_err.find("authentication") != std::string::npos,
           "标签校验失败要说明是校验不过，不能只丢一句「解密失败」");
 
     const Bytes empty_ct = from_hex("e9dfc72a53d4cec416165db4717cb0c2");
@@ -534,7 +534,7 @@ void test_rppairing() {
         R"({"message":{"streamEncrypted":{"_0":"AAAAAAAAAAAAAAAAAAAAAAAAAAA="}},"originatedBy":"device"})"));
     std::string cold_err;
     check(!cold.receive(cold_err), "没配对就收到加密帧要报错");
-    check(cold_err.find("主密钥") != std::string::npos, "这种情况要说清是没装主密钥");
+    check(cold_err.find("main key") != std::string::npos, "这种情况要说清是没装主密钥");
 }
 
 /// ---- 5. pair-verify 的消息形状（对着真机抓下来的字节判） ----

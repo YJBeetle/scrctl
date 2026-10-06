@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "wifi/RemotePairing.h"
 
 #include <unistd.h>
@@ -31,12 +32,12 @@ std::optional<uint16_t> request_tcp_listener(Rppairing &channel, const Bytes &tu
         for (const auto &entry : reply->items()) {
             keys += " " + entry.key();
         }
-        err = "createListener 回信里没有 port（实际字段:" + keys + "）";
+        err = SCRCTL_TR("createListener response missing port (actual fields:") + keys + SCRCTL_TR(")");
         return std::nullopt;
     }
     const int64_t value = json::as_int_or(*port, 0);
     if (value <= 0 || value > 0xFFFF) {
-        err = "createListener 给的端口不像话: " + std::to_string(value);
+        err = SCRCTL_TR("createListener returned an invalid port: ") + std::to_string(value);
         return std::nullopt;
     }
     return static_cast<uint16_t>(value);

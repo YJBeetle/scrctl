@@ -281,7 +281,7 @@ void test_resource_and_encoding_bounds() {
     for (const uint64_t n : {uint64_t(offsets.size()), uint64_t(0), uint64_t(table)})
         for (int shift = 56; shift >= 0; shift -= 8)
             dag.push_back(static_cast<uint8_t>(n >> shift));
-    check(!scrctl::plist::parse_binary(dag, &err) && err.find("节点") != std::string::npos,
+    check(!scrctl::plist::parse_binary(dag, &err) && err.find("node") != std::string::npos,
           "重复引用的展开量受限");
 }
 

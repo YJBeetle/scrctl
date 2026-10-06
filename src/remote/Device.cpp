@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "remote/Device.h"
 
 #include <cstdio>
@@ -18,7 +19,7 @@ constexpr const char *kCoreDeviceProxy = "com.apple.internal.devicecompute.CoreD
 /// 「走到哪了」必须是可见的，否则卡住时只剩一片空白。
 void stage(bool verbose, const char *what) {
     if (verbose) {
-        std::fprintf(stderr, "  [阶段] %s\n", what);
+        std::fprintf(stderr, SCRCTL_TR("  [stage] %s\n"), what);
     }
 }
 
@@ -29,17 +30,15 @@ std::string proxy_failure_hint(const std::string_view lockdown_error) {
     // 锁屏：iOS 只在解锁状态下允许起开发者服务。这一条必须排在最前面——它长得像
     // "权限不够"，而正确答案是"把屏幕解开"，不是去查 DDI。
     if (e.find("PasswordProtected") != std::string::npos) {
-        return "（设备现在**锁着**：iOS 只在解锁状态下放行开发者服务。请解锁并让屏幕"
-               "亮着再试；这不是 DDI 的问题）";
+        return SCRCTL_TR(" (device is locked; unlock it and keep the screen awake before retrying)");
     }
     if (e.find("UserDenied") != std::string::npos || e.find("Trust") != std::string::npos) {
-        return "（设备上还没点「信任这台电脑」：解锁之后会问一次，点信任再试）";
+        return SCRCTL_TR(" (computer not trusted; unlock the device and confirm Trust)");
     }
     if (e.find("InvalidService") != std::string::npos) {
-        return "（设备里没有这个服务：开发者模式没开，或 DDI 还没挂载 —— 用 Xcode 连"
-               "一次这台设备就会挂）";
+        return SCRCTL_TR(" (service unavailable; check Developer Mode and DDI mounting through Xcode)");
     }
-    return "（DDI 是否已挂载？开发者模式是否开着？）";
+    return SCRCTL_TR(" (check DDI mounting and Developer Mode)");
 }
 
 std::string mask(std::string_view value, std::size_t keep) {
@@ -77,9 +76,10 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
     if (devices.empty()) {
         // 这句原先只说"没有在连设备"，而最常见的原因根本不在软件层：今天我自己就撞过
         // 一回——线是只供电不传数据的，设备在旁边充了一晚上，我们这边列表是空的。
-        err = "一台设备都没在连（usbmux 的列表是空的）。先查物理层：换一根确定能传数据的线"
-              "（有些线只供电）、把设备唤醒解锁、拔插一次。注意**还没点「信任」的设备也会"
-              "出现在这个列表里**，所以列表为空不是信任问题，也不是锁屏问题。";
+        err = SCRCTL_TR(
+            "No USB device found (usbmux list is empty). Check the data cable and USB "
+            "connection, then reconnect the device. Untrusted devices normally appear in "
+            "this list too.");
         return std::nullopt;
     }
 
@@ -88,7 +88,7 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
     const transport::DeviceRecord *chosen = nullptr;
     if (udid.empty()) {
         if (devices.size() > 1) {
-            err = "接着 " + std::to_string(devices.size()) + " 台设备，得指定其中一台：";
+            err = SCRCTL_TR("Connected devices: ") + std::to_string(devices.size()) + SCRCTL_TR("; select one: ");
             for (const auto &d : devices) {
                 err += " " + mask(d.udid);
             }
@@ -106,12 +106,11 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
             // 这一句原先写的是"注意信任与锁屏状态"，那是**错的指向**：没点信任、锁着屏的
             // 设备照样会出现在这个列表里（信任是在后面 lockdown 那一步才要的东西）。
             // 报了 UDID 却没匹配上，绝大多数就是"插的不是这台"或"这台掉线了"。
-            err = "没有在连设备匹配 " + std::string(mask(udid)) + "；当前在连的是：";
+            err = SCRCTL_TR("No connected device matches ") + std::string(mask(udid)) + SCRCTL_TR("; connected devices: ");
             for (const auto &d : devices) {
                 err += " " + mask(d.udid);
             }
-            err += "（一共 " + std::to_string(devices.size()) + " 台）。这一条报的不是信任也不是"
-                   "锁屏——那两种设备都会照常出现在列表里；要么是插的不是这台，要么那台已经掉线。";
+            err += SCRCTL_TR(" (total ") + std::to_string(devices.size()) + SCRCTL_TR("). Check the selected UDID and USB connection.");
             return std::nullopt;
         }
     }
@@ -121,24 +120,24 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
     dev->udid_ = chosen->udid;
     dev->connection_type_ = chosen->connection_type;
 
-    stage(verbose, "lockdown 配对 session");
+    stage(verbose, SCRCTL_TR("lockdown pairing session"));
     dev->lockdown_ = transport::Lockdown::establish(chosen->device_id, chosen->udid, err);
     if (!dev->lockdown_) {
-        err = "lockdown 会话建立失败: " + err;
+        err = SCRCTL_TR("Failed to establish lockdown session: ") + err;
         return std::nullopt;
     }
-    stage(verbose, "起 CoreDeviceProxy");
+    stage(verbose, SCRCTL_TR("Start CoreDeviceProxy"));
     auto ep = dev->lockdown_->start_service(kCoreDeviceProxy, err);
     if (!ep) {
-        err = "起 " + std::string(kCoreDeviceProxy) + " 失败: " + err + proxy_failure_hint(err);
+        err = SCRCTL_TR("Start ") + std::string(kCoreDeviceProxy) + SCRCTL_TR(" failed: ") + err + proxy_failure_hint(err);
         return std::nullopt;
     }
-    stage(verbose, "CDTunnel 握手");
+    stage(verbose, SCRCTL_TR("CDTunnel handshake"));
     auto tunnel = transport::PacketTunnel::establish(chosen->device_id, ep->port,
                                                     dev->lockdown_->identity(), ep->requires_tls,
                                                     err);
     if (!tunnel) {
-        err = "包隧道建立失败: " + err;
+        err = SCRCTL_TR("Failed to establish packet tunnel: ") + err;
         return std::nullopt;
     }
     // peer UUID 用配对记录里的 HostID：设备上每条隧道只保留一个 RSD 连接，而且
@@ -146,13 +145,13 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
     // 公布的服务端口。所以这个值必须跨进程、跨重启稳定。
     auto uuid = parse_uuid_text(dev->lockdown_->host_id());
     if (!uuid) {
-        err = "配对记录里的 HostID 不是合法 UUID，无法给出稳定的 peer 身份";
+        err = SCRCTL_TR("Pairing HostID is not a valid UUID; cannot construct a stable peer identity");
         return std::nullopt;
     }
     PeerIdentity identity;
     identity.uuid = *uuid;
 
-    stage(verbose, "隧道内连 RSD 并读目录");
+    stage(verbose, SCRCTL_TR("Connect to RSD inside tunnel and read directory"));
     if (!dev->finish_session(std::move(*tunnel), identity, verbose, err)) {
         return std::nullopt;
     }
@@ -162,13 +161,13 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
 bool Device::finish_session(transport::PacketTunnel &&tunnel, PeerIdentity identity, bool verbose,
                             std::string &err) {
     tunnel_ = std::make_unique<transport::PacketTunnel>(std::move(tunnel));
-    stage(verbose, "隧道内连 RSD 并读目录");
+    stage(verbose, SCRCTL_TR("Connect to RSD inside tunnel and read directory"));
 
     stack_ =
         std::make_unique<net::Stack>(*tunnel_, tunnel_->params().client_address,
                                      tunnel_->params().server_address);
     if (!stack_->addresses_ok()) {
-        err = "隧道给的地址不是合法 IPv6";
+        err = SCRCTL_TR("Tunnel returned an invalid IPv6 address");
         return false;
     }
     // 泵线程必须在任何连接之前起来：端点只从自己的队列取数据，没人替它们读隧道。
@@ -179,7 +178,7 @@ bool Device::finish_session(transport::PacketTunnel &&tunnel, PeerIdentity ident
     if (!rsd_) {
         return false;
     }
-    stage(verbose, "就绪");
+    stage(verbose, SCRCTL_TR("Ready"));
     return true;
 }
 
@@ -191,11 +190,11 @@ std::optional<Device> Device::establish_wifi(const std::string &address,
     dev->udid_ = record.udid;
     dev->connection_type_ = "WiFi";
 
-    stage(verbose, "局域网 pair-verify");
+    stage(verbose, SCRCTL_TR("LAN pair-verify"));
     auto control = transport::connect_tcp(address, port, 5000, err);
     if (!control) {
-        err = "连不上设备的 RemotePairing 端口 " + address + ":" + std::to_string(port) +
-              "：" + err + "（设备与本机在同一个网络上吗？配过对吗？）";
+        err = SCRCTL_TR("Cannot connect to device RemotePairing port ") + address + ":" + std::to_string(port) +
+              "：" + err + SCRCTL_TR(" (check that the device is reachable on this network and has been paired)");
         return std::nullopt;
     }
     wifi::SocketStream stream(*control);
@@ -204,15 +203,15 @@ std::optional<Device> Device::establish_wifi(const std::string &address,
     const wifi::PairVerifyResult verified = wifi::pair_verify(channel, record, err);
     if (verified.outcome != wifi::VerifyOutcome::Paired) {
         if (verified.outcome == wifi::VerifyOutcome::NotPaired) {
-            err = "设备不认这条配对记录：" + mask(record.udid, 8) +
-                  " 在这台设备上没配过，或者已经在设备上被删掉了";
+            err = SCRCTL_TR("Device rejected pairing record: ") + mask(record.udid, 8) +
+                  SCRCTL_TR(" is not paired with this device, or its pairing was removed");
         } else {
-            err = "pair-verify 没走通: " + verified.error;
+            err = SCRCTL_TR("pair-verify failed: ") + verified.error;
         }
         return std::nullopt;
     }
 
-    stage(verbose, "请设备开隧道端口");
+    stage(verbose, SCRCTL_TR("Request device tunnel port"));
     const auto listener = wifi::request_tcp_listener(channel, verified.shared_secret, err);
     if (!listener) {
         return std::nullopt;
@@ -220,17 +219,17 @@ std::optional<Device> Device::establish_wifi(const std::string &address,
     // 控制通道到此为止：隧道是**另一条** TCP 连接，端口是刚才要来的那个。
     control->close();
 
-    stage(verbose, "TLS-PSK + CDTunnel 握手");
+    stage(verbose, SCRCTL_TR("TLS-PSK and CDTunnel handshake"));
     auto tunnel_sock = transport::connect_tcp(address, *listener, 5000, err);
     if (!tunnel_sock) {
-        err = "连不上隧道端口 " + std::to_string(*listener) + "：" + err;
+        err = SCRCTL_TR("Cannot connect to tunnel port ") + std::to_string(*listener) + "：" + err;
         return std::nullopt;
     }
     auto tunnel =
         transport::PacketTunnel::establish_psk(std::move(*tunnel_sock), verified.shared_secret,
                                                err);
     if (!tunnel) {
-        err = "包隧道建立失败: " + err;
+        err = SCRCTL_TR("Failed to establish packet tunnel: ") + err;
         return std::nullopt;
     }
 
@@ -238,7 +237,7 @@ std::optional<Device> Device::establish_wifi(const std::string &address,
     // 必须跨进程、跨重启稳定，否则设备每次都要把这台机器重新 attach 一遍。
     const auto uuid = parse_uuid_text(record.host_identifier);
     if (!uuid) {
-        err = "配对记录里的 host identifier 不是合法 UUID，给不出稳定的 peer 身份";
+        err = SCRCTL_TR("Pairing host identifier is not a valid UUID; cannot construct a stable peer identity");
         return std::nullopt;
     }
     PeerIdentity identity;
@@ -258,7 +257,7 @@ std::string Device::property(std::string_view key) const {
 std::unique_ptr<ServiceConnection> Device::connect(std::string_view service_name, std::string &err,
                                                    bool verbose) {
     if (!rsd_) {
-        err = "会话没有建立";
+        err = SCRCTL_TR("Session not established");
         return nullptr;
     }
     return rsd_->connect_service(service_name, err, verbose);
@@ -270,7 +269,7 @@ CallResult Device::feature_call(std::string_view service_name,
                                 xpc::Value &output, std::string &err, bool verbose,
                                 int timeout_ms) {
     if (rsd_ && !rsd_->supports(service_name, feature_identifier)) {
-        err = std::string(service_name) + " 没有声明 feature " + std::string(feature_identifier);
+        err = std::string(service_name) + SCRCTL_TR(" does not advertise feature ") + std::string(feature_identifier);
         return CallResult::DeviceError;
     }
     auto conn = connect(service_name, err, verbose);

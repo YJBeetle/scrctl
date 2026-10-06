@@ -68,15 +68,38 @@ src/app/         C++ + SDL2 —— 原生窗口、鼠标→触摸、按键映射
 MaaFramework 中已有直接链接 `scrctl_core` 的实验接入。后续方向倾向于参考这里验证过的
 协议独立实现；scrctl 同时作为独立产品发展，当前重构不以稳定 SDK / C ABI 为目标。
 
+## 命令行语言
+
+支持英文和简体中文，注释保持中文。默认按首个非空的 `LC_ALL`、`LC_MESSAGES`、
+`LANG` 选择语言；`zh` 系列 locale 使用简体中文，其他语言、`C`、`POSIX` 或未设置时使用英文。
+`--lang en` / `--lang zh-CN` 显式覆盖环境，`--lang auto` 恢复自动选择。
+`LANGUAGE` 不参与 scrctl 的自动选择，避免与上述规则冲突。
+
+```bash
+LANG=zh_CN.UTF-8 scrctl --help
+scrctl --lang en --help
+scrctl --lang zh-CN --stats
+```
+
+中文目录缺失时显示英文。安装会同时安装 `share/locale/zh_CN/LC_MESSAGES/scrctl.mo`；
+保留 `bin` 与 `share` 的相对目录后可以移动安装目录。开发构建直接读取构建目录的翻译，
+也可用 `SCRCTL_LOCALEDIR` 指定目录根。
+项目自己的帮助、状态和错误提示已接入翻译；设备响应、系统错误与 CLI11 自带校验文字保留其原文。
+开发探针 `tools/` 的独立输出暂不属于这次应用文案翻译范围。
+
 ## 构建
 
 ```bash
-brew install sdl2 openssl ffmpeg          # ffmpeg 提供软解后端，见下
+brew install sdl2 openssl ffmpeg gettext  # ffmpeg 提供软件解码，gettext 提供翻译支持
 cmake -B build-cmake -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build-cmake -j
 ctest --test-dir build-cmake              # 离线自检，不需要真机（项数用 `ctest -N` 数）
 ./build-cmake/scrctl --help
 ```
+
+构建还需要 GNU gettext 工具（`msgfmt`）及消息运行库（Linux glibc 通常已内置；
+macOS 使用 gettext 的 libintl）。开启离线测试需要 Python 3。Debian/Ubuntu 可安装
+`gettext python3 libsdl2-dev libssl-dev libavcodec-dev libavutil-dev libswscale-dev`。
 
 JSON、命令行和 XML plist 解析分别使用 nlohmann/json（>= 3.12.0）、CLI11（>= 2.5.0）和 pugixml（>= 1.16），许可依次为 MIT、BSD-3-Clause、MIT。
 CMake 优先找系统包，缺失时下载固定版本并校验 SHA256；首次配置需要网络。

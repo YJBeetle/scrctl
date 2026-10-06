@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "app/FileSource.h"
 
 #include <algorithm>
@@ -52,20 +53,20 @@ bool FileSource::pump_bytes(std::string &err) {
 bool FileSource::open_file(std::string &err) {
     std::ifstream in(path_, std::ios::binary);
     if (!in) {
-        err = "无法打开文件 " + path_;
+        err = SCRCTL_TR("Cannot open file ") + path_;
         return false;
     }
     buffer_.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
     opened_ = true;
-    std::printf("读入 %s (%zu 字节)\n", path_.c_str(), buffer_.size());
+    std::printf(SCRCTL_TR("Read %s (%zu bytes)\n"), path_.c_str(), buffer_.size());
 
     decoder_ = scrctl::create_platform_decoder();
     if (decoder_ == nullptr) {
         // 确认解码器存在后再解析文件；on_au 会调用 decoder_->configure。
-        err = scrctl::kNoDecoderMessage;
+        err = SCRCTL_TR(scrctl::kNoDecoderMessage);
         return false;
     }
-    std::printf("解码后端: %s\n", decoder_->backend_name());
+    std::printf(SCRCTL_TR("Decoder backend: %s\n"), decoder_->backend_name());
     parser_ = std::make_unique<scrctl::AnnexBParser>(
         [this](std::vector<scrctl::Nal> &&au, bool) { this->on_au(std::move(au)); });
     return true;

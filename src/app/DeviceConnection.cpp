@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "app/DeviceConnection.h"
 #include "wifi/PairRecord.h"
 #include <cstdio>
@@ -25,10 +26,10 @@ std::optional<scrctl::remote::Device> open_device(const std::string &serial,
         const std::vector<std::string> found = scrctl::wifi::list_record_udids(dir, list_err);
         if (found.size() == 1) {
             which = found.front();
-            std::printf("使用唯一的远程配对记录（设备尾号 %s）\n", tail4(which).c_str());
+            std::printf(SCRCTL_TR("Using the only remote pairing record (device suffix %s)\n"), tail4(which).c_str());
         } else if (found.size() > 1) {
-            err = "目录 " + dir + " 里有 " + std::to_string(found.size()) +
-                  " 条配对记录，请用 -s 指定设备；候选尾号：";
+            err = SCRCTL_TR("Directory ") + dir + SCRCTL_TR(" contains ") + std::to_string(found.size()) +
+                  SCRCTL_TR(" pairing records; specify the device with -s. Candidate suffixes: ");
             for (const auto &udid : found) {
                 err += " " + tail4(udid);
             }
@@ -39,8 +40,8 @@ std::optional<scrctl::remote::Device> open_device(const std::string &serial,
     auto record = scrctl::wifi::load_record(scrctl::wifi::record_path(dir, which), load_err);
     if (!record) {
         // 报错只显示记录目录和设备尾号，完整文件路径包含 UDID。
-        err = "无法读取 " + tail4(which) + " 的远程配对记录（目录 " + dir + "）：" + load_err +
-              "。请先通过 USB 建立该设备的远程配对记录。";
+        err = SCRCTL_TR("Cannot read ") + tail4(which) + SCRCTL_TR(" remote pairing record (directory ") + dir + SCRCTL_TR("): ") + load_err +
+              SCRCTL_TR(". Establish a remote pairing record over USB first.");
         return std::nullopt;
     }
     return scrctl::remote::Device::establish_wifi(wifi, *record, err);

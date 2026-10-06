@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "remote/App.h"
 
 #include <algorithm>
@@ -101,7 +102,7 @@ bool App::launch(Device &device, const std::string &bundle_id, std::string &err,
         if (err.find("10004") == std::string::npos || attempt == kAttempts) {
             return false;
         }
-        std::printf("起 %s 撞上旧进程未死干净（第 %d 次），500ms 后重试\n",
+        std::printf(SCRCTL_TR("Launching %s: previous process has not exited (attempt %d); retry in 500 ms\n"),
                     bundle_id.c_str(), attempt);
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
@@ -129,7 +130,7 @@ std::vector<int64_t> App::matching_pids(const xpc::Value &processes,
 
 bool App::list(Device &device, std::vector<Entry> &out, std::string &err, bool verbose) {
     if (!device.rsd().supports(kService, "com.apple.coredevice.feature.streamapplist")) {
-        err = "这台设备的 appservice 没有声明 streamapplist，不退回 listapps（那个是大回复）";
+        err = SCRCTL_TR("Device appservice does not advertise streamapplist; large listapps fallback is disabled");
         return false;
     }
 
@@ -188,7 +189,7 @@ bool App::stop(Device &device, const std::string &bundle_id, std::string &err, b
     }
     const auto it = std::ranges::find(apps, bundle_id, &Entry::bundle_id);
     if (it == apps.end()) {
-        err = "设备上找不到 bundle id " + bundle_id;
+        err = SCRCTL_TR("Device has no app with bundle ID ") + bundle_id;
         return false;
     }
 
@@ -201,7 +202,7 @@ bool App::stop(Device &device, const std::string &bundle_id, std::string &err, b
     if (pids.empty()) {
         // App 根本没在跑。Android 的 `am force-stop` 在这种情况下也是成功的，
         // 所以这里返回真；调用方的意图（"它别在跑"）已经成立。
-        std::printf("stop_app(%s)：没在跑，什么都不做\n", bundle_id.c_str());
+        std::printf(SCRCTL_TR("stop_app(%s): app is not running\n"), bundle_id.c_str());
         return true;
     }
     for (const int64_t pid : pids) {
@@ -222,13 +223,13 @@ bool App::stop(Device &device, const std::string &bundle_id, std::string &err, b
             if (result == CallResult::Ok) {
                 killed = true;
             } else if (result == CallResult::DeviceError) {
-                err = "杀 " + bundle_id + " 的进程 " + std::to_string(pid) + " 失败: " + err;
+                err = SCRCTL_TR("Failed to terminate ") + bundle_id + SCRCTL_TR(" process ") + std::to_string(pid) + SCRCTL_TR(": ") + err;
                 return false;
             }
         }
         if (!killed) {
-            err = "杀 " + bundle_id + " 的进程 " + std::to_string(pid) +
-                  " 三次都问不到回信: " + err;
+            err = SCRCTL_TR("Failed to terminate ") + bundle_id + SCRCTL_TR(" process ") + std::to_string(pid) +
+                  SCRCTL_TR("; no reply after three attempts: ") + err;
             return false;
         }
     }
@@ -249,7 +250,7 @@ bool App::stop(Device &device, const std::string &bundle_id, std::string &err, b
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
-    std::printf("stop_app(%s)：信号已发出，但进程表里还能看到它（旧进程可能卡在退出路径上）\n",
+    std::printf(SCRCTL_TR("stop_app(%s): signal sent, but process is still listed (exit may be pending)\n"),
                 bundle_id.c_str());
     return true;
 }

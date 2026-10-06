@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "media/AudioPump.h"
 
 #include <algorithm>
@@ -71,7 +72,7 @@ std::unique_ptr<AudioPump> AudioPump::start(remote::Device &device, const Option
     // 起流前计算并提示被限制的配置，与构造函数采用相同纯函数。
     const Waterline w = compute_waterline(options);
     if (w.clamped_to_ms != 0) {
-        std::printf("已将 --audio-buffer %d 限制为 %d ms，并按此配置缓冲容量\n",
+        std::printf(SCRCTL_TR("Clamped --audio-buffer %d to %d ms and adjusted buffer capacity\n"),
                     options.target_backlog_ms, w.clamped_to_ms);
     }
     auto pump = std::unique_ptr<AudioPump>(new AudioPump(device, options));
@@ -108,8 +109,7 @@ bool AudioPump::start_session(std::string &err) {
         // 缺少 SSRC 不影响当前收包和解码，但 RR 无法正确指向设备媒体源，
         // 会话可能无法续期。输出协商值以便排查。
         std::fprintf(stderr,
-                     "音频协商响应缺少 SSRC（RemoteSSRC=%u LocalSSRC=%u），"
-                     "音频会话可能无法续期\n",
+                     SCRCTL_TR("Audio answer missing SSRC (RemoteSSRC=%u LocalSSRC=%u); session renewal may fail\n"),
                      started.remote_ssrc, started.local_ssrc);
     }
     session_ = std::move(session);
@@ -270,7 +270,7 @@ void AudioPump::loop() {
                     std::lock_guard<std::mutex> lock(mutex_);
                     ++stats_.restarts;
                 }
-                std::printf("音频会话已重建，收流端口=%u\n", session_->receiver_port());
+                std::printf(SCRCTL_TR("Audio session recreated, receive port=%u\n"), session_->receiver_port());
                 last_packet_ms = now_ms();
                 next_rtcp_ms = last_packet_ms + kRtcpPeriodMs;
                 // 新会话的序号空间与上一条无关，不重置会把第一包判成大片缺口。
@@ -278,7 +278,7 @@ void AudioPump::loop() {
                 seq.reset();
                 continue;
             }
-            std::fprintf(stderr, "重建音频会话失败: %s（1 秒后再试）\n", rerr.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to recreate audio session: %s (retry in 1 second)\n"), rerr.c_str());
             // 使用可取消的条件变量等待，停止请求无需等待退避期结束。
             for (int i = 0; i < 10 && !stopping_.load(); ++i) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -305,7 +305,7 @@ void AudioPump::loop() {
             }
             // 每个会话只输出第一次发送失败，后续由会话恢复策略处理。
             if (failed_after == 1) {
-                std::fprintf(stderr, "音频 RTCP 保活包发送失败: %s\n", serr.c_str());
+                std::fprintf(stderr, SCRCTL_TR("Failed to send audio RTCP keepalive: %s\n"), serr.c_str());
             }
         }
 
@@ -318,7 +318,7 @@ void AudioPump::loop() {
                 const auto state = StreamSession::probe(device_, session_->started().session_uuid,
                                                         perr, verbose_);
                 if (state == StreamSession::ServerState::Ended) {
-                    std::fprintf(stderr, "音频：设备会话已结束（%llu ms 未收到音频），重建会话\n",
+                    std::fprintf(stderr, SCRCTL_TR("Audio: device session ended (%llu ms without audio); recreating session\n"),
                                  static_cast<unsigned long long>(quiet));
                     session_.reset();
                     clear_live();
@@ -365,7 +365,7 @@ void AudioPump::loop() {
             // 解码错误只输出前几次，避免每包重复日志。
             if (decode_failures_logged < 3) {
                 ++decode_failures_logged;
-                std::fprintf(stderr, "音频解码失败（载荷 %zu 字节）: %s\n", payload.size(),
+                std::fprintf(stderr, SCRCTL_TR("Audio decode failed (%zu-byte payload): %s\n"), payload.size(),
                              derr.c_str());
             }
             continue;

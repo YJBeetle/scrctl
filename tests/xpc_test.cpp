@@ -365,7 +365,7 @@ void test_message_envelope() {
     std::vector<uint8_t> lying_count = bytes_of({0x00, 0xf0, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00,
                                                  0xff, 0xff, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00});
     check(!decode(lying_count, err).has_value(), "count 与容器大小不符被拦: " + err);
-    check(err.find("条目数") != std::string::npos, "报的是条目数不符，而不是长度前缀");
+    check(err.find("Entry count") != std::string::npos, "报的是条目数不符，而不是长度前缀");
 
     std::string deep_err;
     Value leaf = make_null();

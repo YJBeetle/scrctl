@@ -173,7 +173,7 @@ void readable_wait_results() {
           "数据到达：清除超时标志");
     char byte = 0;
     check(b.read_exact(&byte, 1, err), "取走可读数据");
-    check(!b.wait_readable(0, err) && err == "等待超时",
+    check(!b.wait_readable(0, err) && err == "Wait timed out",
           "未提供超时标志时保留原有错误语义");
     b.close();
     timed_out = true;

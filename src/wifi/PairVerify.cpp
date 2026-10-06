@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "wifi/PairVerify.h"
 
 #include "wifi/Tlv.h"
@@ -8,7 +9,7 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
                              bool announce_failure) {
     PairVerifyResult result;
     if (!host.complete()) {
-        err = "配对记录不完整，没法签名";
+        err = SCRCTL_TR("Pairing record incomplete; cannot sign");
         result.outcome = VerifyOutcome::NotPaired;
         result.error = err;
         return result;
@@ -62,14 +63,14 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
             json::Value body = j_obj({{"pairVerifyFailed", j_obj({})}});
             channel.send_plain(j_obj({{"event", j_obj({{"_0", std::move(body)}})}}), ignored);
         }
-        err = "设备不认识这条配对记录（没配过，或者在设备上被删了）";
+        err = SCRCTL_TR("Device does not recognize this pairing record (not paired or pairing removed)");
         result.outcome = VerifyOutcome::NotPaired;
         result.error = err;
         return result;
     }
     const Bytes *peer_pub = tlv_get(second, TlvType::PublicKey);
     if (peer_pub == nullptr || peer_pub->size() != 32) {
-        err = "PV-Msg02 里没有 32 字节的公钥" +
+        err = SCRCTL_TR("PV-Msg02 missing 32-byte public key") +
               (tlv_err.empty() ? std::string() : std::string("：") + tlv_err);
         result.error = err;
         return result;
@@ -124,7 +125,7 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
             json::Value body = j_obj({{"pairVerifyFailed", j_obj({})}});
             channel.send_plain(j_obj({{"event", j_obj({{"_0", std::move(body)}})}}), ignored);
         }
-        err = "设备不认识这条配对记录（没配过，或者在设备上被删了）";
+        err = SCRCTL_TR("Device does not recognize this pairing record (not paired or pairing removed)");
         result.outcome = VerifyOutcome::NotPaired;
         result.error = err;
         return result;

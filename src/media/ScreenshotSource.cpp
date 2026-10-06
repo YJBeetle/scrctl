@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "media/ScreenshotSource.h"
 
 #include <chrono>
@@ -34,7 +35,7 @@ bool decode_png_bgra(const std::vector<uint8_t> &png, scrctl::Frame &out, std::s
 #ifdef SCRCTL_HAVE_LIBAV
     const AVCodec *codec = avcodec_find_decoder(AV_CODEC_ID_PNG);
     if (codec == nullptr) {
-        err = "FFmpeg 不提供 PNG 解码器";
+        err = SCRCTL_TR("FFmpeg has no PNG decoder");
         return false;
     }
     AVCodecContext *ctx = avcodec_alloc_context3(codec);
@@ -66,18 +67,18 @@ bool decode_png_bgra(const std::vector<uint8_t> &png, scrctl::Frame &out, std::s
                     sws_freeContext(sws);
                     ok = true;
                 } else {
-                    err = "无法创建 BGRA 像素转换（format=" +
+                    err = SCRCTL_TR("Cannot create BGRA conversion (format=") +
                           std::string(av_get_pix_fmt_name(static_cast<AVPixelFormat>(frame->format))) +
-                          "）";
+                          SCRCTL_TR(")");
                 }
             } else {
-                err = "PNG 图像尺寸必须为正数";
+                err = SCRCTL_TR("PNG dimensions must be positive");
             }
         } else {
-            err = "FFmpeg 无法解码 PNG 图像";
+            err = SCRCTL_TR("FFmpeg could not decode PNG image");
         }
     } else {
-        err = "无法分配 PNG 解码资源";
+        err = SCRCTL_TR("Failed to allocate PNG decode resources");
     }
     av_frame_free(&frame);
     av_packet_free(&pkt);
@@ -86,7 +87,7 @@ bool decode_png_bgra(const std::vector<uint8_t> &png, scrctl::Frame &out, std::s
 #else
     (void)png;
     (void)out;
-    err = "构建未包含 FFmpeg，截图模式缺少 PNG 解码后端";
+    err = SCRCTL_TR("FFmpeg is not included; screenshot mode has no PNG decoder");
     return false;
 #endif
 }
@@ -105,7 +106,7 @@ ScreenshotSource::~ScreenshotSource() {
 std::unique_ptr<ScreenshotSource> ScreenshotSource::start(remote::Device &device,
                                                           std::string &err, bool capture_first) {
     if (!device.rsd().has_service(kService)) {
-        err = "设备目录缺少服务：" + std::string(kService);
+        err = SCRCTL_TR("Device directory missing service: ") + std::string(kService);
         return nullptr;
     }
     std::unique_ptr<ScreenshotSource> src(new ScreenshotSource(device));
@@ -149,7 +150,7 @@ bool ScreenshotSource::capture_once(std::vector<uint8_t> &png, std::string &err)
     }
     const auto *image = out.find("image");
     if (image == nullptr || image->data.empty()) {
-        err = "截图响应缺少 image 数据";
+        err = SCRCTL_TR("Screenshot response missing image data");
         return false;
     }
     png = image->data;

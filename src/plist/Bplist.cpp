@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "plist/Bplist.h"
 
 #include <algorithm>
@@ -50,15 +51,15 @@ public:
 
     std::optional<Value> run(std::string &err) {
         if (!d_ || n_ > kMaxInput) {
-            err = "bplist 输入为空或超过 8 MiB";
+            err = SCRCTL_TR("bplist input empty or larger than 8 MiB");
             return std::nullopt;
         }
         if (n_ < 40) {
-            err = "bplist 太短";
+            err = SCRCTL_TR("bplist too short");
             return std::nullopt;
         }
         if (std::memcmp(d_, "bplist00", 8) != 0) {
-            err = "缺 bplist 魔数";
+            err = SCRCTL_TR("Missing bplist magic");
             return std::nullopt;
         }
         // 尾部 32 字节：6 未用 + 偏移长度 + 引用长度 + 对象数 + 根编号 + 偏移表位置
@@ -69,19 +70,19 @@ public:
         const std::size_t top = be_at(trailer + 16, 8);
         const std::size_t table = be_at(trailer + 24, 8);
         if (offset_size_ == 0 || offset_size_ > 8 || ref_size_ == 0 || ref_size_ > 8) {
-            err = "bplist 尾部声明的字节宽度不合理";
+            err = SCRCTL_TR("Invalid byte width in bplist trailer");
             return std::nullopt;
         }
         if (count == 0 || count > kMaxObjects) {
-            err = "bplist 对象数不合理: " + std::to_string(count);
+            err = SCRCTL_TR("Invalid bplist object count: ") + std::to_string(count);
             return std::nullopt;
         }
         if (table < 8 || table > n_ - 32 || count > (n_ - 32 - table) / offset_size_) {
-            err = "偏移表越界或被截断";
+            err = SCRCTL_TR("Offset table out of bounds or truncated");
             return std::nullopt;
         }
         if (top >= count) {
-            err = "根对象编号越界";
+            err = SCRCTL_TR("Root object index out of bounds");
             return std::nullopt;
         }
         offsets_.resize(count);
@@ -89,7 +90,7 @@ public:
         for (std::size_t i = 0; i < count; ++i) {
             offsets_[i] = be_at(d_ + table + i * offset_size_, offset_size_);
             if (offsets_[i] < 8 || offsets_[i] >= object_end_) {
-                err = "对象偏移落在尾部之后";
+                err = SCRCTL_TR("Object offset outside object region");
                 return std::nullopt;
             }
         }
@@ -116,20 +117,20 @@ private:
             return true;
         }
         if (!fits(pos, 1)) {
-            return fail("长度字段被截断");
+            return fail(SCRCTL_TR("Length field truncated"));
         }
         const uint8_t wide = d_[pos++];
         if ((wide >> 4) != 1) {
-            return fail("长形态的计数头不是 0x1X");
+            return fail(SCRCTL_TR("Extended count marker is not 0x1X"));
         }
         // 计数最多 8 字节。不夹这一刀，(wide & 0xF) 能到 15，于是这里去扫 32768
         // 个字节"凑一个大端整数"——虽然不越界，但纯属浪费，而且凑出来的数毫无意义。
         if ((wide & 0xF) > 3) {
-            return fail("计数宽度不合理");
+            return fail(SCRCTL_TR("Invalid count width"));
         }
         const std::size_t width = std::size_t{1} << (wide & 0xF);
         if (!fits(pos, width)) {
-            return fail("计数字节被截断");
+            return fail(SCRCTL_TR("Count bytes truncated"));
         }
         out = be_at(d_ + pos, width);
         pos += width;
@@ -146,12 +147,12 @@ private:
     bool decode(std::size_t idx, int depth, Value &out) {
         // 文件对象数不能限制展开量：同一子树可被多次引用，造成指数级复制。
         if (++expanded_nodes_ > kMaxExpandedNodes)
-            return fail("bplist 展开节点超过 65536 个");
+            return fail(SCRCTL_TR("bplist expanded nodes exceed 65536"));
         if (depth > kMaxDepth) {
-            return fail("嵌套过深（可能有环）");
+            return fail(SCRCTL_TR("Nesting too deep (possible cycle)"));
         }
         if (idx >= offsets_.size()) {
-            return fail("对象编号越界");
+            return fail(SCRCTL_TR("Object index out of bounds"));
         }
         std::size_t pos = offsets_[idx];
         const uint8_t marker = d_[pos++];
@@ -168,14 +169,14 @@ private:
                     out = Value::Bool(low == 9);
                     return true;
                 }
-                return fail("保留标志位");
+                return fail(SCRCTL_TR("Reserved marker"));
             case 0x1: {  // 整数，字节数 = 2^low
                 if (low > 3) {
-                    return fail("整数宽度超过 8 字节");
+                    return fail(SCRCTL_TR("Integer width exceeds 8 bytes"));
                 }
                 const std::size_t width = std::size_t{1} << low;
                 if (!fits(pos, width)) {
-                    return fail("整数被截断");
+                    return fail(SCRCTL_TR("Integer truncated"));
                 }
                 // 窄形态一律按**无符号**读：这个格式里没有"有符号窄整数"的概念，
                 // 负数在写入方就用满 8 字节。按符号扩展会把 0xFF 读成 -1，
@@ -186,10 +187,10 @@ private:
             }
             case 0x2: {  // 浮点
                 if (low != 3) {
-                    return fail("只支持 8 字节浮点");
+                    return fail(SCRCTL_TR("Only 8-byte reals are supported"));
                 }
                 if (!fits(pos, 8)) {
-                    return fail("浮点被截断");
+                    return fail(SCRCTL_TR("Real truncated"));
                 }
                 const uint64_t bits = be_at(d_ + pos, 8);
                 double v = 0;
@@ -201,7 +202,7 @@ private:
             case 0x4: {  // data
                 std::size_t len = 0;
                 if (!read_length(pos, low, len) || !fits(pos, len) || !consume_bytes(len)) {
-                    return fail("data 越界");
+                    return fail(SCRCTL_TR("Data out of bounds"));
                 }
                 out = Value::OfData(std::vector<uint8_t>(d_ + pos, d_ + pos + len));
                 return true;
@@ -209,7 +210,7 @@ private:
             case 0x5: {  // ASCII
                 std::size_t len = 0;
                 if (!read_length(pos, low, len) || !fits(pos, len) || !consume_bytes(len)) {
-                    return fail("字符串越界");
+                    return fail(SCRCTL_TR("String out of bounds"));
                 }
                 out.kind = Kind::String;
                 out.string.assign(reinterpret_cast<const char *>(d_ + pos), len);
@@ -220,14 +221,14 @@ private:
                 // 除过去而不是乘过去：chars * 2 会绕回，绕回之后守卫形同不存在。
                 if (!read_length(pos, low, chars) || pos > object_end_ ||
                     chars > (object_end_ - pos) / 2 || !consume_bytes(chars * 3)) {
-                    return fail("UTF-16 串越界");
+                    return fail(SCRCTL_TR("UTF-16 string out of bounds"));
                 }
                 out.kind = Kind::String;
                 for (std::size_t i = 0; i < chars; ++i) {
                     uint32_t u = static_cast<uint32_t>(d_[pos + i * 2]) << 8 | d_[pos + i * 2 + 1];
                     if (u >= 0xD800 && u < 0xDC00) {
                         if (i + 1 == chars)
-                            return fail("UTF-16 缺少低代理项");
+                            return fail(SCRCTL_TR("UTF-16 missing low surrogate"));
                         const uint32_t lo =
                             static_cast<uint32_t>(d_[pos + (i + 1) * 2]) << 8 |
                             d_[pos + (i + 1) * 2 + 1];
@@ -235,9 +236,9 @@ private:
                             u = 0x10000 + ((u - 0xD800) << 10) + (lo - 0xDC00);
                             ++i;
                         } else
-                            return fail("UTF-16 代理项不匹配");
+                            return fail(SCRCTL_TR("UTF-16 surrogate mismatch"));
                     } else if (u >= 0xDC00 && u < 0xE000) {
-                        return fail("UTF-16 出现孤立低代理项");
+                        return fail(SCRCTL_TR("UTF-16 isolated low surrogate"));
                     }
                     append_utf8(out.string, u);
                 }
@@ -251,17 +252,17 @@ private:
                 }
                 // pos > n_ 时 (n_ - pos) 会绕回一个巨大值，下面的除法守卫就形同不存在。
                 if (pos > object_end_ || count > (object_end_ - pos) / ref_size_) {
-                    return fail("元素引用数超出剩余字节");
+                    return fail(SCRCTL_TR("Element references exceed remaining bytes"));
                 }
                 // 字典的引用表是"先全部键、再全部值"连着排的两段，所以下面按
                 // (count + i) 取值。只按 count 检查长度的话，值那半截落在缓冲区
                 // 之外——count 只要超过剩余引用数的一半就会越界读。
                 const std::size_t refs = high == 0xD ? count * 2 : count;
                 if (refs > (object_end_ - pos) / ref_size_) {
-                    return fail("字典的键值两段引用放不下");
+                    return fail(SCRCTL_TR("Dictionary key/value references exceed available bytes"));
                 }
                 if (refs > kMaxExpandedNodes - expanded_nodes_)
-                    return fail("bplist 容器展开节点超过限制");
+                    return fail(SCRCTL_TR("bplist expanded container exceeds node limit"));
                 if (high == 0xA) {
                     out = Value::Array();
                     out.array.resize(count);
@@ -281,7 +282,7 @@ private:
                     Value k;
                     Value v;
                     if (!decode(key, depth + 1, k) || !k.is_string()) {
-                        return fail("字典键必须是字符串");
+                        return fail(SCRCTL_TR("Dictionary key must be a string"));
                     }
                     if (!decode(val, depth + 1, v)) {
                         return false;
@@ -292,7 +293,7 @@ private:
                 return true;
             }
             default:
-                return fail("不支持的 bplist 标志");
+                return fail(SCRCTL_TR("Unsupported bplist marker"));
         }
     }
 
@@ -319,7 +320,7 @@ private:
     std::size_t object_end_ = 0, expanded_nodes_ = 0, expanded_bytes_ = 0;
     bool consume_bytes(std::size_t n) {
         if (n > kMaxExpandedBytes - expanded_bytes_)
-            return fail("bplist 展开数据超过 16 MiB");
+            return fail(SCRCTL_TR("bplist expanded data exceeds 16 MiB"));
         expanded_bytes_ += n;
         return true;
     }

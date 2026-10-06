@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "remote/Pasteboard.h"
 
 #include <cstdio>
@@ -88,12 +89,12 @@ bool Pasteboard::set_text(Device &device, const std::string &text, std::string &
     }
     xpc::Value reply;
     if (!conn->call(build_set(text), reply, 20000, err)) {
-        err = "SET 失败: " + err;
+        err = SCRCTL_TR("SET failed: ") + err;
         return false;
     }
     // 设备对形状不对的 SET 也可能回个 SET_REPLY，所以命令名要核一下。
     if (reply.at("command").as_string_or("") != "SET_REPLY") {
-        err = "SET 的回信不是 SET_REPLY: " + xpc::describe(reply).substr(0, 300);
+        err = SCRCTL_TR("SET response is not SET_REPLY: ") + xpc::describe(reply).substr(0, 300);
         return false;
     }
     return true;
@@ -106,14 +107,14 @@ bool Pasteboard::get_text(Device &device, std::string &out, std::string &err, bo
     }
     xpc::Value reply;
     if (!conn->call(build_pull(), reply, 20000, err)) {
-        err = "PULL 失败: " + err;
+        err = SCRCTL_TR("PULL failed: ") + err;
         return false;
     }
     const auto *text = find_text(reply);
     if (text == nullptr) {
         // 剪贴板是空的、里面只有图片、或者我们的请求形状不对，都走这一支。
         // 把回信带上：不然"没读到"和"设备其实在报错"分不开。
-        err = "回信里没有纯文本表示形式: " + xpc::describe(reply).substr(0, 400);
+        err = SCRCTL_TR("Response has no plain-text representation: ") + xpc::describe(reply).substr(0, 400);
         return false;
     }
     out = *text;

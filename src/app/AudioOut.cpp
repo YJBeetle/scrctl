@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "app/AudioOut.h"
 
 #include <cstdio>
@@ -34,15 +35,16 @@ bool AudioOut::open(scrctl::media::AudioPump &pump, std::string &err) {
         pump_ = nullptr;
         char buf[192];
         std::snprintf(buf, sizeof(buf),
-                      "音频设备返回 %d Hz / %d 声道 / 格式 0x%x，流要求 %d Hz / "
-                      "%d 声道 / 0x%x，无法直接播放",
+                      SCRCTL_TR(
+                          "Audio device returned %d Hz / %d channels / format 0x%x; stream requires %d Hz "
+                          "/ %d channels / 0x%x. Direct playback unavailable"),
                       have.freq, have.channels, static_cast<unsigned>(have.format), want.freq,
                       want.channels, static_cast<unsigned>(want.format));
         err = buf;
         return false;
     }
     SDL_PauseAudioDevice(dev_, 0);
-    std::printf("音频输出已打开：%d Hz / %d 声道，后端 %s\n", have.freq, have.channels,
+    std::printf(SCRCTL_TR("Audio output opened: %d Hz / %d channels, backend %s\n"), have.freq, have.channels,
                 SDL_GetCurrentAudioDriver());
     return true;
 }

@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "wifi/Opack.h"
 
 #include <cstdio>
@@ -86,7 +87,7 @@ bool encode_one(const OpackValue &v, Bytes &out, std::string &err) {
     case OpackValue::Kind::kInt: {
         const int64_t n = v.integer;
         if (n < 0) {
-            err = "OPACK 编码器不写负整数（走浮点那一档，我们用不到）";
+            err = SCRCTL_TR("OPACK encoder does not support negative integers");
             return false;
         }
         const auto u = static_cast<uint64_t>(n);
@@ -147,7 +148,7 @@ bool encode_one(const OpackValue &v, Bytes &out, std::string &err) {
         return true;
     }
     }
-    err = "OPACK 编码：不认识的值类型";
+    err = SCRCTL_TR("OPACK encode: unknown value type");
     return false;
 }
 
@@ -178,11 +179,11 @@ bool decode_payload(const Bytes &in, size_t &pos, uint8_t type, Bytes &payload, 
     } else if (type >= 0x70 && type <= 0x90) {
         len = type - 0x70;
     } else {
-        err = "OPACK 解码：长度形态不认识";
+        err = SCRCTL_TR("OPACK decode: unknown length form");
         return false;
     }
     if (pos + len > in.size()) {
-        err = "OPACK 解码：载荷越过缓冲尾";
+        err = SCRCTL_TR("OPACK decode: payload exceeds buffer");
         return false;
     }
     payload.assign(in.begin() + static_cast<long>(pos), in.begin() + static_cast<long>(pos + len));
@@ -192,16 +193,16 @@ bool decode_payload(const Bytes &in, size_t &pos, uint8_t type, Bytes &payload, 
 
 bool decode_one(const Bytes &in, size_t &pos, OpackValue &out, std::string &err, int depth) {
     if (depth > 16) {
-        err = "OPACK 解码：嵌套过深，按坏数据拒收";
+        err = SCRCTL_TR("OPACK decode: nesting too deep");
         return false;
     }
     uint8_t type = 0;
     if (!read_u8(in, pos, type)) {
-        err = "OPACK 解码：缓冲不够一个类型字节";
+        err = SCRCTL_TR("OPACK decode: missing type byte");
         return false;
     }
     if (type == kTerminator) {
-        err = "OPACK 解码：终止符出现在值的位置";
+        err = SCRCTL_TR("OPACK decode: terminator in value position");
         return false;
     }
     if (type == 0x01 || type == 0x02) {
@@ -254,7 +255,7 @@ bool decode_one(const Bytes &in, size_t &pos, OpackValue &out, std::string &err,
         for (size_t i = 0; i < n; ++i) {
             if (pos < in.size() && in[pos] == kTerminator) {
                 if (!terminated) {
-                    err = "OPACK 解码：定长数组里冒出终止符";
+                    err = SCRCTL_TR("OPACK decode: terminator in fixed-length array");
                     return false;
                 }
                 ++pos;
@@ -276,7 +277,7 @@ bool decode_one(const Bytes &in, size_t &pos, OpackValue &out, std::string &err,
         for (size_t i = 0; i < n; ++i) {
             if (pos < in.size() && in[pos] == kTerminator) {
                 if (!terminated) {
-                    err = "OPACK 解码：定长字典里冒出终止符";
+                    err = SCRCTL_TR("OPACK decode: terminator in fixed-length dictionary");
                     return false;
                 }
                 pos += 2;  // 键值各一个终止符
@@ -291,7 +292,7 @@ bool decode_one(const Bytes &in, size_t &pos, OpackValue &out, std::string &err,
         }
         return true;
     }
-    err = "OPACK 解码：不认识的类型字节 0x" + [type] {
+    err = SCRCTL_TR("OPACK decode: unknown type byte 0x") + [type] {
         char buf[3];
         std::snprintf(buf, sizeof(buf), "%02x", type);
         return std::string(buf);
@@ -323,7 +324,7 @@ bool opack_decode(const Bytes &in, OpackValue &out, std::string &err) {
         return false;
     }
     if (pos != in.size()) {
-        err = "OPACK 解码：解完还剩 " + std::to_string(in.size() - pos) + " 字节尾巴";
+        err = SCRCTL_TR("OPACK decode: ") + std::to_string(in.size() - pos) + SCRCTL_TR(" trailing bytes");
         return false;
     }
     return true;

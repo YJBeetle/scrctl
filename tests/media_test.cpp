@@ -399,7 +399,7 @@ int main() {
         check(!scrctl::media::decode_png_bgra(garbage, g, err) && !err.empty(),
               "非 PNG 字节要失败且给原因: " + err);
 #else
-        check(!ok && err.find("libav") != std::string::npos,
+        check(!ok && err.find("FFmpeg") != std::string::npos,
               "没编 libav 的构建要明说缺后端: " + err);
 #endif
     }

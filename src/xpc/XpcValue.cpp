@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "xpc/XpcValue.h"
 
 #include <algorithm>
@@ -183,7 +184,7 @@ public:
 
     bool u32(uint32_t &v) {
         if (remaining() < 4) {
-            return fail("读 u32 越界");
+            return fail(SCRCTL_TR("u32 read out of bounds"));
         }
         v = static_cast<uint32_t>(p_[0]) | static_cast<uint32_t>(p_[1]) << 8 |
             static_cast<uint32_t>(p_[2]) << 16 | static_cast<uint32_t>(p_[3]) << 24;
@@ -193,7 +194,7 @@ public:
 
     bool u64(uint64_t &v) {
         if (remaining() < 8) {
-            return fail("读 u64 越界");
+            return fail(SCRCTL_TR("u64 read out of bounds"));
         }
         v = 0;
         for (int i = 0; i < 8; ++i) {
@@ -205,7 +206,7 @@ public:
 
     bool take(std::size_t n, std::vector<uint8_t> &out) {
         if (remaining() < n) {
-            return fail("读定长字节越界");
+            return fail(SCRCTL_TR("Fixed-length byte read out of bounds"));
         }
         out.assign(p_, p_ + n);
         p_ += n;
@@ -228,7 +229,7 @@ public:
         const uint8_t *start = p_;
         const uint8_t *nul = static_cast<const uint8_t *>(std::memchr(p_, 0, remaining()));
         if (nul == nullptr) {
-            return fail("键在本段内没有 NUL 终结符");
+            return fail(SCRCTL_TR("Key has no NUL terminator in this segment"));
         }
         out.assign(reinterpret_cast<const char *>(p_), static_cast<std::size_t>(nul - p_));
         p_ = nul + 1;
@@ -241,7 +242,7 @@ public:
     /// 内容中间去，而这种错误在「容器正好是最后一个条目」时完全看不出来。
     bool enter(std::size_t n, Reader &out) {
         if (remaining() < n) {
-            return fail("长度前缀超出了剩余字节");
+            return fail(SCRCTL_TR("Length prefix exceeds remaining bytes"));
         }
         out = Reader(p_, p_ + n);
         p_ += n;
@@ -263,7 +264,7 @@ private:
 
 bool decode_into(Reader &r, Value &out, int depth) {
     if (depth > kMaxDepth) {
-        r.set_err("XPC 嵌套过深");
+        r.set_err(SCRCTL_TR("XPC nesting too deep"));
         return false;
     }
     uint32_t tag = 0;
@@ -323,7 +324,7 @@ bool decode_into(Reader &r, Value &out, int depth) {
                 return false;
             }
             if (len == 0 || len > kMaxLen) {
-                r.set_err("字符串长度不合理");
+                r.set_err(SCRCTL_TR("Invalid string length"));
                 return false;
             }
             std::vector<uint8_t> bytes;
@@ -344,7 +345,7 @@ bool decode_into(Reader &r, Value &out, int depth) {
             }
             if (len > kMaxLen) {
                 // 把两个数都打出来：只说"不合理"的话，下一步还得再跑一遍才知道差多少。
-                r.set_err("数据段长度不合理: 声明 " + std::to_string(len) + " 字节，上限 " +
+                r.set_err(SCRCTL_TR("Invalid data length: declared ") + std::to_string(len) + SCRCTL_TR(" bytes, limit ") +
                           std::to_string(kMaxLen));
                 return false;
             }
@@ -389,7 +390,7 @@ bool decode_into(Reader &r, Value &out, int depth) {
                 return false;
             }
             if (total < 4) {
-                r.set_err("容器长度前缀连 count 字段都装不下");
+                r.set_err(SCRCTL_TR("Container length cannot hold count field"));
                 return false;
             }
             // 段边界收紧到 total，条目里再出现「本段内找不到 NUL」就是真畸形。
@@ -408,7 +409,7 @@ bool decode_into(Reader &r, Value &out, int depth) {
             // 免得为一个伪造的数字 resize 出巨量内存。
             const std::size_t min_entry = tag == static_cast<uint32_t>(Type::Array) ? 4 : 8;
             if (static_cast<std::size_t>(count) > body.remaining() / min_entry) {
-                body.set_err("条目数与容器大小不符");
+                body.set_err(SCRCTL_TR("Entry count does not match container size"));
                 r.set_err(body.err());
                 return false;
             }
@@ -427,14 +428,14 @@ bool decode_into(Reader &r, Value &out, int depth) {
                 }
             }
             if (!parsed) {
-                r.set_err(body.err().empty() ? "容器条目解码失败" : body.err());
+                r.set_err(body.err().empty() ? SCRCTL_TR("Container entry decode failed") : body.err());
                 return false;
             }
             out = std::move(v);
             return true;
         }
         default:
-            r.set_err("不支持的 XPC 类型标记 0x" + hex(tag));
+            r.set_err(SCRCTL_TR("Unsupported XPC type marker 0x") + hex(tag));
             return false;
     }
 }
@@ -586,13 +587,13 @@ std::vector<uint8_t> encode(const Value &v) {
 
 std::optional<Value> decode(std::span<const uint8_t> buf, std::string &err) {
     if (buf.size() > kMaxBuffer) {
-        err = "缓冲区过大";
+        err = SCRCTL_TR("Buffer too large");
         return std::nullopt;
     }
     Reader r(buf.data(), buf.data() + buf.size());
     Value v;
     if (!decode_into(r, v, 0)) {
-        err = r.err().empty() ? "解码失败" : r.err();
+        err = r.err().empty() ? SCRCTL_TR("Decode failed") : r.err();
         return std::nullopt;
     }
     return v;
@@ -626,13 +627,13 @@ Status decode_message(std::span<const uint8_t> buf, Message &out, std::size_t &c
                       std::string &err) {
     consumed = 0;
     if (buf.size() < 24) {
-        err = "信封不足 24 字节";
+        err = SCRCTL_TR("Envelope shorter than 24 bytes");
         return Status::NeedMore;
     }
     const uint32_t magic = static_cast<uint32_t>(buf[0]) | static_cast<uint32_t>(buf[1]) << 8 |
                            static_cast<uint32_t>(buf[2]) << 16 | static_cast<uint32_t>(buf[3]) << 24;
     if (magic != kWrapperMagic) {
-        err = "wrapper magic 不符：0x" + hex(magic);
+        err = SCRCTL_TR("Wrapper magic mismatch: 0x") + hex(magic);
         return Status::Malformed;
     }
     uint64_t body_len = 0;
@@ -640,12 +641,12 @@ Status decode_message(std::span<const uint8_t> buf, Message &out, std::size_t &c
         body_len |= static_cast<uint64_t>(buf[8 + i]) << (8 * i);
     }
     if (body_len > kMaxBuffer) {
-        err = "消息长度不合理：" + u64_to_string(body_len);
+        err = SCRCTL_TR("Invalid message length: ") + u64_to_string(body_len);
         return Status::Malformed;
     }
     const std::size_t total = 24 + static_cast<std::size_t>(body_len);
     if (buf.size() < total) {
-        err = "还差 " + u64_to_string(total - buf.size()) + " 字节";
+        err = SCRCTL_TR("Missing ") + u64_to_string(total - buf.size()) + SCRCTL_TR(" bytes");
         return Status::NeedMore;
     }
 
@@ -659,21 +660,21 @@ Status decode_message(std::span<const uint8_t> buf, Message &out, std::size_t &c
         Reader r(buf.data() + 24, buf.data() + total);
         uint32_t pmagic = 0;
         if (!r.u32(pmagic) || pmagic != kPayloadMagic) {
-            err = "payload magic 不符：0x" + hex(pmagic);
+            err = SCRCTL_TR("Payload magic mismatch: 0x") + hex(pmagic);
             return Status::Malformed;
         }
         uint32_t version = 0;
         if (!r.u32(version)) {
-            err = "读不到协议版本";
+            err = SCRCTL_TR("Cannot read protocol version");
             return Status::Malformed;
         }
         if (version != kProtocolVersion) {
-            err = "XPC 协议版本不支持：0x" + hex(version);
+            err = SCRCTL_TR("Unsupported XPC protocol version: 0x") + hex(version);
             return Status::Malformed;
         }
         Value v;
         if (!decode_into(r, v, 0)) {
-            err = r.err().empty() ? "载荷解码失败" : r.err();
+            err = r.err().empty() ? SCRCTL_TR("Payload decode failed") : r.err();
             return Status::Malformed;
         }
         m.has_body = true;
@@ -714,7 +715,7 @@ std::string describe(const Value &v, std::size_t budget) {
             return "<" + u64_to_string(v.data.size()) + " bytes>";
         case Type::FileTransfer:
             return "<file " + u64_to_string(v.file_size) + " bytes, id=" +
-                   u64_to_string(v.transfer_id) + (v.data.empty() ? "" : ", 已到") + ">";
+                   u64_to_string(v.transfer_id) + (v.data.empty() ? "" : SCRCTL_TR(", received ")) + ">";
         case Type::Uuid: {
             static constexpr char kHex[] = "0123456789abcdef";
             std::string s;

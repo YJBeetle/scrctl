@@ -1,5 +1,7 @@
 #pragma once
 
+#include "i18n/Translation.h"
+
 #include "decode/Decoder.h"
 #include <string>
 
@@ -15,7 +17,7 @@ class FrameSource {
 
     [[nodiscard]] virtual bool finished() const { return false; }
     /// 源结束时提供原因。实时源应区分设备断开和暂时的取帧失败。
-    [[nodiscard]] virtual std::string end_reason() const { return "源已结束"; }
+    [[nodiscard]] virtual std::string end_reason() const { return SCRCTL_TR("Source ended"); }
     /// 文件回放要自己按标称帧率追节拍；实时流的到达节奏就是设备的节奏。
     [[nodiscard]] virtual bool paces_itself() const { return false; }
     /// 输出统计；实现按各自时间基线计算速率，调用方按固定周期调用。

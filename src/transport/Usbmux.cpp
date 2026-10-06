@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "Usbmux.h"
 
 #include <arpa/inet.h>
@@ -131,11 +132,11 @@ bool Socket::write_all(const void *data, size_t len, std::string &err) {
             if (errno == EINTR) {
                 continue;
             }
-            err = std::string("send 失败: ") + std::strerror(errno);
+            err = std::string(SCRCTL_TR("send failed: ")) + std::strerror(errno);
             return false;
         }
         if (n == 0) {
-            err = "对端关闭了写方向";
+            err = SCRCTL_TR("Peer closed write direction");
             return false;
         }
         p += static_cast<size_t>(n);
@@ -157,14 +158,14 @@ bool Socket::read_exact(void *data, size_t len, std::string &err) {
                 continue;
             }
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                err = "读超时（对端在时限内没给字节）";
+                err = SCRCTL_TR("Read timed out (no bytes before deadline)");
                 return false;
             }
-            err = std::string("recv 失败: ") + std::strerror(errno);
+            err = std::string(SCRCTL_TR("recv failed: ")) + std::strerror(errno);
             return false;
         }
         if (n == 0) {
-            err = "对端关闭（只读到 " + std::to_string(got) + "/" + std::to_string(len) + "）";
+            err = SCRCTL_TR("Peer closed (received only ") + std::to_string(got) + "/" + std::to_string(len) + SCRCTL_TR(")");
             return false;
         }
         got += static_cast<size_t>(n);
@@ -177,7 +178,7 @@ bool Socket::set_read_timeout(int ms, std::string &err) {
     tv.tv_sec = ms / 1000;
     tv.tv_usec = (ms % 1000) * 1000;
     if (::setsockopt(fd_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) != 0) {
-        err = std::string("设读超时失败: ") + std::strerror(errno);
+        err = std::string(SCRCTL_TR("Failed to set read timeout: ")) + std::strerror(errno);
         return false;
     }
     return true;
@@ -190,7 +191,7 @@ void Socket::interrupt() {
 bool Socket::wait_readable(int ms, std::string &err, bool *timed_out) {
     if (timed_out) *timed_out = false;
     if (fd_ < 0) {
-        err = "socket 已关闭";
+        err = SCRCTL_TR("Socket closed");
         return false;
     }
     pollfd pfd{fd_, POLLIN, 0};
@@ -204,12 +205,12 @@ bool Socket::wait_readable(int ms, std::string &err, bool *timed_out) {
                 *timed_out = true;
                 err.clear();
             } else {
-                err = "等待超时";
+                err = SCRCTL_TR("Wait timed out");
             }
             return false;
         }
         if (errno != EINTR) {
-            err = std::string("poll 失败: ") + std::strerror(errno);
+            err = std::string(SCRCTL_TR("poll failed: ")) + std::strerror(errno);
             return false;
         }
     }
@@ -223,7 +224,7 @@ bool Socket::read_len_prefixed_be(std::vector<uint8_t> &out, std::string &err) {
     const uint32_t len = uint32_t(hdr[0]) << 24 | uint32_t(hdr[1]) << 16 | uint32_t(hdr[2]) << 8 |
                          hdr[3];
     if (len < 4 || len > (32u << 20)) {
-        err = "lockdown 帧长度异常: " + std::to_string(len);
+        err = SCRCTL_TR("Invalid lockdown frame length: ") + std::to_string(len);
         return false;
     }
     out.resize(len);
@@ -250,14 +251,14 @@ std::string Usbmux::socket_path() { return "/var/run/usbmuxd"; }
 std::optional<Usbmux> Usbmux::open(std::string &err) {
     const int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
     if (fd < 0) {
-        err = std::string("socket 失败: ") + std::strerror(errno);
+        err = std::string(SCRCTL_TR("socket failed: ")) + std::strerror(errno);
         return std::nullopt;
     }
     sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
     std::strncpy(addr.sun_path, socket_path().c_str(), sizeof(addr.sun_path) - 1);
     if (::connect(fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
-        err = "连接 " + socket_path() + " 失败: " + std::strerror(errno);
+        err = SCRCTL_TR("Connect to ") + socket_path() + SCRCTL_TR(" failed: ") + std::strerror(errno);
         ::close(fd);
         return std::nullopt;
     }
@@ -305,7 +306,7 @@ bool Usbmux::round_trip(const plist::Value &request, plist::Value &reply, std::s
     // 的话，一个 0xFFFFFFFF 就会让我们先去申请 4GB 内存——那是 DoS，不是解析失败。
     // usbmuxd 的回复实际是 KB 级（设备列表、配对记录），16MB 已经宽到没边。
     if (total < kHeaderLen || total - kHeaderLen > kMaxPayload) {
-        err = "mux 帧长度异常: " + std::to_string(total);
+        err = SCRCTL_TR("Invalid mux frame length: ") + std::to_string(total);
         return false;
     }
     std::vector<uint8_t> payload(total - kHeaderLen);
@@ -318,7 +319,7 @@ bool Usbmux::round_trip(const plist::Value &request, plist::Value &reply, std::s
     auto parsed = plist::parse(std::string_view(
         reinterpret_cast<const char *>(payload.data()), payload.size()));
     if (!parsed) {
-        err = "mux 回复不是合法 plist";
+        err = SCRCTL_TR("mux response is not a valid plist");
         return false;
     }
     reply = std::move(*parsed);
@@ -332,7 +333,7 @@ bool Usbmux::list_devices(std::vector<DeviceRecord> &out, std::string &err) {
     }
     const auto *list = reply.find("DeviceList");
     if (list == nullptr) {
-        err = "ListDevices 回复里没有 DeviceList";
+        err = SCRCTL_TR("ListDevices response missing DeviceList");
         return false;
     }
     for (const auto &rec : list->array) {
@@ -354,7 +355,7 @@ std::optional<Socket> Usbmux::connect(uint32_t device_id, uint16_t port, std::st
     const auto *number_val = reply.find("Number");
     const int number = number_val != nullptr ? static_cast<int>(number_val->as_int_or(-1)) : -1;
     if (number != 0) {
-        err = "Connect 失败，usbmuxd 返回 Number=" + std::to_string(number);
+        err = SCRCTL_TR("Connect failed, usbmuxd returned Number=") + std::to_string(number);
         return std::nullopt;
     }
     // 此后同一 socket 即到 device:port 的透明通道，把 fd 交出去。
@@ -375,8 +376,8 @@ bool Usbmux::read_pair_record(std::string_view udid, std::vector<uint8_t> &out,
     const auto *data = reply.find("PairRecordData");
     if (data == nullptr || data->data.empty()) {
         const auto *e = reply.find("MessageType");
-        err = "ReadPairRecord 没有返回 PairRecordData（回复 " +
-              std::string(e ? e->as_string_or("?") : "?") + "）；设备可能尚未信任本机";
+        err = SCRCTL_TR("ReadPairRecord response missing PairRecordData (response ") +
+              std::string(e ? e->as_string_or("?") : "?") + SCRCTL_TR("); device may not trust this computer yet");
         return false;
     }
     out = data->data;

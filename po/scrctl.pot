@@ -1,0 +1,2809 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the scrctl package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: scrctl 0.1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-07 02:56+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=CHARSET\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: src/remote/App.cpp:105
+#, c-format
+msgid ""
+"Launching %s: previous process has not exited (attempt %d); retry in 500 ms\n"
+msgstr ""
+
+#: src/remote/App.cpp:133
+msgid ""
+"Device appservice does not advertise streamapplist; large listapps fallback "
+"is disabled"
+msgstr ""
+
+#: src/remote/App.cpp:192
+msgid "Device has no app with bundle ID "
+msgstr ""
+
+#: src/remote/App.cpp:205
+#, c-format
+msgid "stop_app(%s): app is not running\n"
+msgstr ""
+
+#: src/remote/App.cpp:226 src/remote/App.cpp:231
+msgid "Failed to terminate "
+msgstr ""
+
+#: src/remote/App.cpp:226 src/remote/App.cpp:231
+msgid " process "
+msgstr ""
+
+#: src/remote/App.cpp:226 src/media/StreamSession.cpp:127
+#: src/transport/TcpConnect.cpp:28
+msgid ": "
+msgstr ""
+
+#: src/remote/App.cpp:232
+msgid "; no reply after three attempts: "
+msgstr ""
+
+#: src/remote/App.cpp:253
+#, c-format
+msgid ""
+"stop_app(%s): signal sent, but process is still listed (exit may be "
+"pending)\n"
+msgstr ""
+
+#: src/remote/Rsd.cpp:99
+#, c-format
+msgid ""
+"Invalid numeric component in SCRCTL_COREDEVICE_VERSION: %s (using 629.3)\n"
+msgstr ""
+
+#: src/remote/Rsd.cpp:112
+#, c-format
+msgid "  coreDeviceVersion overridden by environment: %s (default: 629.3)\n"
+msgstr ""
+
+#: src/remote/Rsd.cpp:168 src/transport/Usbmux.cpp:261
+msgid "Connect to "
+msgstr ""
+
+#: src/remote/Rsd.cpp:168
+msgid " port "
+msgstr ""
+
+#: src/remote/Rsd.cpp:168 src/remote/Rsd.cpp:378 src/remote/Device.cpp:132
+#: src/transport/Usbmux.cpp:261 src/wifi/PairRecord.cpp:285
+msgid " failed: "
+msgstr ""
+
+#: src/remote/Rsd.cpp:177
+msgid " HTTP/2 handshake failed: "
+msgstr ""
+
+#: src/remote/Rsd.cpp:189 src/remote/Rsd.cpp:197 src/remote/Rsd.cpp:205
+#: src/remote/Rsd.cpp:213
+msgid "Service connection is not RemoteXPC"
+msgstr ""
+
+#: src/remote/Rsd.cpp:228
+msgid " failed"
+msgstr ""
+
+#: src/remote/Rsd.cpp:232
+msgid "(code "
+msgstr ""
+
+#: src/remote/Rsd.cpp:232 src/media/ScreenshotSource.cpp:72
+#: src/media/FramePump.cpp:484 src/transport/Usbmux.cpp:168
+#: src/net/Stack.cpp:350 src/net/UdpSocket.cpp:104 src/net/UdpSocket.cpp:130
+#: src/net/TcpStream.cpp:41 src/net/TcpStream.cpp:118 src/net/TcpStream.cpp:122
+#: src/wifi/RemotePairing.cpp:35
+msgid ")"
+msgstr ""
+
+#: src/remote/Rsd.cpp:245
+msgid "; original error: "
+msgstr ""
+
+#: src/remote/Rsd.cpp:270
+msgid " failed; response missing CoreDevice.output: "
+msgstr ""
+
+#: src/remote/Rsd.cpp:282
+msgid "Streaming feature requires an XPC service connection"
+msgstr ""
+
+#: src/remote/Rsd.cpp:297
+msgid "Service connection is not an XPC channel"
+msgstr ""
+
+#: src/remote/Rsd.cpp:316
+msgid " response missing both sideChannelStatus and error: "
+msgstr ""
+
+#: src/remote/Rsd.cpp:322
+msgid " failed mid-stream: "
+msgstr ""
+
+#: src/remote/Rsd.cpp:378
+msgid "Connect to RSD port "
+msgstr ""
+
+#: src/remote/Rsd.cpp:383
+msgid "RSD control channel handshake failed: "
+msgstr ""
+
+#: src/remote/Rsd.cpp:393
+msgid "peer_info missing Services"
+msgstr ""
+
+#: src/remote/Rsd.cpp:470
+msgid "Device directory missing service "
+msgstr ""
+
+#: src/remote/Rsd.cpp:470
+msgid "."
+msgstr ""
+
+#: src/remote/Rsd.cpp:472
+msgid "Directory is empty; check tunnel setup and DDI mounting."
+msgstr ""
+
+#: src/remote/Rsd.cpp:481
+msgid "Device directory contains "
+msgstr ""
+
+#: src/remote/Rsd.cpp:481
+msgid " services, including "
+msgstr ""
+
+#: src/remote/Rsd.cpp:482
+msgid " com.apple.coredevice.* services:\n"
+msgstr ""
+
+#: src/remote/Rsd.cpp:485
+msgid ""
+"  (none found; check DDI mounting through Xcode and the CoreDevice services "
+"available on this device)\n"
+msgstr ""
+
+#: src/remote/Rsd.cpp:492
+msgid ""
+"Include this diagnostic when reporting the issue. For the full directory and "
+"feature lists, run feature_probe --all to print all "
+msgstr ""
+
+#: src/remote/Rsd.cpp:494
+msgid " services.\n"
+msgstr ""
+
+#: src/remote/Rsd.cpp:506
+msgid ""
+" (device rejected the system version: live media worked on tested iOS 27 "
+"devices and was rejected on tested iOS 18 devices. Screenshot fallback and "
+"button input may still be available; see docs/coredevice.md section 23)"
+msgstr ""
+
+#: src/remote/Pasteboard.cpp:92
+msgid "SET failed: "
+msgstr ""
+
+#: src/remote/Pasteboard.cpp:97
+msgid "SET response is not SET_REPLY: "
+msgstr ""
+
+#: src/remote/Pasteboard.cpp:110
+msgid "PULL failed: "
+msgstr ""
+
+#: src/remote/Pasteboard.cpp:117
+msgid "Response has no plain-text representation: "
+msgstr ""
+
+#: src/remote/PairingChannel.cpp:59
+msgid "JSON integer exceeds XPC int64 range"
+msgstr ""
+
+#: src/remote/PairingChannel.cpp:75
+msgid "Field "
+msgstr ""
+
+#: src/remote/PairingChannel.cpp:75
+msgid " must contain base64 binary data; decode failed: "
+msgstr ""
+
+#: src/remote/PairingChannel.cpp:96
+msgid "Unknown JSON value type"
+msgstr ""
+
+#: src/remote/PairingChannel.cpp:151
+msgid "UUID field must contain 16 bytes"
+msgstr ""
+
+#: src/remote/PairingChannel.cpp:177
+msgid "File transfer placeholder is not supported on the pairing channel"
+msgstr ""
+
+#: src/remote/PairingChannel.cpp:180
+msgid "Unknown XPC type marker"
+msgstr ""
+
+#: src/remote/PairingChannel.cpp:219
+msgid "Pairing reply timed out ("
+msgstr ""
+
+#: src/remote/PairingChannel.cpp:219
+msgid " ms without device data)"
+msgstr ""
+
+#: src/remote/PairingChannel.cpp:224 src/remote/PairingChannel.cpp:228
+msgid "Pairing control channel disconnected"
+msgstr ""
+
+#: src/remote/PairingChannel.cpp:242
+msgid "Channel received unexpected type; expected "
+msgstr ""
+
+#: src/remote/PairingChannel.cpp:243
+msgid " (value field missing): "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:112
+#, c-format
+msgid "    >> %zu bytes: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:125
+msgid "Failed to send HTTP/2 preface: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:135
+msgid "Failed to send SETTINGS: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:142
+msgid "Failed to send WINDOW_UPDATE: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:152
+msgid "Failed to send primary channel HEADERS: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:158
+msgid "Failed to send first frame: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:163
+msgid "Failed to send reply channel HEADERS: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:169
+msgid "Failed to send terminating frame: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:174
+msgid "Failed to send INIT_HANDSHAKE frame: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:183
+msgid "Timed out waiting for device SETTINGS"
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:187
+msgid "Disconnected while waiting for device SETTINGS: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:198
+msgid "Failed to send RemoteXPC identity: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:203
+msgid "Failed to read peer_info: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:248
+#, c-format
+msgid ""
+"    HTTP/2 parse failed: %s; buffered %zu bytes, stream offset %llu (total "
+"received %llu), first 64 bytes:\n"
+"      "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:307
+#, c-format
+msgid "    HTTP/2 input dump -> %s\n"
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:368
+msgid "PING payload shorter than 8 bytes"
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:384
+msgid "Device sent GOAWAY "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:397
+msgid "Primary channel reset: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:415
+msgid "Device set END_STREAM on primary channel; connection ended"
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:455
+msgid "Peer did not replenish flow-control window; sent "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:456 src/remote/RemoteXpc.cpp:537
+#: src/xpc/XpcValue.cpp:649 src/http2/Framing.cpp:152
+msgid " bytes"
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:460
+msgid "Disconnected while waiting for flow-control window: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:470
+msgid "Failed to send DATA: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:484
+msgid "XPC encoding failed (depth or length limit exceeded)"
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:526
+msgid "Failed to accept file stream: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:536
+msgid "File receive timed out: stream "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:536
+msgid " has received "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:544
+msgid "Disconnected while receiving file: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:570
+#, c-format
+msgid "    Receiving file: %llu bytes on stream %u\n"
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:589
+msgid "Stream "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:589
+msgid " contains malformed message: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:596
+#, c-format
+msgid "    Stream %u message incomplete: %s\n"
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:606
+#, c-format
+msgid "    => stream %u id=%llu %s\n"
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:629
+msgid "Timed out waiting for device reply"
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:633
+msgid "Connection terminated"
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:643
+msgid "Disconnected while waiting for device reply: "
+msgstr ""
+
+#: src/remote/Device.cpp:22
+#, c-format
+msgid "  [stage] %s\n"
+msgstr ""
+
+#: src/remote/Device.cpp:33
+msgid ""
+" (device is locked; unlock it and keep the screen awake before retrying)"
+msgstr ""
+
+#: src/remote/Device.cpp:36
+msgid " (computer not trusted; unlock the device and confirm Trust)"
+msgstr ""
+
+#: src/remote/Device.cpp:39
+msgid ""
+" (service unavailable; check Developer Mode and DDI mounting through Xcode)"
+msgstr ""
+
+#: src/remote/Device.cpp:41
+msgid " (check DDI mounting and Developer Mode)"
+msgstr ""
+
+#: src/remote/Device.cpp:80
+msgid ""
+"No USB device found (usbmux list is empty). Check the data cable and USB "
+"connection, then reconnect the device. Untrusted devices normally appear in "
+"this list too."
+msgstr ""
+
+#: src/remote/Device.cpp:91
+msgid "Connected devices: "
+msgstr ""
+
+#: src/remote/Device.cpp:91
+msgid "; select one: "
+msgstr ""
+
+#: src/remote/Device.cpp:109
+msgid "No connected device matches "
+msgstr ""
+
+#: src/remote/Device.cpp:109
+msgid "; connected devices: "
+msgstr ""
+
+#: src/remote/Device.cpp:113
+msgid " (total "
+msgstr ""
+
+#: src/remote/Device.cpp:113
+msgid "). Check the selected UDID and USB connection."
+msgstr ""
+
+#: src/remote/Device.cpp:123
+msgid "lockdown pairing session"
+msgstr ""
+
+#: src/remote/Device.cpp:126
+msgid "Failed to establish lockdown session: "
+msgstr ""
+
+#: src/remote/Device.cpp:129
+msgid "Start CoreDeviceProxy"
+msgstr ""
+
+#: src/remote/Device.cpp:132
+msgid "Start "
+msgstr ""
+
+#: src/remote/Device.cpp:135
+msgid "CDTunnel handshake"
+msgstr ""
+
+#: src/remote/Device.cpp:140 src/remote/Device.cpp:232
+msgid "Failed to establish packet tunnel: "
+msgstr ""
+
+#: src/remote/Device.cpp:148
+msgid ""
+"Pairing HostID is not a valid UUID; cannot construct a stable peer identity"
+msgstr ""
+
+#: src/remote/Device.cpp:154 src/remote/Device.cpp:164
+msgid "Connect to RSD inside tunnel and read directory"
+msgstr ""
+
+#: src/remote/Device.cpp:170
+msgid "Tunnel returned an invalid IPv6 address"
+msgstr ""
+
+#: src/remote/Device.cpp:181
+msgid "Ready"
+msgstr ""
+
+#: src/remote/Device.cpp:193
+msgid "LAN pair-verify"
+msgstr ""
+
+#: src/remote/Device.cpp:196
+msgid "Cannot connect to device RemotePairing port "
+msgstr ""
+
+#: src/remote/Device.cpp:197
+msgid ""
+" (check that the device is reachable on this network and has been paired)"
+msgstr ""
+
+#: src/remote/Device.cpp:206
+msgid "Device rejected pairing record: "
+msgstr ""
+
+#: src/remote/Device.cpp:207
+msgid " is not paired with this device, or its pairing was removed"
+msgstr ""
+
+#: src/remote/Device.cpp:209
+msgid "pair-verify failed: "
+msgstr ""
+
+#: src/remote/Device.cpp:214
+msgid "Request device tunnel port"
+msgstr ""
+
+#: src/remote/Device.cpp:222
+msgid "TLS-PSK and CDTunnel handshake"
+msgstr ""
+
+#: src/remote/Device.cpp:225
+msgid "Cannot connect to tunnel port "
+msgstr ""
+
+#: src/remote/Device.cpp:240
+msgid ""
+"Pairing host identifier is not a valid UUID; cannot construct a stable peer "
+"identity"
+msgstr ""
+
+#: src/remote/Device.cpp:260
+msgid "Session not established"
+msgstr ""
+
+#: src/remote/Device.cpp:272
+msgid " does not advertise feature "
+msgstr ""
+
+#: src/remote/DisplayInfo.cpp:115
+msgid "Update missing displays array: "
+msgstr ""
+
+#: src/remote/DisplayInfo.cpp:152
+msgid "No recognized display entries"
+msgstr ""
+
+#: src/remote/DisplayInfo.cpp:178
+msgid " ended without an update"
+msgstr ""
+
+#: src/media/ScreenshotSource.cpp:38
+msgid "FFmpeg has no PNG decoder"
+msgstr ""
+
+#: src/media/ScreenshotSource.cpp:70
+msgid "Cannot create BGRA conversion (format="
+msgstr ""
+
+#: src/media/ScreenshotSource.cpp:75
+msgid "PNG dimensions must be positive"
+msgstr ""
+
+#: src/media/ScreenshotSource.cpp:78
+msgid "FFmpeg could not decode PNG image"
+msgstr ""
+
+#: src/media/ScreenshotSource.cpp:81
+msgid "Failed to allocate PNG decode resources"
+msgstr ""
+
+#: src/media/ScreenshotSource.cpp:90
+msgid "FFmpeg is not included; screenshot mode has no PNG decoder"
+msgstr ""
+
+#: src/media/ScreenshotSource.cpp:109
+msgid "Device directory missing service: "
+msgstr ""
+
+#: src/media/ScreenshotSource.cpp:153
+msgid "Screenshot response missing image data"
+msgstr ""
+
+#: src/media/FramePump.cpp:71
+#, c-format
+msgid ""
+"Software decoder (libavcodec) is not included; continuing with the platform "
+"decoder. The current adapter uses 2-byte NAL lengths and cannot process "
+"larger NALs. Such access units are dropped and the session is recreated, "
+"which may interrupt video.\n"
+"Install FFmpeg development packages and reconfigure the build.\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:108
+msgid "Cannot open recording file "
+msgstr ""
+
+#: src/media/FramePump.cpp:134
+#, c-format
+msgid ""
+"Failed to stop device video session (device will release it when the lease "
+"expires): %s\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:152
+#, c-format
+msgid "Failed to stop previous video session (still attempting restart): %s\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:178
+#, c-format
+msgid "Video session recreated, receive port=%u\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:239
+#, c-format
+msgid "Failed to send PLI: %s\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:259
+#, c-format
+msgid ""
+"Sequence gap or discarded fragment detected: requesting keyframe, wait limit "
+"%d ms\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:293
+#, c-format
+msgid "Decoder switched to %s\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:331
+#, c-format
+msgid ""
+"After %d restarts, NALs still exceed the decoder limit. Video is "
+"unavailable; retrying every %llu seconds. Callers can use screenshots.\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:385
+#, c-format
+msgid "Test: injected keyframe decode failure (%s)\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:386
+msgid "further PLI disabled"
+msgstr ""
+
+#: src/media/FramePump.cpp:387
+msgid "PLI continues"
+msgstr ""
+
+#: src/media/FramePump.cpp:475
+#, c-format
+msgid ""
+"%s: no data for %llu ms; device reports session alive, continuing to wait\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:480
+#, c-format
+msgid "%s: no data for %llu ms, %s; recreating video session\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:483
+msgid "device session ended"
+msgstr ""
+
+#: src/media/FramePump.cpp:484
+msgid "session status query failed ("
+msgstr ""
+
+#: src/media/FramePump.cpp:487 src/media/FramePump.cpp:500
+#, c-format
+msgid "Failed to recreate video session: %s\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:515
+#, c-format
+msgid ""
+"%s: no data for %llu ms; recovery threshold exceeded, recreating video "
+"session\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:536
+#, c-format
+msgid "Failed to recreate video session: %s (retry in 1 second)\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:566
+#, c-format
+msgid "Failed to send RTCP keepalive: %s\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:571
+msgid "Input or frame request"
+msgstr ""
+
+#: src/media/FramePump.cpp:579
+#, c-format
+msgid "Video fallback active for %llu seconds; retrying video session\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:586
+#, c-format
+msgid "%s; recreating video session to obtain a keyframe\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:587
+msgid "Scheduled video retry after fallback"
+msgstr ""
+
+#: src/media/FramePump.cpp:588
+msgid "NAL exceeds platform decoder length limit"
+msgstr ""
+
+#: src/media/FramePump.cpp:622
+#, c-format
+msgid "Keyframe wait reached %d ms; recreating video session\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:637
+#, c-format
+msgid ""
+"No keyframe output after %llu seconds; recreating video session (%d/%d)\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:645
+#, c-format
+msgid ""
+"No keyframe output after %d restarts. Video is unavailable; callers can use "
+"screenshots. Retrying every %llu seconds.\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:668
+msgid "Receive silence timeout"
+msgstr ""
+
+#: src/media/FramePump.cpp:707
+#, c-format
+msgid "Test: dropped video packet %d to inject a sequence gap\n"
+msgstr ""
+
+#: src/media/StreamSession.cpp:127
+msgid "Failed to bind UDP port "
+msgstr ""
+
+#: src/media/StreamSession.cpp:160
+msgid "startmediastream failed on the retained connection (transport failed)"
+msgstr ""
+
+#: src/media/StreamSession.cpp:262
+msgid "getmediastreamserverstatus response missing sessions array"
+msgstr ""
+
+#: src/media/AudioPump.cpp:75
+#, c-format
+msgid "Clamped --audio-buffer %d to %d ms and adjusted buffer capacity\n"
+msgstr ""
+
+#: src/media/AudioPump.cpp:112
+#, c-format
+msgid ""
+"Audio answer missing SSRC (RemoteSSRC=%u LocalSSRC=%u); session renewal may "
+"fail\n"
+msgstr ""
+
+#: src/media/AudioPump.cpp:273
+#, c-format
+msgid "Audio session recreated, receive port=%u\n"
+msgstr ""
+
+#: src/media/AudioPump.cpp:281
+#, c-format
+msgid "Failed to recreate audio session: %s (retry in 1 second)\n"
+msgstr ""
+
+#: src/media/AudioPump.cpp:308
+#, c-format
+msgid "Failed to send audio RTCP keepalive: %s\n"
+msgstr ""
+
+#: src/media/AudioPump.cpp:321
+#, c-format
+msgid ""
+"Audio: device session ended (%llu ms without audio); recreating session\n"
+msgstr ""
+
+#: src/media/AudioPump.cpp:368
+#, c-format
+msgid "Audio decode failed (%zu-byte payload): %s\n"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:187
+msgid "u32 read out of bounds"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:197
+msgid "u64 read out of bounds"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:209
+msgid "Fixed-length byte read out of bounds"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:232
+msgid "Key has no NUL terminator in this segment"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:245
+msgid "Length prefix exceeds remaining bytes"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:267
+msgid "XPC nesting too deep"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:327
+msgid "Invalid string length"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:348
+msgid "Invalid data length: declared "
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:348
+msgid " bytes, limit "
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:393
+msgid "Container length cannot hold count field"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:412
+msgid "Entry count does not match container size"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:431
+msgid "Container entry decode failed"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:438
+msgid "Unsupported XPC type marker 0x"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:590
+msgid "Buffer too large"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:596
+msgid "Decode failed"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:630
+msgid "Envelope shorter than 24 bytes"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:636
+msgid "Wrapper magic mismatch: 0x"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:644
+msgid "Invalid message length: "
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:649 src/http2/Framing.cpp:152
+msgid "Missing "
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:663
+msgid "Payload magic mismatch: 0x"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:668
+msgid "Cannot read protocol version"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:672
+msgid "Unsupported XPC protocol version: 0x"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:677
+msgid "Payload decode failed"
+msgstr ""
+
+#: src/xpc/XpcValue.cpp:718
+msgid ", received "
+msgstr ""
+
+#: src/hid/Hid.cpp:97 src/hid/Hid.cpp:244
+msgid "RSD directory missing "
+msgstr ""
+
+#: src/hid/Hid.cpp:119
+msgid "connectedServices response missing connectedServices: "
+msgstr ""
+
+#: src/hid/Hid.cpp:176
+msgid "Stroke requires at least one point"
+msgstr ""
+
+#: src/json/Json.cpp:15
+msgid "Input too large"
+msgstr ""
+
+#: src/json/Json.cpp:22 src/plist/Plist.cpp:45
+msgid "Nesting too deep"
+msgstr ""
+
+#: src/decode/FFmpegDecoder.cpp:42
+#, c-format
+msgid "FFmpeg has no HEVC decoder\n"
+msgstr ""
+
+#: src/decode/FFmpegDecoder.cpp:58
+#, c-format
+msgid "Failed to open FFmpeg HEVC decoder: %s\n"
+msgstr ""
+
+#: src/decode/FFmpegDecoder.cpp:111
+#, c-format
+msgid "FFmpeg rejected packet: %s\n"
+msgstr ""
+
+#: src/decode/FFmpegDecoder.cpp:157
+#, c-format
+msgid "Software decoder requires CPU frames; received format=%d %dx%d\n"
+msgstr ""
+
+#: src/decode/Decoder.h:76
+msgid ""
+"No HEVC decoder in this build. Non-Apple platforms require FFmpeg "
+"development packages. Install them and reconfigure (Debian/Ubuntu: apt "
+"install libavcodec-dev libavutil-dev libswscale-dev; Fedora: dnf install "
+"ffmpeg-devel).\n"
+msgstr ""
+
+#: src/decode/VideoToolboxDecoder.cpp:70
+#, c-format
+msgid "Failed to parse HEVC parameter sets: %d\n"
+msgstr ""
+
+#: src/decode/VideoToolboxDecoder.cpp:98
+#, c-format
+msgid "Failed to create VideoToolbox session: %d\n"
+msgstr ""
+
+#: src/decode/VideoToolboxDecoder.cpp:220
+#, c-format
+msgid ""
+"NAL size %zu exceeds the 2-byte length prefix; frame dropped. This stream "
+"requires software decoding.\n"
+msgstr ""
+
+#: src/decode/AudioDecoder.h:52
+msgid ""
+"AAC-ELD decoding is unavailable on this platform. This build uses "
+"AudioToolbox on macOS; the tested native FFmpeg AAC decoder does not support "
+"ELD. Video can continue without audio."
+msgstr ""
+
+#: src/decode/AudioToolboxEldDecoder.cpp:100
+msgid "Failed to allocate AudioBufferList"
+msgstr ""
+
+#: src/decode/AudioToolboxEldDecoder.cpp:113
+msgid "AudioConverterFillComplexBuffer failed: "
+msgstr ""
+
+#: src/decode/AudioToolboxEldDecoder.cpp:160
+msgid "AudioConverterNew failed: "
+msgstr ""
+
+#: src/http2/Framing.cpp:141
+msgid "Frame header shorter than 9 bytes"
+msgstr ""
+
+#: src/http2/Framing.cpp:147
+msgid "Frame length too large: "
+msgstr ""
+
+#: src/http2/Framing.cpp:171
+msgid "PADDED DATA missing Pad Length byte"
+msgstr ""
+
+#: src/http2/Framing.cpp:178
+msgid "Pad Length exceeds available payload: "
+msgstr ""
+
+#: src/http2/Framing.cpp:197
+msgid "SETTINGS payload length is not a multiple of 6: "
+msgstr ""
+
+#: src/http2/Framing.cpp:208
+msgid "WINDOW_UPDATE payload must be 4 bytes; got "
+msgstr ""
+
+#: src/http2/Framing.cpp:217
+msgid "GOAWAY payload shorter than 8 bytes"
+msgstr ""
+
+#: src/http2/Framing.cpp:234
+msgid "RST_STREAM payload must be 4 bytes; got "
+msgstr ""
+
+#: src/rt/RtpHevc.cpp:85
+msgid "Not an RTP packet"
+msgstr ""
+
+#: src/util/Base64.cpp:13 src/util/Base64.cpp:51
+msgid "Base64 input too large"
+msgstr ""
+
+#: src/util/Base64.cpp:45
+msgid "Invalid base64 character or padding"
+msgstr ""
+
+#: src/util/Base64.cpp:59
+msgid "Base64 decode failed"
+msgstr ""
+
+#: src/app/FileSource.cpp:56
+msgid "Cannot open file "
+msgstr ""
+
+#: src/app/FileSource.cpp:61
+#, c-format
+msgid "Read %s (%zu bytes)\n"
+msgstr ""
+
+#: src/app/FileSource.cpp:69
+#, c-format
+msgid "Decoder backend: %s\n"
+msgstr ""
+
+#: src/app/Cli.cpp:17
+msgid "iOS screen mirroring and control"
+msgstr ""
+
+#: src/app/Cli.cpp:19
+msgid ""
+"With no arguments, mirror the connected device.\n"
+"The device chooses encoding dimensions, bitrate and frame rate; overrides "
+"are unavailable.\n"
+"Left mouse button maps to touch. Orientation does not support flip; "
+"recording preserves the source bitstream.\n"
+"Wireless use requires pairing. --help / --version do not connect to the "
+"device."
+msgstr ""
+
+#: src/app/Cli.cpp:24
+msgid "Show help"
+msgstr ""
+
+#: src/app/Cli.cpp:25
+msgid "Play an Annex-B HEVC file"
+msgstr ""
+
+#: src/app/Cli.cpp:26
+msgid "Device UDID"
+msgstr ""
+
+#: src/app/Cli.cpp:27
+msgid "LAN address (requires an existing pairing record)"
+msgstr ""
+
+#: src/app/Cli.cpp:28
+msgid "Record the live stream as Annex-B"
+msgstr ""
+
+#: src/app/Cli.cpp:29
+msgid ""
+"Launch bundle ID; ? matches name prefix, + terminates the previous instance"
+msgstr ""
+
+#: src/app/Cli.cpp:30
+msgid "Window title"
+msgstr ""
+
+#: src/app/Cli.cpp:31
+msgid "SDL render driver, e.g. metal / software"
+msgstr ""
+
+#: src/app/Cli.cpp:33
+msgid "stream for live video or screenshot for polling; default: stream"
+msgstr ""
+
+#: src/app/Cli.cpp:35
+msgid "Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"
+msgstr ""
+
+#: src/app/Cli.cpp:42
+msgid "Inject home/lock/volup/voldn/mute"
+msgstr ""
+
+#: src/app/Cli.cpp:44
+msgid "Inject ASCII text (device text field must have focus)"
+msgstr ""
+
+#: src/app/Cli.cpp:45
+msgid "Force alternating video fallback and recovery at T1,T2,... seconds"
+msgstr ""
+
+#: src/app/Cli.cpp:46
+msgid "Write device clipboard and exit (supports Unicode)"
+msgstr ""
+
+#: src/app/Cli.cpp:47
+msgid "List connected devices"
+msgstr ""
+
+#: src/app/Cli.cpp:48
+msgid "Disable input control"
+msgstr ""
+
+#: src/app/Cli.cpp:49
+msgid "List device apps"
+msgstr ""
+
+#: src/app/Cli.cpp:50
+msgid "Show version"
+msgstr ""
+
+#: src/app/Cli.cpp:51
+msgid "Desktop fullscreen"
+msgstr ""
+
+#: src/app/Cli.cpp:52
+msgid "Keep window on top"
+msgstr ""
+
+#: src/app/Cli.cpp:53
+msgid "Borderless window"
+msgstr ""
+
+#: src/app/Cli.cpp:54
+msgid "Prevent local screen sleep while running"
+msgstr ""
+
+#: src/app/Cli.cpp:55
+msgid "Do not start audio stream"
+msgstr ""
+
+#: src/app/Cli.cpp:56
+msgid "Receive and decode audio without local playback"
+msgstr ""
+
+#: src/app/Cli.cpp:57
+msgid "Run without a window"
+msgstr ""
+
+#: src/app/Cli.cpp:58
+msgid "Use platform hardware decoder; default: software"
+msgstr ""
+
+#: src/app/Cli.cpp:59
+msgid "Print input coordinates"
+msgstr ""
+
+#: src/app/Cli.cpp:60
+msgid "Add tunnel diagnostics to --stats"
+msgstr ""
+
+#: src/app/Cli.cpp:61
+msgid "Print statistics every second"
+msgstr ""
+
+#: src/app/Cli.cpp:62
+msgid "Read device clipboard; with --copy, read back after writing"
+msgstr ""
+
+#: src/app/Cli.cpp:63
+msgid "Window horizontal position; default: centered"
+msgstr ""
+
+#: src/app/Cli.cpp:64
+msgid "Window vertical position; default: centered"
+msgstr ""
+
+#: src/app/Cli.cpp:65
+msgid "Window width; 0 for automatic"
+msgstr ""
+
+#: src/app/Cli.cpp:66
+msgid "Window height; 0 for automatic"
+msgstr ""
+
+#: src/app/Cli.cpp:67
+msgid "Run duration in seconds; 0 for unlimited"
+msgstr ""
+
+#: src/app/Cli.cpp:69
+msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
+msgstr ""
+
+#: src/app/Cli.cpp:71
+msgid "Exit after N frames; 0 for unlimited"
+msgstr ""
+
+#: src/app/Cli.cpp:73
+msgid "Finite positive scale; default: fit screen"
+msgstr ""
+
+#: src/app/Cli.cpp:77
+msgid ""
+"Clockwise display orientation; auto follows device and does not affect "
+"recording"
+msgstr ""
+
+#: src/app/Cli.cpp:79
+msgid "Crop WxH+X+Y or W:H:X:Y"
+msgstr ""
+
+#: src/app/Cli.cpp:80
+msgid "Background color #RRGGBB"
+msgstr ""
+
+#: src/app/Cli.cpp:81
+msgid "Read window at frame N into BMP: N FILE (requires a window)"
+msgstr ""
+
+#: src/app/Cli.cpp:83
+msgid "Message language: auto, en, zh-CN (default: environment, fallback: en)"
+msgstr ""
+
+#: src/app/Cli.cpp:89
+msgid "--lang must be auto, en or zh-CN"
+msgstr ""
+
+#: src/app/Cli.cpp:102
+msgid "Coordinates must be finite numbers in [0, 1]"
+msgstr ""
+
+#: src/app/Cli.cpp:109
+msgid "Requires a finite positive number"
+msgstr ""
+
+#: src/app/Cli.cpp:126
+msgid ""
+"Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
+msgstr ""
+
+#: src/app/Cli.cpp:133
+msgid "Expected #RRGGBB"
+msgstr ""
+
+#: src/app/Cli.cpp:146
+msgid "Frame number must be a positive integer"
+msgstr ""
+
+#: src/app/Cli.cpp:151
+msgid "Requires a window; incompatible with --no-window"
+msgstr ""
+
+#: src/app/Cli.cpp:162
+msgid "Usage"
+msgstr ""
+
+#: src/app/Cli.cpp:163 src/app/Cli.cpp:164
+msgid "Options"
+msgstr ""
+
+#: src/app/Presenter.cpp:38
+#, c-format
+msgid "Screen %dx%d points; window scaled to %dx%d (override with --scale)\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:57
+#, c-format
+msgid "Failed to create window: %s\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:70
+#, c-format
+msgid "Failed to create renderer: %s\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:75
+#, c-format
+msgid "Render driver: %s\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:90
+#, c-format
+msgid "Failed to create texture: %s\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:95
+#, c-format
+msgid ""
+"Window %dx%d points / drawable %dx%d pixels / viewport %dx%d (source %dx%d, "
+"crop %dx%d+%d+%d, clockwise rotation %d degrees)\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:107
+#, c-format
+msgid "Failed to upload texture: %s\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:122
+#, c-format
+msgid "Failed to query drawable dimensions: %s\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:127
+#, c-format
+msgid "Failed to create readback buffer: %s\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:131
+#, c-format
+msgid "Failed to lock readback buffer: %s\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:145
+#, c-format
+msgid "Readback failed: %s\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:152
+#, c-format
+msgid "Failed to save image: %s\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:155
+#, c-format
+msgid "Window readback saved to %s (%dx%d pixels)\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:165
+#, c-format
+msgid ""
+"[input] %s raw(%d,%d) viewport %d x%d (rotation %d degrees) / window %d "
+"x%d / drawable %d x%d -> (%.3f, %.3f)\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:192
+msgid "down"
+msgstr ""
+
+#: src/app/Presenter.cpp:201
+msgid "move"
+msgstr ""
+
+#: src/app/AudioOut.cpp:39
+#, c-format
+msgid ""
+"Audio device returned %d Hz / %d channels / format 0x%x; stream requires %d "
+"Hz / %d channels / 0x%x. Direct playback unavailable"
+msgstr ""
+
+#: src/app/AudioOut.cpp:47
+#, c-format
+msgid "Audio output opened: %d Hz / %d channels, backend %s\n"
+msgstr ""
+
+#: src/app/FrameSource.h:20
+msgid "Source ended"
+msgstr ""
+
+#: src/app/LiveSource.cpp:22
+msgid "Invalid --test-degrade: "
+msgstr ""
+
+#: src/app/LiveSource.cpp:65
+#, c-format
+msgid "Failed to query display dimensions: %s (using model crop table)\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:66
+msgid "Update contains no usable dimensions"
+msgstr ""
+
+#: src/app/LiveSource.cpp:76
+#, c-format
+msgid ""
+"Failed to subscribe to display changes: %s (automatic rotation unavailable)\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:98
+#, c-format
+msgid "Media stream unavailable: %s\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:101
+#, c-format
+msgid ""
+"Using screenshot polling; refresh rate depends on capture time. Input "
+"control remains available\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:105
+msgid "Failed to start screenshot polling: "
+msgstr ""
+
+#: src/app/LiveSource.cpp:117
+msgid "No first screenshot within 5 seconds"
+msgstr ""
+
+#: src/app/LiveSource.cpp:127
+msgid "Screenshot is the visible area"
+msgstr ""
+
+#: src/app/LiveSource.cpp:131
+msgid "No first decoded frame within 5 seconds"
+msgstr ""
+
+#: src/app/LiveSource.cpp:135
+#, c-format
+msgid "Screenshot mirroring started: %s / iOS %s, %ux%u\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:139
+#, c-format
+msgid ""
+"Video stream started: %s / iOS %s, receive port=%u PT=%u, first frame %ux%u\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:148
+#, c-format
+msgid ""
+"Display geometry: visible area %dx%d (displayId=%llu %s), UI rotation %d "
+"degrees clockwise, stream %ux%u\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:155
+#, c-format
+msgid "Screenshot mode cannot record Annex-B; ignoring --record\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:157
+#, c-format
+msgid "Recording to %s\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:164
+#, c-format
+msgid "Screenshot mode does not start audio\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:175
+#, c-format
+msgid "Failed to start audio: %s (video continues)\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:180
+#, c-format
+msgid "Audio stream started: receive port=%u PT=%u backend=%s\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:188
+#, c-format
+msgid "--test-degrade: from now,"
+msgstr ""
+
+#: src/app/LiveSource.cpp:190
+#, c-format
+msgid " at %.1f seconds: %s"
+msgstr ""
+
+#: src/app/LiveSource.cpp:191
+msgid "force fallback"
+msgstr ""
+
+#: src/app/LiveSource.cpp:191
+msgid "release override"
+msgstr ""
+
+#: src/app/LiveSource.cpp:193
+#, c-format
+msgid " (test mode)\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:200
+msgid ""
+"No playable audio stream (disabled, failed to start, or unsupported build)"
+msgstr ""
+
+#: src/app/LiveSource.cpp:221
+#, c-format
+msgid "Control connected (touch injection available)\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:295
+#, c-format
+msgid ""
+"Live video unavailable; using screenshot polling while retrying video in the "
+"background\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:298
+#, c-format
+msgid "Failed to switch to screenshots: %s (retry in %llu seconds)\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:304
+#, c-format
+msgid "Live video recovered; switched back to video stream\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:338
+msgid "Device connection lost ("
+msgstr ""
+
+#: src/app/LiveSource.cpp:338
+msgid "); closing session"
+msgstr ""
+
+#: src/app/LiveSource.cpp:348
+#, c-format
+msgid "  Tunnel TCP: receive %.1f KiB/s, total %.2f MiB (lwIP)\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:351
+#, c-format
+msgid ""
+"  Network diagnostics: bad checksums %llu, ICMPv6 %llu, echo replies %llu\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:369
+#, c-format
+msgid "  Screenshots: %5.2f/s, total %llu images / %llu KiB, %llu failures\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:409
+#, c-format
+msgid ""
+"  Video: device video packets %6.0f/s, local datagrams (including RTCP) "
+"%6.0f/s, assembled %5.1f/s, decoded %5.1f/s\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:416
+#, c-format
+msgid "      Sampling: device SR not received yet, local %.1f s\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:419
+#, c-format
+msgid ""
+"      Sampling: device %.1f s, local %.1f s (different intervals; rates "
+"cannot be subtracted directly)\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:426
+#, c-format
+msgid ""
+"      Current session: device video packets %llu, local datagrams (including "
+"RTCP) %llu; all sessions: assembled %llu, decoded %llu\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:432
+#, c-format
+msgid ""
+"      Per frame: depacketize %.1f ms, decode %.1f ms, deliver %.1f ms (%llu "
+"AU calls)\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:438
+#, c-format
+msgid ""
+"      Current session: non-video packets %llu, sequence gaps %llu, dropped "
+"fragments %llu\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:443
+#, c-format
+msgid ""
+"      All sessions: no output %llu, dropped waiting for keyframe %llu, "
+"restarts %llu, oversized NAL drops %llu\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:452
+#, c-format
+msgid ""
+"      All sessions: video packets %llu, SR %llu, sent RR %llu, PLI %llu\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:467
+#, c-format
+msgid ""
+"  Audio: received %6.0f packets/s, decoded %6.0f packets/s, delivered %6.0f "
+"frames/s (output=%s)\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:471
+msgid "closed"
+msgstr ""
+
+#: src/app/LiveSource.cpp:473
+#, c-format
+msgid ""
+"      All sessions: decode failures %llu, lost %llu, late %llu, dropped old "
+"samples %llu, adjusted samples %llu, silence fill %llu, RR sent/failed %llu/"
+"%llu, restarts %llu, buffered %zu frames, interval %.1f s\n"
+msgstr ""
+
+#: src/app/Application.cpp:41
+#, c-format
+msgid ""
+"Visible area %ux%u -> %dx%d (device did not report dimensions; using model "
+"table)\n"
+msgstr ""
+
+#: src/app/Application.cpp:89 src/app/Application.cpp:108
+#, c-format
+msgid "Failed to establish session: %s\n"
+msgstr ""
+
+#: src/app/Application.cpp:94
+#, c-format
+msgid "Failed to list apps: %s\n"
+msgstr ""
+
+#: src/app/Application.cpp:100
+#, c-format
+msgid "Total: %zu\n"
+msgstr ""
+
+#: src/app/Application.cpp:114
+#, c-format
+msgid "Wrote %zu bytes to device clipboard\n"
+msgstr ""
+
+#: src/app/Application.cpp:116
+#, c-format
+msgid "--copy failed: %s\n"
+msgstr ""
+
+#: src/app/Application.cpp:123
+#, c-format
+msgid "Device clipboard (%zu bytes): %s\n"
+msgstr ""
+
+#: src/app/Application.cpp:125
+#, c-format
+msgid "--paste failed: %s\n"
+msgstr ""
+
+#: src/app/Application.cpp:143
+#, c-format
+msgid "Failed to start video: %s\n"
+msgstr ""
+
+#: src/app/Application.cpp:149
+#, c-format
+msgid "Device is in a call. End the call and try again.\n"
+msgstr ""
+
+#: src/app/Application.cpp:163
+#, c-format
+msgid "File playback cannot launch a device app; ignoring --start-app\n"
+msgstr ""
+
+#: src/app/Application.cpp:181
+#, c-format
+msgid "--start-app requires a nonempty app name\n"
+msgstr ""
+
+#: src/app/Application.cpp:191
+#, c-format
+msgid "Failed to find app by name: %s\n"
+msgstr ""
+
+#: src/app/Application.cpp:209
+#, c-format
+msgid "No app name starts with %s\n"
+msgstr ""
+
+#: src/app/Application.cpp:217
+#, c-format
+msgid "Failed to launch %s: %s\n"
+msgstr ""
+
+#: src/app/Application.cpp:220
+#, c-format
+msgid "Launched %s%s\n"
+msgstr ""
+
+#: src/app/Application.cpp:220
+msgid " (previous instance terminated)"
+msgstr ""
+
+#: src/app/Application.cpp:237
+#, c-format
+msgid "SDL initialization failed: %s\n"
+msgstr ""
+
+#: src/app/Application.cpp:246
+#, c-format
+msgid "Failed to open audio output: %s (receiving and decoding continue)\n"
+msgstr ""
+
+#: src/app/Application.cpp:249
+#, c-format
+msgid "Local audio playback disabled; receiving and decoding continue\n"
+msgstr ""
+
+#: src/app/Application.cpp:270
+msgid "injected"
+msgstr ""
+
+#: src/app/Application.cpp:270
+msgid "failed"
+msgstr ""
+
+#: src/app/Application.cpp:279
+#, c-format
+msgid "--test-button %s: pressed\n"
+msgstr ""
+
+#: src/app/Application.cpp:281
+#, c-format
+msgid "--test-button %s failed: %s\n"
+msgstr ""
+
+#: src/app/Application.cpp:290
+#, c-format
+msgid "--test-type %s: injected\n"
+msgstr ""
+
+#: src/app/Application.cpp:292
+#, c-format
+msgid "--test-type failed: %s\n"
+msgstr ""
+
+#: src/app/Application.cpp:317
+#, c-format
+msgid "Input injection failed (further attempts disabled): %s\n"
+msgstr ""
+
+#: src/app/Application.cpp:328
+#, c-format
+msgid "Reached --time-limit %d seconds\n"
+msgstr ""
+
+#: src/app/Application.cpp:332
+#, c-format
+msgid "Received exit signal; closing device session\n"
+msgstr ""
+
+#: src/app/Application.cpp:342
+#, c-format
+msgid ""
+"  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
+msgstr ""
+
+#: src/app/Application.cpp:367 src/app/Application.cpp:419
+#, c-format
+msgid "Reached --exit-after %d\n"
+msgstr ""
+
+#: src/app/Application.cpp:401
+#, c-format
+msgid "Display orientation changed to %d degrees clockwise; window recreated\n"
+msgstr ""
+
+#: src/app/Application.cpp:425
+#, c-format
+msgid "Finished: rendered %d frames\n"
+msgstr ""
+
+#: src/app/DeviceConnection.cpp:29
+#, c-format
+msgid "Using the only remote pairing record (device suffix %s)\n"
+msgstr ""
+
+#: src/app/DeviceConnection.cpp:31
+msgid "Directory "
+msgstr ""
+
+#: src/app/DeviceConnection.cpp:31
+msgid " contains "
+msgstr ""
+
+#: src/app/DeviceConnection.cpp:32
+msgid " pairing records; specify the device with -s. Candidate suffixes: "
+msgstr ""
+
+#: src/app/DeviceConnection.cpp:43
+msgid "Cannot read "
+msgstr ""
+
+#: src/app/DeviceConnection.cpp:43
+msgid " remote pairing record (directory "
+msgstr ""
+
+#: src/app/DeviceConnection.cpp:43
+msgid "): "
+msgstr ""
+
+#: src/app/DeviceConnection.cpp:44
+msgid ". Establish a remote pairing record over USB first."
+msgstr ""
+
+#: src/app/SourcePick.h:68
+msgid "Invalid number: \""
+msgstr ""
+
+#: src/app/SourcePick.h:74
+msgid "Time is not finite: \""
+msgstr ""
+
+#: src/app/SourcePick.h:78
+msgid "Time cannot be negative"
+msgstr ""
+
+#: src/app/SourcePick.h:85
+msgid "Time exceeds uint64 millisecond range: \""
+msgstr ""
+
+#: src/app/SourcePick.h:90
+msgid "Times must be in ascending order"
+msgstr ""
+
+#: src/app/SourcePick.h:98
+msgid "Trailing comma is not allowed"
+msgstr ""
+
+#: src/app/SourcePick.h:104
+msgid "Invalid character: \""
+msgstr ""
+
+#: src/app/SourcePick.h:109
+msgid "Schedule requires at least one time"
+msgstr ""
+
+#: src/transport/TcpConnect.cpp:28
+msgid "Failed to resolve address "
+msgstr ""
+
+#: src/transport/TcpConnect.cpp:28
+msgid "no results"
+msgstr ""
+
+#: src/transport/TcpConnect.cpp:49
+msgid "Failed to enable nonblocking mode: "
+msgstr ""
+
+#: src/transport/TcpConnect.cpp:73
+msgid "Connection timed out"
+msgstr ""
+
+#: src/transport/TcpConnect.cpp:74
+msgid "Failed to wait for connection: "
+msgstr ""
+
+#: src/transport/TcpConnect.cpp:86
+msgid "Failed to restore blocking mode: "
+msgstr ""
+
+#: src/transport/TcpConnect.cpp:91
+msgid "Cannot connect to "
+msgstr ""
+
+#: src/transport/Tunnel.cpp:34
+msgid "Tunnel TLS write failed"
+msgstr ""
+
+#: src/transport/Tunnel.cpp:48
+msgid "Tunnel TLS read failed"
+msgstr ""
+
+#: src/transport/Tunnel.cpp:112
+msgid "Tunnel handshake response has incorrect magic"
+msgstr ""
+
+#: src/transport/Tunnel.cpp:124
+msgid "Tunnel handshake response is not valid JSON"
+msgstr ""
+
+#: src/transport/Tunnel.cpp:140
+msgid "Tunnel handshake response missing required fields"
+msgstr ""
+
+#: src/transport/Tunnel.cpp:158 src/transport/Tunnel.cpp:167
+msgid "Tunnel not connected"
+msgstr ""
+
+#: src/transport/Tunnel.cpp:175
+msgid "Tunnel packet is not IPv6: version nibble="
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:32 src/transport/TlsChannel.cpp:46
+msgid "BIO_new_mem_buf failed"
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:38
+msgid "Failed to parse certificate PEM"
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:52
+msgid "Failed to parse private key PEM"
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:167 src/transport/TlsChannel.cpp:243
+msgid "SSL_CTX_new failed"
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:180
+msgid "Failed to add root certificate"
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:204
+msgid "Failed to load client certificate"
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:207
+msgid "Failed to load client private key"
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:210
+msgid "Client certificate does not match private key"
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:215 src/transport/TlsChannel.cpp:260
+msgid "SSL_new failed"
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:220 src/transport/TlsChannel.cpp:266
+msgid "SSL_set_fd failed"
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:226
+msgid "TLS handshake failed, ssl_err="
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:237
+msgid "PSK is empty"
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:250
+msgid ""
+"TLS backend has no PSK cipher suite; use an OpenSSL build with PSK support"
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:263
+msgid "Failed to attach PSK to TLS channel"
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:274
+msgid "PSK handshake failed, ssl_err="
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:276
+msgid ""
+" (device tunnel listener rejected the PSK; check pair-verify key derivation)"
+msgstr ""
+
+#: src/transport/Usbmux.cpp:135
+msgid "send failed: "
+msgstr ""
+
+#: src/transport/Usbmux.cpp:139
+msgid "Peer closed write direction"
+msgstr ""
+
+#: src/transport/Usbmux.cpp:161
+msgid "Read timed out (no bytes before deadline)"
+msgstr ""
+
+#: src/transport/Usbmux.cpp:164
+msgid "recv failed: "
+msgstr ""
+
+#: src/transport/Usbmux.cpp:168
+msgid "Peer closed (received only "
+msgstr ""
+
+#: src/transport/Usbmux.cpp:181
+msgid "Failed to set read timeout: "
+msgstr ""
+
+#: src/transport/Usbmux.cpp:194
+msgid "Socket closed"
+msgstr ""
+
+#: src/transport/Usbmux.cpp:208
+msgid "Wait timed out"
+msgstr ""
+
+#: src/transport/Usbmux.cpp:213
+msgid "poll failed: "
+msgstr ""
+
+#: src/transport/Usbmux.cpp:227 src/transport/Lockdown.cpp:44
+msgid "Invalid lockdown frame length: "
+msgstr ""
+
+#: src/transport/Usbmux.cpp:254
+msgid "socket failed: "
+msgstr ""
+
+#: src/transport/Usbmux.cpp:309
+msgid "Invalid mux frame length: "
+msgstr ""
+
+#: src/transport/Usbmux.cpp:322
+msgid "mux response is not a valid plist"
+msgstr ""
+
+#: src/transport/Usbmux.cpp:336
+msgid "ListDevices response missing DeviceList"
+msgstr ""
+
+#: src/transport/Usbmux.cpp:358
+msgid "Connect failed, usbmuxd returned Number="
+msgstr ""
+
+#: src/transport/Usbmux.cpp:379
+msgid "ReadPairRecord response missing PairRecordData (response "
+msgstr ""
+
+#: src/transport/Usbmux.cpp:380
+msgid "); device may not trust this computer yet"
+msgstr ""
+
+#: src/transport/Lockdown.cpp:21
+msgid "Failed to write TLS header"
+msgstr ""
+
+#: src/transport/Lockdown.cpp:25
+msgid "Failed to write TLS body"
+msgstr ""
+
+#: src/transport/Lockdown.cpp:36
+msgid "Failed to read TLS header"
+msgstr ""
+
+#: src/transport/Lockdown.cpp:54
+msgid "Failed to read TLS body"
+msgstr ""
+
+#: src/transport/Lockdown.cpp:84
+msgid "lockdown response is not a valid plist"
+msgstr ""
+
+#: src/transport/Lockdown.cpp:105
+msgid "Cannot parse pairing record"
+msgstr ""
+
+#: src/transport/Lockdown.cpp:123
+msgid "Pairing record missing required fields"
+msgstr ""
+
+#: src/transport/Lockdown.cpp:146
+msgid "StartSession rejected: "
+msgstr ""
+
+#: src/transport/Lockdown.cpp:170
+msgid ") rejected: "
+msgstr ""
+
+#: src/transport/Lockdown.cpp:175
+msgid "StartService response missing Port"
+msgstr ""
+
+#: src/net/Stack.cpp:139
+msgid ""
+"Cannot start tunnel stack: invalid address or stack already started/stopped"
+msgstr ""
+
+#: src/net/Stack.cpp:142
+msgid "Tunnel MTU is below the IPv6 minimum"
+msgstr ""
+
+#: src/net/Stack.cpp:157
+msgid "Failed to register lwIP tunnel interface"
+msgstr ""
+
+#: src/net/Stack.cpp:162
+msgid "Failed to start tunnel thread: "
+msgstr ""
+
+#: src/net/Stack.cpp:182
+msgid "Tunnel stopped"
+msgstr ""
+
+#: src/net/Stack.cpp:223
+msgid "Tunnel stopped or send queue full"
+msgstr ""
+
+#: src/net/Stack.cpp:278
+msgid "Tunnel processing failed: "
+msgstr ""
+
+#: src/net/Stack.cpp:283
+msgid "Tunnel read failed"
+msgstr ""
+
+#: src/net/Stack.cpp:344
+msgid "no route to destination"
+msgstr ""
+
+#: src/net/Stack.cpp:344
+msgid "communication administratively prohibited"
+msgstr ""
+
+#: src/net/Stack.cpp:344
+msgid "beyond source address scope"
+msgstr ""
+
+#: src/net/Stack.cpp:345
+msgid "address unreachable"
+msgstr ""
+
+#: src/net/Stack.cpp:345
+msgid "port unreachable"
+msgstr ""
+
+#: src/net/Stack.cpp:345
+msgid "source address failed ingress/egress policy"
+msgstr ""
+
+#: src/net/Stack.cpp:346
+msgid "route to destination rejected"
+msgstr ""
+
+#: src/net/Stack.cpp:350
+msgid "("
+msgstr ""
+
+#: src/net/Stack.cpp:352
+msgid " (packet too big)"
+msgstr ""
+
+#: src/net/Stack.cpp:354
+msgid " (hop limit exceeded)"
+msgstr ""
+
+#: src/net/Stack.cpp:356
+msgid " (parameter problem)"
+msgstr ""
+
+#: src/net/Stack.cpp:358
+msgid " (echo request)"
+msgstr ""
+
+#: src/net/Stack.cpp:358
+msgid " (echo reply)"
+msgstr ""
+
+#: src/net/Stack.cpp:372
+msgid " inner nh="
+msgstr ""
+
+#: src/net/Stack.cpp:376
+msgid " ports "
+msgstr ""
+
+#: src/net/UdpSocket.cpp:74
+msgid "UDP endpoint closed"
+msgstr ""
+
+#: src/net/UdpSocket.cpp:104
+msgid "UDP bind failed (lwIP "
+msgstr ""
+
+#: src/net/UdpSocket.cpp:130
+msgid "UDP send failed (lwIP "
+msgstr ""
+
+#: src/net/UdpSocket.cpp:141
+msgid "UDP receive timed out"
+msgstr ""
+
+#: src/net/TcpStream.cpp:41
+msgid "TCP connection terminated (lwIP "
+msgstr ""
+
+#: src/net/TcpStream.cpp:118
+msgid "TCP connect failed (lwIP "
+msgstr ""
+
+#: src/net/TcpStream.cpp:122
+msgid "Cannot create TCP connection (lwIP "
+msgstr ""
+
+#: src/net/TcpStream.cpp:130
+msgid "TCP connect timed out or connection closed"
+msgstr ""
+
+#: src/net/TcpStream.cpp:168
+msgid "TCP send failed (connection closed or network error)"
+msgstr ""
+
+#: src/net/TcpStream.cpp:176
+msgid "TCP send timed out"
+msgstr ""
+
+#: src/net/TcpStream.cpp:189
+msgid "TCP connection not established"
+msgstr ""
+
+#: src/net/TcpStream.cpp:207
+msgid "TCP read timed out"
+msgstr ""
+
+#: src/net/TcpStream.cpp:211
+msgid "TCP peer or local endpoint closed"
+msgstr ""
+
+#: src/wifi/RemotePairing.cpp:35
+msgid "createListener response missing port (actual fields:"
+msgstr ""
+
+#: src/wifi/RemotePairing.cpp:40
+msgid "createListener returned an invalid port: "
+msgstr ""
+
+#: src/wifi/Opack.cpp:90
+msgid "OPACK encoder does not support negative integers"
+msgstr ""
+
+#: src/wifi/Opack.cpp:151
+msgid "OPACK encode: unknown value type"
+msgstr ""
+
+#: src/wifi/Opack.cpp:182
+msgid "OPACK decode: unknown length form"
+msgstr ""
+
+#: src/wifi/Opack.cpp:186
+msgid "OPACK decode: payload exceeds buffer"
+msgstr ""
+
+#: src/wifi/Opack.cpp:196
+msgid "OPACK decode: nesting too deep"
+msgstr ""
+
+#: src/wifi/Opack.cpp:201
+msgid "OPACK decode: missing type byte"
+msgstr ""
+
+#: src/wifi/Opack.cpp:205
+msgid "OPACK decode: terminator in value position"
+msgstr ""
+
+#: src/wifi/Opack.cpp:258
+msgid "OPACK decode: terminator in fixed-length array"
+msgstr ""
+
+#: src/wifi/Opack.cpp:280
+msgid "OPACK decode: terminator in fixed-length dictionary"
+msgstr ""
+
+#: src/wifi/Opack.cpp:295
+msgid "OPACK decode: unknown type byte 0x"
+msgstr ""
+
+#: src/wifi/Opack.cpp:327
+msgid "OPACK decode: "
+msgstr ""
+
+#: src/wifi/Opack.cpp:327
+msgid " trailing bytes"
+msgstr ""
+
+#: src/wifi/Rppairing.h:30
+msgid "This stream does not support waiting for readability"
+msgstr ""
+
+#: src/wifi/Srp.cpp:128
+msgid "SRP B is a multiple of N; rejected"
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:37
+msgid "Hex length must be even"
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:57
+msgid "Invalid hex character"
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:92
+msgid "Cannot open temporary file "
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:97
+msgid "Failed to set record file permissions"
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:105
+msgid "Incomplete record file write"
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:110
+msgid "Rename failed"
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:120
+msgid "Cannot open "
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:127
+msgid "Pairing record file too large"
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:172
+msgid "Invalid scrctl pairing record header"
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:179
+msgid "Record line is not key=value"
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:190
+msgid "Incorrect field length: "
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:190
+msgid " requires "
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:191
+msgid " bytes; got "
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:222
+msgid "Record missing host_private_key"
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:238
+msgid "Failed to create directory "
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:285
+msgid "Reading directory "
+msgstr ""
+
+#: src/wifi/Rppairing.cpp:27
+msgid "Frame exceeds u16 length field"
+msgstr ""
+
+#: src/wifi/Rppairing.cpp:45
+msgid "Frame header is not RPPairing; check port and stream alignment"
+msgstr ""
+
+#: src/wifi/Rppairing.cpp:85
+msgid "Envelope missing message field"
+msgstr ""
+
+#: src/wifi/Rppairing.cpp:91
+msgid "plain missing _0"
+msgstr ""
+
+#: src/wifi/Rppairing.cpp:98
+msgid "Envelope is neither plain nor streamEncrypted"
+msgstr ""
+
+#: src/wifi/Rppairing.cpp:103
+msgid "streamEncrypted._0 is not a string"
+msgstr ""
+
+#: src/wifi/Rppairing.cpp:107
+msgid "Encrypted frame received before main key and nonce were ready"
+msgstr ""
+
+#: src/wifi/Rppairing.cpp:126
+msgid "Decrypted message is not a response"
+msgstr ""
+
+#: src/wifi/Rppairing.cpp:131
+msgid "response missing _1"
+msgstr ""
+
+#: src/wifi/Rppairing.cpp:140 src/wifi/Rppairing.cpp:199
+msgid "Device rejected request: "
+msgstr ""
+
+#: src/wifi/Rppairing.cpp:140 src/wifi/Rppairing.cpp:199
+msgid "(no description)"
+msgstr ""
+
+#: src/wifi/Rppairing.cpp:187
+msgid "Expected event during pairing"
+msgstr ""
+
+#: src/wifi/Rppairing.cpp:192
+msgid "event missing _0"
+msgstr ""
+
+#: src/wifi/Rppairing.cpp:204
+msgid "Device requested user consent twice consecutively"
+msgstr ""
+
+#: src/wifi/Rppairing.cpp:209
+msgid "Device is waiting for Trust confirmation on its screen"
+msgstr ""
+
+#: src/wifi/Rppairing.cpp:217
+msgid "event missing pairingData._0.data; actual fields: "
+msgstr ""
+
+#: src/wifi/Rppairing.cpp:230
+msgid "Main key not installed; cannot send encrypted frame"
+msgstr ""
+
+#: src/wifi/Tlv.cpp:30
+msgid "TLV header truncated"
+msgstr ""
+
+#: src/wifi/Tlv.cpp:39
+msgid "TLV length exceeds buffer"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:44
+msgid "Failed to create private key (invalid length or unsupported platform)"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:44
+msgid "Failed to create public key (invalid length or unsupported platform)"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:54
+msgid "HMAC-SHA512 failed"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:70
+msgid "ChaCha20-Poly1305 requires a 32-byte key and 12-byte nonce"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:74
+msgid "Ciphertext shorter than Poly1305 tag"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:79
+msgid "Failed to allocate EVP_CIPHER_CTX"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:87
+msgid "ChaCha20-Poly1305 initialization failed; check OpenSSL cipher support"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:96
+msgid "ChaCha20-Poly1305 update failed"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:103
+msgid "Failed to set Poly1305 tag"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:107
+msgid ""
+"Poly1305 authentication failed; check key derivation and frame boundaries"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:114
+msgid "ChaCha20-Poly1305 finalization failed"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:120
+msgid "Failed to get Poly1305 tag"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:132
+msgid "Failed to initialize X25519 key generation"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:137
+msgid "Failed to generate X25519 key"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:145
+msgid "Failed to get X25519 public key"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:151
+msgid "Failed to get X25519 private key"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:160
+msgid "Failed to obtain cryptographic random bytes"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:180
+msgid "Failed to get Ed25519 public key"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:188
+msgid "Peer X25519 public key must be 32 bytes"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:206 src/wifi/Crypto.cpp:211
+msgid "X25519 shared secret computation failed"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:217
+msgid "X25519 shared secret is all zero (low-order peer public key)"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:225
+msgid "Ed25519 private key seed must be 32 bytes"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:234
+msgid "Failed to initialize Ed25519 signing"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:239
+msgid "Failed to get Ed25519 signature length"
+msgstr ""
+
+#: src/wifi/Crypto.cpp:244
+msgid "Ed25519 signing failed"
+msgstr ""
+
+#: src/wifi/PairVerify.cpp:12
+msgid "Pairing record incomplete; cannot sign"
+msgstr ""
+
+#: src/wifi/PairVerify.cpp:66 src/wifi/PairVerify.cpp:128
+msgid ""
+"Device does not recognize this pairing record (not paired or pairing removed)"
+msgstr ""
+
+#: src/wifi/PairVerify.cpp:73
+msgid "PV-Msg02 missing 32-byte public key"
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:45
+msgid "MD5 unavailable; check OpenSSL algorithm providers"
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:69
+msgid "Handshake response missing response._1.handshake._0"
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:81
+msgid " TLV decode incomplete: "
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:85
+msgid " returned error code 0x"
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:103
+msgid ""
+"Control channel does not allow pair-setup "
+"(deviceOptions.allowsPairSetup=false). Tested iOS 27 devices require the "
+"RemoteXPC entry point (wifi_probe --pair-setup-xpc)"
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:147
+msgid "Host identifier missing; provide one if hostname lookup is unavailable"
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:217
+msgid "Verify M2 missing 32-byte public key"
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:257
+msgid "verify-M4 TLV decode incomplete: "
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:264
+msgid ""
+"Device accepted this identifier; already paired, pair-setup is unnecessary"
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:269
+msgid "Verify completed without accepting this key; sending upgrade M1"
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:287
+msgid "Handshake (attemptPairVerify=false) completed; sending M1"
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:305
+msgid "M2 missing PUBLIC_KEY or SALT"
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:330
+msgid "M4 missing PROOF"
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:336
+msgid "Device SRP proof mismatch; pairing aborted. Check PIN and peer identity"
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:340
+msgid "SRP mutual verification passed; registering host key on device (M5)"
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:429
+msgid "Cannot decrypt M6: "
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:482
+msgid "createRemoteUnlockKey failed ("
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:482
+msgid "); pairing itself succeeded"
+msgstr ""
+
+#: src/plist/Bplist.cpp:54
+msgid "bplist input empty or larger than 8 MiB"
+msgstr ""
+
+#: src/plist/Bplist.cpp:58
+msgid "bplist too short"
+msgstr ""
+
+#: src/plist/Bplist.cpp:62
+msgid "Missing bplist magic"
+msgstr ""
+
+#: src/plist/Bplist.cpp:73
+msgid "Invalid byte width in bplist trailer"
+msgstr ""
+
+#: src/plist/Bplist.cpp:77
+msgid "Invalid bplist object count: "
+msgstr ""
+
+#: src/plist/Bplist.cpp:81
+msgid "Offset table out of bounds or truncated"
+msgstr ""
+
+#: src/plist/Bplist.cpp:85
+msgid "Root object index out of bounds"
+msgstr ""
+
+#: src/plist/Bplist.cpp:93
+msgid "Object offset outside object region"
+msgstr ""
+
+#: src/plist/Bplist.cpp:120
+msgid "Length field truncated"
+msgstr ""
+
+#: src/plist/Bplist.cpp:124
+msgid "Extended count marker is not 0x1X"
+msgstr ""
+
+#: src/plist/Bplist.cpp:129
+msgid "Invalid count width"
+msgstr ""
+
+#: src/plist/Bplist.cpp:133
+msgid "Count bytes truncated"
+msgstr ""
+
+#: src/plist/Bplist.cpp:150
+msgid "bplist expanded nodes exceed 65536"
+msgstr ""
+
+#: src/plist/Bplist.cpp:152
+msgid "Nesting too deep (possible cycle)"
+msgstr ""
+
+#: src/plist/Bplist.cpp:155
+msgid "Object index out of bounds"
+msgstr ""
+
+#: src/plist/Bplist.cpp:172
+msgid "Reserved marker"
+msgstr ""
+
+#: src/plist/Bplist.cpp:175
+msgid "Integer width exceeds 8 bytes"
+msgstr ""
+
+#: src/plist/Bplist.cpp:179
+msgid "Integer truncated"
+msgstr ""
+
+#: src/plist/Bplist.cpp:190
+msgid "Only 8-byte reals are supported"
+msgstr ""
+
+#: src/plist/Bplist.cpp:193
+msgid "Real truncated"
+msgstr ""
+
+#: src/plist/Bplist.cpp:205
+msgid "Data out of bounds"
+msgstr ""
+
+#: src/plist/Bplist.cpp:213
+msgid "String out of bounds"
+msgstr ""
+
+#: src/plist/Bplist.cpp:224
+msgid "UTF-16 string out of bounds"
+msgstr ""
+
+#: src/plist/Bplist.cpp:231
+msgid "UTF-16 missing low surrogate"
+msgstr ""
+
+#: src/plist/Bplist.cpp:239
+msgid "UTF-16 surrogate mismatch"
+msgstr ""
+
+#: src/plist/Bplist.cpp:241
+msgid "UTF-16 isolated low surrogate"
+msgstr ""
+
+#: src/plist/Bplist.cpp:255
+msgid "Element references exceed remaining bytes"
+msgstr ""
+
+#: src/plist/Bplist.cpp:262
+msgid "Dictionary key/value references exceed available bytes"
+msgstr ""
+
+#: src/plist/Bplist.cpp:265
+msgid "bplist expanded container exceeds node limit"
+msgstr ""
+
+#: src/plist/Bplist.cpp:285
+msgid "Dictionary key must be a string"
+msgstr ""
+
+#: src/plist/Bplist.cpp:296
+msgid "Unsupported bplist marker"
+msgstr ""
+
+#: src/plist/Bplist.cpp:323
+msgid "bplist expanded data exceeds 16 MiB"
+msgstr ""
+
+#: src/plist/Plist.cpp:27
+msgid "Container contains nonempty text"
+msgstr ""
+
+#: src/plist/Plist.cpp:38
+msgid "Scalar cannot contain nested elements"
+msgstr ""
+
+#: src/plist/Plist.cpp:55
+msgid "Dictionary key missing value"
+msgstr ""
+
+#: src/plist/Plist.cpp:58
+msgid "Expected <key> in dictionary"
+msgstr ""
+
+#: src/plist/Plist.cpp:67
+msgid "Boolean element must be empty"
+msgstr ""
+
+#: src/plist/Plist.cpp:76
+msgid "Invalid base64 in data: "
+msgstr ""
+
+#: src/plist/Plist.cpp:82
+msgid "Numeric value is empty"
+msgstr ""
+
+#: src/plist/Plist.cpp:92
+msgid "Real must be finite"
+msgstr ""
+
+#: src/plist/Plist.cpp:95
+msgid "Trailing content in numeric value"
+msgstr ""
+
+#: src/plist/Plist.cpp:98
+msgid "Unsupported element "
+msgstr ""
+
+#: src/plist/Plist.cpp:103
+msgid "XML text cannot contain NUL"
+msgstr ""
+
+#: src/plist/Plist.cpp:110
+msgid "plist nesting too deep"
+msgstr ""
+
+#: src/plist/Plist.cpp:120
+msgid "plist real must be finite"
+msgstr ""
+
+#: src/plist/Plist.cpp:137
+msgid "plist dictionary key/value count mismatch"
+msgstr ""
+
+#: src/plist/Plist.cpp:154
+msgid "XML input too large or contains NUL"
+msgstr ""
+
+#: src/plist/Plist.cpp:167
+msgid "Root must be a single <plist> element"
+msgstr ""
+
+#: src/plist/Plist.cpp:170
+msgid "plist root must contain a single value"
+msgstr ""

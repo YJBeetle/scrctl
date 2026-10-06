@@ -1,7 +1,6 @@
 # Third-party notices
 
-This file records the licenses of the JSON, CLI and XML dependencies added during the
-application refactor. It accompanies binary installs under share/doc/scrctl.
+This file records the licenses of the dependencies added during the application and transport refactor. It accompanies binary installs under share/doc/scrctl.
 Existing SDL2, OpenSSL and optional FFmpeg dependencies retain their own licenses
 and distribution requirements.
 
@@ -162,3 +161,17 @@ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
 IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY
 OF SUCH DAMAGE.
 ```
+
+
+## GNU gettext / libintl
+
+Source: https://www.gnu.org/software/gettext/
+
+Message catalogs are compiled with GNU gettext tools. On systems with built-in
+gettext support (such as glibc), the runtime uses that implementation. Elsewhere,
+it links the installed libintl library; this macOS build uses shared libintl.
+GNU libintl is distributed under the GNU Lesser General Public License.
+The build tools and runtime have distinct licenses; the gettext tools are build
+requirements and are not bundled in scrctl. A binary package that also bundles
+libintl must include its applicable license and meet its distribution requirements.
+Project translation files retain the scrctl project license.

@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "Hid.h"
 
 #include <algorithm>
@@ -93,7 +94,7 @@ uint16_t normalize(double v) {    if (!(v > 0.0)) {  // 也吃掉 NaN
 std::unique_ptr<Service> Service::open(scrctl::remote::Device &device, std::string &err,
                                       bool verbose) {
     if (!device.rsd().has_service(kServiceName)) {
-        err = "RSD 目录里没有 " + std::string(kServiceName);
+        err = SCRCTL_TR("RSD directory missing ") + std::string(kServiceName);
         return nullptr;
     }
     auto conn = device.connect(kServiceName, err, verbose);
@@ -115,7 +116,7 @@ bool Service::surfaces(std::vector<Surface> &out, std::string &err) {
     const auto *list = reply.find("connectedServices");
     if (list == nullptr) {
         // 不认识这个回信形状时把原文交出去，别猜。
-        err = "connectedServices 的回信里没有 connectedServices: " + xpc::describe(reply);
+        err = SCRCTL_TR("connectedServices response missing connectedServices: ") + xpc::describe(reply);
         return false;
     }
     const auto each = [&](const xpc::Value &v) {
@@ -172,7 +173,7 @@ bool Service::tap(double x, double y, int hold_ms, std::string &err) {
 bool Service::stroke(const std::vector<std::pair<double, double>> &points, int step_ms,
                      std::string &err) {
     if (points.empty()) {
-        err = "stroke 至少要一个点";
+        err = SCRCTL_TR("Stroke requires at least one point");
         return false;
     }
     for (std::size_t i = 0; i < points.size(); ++i) {
@@ -240,7 +241,7 @@ bool Service::type_text(const std::string &text, int hold_ms, std::string &err) 
 std::unique_ptr<Buttons> Buttons::open(scrctl::remote::Device &device, std::string &err,
                                        bool verbose) {
     if (!device.rsd().has_service(kIndigoServiceName)) {
-        err = "RSD 目录里没有 " + std::string(kIndigoServiceName);
+        err = SCRCTL_TR("RSD directory missing ") + std::string(kIndigoServiceName);
         return nullptr;
     }
     auto conn = device.connect(kIndigoServiceName, err, verbose);

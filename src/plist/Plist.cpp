@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "plist/Plist.h"
 #include "util/Base64.h"
 
@@ -23,7 +24,7 @@ std::vector<pugi::xml_node> elements(pugi::xml_node node) {
             result.push_back(child);
         else if ((child.type() == pugi::node_pcdata || child.type() == pugi::node_cdata) &&
                  !whitespace(child.value()))
-            throw std::runtime_error("容器内出现非空文本");
+            throw std::runtime_error(SCRCTL_TR("Container contains nonempty text"));
     }
     return result;
 }
@@ -34,14 +35,14 @@ std::string text(pugi::xml_node node) {
         if (child.type() == pugi::node_pcdata || child.type() == pugi::node_cdata)
             result += child.value();
         else if (child.type() == pugi::node_element)
-            throw std::runtime_error("标量内不能嵌套元素");
+            throw std::runtime_error(SCRCTL_TR("Scalar cannot contain nested elements"));
     }
     return result;
 }
 
 Value read_value(pugi::xml_node node, int depth) {
     if (depth > kMaxDepth)
-        throw std::runtime_error("嵌套过深");
+        throw std::runtime_error(SCRCTL_TR("Nesting too deep"));
     const std::string_view name = node.name();
     if (name == "dict" || name == "array") {
         const auto children = elements(node);
@@ -51,10 +52,10 @@ Value read_value(pugi::xml_node node, int depth) {
                 out.push(read_value(child, depth + 1));
         } else {
             if (children.size() % 2 != 0)
-                throw std::runtime_error("dict 缺少键对应的值");
+                throw std::runtime_error(SCRCTL_TR("Dictionary key missing value"));
             for (size_t i = 0; i < children.size(); i += 2) {
                 if (std::string_view(children[i].name()) != "key")
-                    throw std::runtime_error("dict 里期望 <key>");
+                    throw std::runtime_error(SCRCTL_TR("Expected <key> in dictionary"));
                 out.set(text(children[i]), read_value(children[i + 1], depth + 1));
             }
         }
@@ -63,7 +64,7 @@ Value read_value(pugi::xml_node node, int depth) {
     const auto content = text(node);
     if (name == "true" || name == "false") {
         if (!whitespace(content))
-            throw std::runtime_error("bool 内容必须为空");
+            throw std::runtime_error(SCRCTL_TR("Boolean element must be empty"));
         return Value::Bool(name == "true");
     }
     if (name == "string")
@@ -72,13 +73,13 @@ Value read_value(pugi::xml_node node, int depth) {
         std::string err;
         auto bytes = util::base64_decode(content, err);
         if (!bytes)
-            throw std::runtime_error("data 不是合法 base64: " + err);
+            throw std::runtime_error(SCRCTL_TR("Invalid base64 in data: ") + err);
         return Value::OfData(std::move(*bytes));
     }
     if (name == "integer" || name == "real") {
         const auto first = content.find_first_not_of(" \t\r\n");
         if (first == std::string::npos)
-            throw std::runtime_error("数值内容为空");
+            throw std::runtime_error(SCRCTL_TR("Numeric value is empty"));
         const auto number = content.substr(first, content.find_last_not_of(" \t\r\n") - first + 1);
         size_t end = 0;
         Value out;
@@ -88,25 +89,25 @@ Value read_value(pugi::xml_node node, int depth) {
             out.kind = Kind::Real;
             out.real = std::stod(number, &end);
             if (!std::isfinite(out.real))
-                throw std::runtime_error("real 必须是有限数");
+                throw std::runtime_error(SCRCTL_TR("Real must be finite"));
         }
         if (end != number.size())
-            throw std::runtime_error("数值尾部有多余内容");
+            throw std::runtime_error(SCRCTL_TR("Trailing content in numeric value"));
         return out;
     }
-    throw std::runtime_error("不支持的元素 " + std::string(name));
+    throw std::runtime_error(SCRCTL_TR("Unsupported element ") + std::string(name));
 }
 
 const char *xml_text(const std::string &value) {
     if (value.find('\0') != std::string::npos) {
-        throw std::invalid_argument("XML 文本不能包含 NUL");
+        throw std::invalid_argument(SCRCTL_TR("XML text cannot contain NUL"));
     }
     return value.c_str();
 }
 
 void write_value(pugi::xml_node parent, const Value &v, int depth) {
     if (depth > kMaxDepth)
-        throw std::invalid_argument("plist 嵌套过深");
+        throw std::invalid_argument(SCRCTL_TR("plist nesting too deep"));
     switch (v.kind) {
     case Kind::Bool:
         parent.append_child(v.boolean ? "true" : "false");
@@ -116,7 +117,7 @@ void write_value(pugi::xml_node parent, const Value &v, int depth) {
         break;
     case Kind::Real:
         if (!std::isfinite(v.real))
-            throw std::invalid_argument("plist real 必须是有限数");
+            throw std::invalid_argument(SCRCTL_TR("plist real must be finite"));
         parent.append_child("real").text().set(v.real, 17);
         break;
     case Kind::String:
@@ -133,7 +134,7 @@ void write_value(pugi::xml_node parent, const Value &v, int depth) {
     }
     case Kind::Dict: {
         if (v.keys.size() != v.values.size())
-            throw std::invalid_argument("plist dict 键值数量不一致");
+            throw std::invalid_argument(SCRCTL_TR("plist dictionary key/value count mismatch"));
         auto node = parent.append_child("dict");
         for (size_t i = 0; i < v.keys.size(); ++i) {
             node.append_child("key").text().set(xml_text(v.keys[i]));
@@ -150,7 +151,7 @@ std::optional<Value> parse(std::string_view xml, std::string *err) {
         err->clear();
     if (xml.size() > kMaxInput || xml.find('\0') != std::string_view::npos) {
         if (err)
-            *err = "XML 输入过大或含 NUL";
+            *err = SCRCTL_TR("XML input too large or contains NUL");
         return std::nullopt;
     }
     try {
@@ -163,10 +164,10 @@ std::optional<Value> parse(std::string_view xml, std::string *err) {
             throw std::runtime_error(result.description());
         const auto roots = elements(doc);
         if (roots.size() != 1 || std::string_view(roots[0].name()) != "plist")
-            throw std::runtime_error("根元素必须是单个 <plist>");
+            throw std::runtime_error(SCRCTL_TR("Root must be a single <plist> element"));
         const auto values = elements(roots[0]);
         if (values.size() != 1)
-            throw std::runtime_error("plist 根必须包含单个值");
+            throw std::runtime_error(SCRCTL_TR("plist root must contain a single value"));
         return read_value(values[0], 0);
     } catch (const std::exception &e) {
         if (err)

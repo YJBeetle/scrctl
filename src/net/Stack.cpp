@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "net/Stack.h"
 
 #include "net/LwipRuntime.h"
@@ -135,10 +136,10 @@ void Stack::close_tcp(tcp_pcb *pcb) {
 }
 bool Stack::start_pump(std::string &err) {
   if (!addresses_valid_ || stopping_ || pumping_)
-    return err = "隧道栈无法启动：地址无效或已启动/停止", false;
+    return err = SCRCTL_TR("Cannot start tunnel stack: invalid address or stack already started/stopped"), false;
   const auto mtu = tunnel_.mtu();
   if (mtu < 1280)
-    return err = "隧道 MTU 小于 IPv6 最小值", false;
+    return err = SCRCTL_TR("Tunnel MTU is below the IPv6 minimum"), false;
   const bool registered = LwipRuntime::instance().call([&] {
     ip6_addr_t ip{};
     ip6addr_aton(local_text_.c_str(), &ip);
@@ -153,12 +154,12 @@ bool Stack::start_pump(std::string &err) {
     return true;
   });
   if (!registered)
-    return err = "无法注册 lwIP 隧道接口", false;
+    return err = SCRCTL_TR("Failed to register lwIP tunnel interface"), false;
   pumping_ = true;
   try {
     pump_ = std::thread(&Stack::pump_loop, this);
   } catch (const std::system_error &e) {
-    err = "无法启动隧道线程：" + std::string(e.what());
+    err = SCRCTL_TR("Failed to start tunnel thread: ") + std::string(e.what());
     stop_pump();
     return false;
   }
@@ -178,7 +179,7 @@ void Stack::stop_pump() {
   {
     std::lock_guard lock(err_mu_);
     if (pump_err_.empty())
-      pump_err_ = "隧道已停止";
+      pump_err_ = SCRCTL_TR("Tunnel stopped");
   }
   tunnel_.shutdown(); // 中断阻塞的 TLS/包读取；fd 在线程退出之后才释放。
   fail_endpoints(pump_error());
@@ -219,7 +220,7 @@ bool Stack::enqueue(std::vector<uint8_t> packet) {
 }
 bool Stack::send(const std::vector<uint8_t> &packet, std::string &err) {
   if (!pumping_ || !enqueue(packet))
-    return err = "隧道已停止或发送队列已满", false;
+    return err = SCRCTL_TR("Tunnel stopped or send queue full"), false;
   return true;
 }
 void Stack::pump_loop() {
@@ -274,12 +275,12 @@ void Stack::pump_loop() {
       });
     }
   } catch (const std::exception &e) {
-    error = "隧道处理失败：" + std::string(e.what());
+    error = SCRCTL_TR("Tunnel processing failed: ") + std::string(e.what());
   }
   if (!stopping_) {
     {
       std::lock_guard lock(err_mu_);
-      pump_err_ = error.empty() ? "隧道读取失败" : error;
+      pump_err_ = error.empty() ? SCRCTL_TR("Tunnel read failed") : error;
     }
     stopping_ = true;
     fail_endpoints(pump_error());
@@ -340,21 +341,21 @@ void Stack::observe_icmpv6(const uint8_t *icmp, std::size_t len) {
   // code 3， v6 的是 code 4（照 v4
   // 抄会把金丝雀那条读成"地址不可达"，意思整个反了）。
   static constexpr const char *kCodes[] = {
-      "没有路由到目的",    "与管理策略禁止通信", "超出源地址的范围",
-      "地址不可达",        "端口不可达",         "源地址被入/出站策略禁止",
-      "到目的的路由被拒绝"};
+      SCRCTL_N_("no route to destination"),    SCRCTL_N_("communication administratively prohibited"), SCRCTL_N_("beyond source address scope"),
+      SCRCTL_N_("address unreachable"),        SCRCTL_N_("port unreachable"),         SCRCTL_N_("source address failed ingress/egress policy"),
+      SCRCTL_N_("route to destination rejected")};
   std::string line =
       "ICMPv6 type=" + std::to_string(type) + " code=" + std::to_string(code);
   if (type == 1 && code < std::size(kCodes)) {
-    line += std::string("（") + kCodes[code] + "）";
+    line += std::string(SCRCTL_TR("(")) + SCRCTL_TR(kCodes[code]) + SCRCTL_TR(")");
   } else if (type == 2) {
-    line += "（包太大）";
+    line += SCRCTL_TR(" (packet too big)");
   } else if (type == 3) {
-    line += "（TTL 耗尽）";
+    line += SCRCTL_TR(" (hop limit exceeded)");
   } else if (type == 4) {
-    line += "（参数问题）";
+    line += SCRCTL_TR(" (parameter problem)");
   } else if (type == 128 || type == 129) {
-    line += type == 128 ? "（回音请求）" : "（回音应答）";
+    line += type == 128 ? SCRCTL_TR(" (echo request)") : SCRCTL_TR(" (echo reply)");
   }
   // 错误消息（type 1..4）在第 8 字节之后回带触发它的那个包：内层 IPv6 头 40
   // 字节， 再往后是触发包 L4 头的前 8 字节——对 UDP 来说刚好是
@@ -368,11 +369,11 @@ void Stack::observe_icmpv6(const uint8_t *icmp, std::size_t len) {
     char dst[64] = "?";
     inet_ntop(AF_INET6, inner + 8, src, sizeof(src));
     inet_ntop(AF_INET6, inner + 24, dst, sizeof(dst));
-    line += " 内层 nh=" + std::to_string(inner_nh) + " " + src + " -> " + dst;
+    line += SCRCTL_TR(" inner nh=") + std::to_string(inner_nh) + " " + src + " -> " + dst;
     if (inner_nh == 17 && rest >= 48 + 8) {
       const uint16_t sp = get16(inner + 40);
       const uint16_t dp = get16(inner + 42);
-      line += " 端口 " + std::to_string(sp) + "->" + std::to_string(dp);
+      line += SCRCTL_TR(" ports ") + std::to_string(sp) + "->" + std::to_string(dp);
     }
   }
   {

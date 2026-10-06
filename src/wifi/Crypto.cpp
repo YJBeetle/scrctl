@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "wifi/Crypto.h"
 #include "util/Base64.h"
 
@@ -40,7 +41,7 @@ PkeyUp raw_key(int pkey_type, std::string_view data, bool as_private, std::strin
                         : EVP_PKEY_new_raw_public_key(pkey_type, nullptr, u8(data),
                                                       static_cast<int>(data.size())));
     if (!p) {
-        err = as_private ? "构造私钥失败（长度或平台不支持）" : "构造公钥失败（长度或平台不支持）";
+        err = as_private ? SCRCTL_TR("Failed to create private key (invalid length or unsupported platform)") : SCRCTL_TR("Failed to create public key (invalid length or unsupported platform)");
     }
     return p;
 }
@@ -50,7 +51,7 @@ bool hmac_sha512(const Bytes &key, const Bytes &data, Bytes &out, std::string &e
     unsigned int len = 0;
     if (HMAC(EVP_sha512(), key.data(), static_cast<int>(key.size()), data.data(), data.size(),
             out.data(), &len) == nullptr) {
-        err = "HMAC-SHA512 失败";
+        err = SCRCTL_TR("HMAC-SHA512 failed");
         return false;
     }
     out.resize(len);
@@ -66,16 +67,16 @@ bool chacha(bool encrypt, std::string_view key, std::string_view nonce, const By
             std::string &err) {
     static constexpr size_t kTagLen = 16;
     if (key.size() != 32 || nonce.size() != 12) {
-        err = "ChaCha20-Poly1305 要 32 字节密钥 + 12 字节 nonce";
+        err = SCRCTL_TR("ChaCha20-Poly1305 requires a 32-byte key and 12-byte nonce");
         return false;
     }
     if (!encrypt && in.size() < kTagLen) {
-        err = "密文比 Poly1305 标签还短";
+        err = SCRCTL_TR("Ciphertext shorter than Poly1305 tag");
         return false;
     }
     CtxUp ctx(EVP_CIPHER_CTX_new());
     if (!ctx) {
-        err = "分配 EVP_CIPHER_CTX 失败";
+        err = SCRCTL_TR("Failed to allocate EVP_CIPHER_CTX");
         return false;
     }
     if (EVP_CipherInit_ex(ctx.get(), EVP_chacha20_poly1305(), nullptr, nullptr, nullptr,
@@ -83,7 +84,7 @@ bool chacha(bool encrypt, std::string_view key, std::string_view nonce, const By
         EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_AEAD_SET_IVLEN, static_cast<int>(nonce.size()),
                             nullptr) != 1 ||
         EVP_CipherInit_ex(ctx.get(), nullptr, nullptr, u8(key), u8(nonce), encrypt ? 1 : 0) != 1) {
-        err = "ChaCha20-Poly1305 初始化失败（这个 OpenSSL 可能没编 CHACHA）";
+        err = SCRCTL_TR("ChaCha20-Poly1305 initialization failed; check OpenSSL cipher support");
         return false;
     }
     const size_t body = encrypt ? in.size() : in.size() - kTagLen;
@@ -92,31 +93,31 @@ bool chacha(bool encrypt, std::string_view key, std::string_view nonce, const By
     if (body > 0 &&
         EVP_CipherUpdate(ctx.get(), out.data(), &produced, in.data(),
                          static_cast<int>(body)) != 1) {
-        err = "ChaCha20-Poly1305 更新失败";
+        err = SCRCTL_TR("ChaCha20-Poly1305 update failed");
         return false;
     }
     int tail = 0;
     if (!encrypt) {
         if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_AEAD_SET_TAG, static_cast<int>(kTagLen),
                                 const_cast<unsigned char *>(in.data() + body)) != 1) {  // NOLINT
-            err = "设 Poly1305 标签失败";
+            err = SCRCTL_TR("Failed to set Poly1305 tag");
             return false;
         }
         if (EVP_CipherFinal_ex(ctx.get(), out.data() + produced, &tail) != 1) {
-            err = "Poly1305 标签校验失败：要么密钥不对，要么帧取错了字节";
+            err = SCRCTL_TR("Poly1305 authentication failed; check key derivation and frame boundaries");
             return false;
         }
         out.resize(static_cast<size_t>(produced) + tail);
         return true;
     }
     if (EVP_CipherFinal_ex(ctx.get(), out.data() + produced, &tail) != 1) {
-        err = "ChaCha20-Poly1305 收尾失败";
+        err = SCRCTL_TR("ChaCha20-Poly1305 finalization failed");
         return false;
     }
     produced += tail;
     if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_AEAD_GET_TAG, static_cast<int>(kTagLen),
                             out.data() + produced) != 1) {
-        err = "取 Poly1305 标签失败";
+        err = SCRCTL_TR("Failed to get Poly1305 tag");
         return false;
     }
     out.resize(static_cast<size_t>(produced) + kTagLen);
@@ -128,12 +129,12 @@ bool chacha(bool encrypt, std::string_view key, std::string_view nonce, const By
 std::optional<X25519KeyPair> x25519_keypair(std::string &err) {
     PctxUp pctx(EVP_PKEY_CTX_new_id(EVP_PKEY_X25519, nullptr));
     if (!pctx || EVP_PKEY_keygen_init(pctx.get()) <= 0) {
-        err = "初始化 X25519 密钥生成失败";
+        err = SCRCTL_TR("Failed to initialize X25519 key generation");
         return std::nullopt;
     }
     EVP_PKEY *raw = nullptr;
     if (EVP_PKEY_keygen(pctx.get(), &raw) <= 0) {
-        err = "生成 X25519 密钥失败";
+        err = SCRCTL_TR("Failed to generate X25519 key");
         return std::nullopt;
     }
     PkeyUp pkey(raw);
@@ -141,13 +142,13 @@ std::optional<X25519KeyPair> x25519_keypair(std::string &err) {
     size_t len = out.pub.size();
     if (EVP_PKEY_get_raw_public_key(pkey.get(), out.pub.data(), &len) != 1 ||
         len != out.pub.size()) {
-        err = "取 X25519 公钥失败";
+        err = SCRCTL_TR("Failed to get X25519 public key");
         return std::nullopt;
     }
     len = out.priv.size();
     if (EVP_PKEY_get_raw_private_key(pkey.get(), out.priv.data(), &len) != 1 ||
         len != out.priv.size()) {
-        err = "取 X25519 私钥失败";
+        err = SCRCTL_TR("Failed to get X25519 private key");
         return std::nullopt;
     }
     return out;
@@ -156,7 +157,7 @@ std::optional<X25519KeyPair> x25519_keypair(std::string &err) {
 std::optional<Bytes> random_bytes(size_t n, std::string &err) {
     Bytes out(n);
     if (n > 0 && RAND_bytes(out.data(), static_cast<int>(n)) != 1) {
-        err = "取随机字节失败（CSPRNG 没播种？）";
+        err = SCRCTL_TR("Failed to obtain cryptographic random bytes");
         return std::nullopt;
     }
     return out;
@@ -176,7 +177,7 @@ std::optional<Ed25519KeyPair> ed25519_keypair(std::string &err) {
     std::memcpy(out.seed.data(), seed->data(), out.seed.size());
     size_t len = out.pub.size();
     if (EVP_PKEY_get_raw_public_key(key.get(), out.pub.data(), &len) != 1 || len != out.pub.size()) {
-        err = "取 Ed25519 公钥失败";
+        err = SCRCTL_TR("Failed to get Ed25519 public key");
         return std::nullopt;
     }
     return out;
@@ -184,7 +185,7 @@ std::optional<Ed25519KeyPair> ed25519_keypair(std::string &err) {
 
 std::optional<Bytes> x25519_shared(const std::array<uint8_t, 32> &priv, std::string_view peer_pub,
                                    std::string &err) {    if (peer_pub.size() != 32) {
-        err = "对端 X25519 公钥长度不是 32";
+        err = SCRCTL_TR("Peer X25519 public key must be 32 bytes");
         return std::nullopt;
     }
     const std::string_view priv_view(reinterpret_cast<const char *>(priv.data()),  // NOLINT
@@ -202,18 +203,18 @@ std::optional<Bytes> x25519_shared(const std::array<uint8_t, 32> &priv, std::str
     if (!dctx || EVP_PKEY_derive_init(dctx.get()) <= 0 ||
         EVP_PKEY_derive_set_peer(dctx.get(), theirs.get()) <= 0 ||
         EVP_PKEY_derive(dctx.get(), nullptr, &len) <= 0 || len != 32) {
-        err = "X25519 共享密钥计算失败";
+        err = SCRCTL_TR("X25519 shared secret computation failed");
         return std::nullopt;
     }
     Bytes out(len);
     if (EVP_PKEY_derive(dctx.get(), out.data(), &len) <= 0) {
-        err = "X25519 共享密钥计算失败";
+        err = SCRCTL_TR("X25519 shared secret computation failed");
         return std::nullopt;
     }
     // RFC 7748 §6.1：全零意味着对端是低阶点。不挡掉的话，后面所有密钥都从一个
     // 攻击者可预测的值派生——这就是"看着握上了手"的空会话。
     if (std::all_of(out.begin(), out.end(), [](uint8_t b) { return b == 0; })) {
-        err = "X25519 共享密钥全零（对端公钥是低阶点）";
+        err = SCRCTL_TR("X25519 shared secret is all zero (low-order peer public key)");
         return std::nullopt;
     }
     return out;
@@ -221,7 +222,7 @@ std::optional<Bytes> x25519_shared(const std::array<uint8_t, 32> &priv, std::str
 
 std::optional<Bytes> ed25519_sign(std::string_view seed, const Bytes &msg, std::string &err) {
     if (seed.size() != 32) {
-        err = "Ed25519 私钥种子长度不是 32";
+        err = SCRCTL_TR("Ed25519 private key seed must be 32 bytes");
         return std::nullopt;
     }
     PkeyUp key = raw_key(EVP_PKEY_ED25519, seed, true, err);
@@ -230,17 +231,17 @@ std::optional<Bytes> ed25519_sign(std::string_view seed, const Bytes &msg, std::
     }
     MdCtxUp mdctx(EVP_MD_CTX_new());
     if (!mdctx || EVP_DigestSignInit(mdctx.get(), nullptr, nullptr, nullptr, key.get()) <= 0) {
-        err = "初始化 Ed25519 签名失败";
+        err = SCRCTL_TR("Failed to initialize Ed25519 signing");
         return std::nullopt;
     }
     size_t len = 0;
     if (EVP_DigestSign(mdctx.get(), nullptr, &len, msg.data(), msg.size()) <= 0 || len != 64) {
-        err = "取 Ed25519 签名长度失败";
+        err = SCRCTL_TR("Failed to get Ed25519 signature length");
         return std::nullopt;
     }
     Bytes out(len);
     if (EVP_DigestSign(mdctx.get(), out.data(), &len, msg.data(), msg.size()) <= 0) {
-        err = "Ed25519 签名失败";
+        err = SCRCTL_TR("Ed25519 signing failed");
         return std::nullopt;
     }
     return out;

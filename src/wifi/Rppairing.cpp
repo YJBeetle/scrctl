@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "wifi/Rppairing.h"
 
 #include <cstring>
@@ -23,7 +24,7 @@ void Rppairing::install_main_keys(Bytes client_key, Bytes server_key) {
 bool FramedCarrier::write_envelope(const json::Value &envelope, std::string &err) {
     const std::string text = json::write(envelope);
     if (text.size() > 0xFFFF) {
-        err = "帧太长，u16 长度字段放不下";
+        err = SCRCTL_TR("Frame exceeds u16 length field");
         return false;
     }
     Bytes buf;
@@ -41,7 +42,7 @@ std::optional<json::Value> FramedCarrier::read_envelope(std::string &err) {
         return std::nullopt;
     }
     if (std::memcmp(header, kRpPairingMagic.data(), kRpPairingMagic.size()) != 0) {
-        err = "帧头不是 RPPairing，说明我们对上了一个不对的端口或者流错位了";
+        err = SCRCTL_TR("Frame header is not RPPairing; check port and stream alignment");
         return std::nullopt;
     }
     const size_t len = (static_cast<size_t>(header[kRpPairingMagic.size()]) << 8) |
@@ -81,29 +82,29 @@ std::optional<json::Value> Rppairing::receive(std::string &err) {
 
     const json::Value *message = json::find(*envelope, "message");
     if (message == nullptr) {
-        err = "信封里没有 message 字段";
+        err = SCRCTL_TR("Envelope missing message field");
         return std::nullopt;
     }
     if (const json::Value *plain = json::find(*message, "plain")) {
         const json::Value *inner = json::find(*plain, "_0");
         if (inner == nullptr) {
-            err = "plain 里没有 _0";
+            err = SCRCTL_TR("plain missing _0");
             return std::nullopt;
         }
         return *inner;
     }
     const json::Value *encrypted = json::find(*message, "streamEncrypted");
     if (encrypted == nullptr) {
-        err = "信封既不是 plain 也不是 streamEncrypted";
+        err = SCRCTL_TR("Envelope is neither plain nor streamEncrypted");
         return std::nullopt;
     }
     const json::Value *payload = json::find(*encrypted, "_0");
     if (payload == nullptr || !payload->is_string()) {
-        err = "streamEncrypted 的 _0 不是字符串";
+        err = SCRCTL_TR("streamEncrypted._0 is not a string");
         return std::nullopt;
     }
     if (server_main_.size() != 32 || last_nonce_.size() != 12) {
-        err = "收到加密帧，但主密钥/nonce 还没就绪（配对没走通就发东西了）";
+        err = SCRCTL_TR("Encrypted frame received before main key and nonce were ready");
         return std::nullopt;
     }
     const std::optional<Bytes> sealed = b64_decode(json::as_string_or(*payload), err);
@@ -122,12 +123,12 @@ std::optional<json::Value> Rppairing::receive(std::string &err) {
     }
     const json::Value *response = json::find(*decrypted, "response");
     if (response == nullptr) {
-        err = "解密出来的不是 response";
+        err = SCRCTL_TR("Decrypted message is not a response");
         return std::nullopt;
     }
     const json::Value *body_of_response = json::find(*response, "_1");
     if (body_of_response == nullptr) {
-        err = "response 里没有 _1";
+        err = SCRCTL_TR("response missing _1");
         return std::nullopt;
     }
     // 设备把错误也塞在加密回复里：不挑出来的话，调用方会拿一个没有期待字段的对象
@@ -136,7 +137,7 @@ std::optional<json::Value> Rppairing::receive(std::string &err) {
         const json::Value *info = json::find(*extended, "_0");
         const json::Value *user = info != nullptr ? json::find(*info, "userInfo") : nullptr;
         const json::Value *why = user != nullptr ? json::find(*user, "NSLocalizedDescription") : nullptr;
-        err = "设备拒绝: " + (why != nullptr ? json::as_string_or(*why) : std::string("(没有描述)"));
+        err = SCRCTL_TR("Device rejected request: ") + (why != nullptr ? json::as_string_or(*why) : std::string(SCRCTL_TR("(no description)")));
         return std::nullopt;
     }
     return *body_of_response;
@@ -183,29 +184,29 @@ std::optional<Bytes> pairing_data_roundtrip(Rppairing &channel, const Bytes &tlv
         }
         const json::Value *event = json::find(*reply, "event");
         if (event == nullptr) {
-            err = "配对过程中设备回的不是 event";
+            err = SCRCTL_TR("Expected event during pairing");
             return std::nullopt;
         }
         const json::Value *zero = json::find(*event, "_0");
         if (zero == nullptr) {
-            err = "event 里没有 _0";
+            err = SCRCTL_TR("event missing _0");
             return std::nullopt;
         }
         if (const json::Value *rejected = json::find(*zero, "pairingRejectedWithError")) {
             const json::Value *wrapped = json::find(*rejected, "wrappedError");
             const json::Value *user = wrapped != nullptr ? json::find(*wrapped, "userInfo") : nullptr;
             const json::Value *why = user != nullptr ? json::find(*user, "NSLocalizedDescription") : nullptr;
-            err = "设备拒绝: " + (why != nullptr ? json::as_string_or(*why) : std::string("(没有描述)"));
+            err = SCRCTL_TR("Device rejected request: ") + (why != nullptr ? json::as_string_or(*why) : std::string(SCRCTL_TR("(no description)")));
             return std::nullopt;
         }
         if (json::find(*zero, "awaitingUserConsent") != nullptr) {
             if (!consent_pending) {
-                err = "设备连着两次说要等用户同意";
+                err = SCRCTL_TR("Device requested user consent twice consecutively");
                 return std::nullopt;
             }
             consent_pending = false;
             if (progress) {
-                progress("设备在等你在屏幕上点「信任」——点了这一步才会继续");
+                progress(SCRCTL_TR("Device is waiting for Trust confirmation on its screen"));
             }
             continue;
         }
@@ -213,7 +214,7 @@ std::optional<Bytes> pairing_data_roundtrip(Rppairing &channel, const Bytes &tlv
         const json::Value *inner_data = data != nullptr ? json::find(*data, "_0") : nullptr;
         const json::Value *bytes = inner_data != nullptr ? json::find(*inner_data, "data") : nullptr;
         if (bytes == nullptr || !bytes->is_string()) {
-            err = "event 里没有 pairingData._0.data，实际字段：";
+            err = SCRCTL_TR("event missing pairingData._0.data; actual fields: ");
             for (const auto &kv : zero->items()) {
                 err += " " + kv.key();
             }
@@ -226,7 +227,7 @@ std::optional<Bytes> pairing_data_roundtrip(Rppairing &channel, const Bytes &tlv
 std::optional<json::Value> Rppairing::encrypted_roundtrip(const json::Value &request,
                                                           std::string &err) {
     if (client_main_.size() != 32) {
-        err = "还没装主密钥，发不了加密帧";
+        err = SCRCTL_TR("Main key not installed; cannot send encrypted frame");
         return std::nullopt;
     }
     // nonce = u64 小端计数 + 4 个零字节。计数在**往返成功之后**才推进。

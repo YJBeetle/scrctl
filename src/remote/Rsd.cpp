@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "remote/Rsd.h"
 
 #include <chrono>
@@ -95,7 +96,7 @@ xpc::Value core_device_request(std::string_view feature_identifier,
                 value = value * 10 + static_cast<uint64_t>(c - '0');
             }
             if (bad) {
-                std::fprintf(stderr, "SCRCTL_COREDEVICE_VERSION 里有非数字段: %s（按 629.3 走）\n",
+                std::fprintf(stderr, SCRCTL_TR("Invalid numeric component in SCRCTL_COREDEVICE_VERSION: %s (using 629.3)\n"),
                              override);
                 parsed.clear();
                 break;
@@ -108,7 +109,7 @@ xpc::Value core_device_request(std::string_view feature_identifier,
         }
         if (!parsed.empty()) {
             parts = std::move(parsed);
-            std::fprintf(stderr, "  [注] coreDeviceVersion 按环境变量的申报改成了 %s（默认 629.3）\n",
+            std::fprintf(stderr, SCRCTL_TR("  coreDeviceVersion overridden by environment: %s (default: 629.3)\n"),
                          override);
         }
     }
@@ -164,7 +165,7 @@ std::unique_ptr<ServiceConnection> ServiceConnection::open(net::Stack &stack,
     auto conn = std::unique_ptr<ServiceConnection>(new ServiceConnection());
     conn->tcp_ = std::make_unique<net::TcpStream>(stack);
     if (!conn->tcp_->connect(service.port, err)) {
-        err = "连 " + service.name + " 端口 " + std::to_string(service.port) + " 失败: " + err;
+        err = SCRCTL_TR("Connect to ") + service.name + SCRCTL_TR(" port ") + std::to_string(service.port) + SCRCTL_TR(" failed: ") + err;
         return nullptr;
     }
     if (!service.uses_remote_xpc) {
@@ -173,7 +174,7 @@ std::unique_ptr<ServiceConnection> ServiceConnection::open(net::Stack &stack,
     }
     auto channel = Channel::open(*conn->tcp_, err, verbose);
     if (!channel) {
-        err = service.name + " 的 HTTP/2 握手失败: " + err;
+        err = service.name + SCRCTL_TR(" HTTP/2 handshake failed: ") + err;
         return nullptr;
     }
     // 服务连接上不再喊一次设备身份：那是 RSD 控制通道独有的步骤，设备这边
@@ -185,7 +186,7 @@ std::unique_ptr<ServiceConnection> ServiceConnection::open(net::Stack &stack,
 bool ServiceConnection::call(const xpc::Value &request, xpc::Value &reply, int timeout_ms,
                              std::string &err) {
     if (channel_ == nullptr) {
-        err = "这条服务连接不是 RemoteXPC 服务";
+        err = SCRCTL_TR("Service connection is not RemoteXPC");
         return false;
     }
     return channel_->call(request, reply, timeout_ms, err);
@@ -193,7 +194,7 @@ bool ServiceConnection::call(const xpc::Value &request, xpc::Value &reply, int t
 
 bool ServiceConnection::send_only(const xpc::Value &request, std::string &err) {
     if (channel_ == nullptr) {
-        err = "这条服务连接不是 RemoteXPC 服务";
+        err = SCRCTL_TR("Service connection is not RemoteXPC");
         return false;
     }
     return channel_->send_request(request, false, err);
@@ -201,7 +202,7 @@ bool ServiceConnection::send_only(const xpc::Value &request, std::string &err) {
 
 bool ServiceConnection::service(int timeout_ms, std::string &err) {
     if (channel_ == nullptr) {
-        err = "这条服务连接不是 RemoteXPC 服务";
+        err = SCRCTL_TR("Service connection is not RemoteXPC");
         return false;
     }
     return channel_->service(timeout_ms, err);
@@ -209,7 +210,7 @@ bool ServiceConnection::service(int timeout_ms, std::string &err) {
 
 Channel::Wait ServiceConnection::wait_message(xpc::Value &out, int timeout_ms, std::string &err) {
     if (channel_ == nullptr) {
-        err = "这条服务连接不是 RemoteXPC 服务";
+        err = SCRCTL_TR("Service connection is not RemoteXPC");
         return Channel::Wait::Broken;
     }
     return channel_->wait(out, timeout_ms, err);
@@ -224,11 +225,11 @@ std::string device_error_text(std::string_view feature_identifier, const xpc::Va
         error.at("userInfo").at("NSLocalizedDescription").as_string_or("");
     const auto code = error.at("code").as_int_or(0);
     // 设备答了，而且答的是"不同意"：这是语义结果，重试只会再拿到同一句话。
-    std::string err = std::string(feature_identifier) + " 失败";
+    std::string err = std::string(feature_identifier) + SCRCTL_TR(" failed");
     if (!detail.empty()) {
         err += "：" + detail;
     }
-    err += "（code " + std::to_string(code) + "）";
+    err += SCRCTL_TR("(code ") + std::to_string(code) + SCRCTL_TR(")");
     err += Rsd::remote_control_version_hint(detail);
     // NSDebugDescription 是"缺哪个键 / 哪个类型不对"的正式答案，NSCodingPath 指出
     // 是哪一个键。这两个必须**原样、不截断**地交出去：整个 error 字典的 describe
@@ -241,7 +242,7 @@ std::string device_error_text(std::string_view feature_identifier, const xpc::Va
     }
     if (detail.empty() && debug.empty()) {
         // 什么话都没有就把整个 error 交出去，别只报一个数字。
-        err += "；error 原文: " + xpc::describe(error).substr(0, 600);
+        err += SCRCTL_TR("; original error: ") + xpc::describe(error).substr(0, 600);
     }
     return err;
 }
@@ -266,7 +267,7 @@ CallResult ServiceConnection::invoke(std::string_view feature_identifier,
     output = xpc::make_dict();
     const auto *error = reply.find("CoreDevice.error");
     if (error == nullptr) {
-        err = std::string(feature_identifier) + " 失败，回信里没有 CoreDevice.output: " +
+        err = std::string(feature_identifier) + SCRCTL_TR(" failed; response missing CoreDevice.output: ") +
               xpc::describe(reply).substr(0, 300);
         return CallResult::DeviceError;
     }
@@ -278,7 +279,7 @@ bool ServiceConnection::subscribe(std::string_view feature_identifier,
                                   std::string_view action_identifier, const xpc::Value &input,
                                   std::string &err) {
     if (channel_ == nullptr) {
-        err = "这条服务连接不是 XPC 通道，流式 feature 走不了";
+        err = SCRCTL_TR("Streaming feature requires an XPC service connection");
         return false;
     }
     if (!channel_->send_request(
@@ -293,7 +294,7 @@ ServiceConnection::StreamEvent ServiceConnection::next_batch(std::vector<xpc::Va
                                                              int timeout_ms, std::string &err) {
     elements.clear();
     if (channel_ == nullptr) {
-        err = "这条服务连接不是 XPC 通道";
+        err = SCRCTL_TR("Service connection is not an XPC channel");
         return StreamEvent::Broken;
     }
     xpc::Value reply;
@@ -312,13 +313,13 @@ ServiceConnection::StreamEvent ServiceConnection::next_batch(std::vector<xpc::Va
             err = device_error_text(subscribed_feature_, *error);
         } else {
             err = subscribed_feature_ +
-                  " 的回信里既没有 sideChannelStatus 也没有 error: " +
+                  SCRCTL_TR(" response missing both sideChannelStatus and error: ") +
                   xpc::describe(reply).substr(0, 300);
         }
         return StreamEvent::DeviceError;
     }
     if (status->find("receivedError") != nullptr) {
-        err = subscribed_feature_ + " 中途失败：" +
+        err = subscribed_feature_ + SCRCTL_TR(" failed mid-stream: ") +
               xpc::describe(status->at("receivedError")).substr(0, 400);
         return StreamEvent::DeviceError;
     }
@@ -374,12 +375,12 @@ std::optional<Rsd> Rsd::open(net::Stack &stack, transport::PacketTunnel &tunnel,
     // 决定析构顺序：control_ 必须先于 tcp_ 析构。
     rsd->tcp_ = std::make_unique<net::TcpStream>(stack);
     if (!rsd->tcp_->connect(p.rsd_port, err)) {
-        err = "连 RSD 端口 " + std::to_string(p.rsd_port) + " 失败: " + err;
+        err = SCRCTL_TR("Connect to RSD port ") + std::to_string(p.rsd_port) + SCRCTL_TR(" failed: ") + err;
         return std::nullopt;
     }
     auto channel = Channel::open(*rsd->tcp_, err, verbose);
     if (!channel) {
-        err = "RSD 控制通道握手失败: " + err;
+        err = SCRCTL_TR("RSD control channel handshake failed: ") + err;
         return std::nullopt;
     }
     rsd->control_ = std::make_unique<Channel>(std::move(*channel));
@@ -389,7 +390,7 @@ std::optional<Rsd> Rsd::open(net::Stack &stack, transport::PacketTunnel &tunnel,
     const auto *info = rsd->control_->peer_info();
     const auto *services = info != nullptr ? info->find("Services") : nullptr;
     if (services == nullptr || !services->is_dict()) {
-        err = "peer_info 里没有 Services";
+        err = SCRCTL_TR("peer_info missing Services");
         return std::nullopt;
     }
     for (const auto &entry : services->dict) {
@@ -466,9 +467,9 @@ std::string Rsd::missing_service_message(const std::string_view name,
     // `com.apple.coredevice.*` 这一族——**这一族有没有、有几条，正是"DDI 挂没挂"与
     // "这版系统的 DeviceKit 缺哪条服务"的分界**。剩下的用数目交代，要全量有
     // `feature_probe --all`。
-    std::string out = "设备目录里没有服务 " + std::string(name) + "。";
+    std::string out = SCRCTL_TR("Device directory missing service ") + std::string(name) + SCRCTL_TR(".");
     if (seen.empty()) {
-        out += "而目录是**空的**（一条服务都没读到）：隧道大概率没通成，或设备还没挂载 DDI。";
+        out += SCRCTL_TR("Directory is empty; check tunnel setup and DDI mounting.");
         return out;
     }
     std::vector<std::string> cd;
@@ -477,18 +478,20 @@ std::string Rsd::missing_service_message(const std::string_view name,
             cd.push_back(s.name);
         }
     }
-    out += "设备自己给的目录一共 " + std::to_string(seen.size()) + " 条，其中 " +
-           std::to_string(cd.size()) + " 条是 com.apple.coredevice.*：\n";
+    out += SCRCTL_TR("Device directory contains ") + std::to_string(seen.size()) + SCRCTL_TR(" services, including ") +
+           std::to_string(cd.size()) + SCRCTL_TR(" com.apple.coredevice.* services:\n");
     if (cd.empty()) {
-        out += "  （一条都没有 —— 这就是「DDI 没挂／这台设备的 CoreDevice 服务集是空的」，"
-               "先用 Xcode 连一次这台设备）\n";
+        out += SCRCTL_TR(
+            "  (none found; check DDI mounting through Xcode and the CoreDevice services "
+            "available on this device)\n");
     }
     for (const auto &n : cd) {
         out += "  · " + n + "\n";
     }
-    out += "请把这一段整段贴回来：它能直接分得开「DDI 没挂」与「这版系统没实现这套服务」。"
-           "要完整目录（含每条的 feature 列表）跑 `feature_probe`，加 `--all` 打全部 " +
-           std::to_string(seen.size()) + " 条。\n";
+    out += SCRCTL_TR(
+        "Include this diagnostic when reporting the issue. For the full directory and "
+        "feature lists, run feature_probe --all to print all ") +
+           std::to_string(seen.size()) + SCRCTL_TR(" services.\n");
     return out;
 }
 
@@ -499,9 +502,10 @@ std::string Rsd::remote_control_version_hint(const std::string_view device_detai
     if (device_detail.find("requires iOS") == std::string_view::npos) {
         return "";
     }
-    return "（设备侧的系统版本门槛：媒体流（镜像+音频）实测要求 iOS 27+，iOS 18 的设备"
-           "一律回这句——不是 DDI 没挂、也不是配对问题。同一台 iOS 18 设备上截图服务与"
-           "按键注入仍可用；scrctl 目前没有截图式兜底镜像。见 docs §23）";
+    return SCRCTL_TR(
+        " (device rejected the system version: live media worked on tested iOS 27 "
+        "devices and was rejected on tested iOS 18 devices. Screenshot fallback and "
+        "button input may still be available; see docs/coredevice.md section 23)");
 }
 
 const xpc::Value *Rsd::properties() const {

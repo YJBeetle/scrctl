@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "remote/RemoteXpc.h"
 
 #include <algorithm>
@@ -108,7 +109,7 @@ std::optional<std::array<uint8_t, 16>> parse_uuid_text(std::string_view text) {
 
 bool Channel::send_bytes(std::span<const uint8_t> data, std::string &err) {
     if (verbose_) {
-        std::fprintf(stderr, "    >> %zu 字节: ", data.size());
+        std::fprintf(stderr, SCRCTL_TR("    >> %zu bytes: "), data.size());
         for (const uint8_t b : data) {
             std::fprintf(stderr, "%02x", b);
         }
@@ -121,7 +122,7 @@ bool Channel::start(std::string &err) {
     // 1. 客户端前置签名（不是帧，24 字节裸串）。
     if (!write_all(socket_, std::string_view(http2::kClientPreface, http2::kClientPrefaceSize),
                    err)) {
-        err = "发 HTTP/2 前置签名失败: " + err;
+        err = SCRCTL_TR("Failed to send HTTP/2 preface: ") + err;
         return false;
     }
     // 2. 我们的 SETTINGS：一次把窗口和并发数放到宽，省掉后续来回。
@@ -131,14 +132,14 @@ bool Channel::start(std::string &err) {
             http2::settings_frame({{http2::kSettingMaxConcurrentStreams, 100},
                                    {http2::kSettingInitialWindowSize, kGrantWindow}}),
             err)) {
-        err = "发 SETTINGS 失败: " + err;
+        err = SCRCTL_TR("Failed to send SETTINGS: ") + err;
         return false;
     }
     // 3. 给对端放行 16 MiB 的接收窗口（连接级）。
     //    我方发出去的可用量此刻仍是 RFC 默认的 65535，要等对端的
     //    SETTINGS / WINDOW_UPDATE 来改。
     if (!send_bytes(http2::window_update_frame(0, kWindowIncr), err)) {
-        err = "发 WINDOW_UPDATE 失败: " + err;
+        err = SCRCTL_TR("Failed to send WINDOW_UPDATE: ") + err;
         return false;
     }
     // 4–8. 建流与终止帧。顺序不能改，设备侧会校验。
@@ -148,29 +149,29 @@ bool Channel::start(std::string &err) {
     // 于是回一个 GOAWAY "too large frame size"——报错的位置离真正的错因很远，
     // 光看错误信息完全猜不到是自家帧头没写。
     if (!send_bytes(http2::headers_frame(kRootStream), err)) {
-        err = "发主通道 HEADERS 失败: " + err;
+        err = SCRCTL_TR("Failed to send primary channel HEADERS: ") + err;
         return false;
     }
     auto empty_dict = xpc::make_dict();
     auto opener = xpc::encode_message(wrapper_flags(&empty_dict, false), 0, &empty_dict);
     if (!send_bytes(http2::data_frame(kRootStream, opener), err)) {
-        err = "发首帧失败: " + err;
+        err = SCRCTL_TR("Failed to send first frame: ") + err;
         return false;
     }
     next_message_id_ = 1;
     if (!send_bytes(http2::headers_frame(kReplyStream), err)) {
-        err = "发回信通道 HEADERS 失败: " + err;
+        err = SCRCTL_TR("Failed to send reply channel HEADERS: ") + err;
         return false;
     }
     // 主通道的「终止帧」：空载荷，flags = ALWAYS_SET | 0x200（见常量注释）。
     auto term = xpc::encode_message(xpc::kFlagAlwaysSet | xpc::kFlagTermChannel, 0, nullptr);
     if (!send_bytes(http2::data_frame(kRootStream, term), err)) {
-        err = "发终止帧失败: " + err;
+        err = SCRCTL_TR("Failed to send terminating frame: ") + err;
         return false;
     }
     auto init = xpc::encode_message(xpc::kFlagAlwaysSet | xpc::kFlagInitHandshake, 0, nullptr);
     if (!send_bytes(http2::data_frame(kReplyStream, init), err)) {
-        err = "发 INIT_HANDSHAKE 帧失败: " + err;
+        err = SCRCTL_TR("Failed to send INIT_HANDSHAKE frame: ") + err;
         return false;
     }
 
@@ -179,11 +180,11 @@ bool Channel::start(std::string &err) {
     while (!settings_received_) {
         const auto left = remaining_ms(deadline);
         if (left == 0) {
-            err = "等设备 SETTINGS 超时（前面发的帧被拒了吗）";
+            err = SCRCTL_TR("Timed out waiting for device SETTINGS");
             return false;
         }
         if (!pump(static_cast<int>(left), err)) {
-            err = "等设备 SETTINGS 时断开: " + err;
+            err = SCRCTL_TR("Disconnected while waiting for device SETTINGS: ") + err;
             return false;
         }
     }
@@ -194,12 +195,12 @@ bool Channel::start(std::string &err) {
 bool Channel::announce_device(const PeerIdentity &identity, std::string &err) {
     auto hs = build_handshake(identity);
     if (!send_request(hs, false, err)) {
-        err = "发 RemoteXPC 身份申报失败: " + err;
+        err = SCRCTL_TR("Failed to send RemoteXPC identity: ") + err;
         return false;
     }
     xpc::Value info;
     if (!receive(info, 5000, err)) {
-        err = "读 peer_info 失败: " + err;
+        err = SCRCTL_TR("Failed to read peer_info: ") + err;
         return false;
     }
     peer_info_ = std::move(info);
@@ -243,8 +244,9 @@ bool Channel::pump(int timeout_ms, std::string &err) {
             // 那个**流内偏移**（进来过多少减去手上还剩多少）是为了能和
             // SCRCTL_H2_DUMP 留下的原始字节文件对上：有了它，这个现场就能离线重放。
             std::fprintf(stderr,
-                         "    !! HTTP/2 帧解析失败: %s，缓冲 %zu 字节，流内偏移 %llu（本连接累计进 "
-                         "%llu），前 64 字节:\n      ",
+                         SCRCTL_TR(
+                             "    HTTP/2 parse failed: %s; buffered %zu bytes, stream offset %llu (total "
+                             "received %llu), first 64 bytes:\n      "),
                          perr.c_str(), rx_.size(),
                          static_cast<unsigned long long>(rx_total_ - rx_.size()),
                          static_cast<unsigned long long>(rx_total_));
@@ -302,7 +304,7 @@ void Channel::maybe_open_dump() {
     const std::string path = std::string(prefix) + "." + std::to_string(seq.fetch_add(1)) + ".bin";
     dump_.reset(std::fopen(path.c_str(), "wb"));
     if (dump_ != nullptr) {
-        std::fprintf(stderr, "    H2 入流 dump -> %s\n", path.c_str());
+        std::fprintf(stderr, SCRCTL_TR("    HTTP/2 input dump -> %s\n"), path.c_str());
     }
 }
 
@@ -363,7 +365,7 @@ bool Channel::handle_frame(const http2::Frame &f, std::string &err) {
                 return true;
             }
             if (f.payload.size() < 8) {
-                err = "PING 载荷不足 8 字节";
+                err = SCRCTL_TR("PING payload shorter than 8 bytes");
                 return false;
             }
             {
@@ -379,7 +381,7 @@ bool Channel::handle_frame(const http2::Frame &f, std::string &err) {
                 return false;
             }
             terminated_ = true;
-            err = std::string("设备发来 GOAWAY ") + http2::error_code_name(g.error_code);
+            err = std::string(SCRCTL_TR("Device sent GOAWAY ")) + http2::error_code_name(g.error_code);
             if (!g.debug_data.empty()) {
                 err += "：\"" + g.debug_data + "\"";
             }
@@ -392,7 +394,7 @@ bool Channel::handle_frame(const http2::Frame &f, std::string &err) {
             }
             if (f.stream_id == kRootStream) {
                 terminated_ = true;
-                err = std::string("主通道被 RST：") + http2::error_code_name(code);
+                err = std::string(SCRCTL_TR("Primary channel reset: ")) + http2::error_code_name(code);
                 return false;
             }
             return true;
@@ -410,7 +412,7 @@ bool Channel::handle_frame(const http2::Frame &f, std::string &err) {
             replenish_inbound_window(f.stream_id);
             if ((f.flags & http2::kFlagEndStream) != 0 && f.stream_id == kRootStream) {
                 terminated_ = true;
-                err = "设备在主通道上置了 END_STREAM，连接已经结束";
+                err = SCRCTL_TR("Device set END_STREAM on primary channel; connection ended");
                 return false;
             }
             return true;
@@ -450,12 +452,12 @@ bool Channel::send_data(uint32_t stream_id, std::span<const uint8_t> payload, st
             // 没有窗口就等对端补。这里只等得有限次：设备要是铁了心不放量，
             // 无限等会变成挂死，不如报出来。
             if (++idle_rounds > 5) {
-                err = "对端迟迟不补发流控窗口，已发 " + std::to_string(off) + "/" +
-                      std::to_string(payload.size()) + " 字节";
+                err = SCRCTL_TR("Peer did not replenish flow-control window; sent ") + std::to_string(off) + "/" +
+                      std::to_string(payload.size()) + SCRCTL_TR(" bytes");
                 return false;
             }
             if (!pump(1000, err)) {
-                err = "等流控窗口时断开: " + err;
+                err = SCRCTL_TR("Disconnected while waiting for flow-control window: ") + err;
                 return false;
             }
             continue;
@@ -465,7 +467,7 @@ bool Channel::send_data(uint32_t stream_id, std::span<const uint8_t> payload, st
                                           static_cast<uint64_t>(payload.size() - off));
         auto frame = http2::data_frame(stream_id, payload.subspan(off, n));
         if (!send_bytes(frame, err)) {
-            err = "发 DATA 失败: " + err;
+            err = SCRCTL_TR("Failed to send DATA: ") + err;
             return false;
         }
         outbound_connection_ -= static_cast<int64_t>(n);
@@ -479,7 +481,7 @@ bool Channel::send_request(const xpc::Value &body, bool want_reply, std::string 
     const auto flags = wrapper_flags(&body, want_reply);
     auto wire = xpc::encode_message(flags, next_message_id_, &body);
     if (wire.empty()) {
-        err = "XPC 编码失败（深度或长度超限）";
+        err = SCRCTL_TR("XPC encoding failed (depth or length limit exceeded)");
         return false;
     }
     if (verbose_) {
@@ -521,7 +523,7 @@ bool Channel::receive_file(uint32_t stream_id, uint64_t size,
     auto ack_frame = http2::data_frame(stream_id, accept);
     frames.insert(frames.end(), ack_frame.begin(), ack_frame.end());
     if (!send_bytes(frames, err)) {
-        err = "接受文件流失败: " + err;
+        err = SCRCTL_TR("Failed to accept file stream: ") + err;
         return false;
     }
     out.clear();
@@ -531,15 +533,15 @@ bool Channel::receive_file(uint32_t stream_id, uint64_t size,
                               deadline - std::chrono::steady_clock::now())
                               .count();
         if (left <= 0) {
-            err = "收文件超时：流 " + std::to_string(stream_id) + " 上已到 " +
-                  std::to_string(raw_[stream_id].size()) + "/" + std::to_string(size) + " 字节";
+            err = SCRCTL_TR("File receive timed out: stream ") + std::to_string(stream_id) + SCRCTL_TR(" has received ") +
+                  std::to_string(raw_[stream_id].size()) + "/" + std::to_string(size) + SCRCTL_TR(" bytes");
             return false;
         }
         if (!pump(static_cast<int>(left), err)) {
             if (raw_[stream_id].size() >= size) {
                 break;
             }
-            err = "收文件时断开: " + err;
+            err = SCRCTL_TR("Disconnected while receiving file: ") + err;
             return false;
         }
     }
@@ -565,7 +567,7 @@ bool Channel::materialize_files(xpc::Value &reply,
             continue;
         }
         if (verbose_) {
-            std::fprintf(stderr, "    ~ 取文件 %llu 字节，走流 %u\n",
+            std::fprintf(stderr, SCRCTL_TR("    Receiving file: %llu bytes on stream %u\n"),
                          static_cast<unsigned long long>(files[i]->file_size), stream_id);
         }
         if (!receive_file(stream_id, files[i]->file_size, deadline, files[i]->data, err)) {
@@ -584,14 +586,14 @@ bool Channel::take_message(xpc::Value &out,
             std::string derr;
             const auto st = xpc::decode_message(buf, m, used, derr);
             if (st == xpc::Status::Malformed) {
-                err = "流 " + std::to_string(stream) + " 上的消息畸形: " + derr;
+                err = SCRCTL_TR("Stream ") + std::to_string(stream) + SCRCTL_TR(" contains malformed message: ") + derr;
                 return false;
             }
             if (st == xpc::Status::NeedMore) {
                 // "差多少字节"是判据本身：设备说它发完了而我们还在等，就是它那边
                 // 截断了；数字对得上却迟迟不来，才是流控或链路问题。
                 if (verbose_) {
-                    std::fprintf(stderr, "    ~~ 流%u 消息未完：%s\n", stream, derr.c_str());
+                    std::fprintf(stderr, SCRCTL_TR("    Stream %u message incomplete: %s\n"), stream, derr.c_str());
                 }
                 break;
             }
@@ -601,7 +603,7 @@ bool Channel::take_message(xpc::Value &out,
             // 的对象，而真正的回信还在后面排队。
             if (m.has_body && m.body.is_dict() && !m.body.dict.empty()) {
                 if (verbose_) {
-                    std::fprintf(stderr, "    => 流%u id=%llu %s\n", stream,
+                    std::fprintf(stderr, SCRCTL_TR("    => stream %u id=%llu %s\n"), stream,
                                  static_cast<unsigned long long>(m.message_id),
                                  xpc::describe(m.body).substr(0, 300).c_str());
                 }
@@ -624,11 +626,11 @@ Channel::Wait Channel::wait(xpc::Value &out, int timeout_ms, std::string &err) {
         }
         const auto left = remaining_ms(deadline);
         if (left == 0) {
-            err = "等设备回信超时";
+            err = SCRCTL_TR("Timed out waiting for device reply");
             return Wait::Timeout;
         }
         if (terminated_) {
-            err = "连接已终止";
+            err = SCRCTL_TR("Connection terminated");
             return Wait::Broken;
         }
         if (!pump(static_cast<int>(left), err)) {
@@ -638,7 +640,7 @@ Channel::Wait Channel::wait(xpc::Value &out, int timeout_ms, std::string &err) {
             if (take_message(out, deadline, err)) {
                 return Wait::Message;
             }
-            err = "等设备回信时断开: " + err;
+            err = SCRCTL_TR("Disconnected while waiting for device reply: ") + err;
             return Wait::Broken;
         }
     }

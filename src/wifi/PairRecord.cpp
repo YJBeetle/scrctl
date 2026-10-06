@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "wifi/PairRecord.h"
 
 #include <algorithm>
@@ -33,7 +34,7 @@ std::string hex(const Bytes &data) {
 
 std::optional<Bytes> unhex(std::string_view text, std::string &err) {
     if (text.size() % 2 != 0) {
-        err = "hex 长度不是偶数";
+        err = SCRCTL_TR("Hex length must be even");
         return std::nullopt;
     }
     auto nibble = [](char c) -> int {
@@ -53,7 +54,7 @@ std::optional<Bytes> unhex(std::string_view text, std::string &err) {
     for (size_t i = 0; i < text.size(); i += 2) {
         const int hi = nibble(text[i]), lo = nibble(text[i + 1]);
         if (hi < 0 || lo < 0) {
-            err = "hex 里有非法字符";
+            err = SCRCTL_TR("Invalid hex character");
             return std::nullopt;
         }
         out.push_back(static_cast<uint8_t>((hi << 4) | lo));
@@ -88,12 +89,12 @@ bool write_file(const std::string &path, std::string_view text, std::string &err
     const std::string tmp = path + ".tmp";
     std::FILE *f = std::fopen(tmp.c_str(), "wb");
     if (f == nullptr) {
-        err = "打不开临时文件 " + tmp;
+        err = SCRCTL_TR("Cannot open temporary file ") + tmp;
         return false;
     }
     // 0600 要在内容落地之前设好：这把钥匙加对方设备的信任，值得较这个真。
     if (::fchmod(::fileno(f), 0600) != 0) {
-        err = "设置记录文件权限失败";
+        err = SCRCTL_TR("Failed to set record file permissions");
         std::fclose(f);
         ::remove(tmp.c_str());
         return false;
@@ -101,12 +102,12 @@ bool write_file(const std::string &path, std::string_view text, std::string &err
     const size_t written = std::fwrite(text.data(), 1, text.size(), f);
     std::fclose(f);
     if (written != text.size()) {
-        err = "写记录文件没写完";
+        err = SCRCTL_TR("Incomplete record file write");
         ::remove(tmp.c_str());
         return false;
     }
     if (std::rename(tmp.c_str(), path.c_str()) != 0) {
-        err = "换名失败";
+        err = SCRCTL_TR("Rename failed");
         ::remove(tmp.c_str());
         return false;
     }
@@ -116,14 +117,14 @@ bool write_file(const std::string &path, std::string_view text, std::string &err
 std::optional<std::string> read_file(const std::string &path, std::string &err) {
     std::ifstream in(path, std::ios::binary);
     if (!in) {
-        err = "打不开 " + path;
+        err = SCRCTL_TR("Cannot open ") + path;
         return std::nullopt;
     }
     std::ostringstream ss;
     ss << in.rdbuf();
     std::string text = ss.str();
     if (text.size() > kMaxRecordText) {
-        err = "记录文件太大，不像配对记录";
+        err = SCRCTL_TR("Pairing record file too large");
         return std::nullopt;
     }
     return text;
@@ -168,14 +169,14 @@ std::optional<PairRecord> parse_record(std::string_view text, std::string &err) 
         if (first) {
             first = false;
             if (line != kHeader) {
-                err = "不是 scrctl 的配对记录（首部不认）";
+                err = SCRCTL_TR("Invalid scrctl pairing record header");
                 return std::nullopt;
             }
             continue;
         }
         const size_t eq = line.find('=');
         if (eq == std::string_view::npos) {
-            err = "记录里有一行不是 key=value";
+            err = SCRCTL_TR("Record line is not key=value");
             return std::nullopt;
         }
         const std::string_view key = trim(line.substr(0, eq));
@@ -186,8 +187,8 @@ std::optional<PairRecord> parse_record(std::string_view text, std::string &err) 
                 return false;
             }
             if (bytes->size() != want) {
-                err = "字段长度不对：" + std::string(key) + " 要 " + std::to_string(want) +
-                      " 字节，实际 " + std::to_string(bytes->size());
+                err = SCRCTL_TR("Incorrect field length: ") + std::string(key) + SCRCTL_TR(" requires ") + std::to_string(want) +
+                      SCRCTL_TR(" bytes; got ") + std::to_string(bytes->size());
                 return false;
             }
             field = *bytes;
@@ -218,7 +219,7 @@ std::optional<PairRecord> parse_record(std::string_view text, std::string &err) 
         // 未知键**忽略**：向后兼容比报错有用——老版本读新记录时该能继续用。
     }
     if (!seen_private) {
-        err = "记录里没有 host_private_key";
+        err = SCRCTL_TR("Record missing host_private_key");
         return std::nullopt;
     }
     return record;
@@ -234,7 +235,7 @@ bool save_record(const std::string &path, const PairRecord &record, std::string 
         const bool existed = std::filesystem::is_directory(dir, ec);
         std::filesystem::create_directories(dir, ec);
         if (ec) {
-            err = "建目录失败 " + dir + ": " + ec.message();
+            err = SCRCTL_TR("Failed to create directory ") + dir + ": " + ec.message();
             return false;
         }
         if (!existed) {
@@ -281,7 +282,7 @@ std::vector<std::string> list_record_udids(const std::string &dir, std::string &
     }
     for (const auto &entry : std::filesystem::directory_iterator(root, ec)) {
         if (ec) {
-            err = "读目录 " + dir + " 中断: " + ec.message();
+            err = SCRCTL_TR("Reading directory ") + dir + SCRCTL_TR(" failed: ") + ec.message();
             break;
         }
         if (!entry.is_regular_file(ec)) {

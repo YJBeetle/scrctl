@@ -238,15 +238,15 @@ int main() {
     {
         using scrctl::remote::proxy_failure_hint;
         const auto locked = proxy_failure_hint("StartService(x) 被拒: PasswordProtected");
-        check(locked.find("锁着") != std::string::npos &&
-                  locked.find("解锁") != std::string::npos,
+        check(locked.find("locked") != std::string::npos &&
+                  locked.find("unlock") != std::string::npos,
               "PasswordProtected -> 请解锁（不能再暗示 DDI）: " + locked);
-        check(locked.find("是否已挂载") == std::string::npos,
+        check(locked.find("mounting") == std::string::npos,
               "锁屏那一句里不许反问 DDI 挂载不挂载——两条提问会让用户两条都去查: " + locked);
-        check(locked.find("不是 DDI") != std::string::npos,
+        check(locked.find("DDI") == std::string::npos,
               "但要明说这不是 DDI 的事，省得他自己去猜: " + locked);
         const auto denied = proxy_failure_hint("StartService(x) 被拒: UserDenied");
-        check(denied.find("信任") != std::string::npos, "UserDenied -> 点信任: " + denied);
+        check(denied.find("Trust") != std::string::npos, "UserDenied -> 点信任: " + denied);
         const auto nosvc = proxy_failure_hint("StartService(x) 被拒: InvalidService");
         check(nosvc.find("DDI") != std::string::npos, "InvalidService -> 查 DDI: " + nosvc);
         check(proxy_failure_hint("连接被重置").find("DDI") != std::string::npos,
@@ -255,15 +255,15 @@ int main() {
         using scrctl::remote::Rsd;
         std::vector<scrctl::remote::ServiceInfo> seen;
         const auto empty_msg = Rsd::missing_service_message("com.apple.x.displayservice", seen);
-        check(empty_msg.find("空的") != std::string::npos,
+        check(empty_msg.find("empty") != std::string::npos,
               "目录为空要说清是空的（那是隧道没通，不是缺服务）: " + empty_msg);
         seen.push_back({"com.apple.coredevice.hid.indigo", 50001, true, false, "",
                         {"com.apple.coredevice.feature.remote.hid.button"}});
         seen.push_back({"com.apple.coredevice.displayservice", 50002, true, false, "", {}});
         seen.push_back({"com.apple.mobile.installation_proxy", 60100, false, true, "", {}});
         const auto msg = Rsd::missing_service_message("com.apple.coredevice.screenshotservice", seen);
-        check(msg.find("一共 3 条") != std::string::npos, "要报目录总条数: " + msg);
-        check(msg.find("其中 2 条是 com.apple.coredevice.*") != std::string::npos,
+        check(msg.find("contains 3 services") != std::string::npos, "要报目录总条数: " + msg);
+        check(msg.find("including 2 com.apple.coredevice.*") != std::string::npos,
               "coredevice 那一族要单独点数——它才是「挂没挂 DDI」的判据: " + msg);
         check(msg.find("com.apple.coredevice.hid.indigo") != std::string::npos,
               "族里的每一条都要打出来: " + msg);
@@ -277,16 +277,16 @@ int main() {
         const auto no_cd = Rsd::missing_service_message(
             "com.apple.coredevice.displayservice",
             {{"com.apple.mobile.installation_proxy", 60100, false, true, "", {}}});
-        check(no_cd.find("一条都没有") != std::string::npos &&
+        check(no_cd.find("none found") != std::string::npos &&
                   no_cd.find("Xcode") != std::string::npos,
               "coredevice 族为空 -> 直接指向「没挂 DDI，用 Xcode 连一次」: " + no_cd);
         // iOS 18 的设备会按版本拒掉媒体流（code 9021）。只转述设备原话的话，用户会照着
         // 去查 DDI 与配对——而这两样都是好的，门槛在设备系统版本上。
         const auto gate = scrctl::remote::Rsd::remote_control_version_hint(
             "Remote control requires iOS 27.0 or later on this device.");
-        check(gate.find("iOS 27+") != std::string::npos && gate.find("DDI") != std::string::npos,
+        check(gate.find("iOS 27") != std::string::npos && gate.find("iOS 18") != std::string::npos,
               "版本门槛要明说「不是 DDI 没挂、不是配对问题」: " + gate);
-        check(gate.find("截图服务") != std::string::npos,
+        check(gate.find("Screenshot fallback") != std::string::npos,
               "要交代同机上还有什么能用: " + gate);
         check(scrctl::remote::Rsd::remote_control_version_hint(
                   "The operation couldn't be completed.") == "",

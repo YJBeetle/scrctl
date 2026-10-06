@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "TlsChannel.h"
 
 #include <openssl/err.h>
@@ -28,13 +29,13 @@ std::string openssl_error(std::string_view what) {
 X509 *read_cert_pem(const std::vector<uint8_t> &pem, std::string &err) {
     BIO *bio = BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size()));
     if (bio == nullptr) {
-        err = "BIO_new_mem_buf 失败";
+        err = SCRCTL_TR("BIO_new_mem_buf failed");
         return nullptr;
     }
     X509 *cert = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
     BIO_free(bio);
     if (cert == nullptr) {
-        err = openssl_error("证书 PEM 解析失败");
+        err = openssl_error(SCRCTL_TR("Failed to parse certificate PEM"));
     }
     return cert;
 }
@@ -42,13 +43,13 @@ X509 *read_cert_pem(const std::vector<uint8_t> &pem, std::string &err) {
 EVP_PKEY *read_key_pem(const std::vector<uint8_t> &pem, std::string &err) {
     BIO *bio = BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size()));
     if (bio == nullptr) {
-        err = "BIO_new_mem_buf 失败";
+        err = SCRCTL_TR("BIO_new_mem_buf failed");
         return nullptr;
     }
     EVP_PKEY *key = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
     BIO_free(bio);
     if (key == nullptr) {
-        err = openssl_error("私钥 PEM 解析失败");
+        err = openssl_error(SCRCTL_TR("Failed to parse private key PEM"));
     }
     return key;
 }
@@ -163,7 +164,7 @@ bool TlsChannel::handshake(Socket &sock, const PemIdentity &id, std::string &err
     release();
     ctx_ = SSL_CTX_new(TLS_client_method());
     if (ctx_ == nullptr) {
-        return err = openssl_error("SSL_CTX_new 失败"), false;
+        return err = openssl_error(SCRCTL_TR("SSL_CTX_new failed")), false;
     }
     // 设备侧 lockdown 仍接受很旧的 TLS，且需要允许不带 SNI 的裸 IP 连接。
     SSL_CTX_set_min_proto_version(ctx_, TLS1_VERSION);
@@ -176,7 +177,7 @@ bool TlsChannel::handshake(Socket &sock, const PemIdentity &id, std::string &err
     const int added = X509_STORE_add_cert(SSL_CTX_get_cert_store(ctx_), root);
     X509_free(root);
     if (added != 1) {
-        return err = "加入根证书失败", false;
+        return err = SCRCTL_TR("Failed to add root certificate"), false;
     }
     SSL_CTX_set_verify(ctx_, SSL_VERIFY_PEER, verify_accept_peer);
 
@@ -200,29 +201,29 @@ bool TlsChannel::handshake(Socket &sock, const PemIdentity &id, std::string &err
     X509_free(host_cert);
     EVP_PKEY_free(host_key);
     if (use_cert != 1) {
-        return err = openssl_error("装载客户端证书失败"), false;
+        return err = openssl_error(SCRCTL_TR("Failed to load client certificate")), false;
     }
     if (use_key != 1) {
-        return err = openssl_error("装载客户端私钥失败"), false;
+        return err = openssl_error(SCRCTL_TR("Failed to load client private key")), false;
     }
     if (match != 1) {
-        return err = "客户端证书与私钥不匹配", false;
+        return err = SCRCTL_TR("Client certificate does not match private key"), false;
     }
 
     ssl_ = SSL_new(ctx_);
     if (ssl_ == nullptr) {
-        return err = "SSL_new 失败", false;
+        return err = SCRCTL_TR("SSL_new failed"), false;
     }
     // 设备证书没有 SAN/IP，所以只验链可信、不做主机名校验
     // （OpenSSL 默认即如此，无需显式关闭）。
     if (SSL_set_fd(ssl_, sock.fd()) != 1) {
-        return err = "SSL_set_fd 失败", false;
+        return err = SCRCTL_TR("SSL_set_fd failed"), false;
     }
     if (SSL_connect(ssl_) != 1) {
         const int ssl_err = SSL_get_error(ssl_, -1);
         char buf[256] = {0};
         ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
-        err = "TLS 握手失败 ssl_err=" + std::to_string(ssl_err) + " " + buf;
+        err = SCRCTL_TR("TLS handshake failed, ssl_err=") + std::to_string(ssl_err) + " " + buf;
         release();
         return false;
     }
@@ -233,20 +234,20 @@ bool TlsChannel::handshake_psk(Socket &sock, const std::vector<uint8_t> &psk, st
     ignore_sigpipe_once();
     release();
     if (psk.empty()) {
-        err = "PSK 是空的，握不上";
+        err = SCRCTL_TR("PSK is empty");
         return false;
     }
     psk_ = psk;
     ctx_ = SSL_CTX_new(TLS_client_method());
     if (ctx_ == nullptr) {
-        return err = openssl_error("SSL_CTX_new 失败"), false;
+        return err = openssl_error(SCRCTL_TR("SSL_CTX_new failed")), false;
     }
     // 钉在 TLS 1.2：设备的隧道监听器只给 PSK 那批密码套件，而 TLS 1.3 里的 PSK 是
     // 另一套机制（external PSK），1.3 的 ClientHello 长那样、对方根本不认。
     SSL_CTX_set_min_proto_version(ctx_, TLS1_2_VERSION);
     SSL_CTX_set_max_proto_version(ctx_, TLS1_2_VERSION);
     if (SSL_CTX_set_cipher_list(ctx_, "PSK") != 1) {
-        err = "这个 TLS 后端没有 PSK 密码套件（macOS 系统自带的 LibreSSL 就是这样）";
+        err = SCRCTL_TR("TLS backend has no PSK cipher suite; use an OpenSSL build with PSK support");
         release();
         return false;
     }
@@ -256,13 +257,13 @@ bool TlsChannel::handshake_psk(Socket &sock, const std::vector<uint8_t> &psk, st
 
     ssl_ = SSL_new(ctx_);
     if (ssl_ == nullptr) {
-        return err = "SSL_new 失败", false;
+        return err = SCRCTL_TR("SSL_new failed"), false;
     }
     if (SSL_set_ex_data(ssl_, psk_ex_index(), &psk_) != 1) {
-        return err = "给 TLS 通道挂 PSK 失败", false;
+        return err = SCRCTL_TR("Failed to attach PSK to TLS channel"), false;
     }
     if (SSL_set_fd(ssl_, sock.fd()) != 1) {
-        return err = "SSL_set_fd 失败", false;
+        return err = SCRCTL_TR("SSL_set_fd failed"), false;
     }
     if (SSL_connect(ssl_) != 1) {
         const int ssl_err = SSL_get_error(ssl_, -1);
@@ -270,9 +271,9 @@ bool TlsChannel::handshake_psk(Socket &sock, const std::vector<uint8_t> &psk, st
         ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
         // "unknown psk identity" 这一句值单独说：它的意思不是网络不通，而是
         // pair-verify 那一步的共享密钥算错了——差的往往就是某个 HKDF 的 salt/info。
-        err = "PSK 握手失败 ssl_err=" + std::to_string(ssl_err) + " " + buf +
+        err = SCRCTL_TR("PSK handshake failed, ssl_err=") + std::to_string(ssl_err) + " " + buf +
               (std::strstr(buf, "psk") != nullptr
-                   ? "（设备的隧道监听器说这把 PSK 它不认：回头查 pair-verify 的密钥派生）"
+                   ? SCRCTL_TR(" (device tunnel listener rejected the PSK; check pair-verify key derivation)")
                    : "");
         release();
         return false;

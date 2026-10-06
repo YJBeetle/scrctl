@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "wifi/Srp.h"
 
 #include <openssl/bn.h>
@@ -124,7 +125,7 @@ bool SrpClient::process(const Bytes &salt, const Bytes &server_public, std::stri
         BN_mod(mod.v, B.v, N.v, ctx);
         BN_CTX_free(ctx);
         if (BN_is_zero(mod.v)) {
-            err = "SRP 的 B 是 N 的倍数，拒收";
+            err = SCRCTL_TR("SRP B is a multiple of N; rejected");
             return false;
         }
     }

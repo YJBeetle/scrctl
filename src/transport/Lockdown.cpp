@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "Lockdown.h"
 
 #include <cstring>
@@ -17,11 +18,11 @@ bool write_frame(SSL *ssl, Socket &sock, std::string_view body, std::string &err
     hdr[3] = static_cast<uint8_t>(n);
     if (ssl != nullptr) {
         if (SSL_write(ssl, hdr, 4) != 4) {
-            return err = "TLS 写头失败", false;
+            return err = SCRCTL_TR("Failed to write TLS header"), false;
         }
         if (SSL_write(ssl, body.data(), static_cast<int>(body.size())) !=
             static_cast<int>(body.size())) {
-            return err = "TLS 写体失败", false;
+            return err = SCRCTL_TR("Failed to write TLS body"), false;
         }
         return true;
     }
@@ -32,7 +33,7 @@ bool read_frame(SSL *ssl, Socket &sock, std::vector<uint8_t> &out, std::string &
     uint8_t hdr[4];
     if (ssl != nullptr) {
         if (SSL_read(ssl, hdr, 4) != 4) {
-            return err = "TLS 读头失败", false;
+            return err = SCRCTL_TR("Failed to read TLS header"), false;
         }
     } else if (!sock.read_exact(hdr, 4, err)) {
         return false;
@@ -40,7 +41,7 @@ bool read_frame(SSL *ssl, Socket &sock, std::vector<uint8_t> &out, std::string &
     const uint32_t len =
         uint32_t(hdr[0]) << 24 | uint32_t(hdr[1]) << 16 | uint32_t(hdr[2]) << 8 | hdr[3];
     if (len < 1 || len > (32u << 20)) {
-        return err = "lockdown 帧长度异常: " + std::to_string(len), false;
+        return err = SCRCTL_TR("Invalid lockdown frame length: ") + std::to_string(len), false;
     }
     out.resize(len);
     if (ssl == nullptr) {
@@ -50,7 +51,7 @@ bool read_frame(SSL *ssl, Socket &sock, std::vector<uint8_t> &out, std::string &
     while (got < len) {
         const int n = SSL_read(ssl, out.data() + got, static_cast<int>(len - got));
         if (n <= 0) {
-            return err = "TLS 读体失败", false;
+            return err = SCRCTL_TR("Failed to read TLS body"), false;
         }
         got += static_cast<size_t>(n);
     }
@@ -80,7 +81,7 @@ bool Lockdown::request(const plist::Value &req, plist::Value &reply, std::string
     auto parsed = plist::parse(
         std::string_view(reinterpret_cast<const char *>(frame.data()), frame.size()));
     if (!parsed) {
-        return err = "lockdown 回复不是合法 plist", false;
+        return err = SCRCTL_TR("lockdown response is not a valid plist"), false;
     }
     reply = std::move(*parsed);
     return true;
@@ -101,7 +102,7 @@ std::optional<Lockdown> Lockdown::establish(uint32_t device_id, std::string_view
     auto parsed = plist::parse(
         std::string_view(reinterpret_cast<const char *>(record.data()), record.size()));
     if (!parsed) {
-        err = "配对记录无法解析";
+        err = SCRCTL_TR("Cannot parse pairing record");
         return std::nullopt;
     }
     auto take = [&](std::string_view key) -> std::vector<uint8_t> {
@@ -119,7 +120,7 @@ std::optional<Lockdown> Lockdown::establish(uint32_t device_id, std::string_view
     ld.identity_ = PemIdentity{take("HostCertificate"), take("HostPrivateKey"),
                                take("RootCertificate")};
     if (ld.host_id_.empty() || !ld.identity_.complete()) {
-        err = "配对记录缺少必要字段";
+        err = SCRCTL_TR("Pairing record missing required fields");
         return std::nullopt;
     }
 
@@ -142,7 +143,7 @@ std::optional<Lockdown> Lockdown::establish(uint32_t device_id, std::string_view
         return std::nullopt;
     }
     if (const auto *e = reply.find("Error"); e != nullptr) {
-        err = "StartSession 被拒: " + e->as_string_or("?");
+        err = SCRCTL_TR("StartSession rejected: ") + e->as_string_or("?");
         return std::nullopt;
     }
     if (const auto *sid = reply.find("SessionID")) {
@@ -166,12 +167,12 @@ std::optional<Lockdown::ServiceEndpoint> Lockdown::start_service(std::string_vie
         return std::nullopt;
     }
     if (const auto *e = reply.find("Error"); e != nullptr) {
-        err = "StartService(" + std::string(name) + ") 被拒: " + e->as_string_or("?");
+        err = "StartService(" + std::string(name) + SCRCTL_TR(") rejected: ") + e->as_string_or("?");
         return std::nullopt;
     }
     const auto *port = reply.find("Port");
     if (port == nullptr) {
-        err = "StartService 回复里没有 Port";
+        err = SCRCTL_TR("StartService response missing Port");
         return std::nullopt;
     }
     ServiceEndpoint ep;

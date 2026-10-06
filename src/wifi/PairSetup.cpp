@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "wifi/PairSetup.h"
 
 #include <openssl/evp.h>
@@ -41,7 +42,7 @@ bool md5_of(std::string_view data, Bytes &out, std::string &err) {
     unsigned int len = 0;
     if (EVP_Digest(data.data(), data.size(), out.data(), &len, EVP_md5(), nullptr) != 1 ||
         len != 16) {
-        err = "算不出 MD5（这个 OpenSSL 把 MD5 挪进 legacy provider 了？）";
+        err = SCRCTL_TR("MD5 unavailable; check OpenSSL algorithm providers");
         return false;
     }
     return true;
@@ -65,7 +66,7 @@ std::optional<json::Value> do_handshake(Rppairing &channel, bool attempt_verify,
     const json::Value *handshake = one != nullptr ? json::find(*one, "handshake") : nullptr;
     const json::Value *zero = handshake != nullptr ? json::find(*handshake, "_0") : nullptr;
     if (zero == nullptr) {
-        err = "handshake 回信里没有 response._1.handshake._0";
+        err = SCRCTL_TR("Handshake response missing response._1.handshake._0");
         return std::nullopt;
     }
     return *zero;
@@ -77,11 +78,11 @@ std::optional<std::map<uint8_t, Bytes>> parse_reply(const Bytes &raw, const char
     std::string tlv_err;
     std::map<uint8_t, Bytes> fields = tlv_parse(raw, tlv_err);
     if (!tlv_err.empty()) {
-        err = std::string(which) + " 的 TLV 没解干净: " + tlv_err;
+        err = std::string(which) + SCRCTL_TR(" TLV decode incomplete: ") + tlv_err;
         return std::nullopt;
     }
     if (const Bytes *code = tlv_get(fields, TlvType::Error)) {
-        err = std::string(which) + " 带错误码 0x";
+        err = std::string(which) + SCRCTL_TR(" returned error code 0x");
         err += hex_upper(code->data(), code->size());
         return std::nullopt;
     }
@@ -98,8 +99,10 @@ bool plane_allows_pair_setup(const json::Value &handshake, std::string &err) {
     const json::Value *options = json::find(handshake, "deviceOptions");
     const json::Value *allowed = options != nullptr ? json::find(*options, "allowsPairSetup") : nullptr;
     if (allowed != nullptr && allowed->is_boolean() && !allowed->get<bool>()) {
-        err = "这条控制面不接受 pair-setup（设备自报 deviceOptions.allowsPairSetup=否）；"
-              "iOS 27 上只有 RemoteXPC 入口收（wifi_probe --pair-setup-xpc）";
+        err = SCRCTL_TR(
+            "Control channel does not allow pair-setup "
+            "(deviceOptions.allowsPairSetup=false). Tested iOS 27 devices require the "
+            "RemoteXPC entry point (wifi_probe --pair-setup-xpc)");
         return false;
     }
     return true;
@@ -141,7 +144,7 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
         return result;
     };
     if (host_identifier.empty()) {
-        err = "没有 host identifier，注册不了（主机名取不到时可以显式给一个）";
+        err = SCRCTL_TR("Host identifier missing; provide one if hostname lookup is unavailable");
         return fail();
     }
     // host 密钥一开始就生成：verify 探针的签名必须用它（真钥匙），M5 注册的是同一把。
@@ -211,7 +214,7 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
             // identifier 可能在设备那边挂着（含已撤销的）：走完 Msg03 看它认不认。
             const Bytes *peer_x = tlv_get(*vf, TlvType::PublicKey);
             if (peer_x == nullptr || peer_x->size() != 32) {
-                err = "verify 的 M2 里没有 32 字节公钥";
+                err = SCRCTL_TR("Verify M2 missing 32-byte public key");
                 return fail();
             }
             const std::optional<Bytes> shared = x25519_shared(vk->priv, sv(*peer_x), err);
@@ -251,19 +254,19 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
             std::string v4_tlv_err;
             const std::map<uint8_t, Bytes> v4f = tlv_parse(*raw_v4, v4_tlv_err);
             if (!v4_tlv_err.empty()) {
-                err = "verify-M4 的 TLV 没解干净: " + v4_tlv_err;
+                err = SCRCTL_TR("verify-M4 TLV decode incomplete: ") + v4_tlv_err;
                 return fail();
             }
             if (tlv_get(v4f, TlvType::Error) != nullptr) {
                 // ERROR = 不认这把钥匙，正是我们要的正常结局。
                 send_verify_failed();
             } else {
-                err = "设备认这个 identifier：已经配过了，不需要 pair-setup";
+                err = SCRCTL_TR("Device accepted this identifier; already paired, pair-setup is unnecessary");
                 return fail();
             }
         }
         if (progress) {
-            progress("verify 探针干净落地（设备没认这把钥匙），发 upgrade M1");
+            progress(SCRCTL_TR("Verify completed without accepting this key; sending upgrade M1"));
         }
     } else {
         const std::optional<json::Value> device_handshake =
@@ -281,7 +284,7 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
             }
         }
         if (progress) {
-            progress("handshake（attemptPairVerify=false）完成，发 M1");
+            progress(SCRCTL_TR("Handshake (attemptPairVerify=false) completed; sending M1"));
         }
     }
     // 2) M1 → M2：设备给出 SRP 的 salt 与 B。kind 见 PairSetupOptions::pairing_kind。
@@ -299,7 +302,7 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
     const Bytes *server_public = tlv_get(*fields2, TlvType::PublicKey);
     const Bytes *salt = tlv_get(*fields2, TlvType::Salt);
     if (server_public == nullptr || salt == nullptr || server_public->empty() || salt->empty()) {
-        err = "M2 里缺 PUBLIC_KEY 或 SALT";
+        err = SCRCTL_TR("M2 missing PUBLIC_KEY or SALT");
         return fail();
     }
 
@@ -324,17 +327,17 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
     }
     const Bytes *server_proof = tlv_get(*fields4, TlvType::Proof);
     if (server_proof == nullptr) {
-        err = "M4 里没有 PROOF";
+        err = SCRCTL_TR("M4 missing PROOF");
         return fail();
     }
     // 这一条是 pair-setup 唯一能挡住"中间人接了这条控制面"的地方：设备若不知道 PIN，
     // 就算不出 K，也就给不出对的 M2。不过就得往下走等于把 host 密钥交给陌生人。
     if (!srp.verify_server_proof(*server_proof)) {
-        err = "设备的 M2 证明对不上：要么它不知道 PIN，要么这条面被中间人接了，不能继续注册";
+        err = SCRCTL_TR("Device SRP proof mismatch; pairing aborted. Check PIN and peer identity");
         return fail();
     }
     if (progress) {
-        progress("SRP 双向证明通过，正在把我们的 host 密钥注册到设备上（M5）");
+        progress(SCRCTL_TR("SRP mutual verification passed; registering host key on device (M5)"));
     }
 
     const Bytes &session_key = srp.session_key();
@@ -423,7 +426,7 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
             chacha_open(sv(*setup_key), std::string_view(kPsMsg06, sizeof(kPsMsg06) - 1), *sealed6,
                         open_err);
         if (!plain6) {
-            err = "M6 解不开（setup 密钥不对？）: " + open_err;
+            err = SCRCTL_TR("Cannot decrypt M6: ") + open_err;
             return fail();
         }
         std::string inner_err;
@@ -476,7 +479,7 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
             record.remote_unlock_host_key = json::as_string_or(*host_key_field);
         }
     } else if (progress) {
-        progress(std::string("createRemoteUnlockKey 没成（") + unlock_err + "），不影响配对本身");
+        progress(std::string(SCRCTL_TR("createRemoteUnlockKey failed (")) + unlock_err + SCRCTL_TR("); pairing itself succeeded"));
     }
 
     result.record = std::move(record);

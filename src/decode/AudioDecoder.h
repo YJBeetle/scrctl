@@ -1,5 +1,7 @@
 #pragma once
 
+#include "i18n/Translation.h"
+
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -46,8 +48,9 @@ inline constexpr bool kHaveAudioDecoder = false;
 #endif
 
 inline constexpr const char *kNoAudioDecoderMessage =
-    "这个平台上没有 AAC-ELD 解码后端：设备音频是苹果专有的 AAC-ELD，而 macOS 之外"
-    "没有能解它的自由实现（libavcodec 的原生 aac 解码器不支持 ELD，实测）。"
-    "所以音频在非 Apple 平台上是缺的，不是没接好。";
+    SCRCTL_N_(
+        "AAC-ELD decoding is unavailable on this platform. This build uses AudioToolbox "
+        "on macOS; the tested native FFmpeg AAC decoder does not support ELD. Video can "
+        "continue without audio.");
 
 }  // namespace scrctl

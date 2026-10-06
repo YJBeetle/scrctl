@@ -7,7 +7,7 @@
 namespace scrctl {
 
 std::unique_ptr<AudioDecoder> create_audio_decoder(int, int, int, std::string &err) {
-    err = kNoAudioDecoderMessage;
+    err = SCRCTL_TR(kNoAudioDecoderMessage);
     return nullptr;
 }
 

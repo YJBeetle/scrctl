@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "app/Cli.h"
 #include "hid/Hid.h"
 #include <CLI/CLI.hpp>
@@ -11,82 +12,101 @@
 namespace scrctl::app {
 
 ParseResult parse_args(int argc, char **argv, Options &o) {
-    CLI::App app{"iOS 屏幕镜像与控制"};
-    app.footer("无参数时镜像当前连接的设备。\n"
-               "设备决定编码尺寸、码率和帧率，暂不支持修改这些参数。\n"
-               "鼠标左键映射为触摸；方向不支持 flip，录制保留原始码流。\n"
-               "无线需要先配对；--help / --version 不连接设备。");
-    app.set_help_flag("-h,--help", "显示帮助");
-    app.add_option("--play", o.path, "回放 Annex-B HEVC 文件");
-    app.add_option("-s,--serial", o.serial, "设备 UDID");
-    app.add_option("--wifi", o.wifi, "局域网地址（需要已有配对记录）");
-    app.add_option("-r,--record", o.record, "将实时流录为 Annex-B");
-    app.add_option("--start-app", o.start_app, "启动 bundle id；? 按名称前缀，+ 先终止实例");
-    app.add_option("--window-title,--title", o.title, "窗口标题");
-    app.add_option("--render-driver", o.render_driver, "SDL 渲染驱动，如 metal / software");
+    i18n::initialize();
+    std::string requested_language = "auto";
+    CLI::App app{SCRCTL_N_("iOS screen mirroring and control")};
+    app.footer(SCRCTL_N_(
+        "With no arguments, mirror the connected device.\nThe device chooses encoding "
+        "dimensions, bitrate and frame rate; overrides are unavailable.\nLeft mouse "
+        "button maps to touch. Orientation does not support flip; recording preserves "
+        "the source bitstream.\nWireless use requires pairing. --help / --version do not "
+        "connect to the device."));
+    app.set_help_flag("-h,--help", SCRCTL_N_("Show help"));
+    app.add_option("--play", o.path, SCRCTL_N_("Play an Annex-B HEVC file"));
+    app.add_option("-s,--serial", o.serial, SCRCTL_N_("Device UDID"));
+    app.add_option("--wifi", o.wifi, SCRCTL_N_("LAN address (requires an existing pairing record)"));
+    app.add_option("-r,--record", o.record, SCRCTL_N_("Record the live stream as Annex-B"));
+    app.add_option("--start-app", o.start_app, SCRCTL_N_("Launch bundle ID; ? matches name prefix, + terminates the previous instance"));
+    app.add_option("--window-title,--title", o.title, SCRCTL_N_("Window title"));
+    app.add_option("--render-driver", o.render_driver, SCRCTL_N_("SDL render driver, e.g. metal / software"));
     app.add_option("--video-source", o.video_source,
-                   "stream 实时流或 screenshot 截图轮询，默认 stream")
+                   SCRCTL_N_("stream for live video or screenshot for polling; default: stream"))
         ->check(CLI::IsMember({"stream", "screenshot"}));
-    app.add_option("--test-touch", o.test_touch, "注入直线 X0,Y0,X1,Y1 后退出（归一化坐标）")
+    app.add_option("--test-touch", o.test_touch, SCRCTL_N_("Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"))
         ->delimiter(',')->expected(4);
     const std::map<std::string, uint16_t> button_codes = {
         {"home", hid::button::kHome}, {"lock", hid::button::kLock},
         {"volup", hid::button::kVolumeUp}, {"voldn", hid::button::kVolumeDown},
         {"mute", hid::button::kMute},
     };
-    app.add_option("--test-button", o.test_button, "注入 home/lock/volup/voldn/mute")
+    app.add_option("--test-button", o.test_button, SCRCTL_N_("Inject home/lock/volup/voldn/mute"))
         ->check(CLI::IsMember(button_codes));
-    app.add_option("--test-type", o.test_type, "注入 ASCII 文本（设备需已聚焦文本框）");
-    app.add_option("--test-degrade", o.test_degrade, "按 T1,T2,... 秒交替强制降级与恢复");
-    app.add_option("--copy", o.copy_text, "写入设备剪贴板后退出（支持中文）");
-    app.add_flag("--list-devices", o.list_devices, "列出连接的设备");
-    app.add_flag("-n,--no-control", o.no_control, "关闭输入控制");
-    app.add_flag("--list-apps", o.list_apps, "列出设备 App");
-    app.add_flag("--version", o.show_version, "显示版本");
-    app.add_flag("-f,--fullscreen", o.fullscreen, "桌面全屏");
-    app.add_flag("--always-on-top", o.always_on_top, "窗口置顶");
-    app.add_flag("--window-borderless", o.borderless, "无边框窗口");
-    app.add_flag("--disable-screensaver", o.disable_screensaver, "运行期间禁止本机息屏");
-    app.add_flag("--no-audio", o.no_audio, "不启动音频流");
-    app.add_flag("--no-audio-playback", o.no_audio_playback, "接收和解码音频，但本机不播放");
-    app.add_flag("--no-window", o.no_window, "无窗口运行");
-    app.add_flag("--hw-decode", o.hw_decode, "使用平台硬件解码，默认软件解码");
-    app.add_flag("--debug-input", o.debug_input, "打印输入坐标");
-    app.add_flag("--debug-net", o.debug_net, "在 --stats 中增加隧道网络诊断");
-    app.add_flag("--stats", o.stats, "每秒打印统计");
-    app.add_flag("--paste", o.paste, "读取设备剪贴板；与 --copy 同用时写后读回");
-    app.add_option("--window-x", o.win_x, "窗口横坐标，默认居中");
-    app.add_option("--window-y", o.win_y, "窗口纵坐标，默认居中");
-    app.add_option("--window-width", o.win_w, "窗口宽度，0 为自动")->check(CLI::NonNegativeNumber);
-    app.add_option("--window-height", o.win_h, "窗口高度，0 为自动")->check(CLI::NonNegativeNumber);
-    app.add_option("--time-limit", o.time_limit, "运行秒数，0 为不限")
+    app.add_option("--test-type", o.test_type, SCRCTL_N_("Inject ASCII text (device text field must have focus)"));
+    app.add_option("--test-degrade", o.test_degrade, SCRCTL_N_("Force alternating video fallback and recovery at T1,T2,... seconds"));
+    app.add_option("--copy", o.copy_text, SCRCTL_N_("Write device clipboard and exit (supports Unicode)"));
+    app.add_flag("--list-devices", o.list_devices, SCRCTL_N_("List connected devices"));
+    app.add_flag("-n,--no-control", o.no_control, SCRCTL_N_("Disable input control"));
+    app.add_flag("--list-apps", o.list_apps, SCRCTL_N_("List device apps"));
+    app.add_flag("--version", o.show_version, SCRCTL_N_("Show version"));
+    app.add_flag("-f,--fullscreen", o.fullscreen, SCRCTL_N_("Desktop fullscreen"));
+    app.add_flag("--always-on-top", o.always_on_top, SCRCTL_N_("Keep window on top"));
+    app.add_flag("--window-borderless", o.borderless, SCRCTL_N_("Borderless window"));
+    app.add_flag("--disable-screensaver", o.disable_screensaver, SCRCTL_N_("Prevent local screen sleep while running"));
+    app.add_flag("--no-audio", o.no_audio, SCRCTL_N_("Do not start audio stream"));
+    app.add_flag("--no-audio-playback", o.no_audio_playback, SCRCTL_N_("Receive and decode audio without local playback"));
+    app.add_flag("--no-window", o.no_window, SCRCTL_N_("Run without a window"));
+    app.add_flag("--hw-decode", o.hw_decode, SCRCTL_N_("Use platform hardware decoder; default: software"));
+    app.add_flag("--debug-input", o.debug_input, SCRCTL_N_("Print input coordinates"));
+    app.add_flag("--debug-net", o.debug_net, SCRCTL_N_("Add tunnel diagnostics to --stats"));
+    app.add_flag("--stats", o.stats, SCRCTL_N_("Print statistics every second"));
+    app.add_flag("--paste", o.paste, SCRCTL_N_("Read device clipboard; with --copy, read back after writing"));
+    app.add_option("--window-x", o.win_x, SCRCTL_N_("Window horizontal position; default: centered"));
+    app.add_option("--window-y", o.win_y, SCRCTL_N_("Window vertical position; default: centered"));
+    app.add_option("--window-width", o.win_w, SCRCTL_N_("Window width; 0 for automatic"))->check(CLI::NonNegativeNumber);
+    app.add_option("--window-height", o.win_h, SCRCTL_N_("Window height; 0 for automatic"))->check(CLI::NonNegativeNumber);
+    app.add_option("--time-limit", o.time_limit, SCRCTL_N_("Run duration in seconds; 0 for unlimited"))
         ->check(CLI::NonNegativeNumber);
-    app.add_option("--audio-buffer", o.audio_buffer_ms, "音频缓冲毫秒数，默认 50，上限 1000")
+    app.add_option("--audio-buffer", o.audio_buffer_ms, SCRCTL_N_("Audio buffer in milliseconds; default: 50, maximum: 1000"))
         ->check(CLI::NonNegativeNumber);
-    app.add_option("--exit-after", o.exit_after, "处理 N 帧后退出，0 为不限")
+    app.add_option("--exit-after", o.exit_after, SCRCTL_N_("Exit after N frames; 0 for unlimited"))
         ->check(CLI::NonNegativeNumber);
-    auto *scale = app.add_option("--scale", o.scale, "有限正数缩放比例，默认自动适应屏幕");
+    auto *scale = app.add_option("--scale", o.scale, SCRCTL_N_("Finite positive scale; default: fit screen"));
     std::string orientation, crop, background;
     std::vector<std::string> verify;
     app.add_option("--display-orientation,--orientation", orientation,
-                   "显示顺时针朝向；auto 跟随设备，不影响录制")
+                   SCRCTL_N_("Clockwise display orientation; auto follows device and does not affect recording"))
         ->check(CLI::IsMember({"auto", "0", "90", "180", "270"}));
-    app.add_option("--crop", crop, "裁剪 WxH+X+Y 或 W:H:X:Y");
-    app.add_option("--background-color", background, "背景色 #RRGGBB");
-    app.add_option("--verify", verify, "第 N 帧回读窗口为 BMP：N FILE（需要窗口）")->expected(2);
+    app.add_option("--crop", crop, SCRCTL_N_("Crop WxH+X+Y or W:H:X:Y"));
+    app.add_option("--background-color", background, SCRCTL_N_("Background color #RRGGBB"));
+    app.add_option("--verify", verify, SCRCTL_N_("Read window at frame N into BMP: N FILE (requires a window)"))->expected(2);
+    auto *language_option = app.add_option("--lang", requested_language,
+        SCRCTL_N_("Message language: auto, en, zh-CN (default: environment, fallback: en)"))
+        ->check(CLI::IsMember({"auto", "en", "zh-CN"}));
+    auto select_language = [&]() {
+        const auto &values = language_option->results();
+        const auto requested = values.empty() ? std::string("auto") : values.back();
+        if (requested != "auto" && requested != "en" && requested != "zh-CN") {
+            std::fprintf(stderr, "%s\n", SCRCTL_TR("--lang must be auto, en or zh-CN"));
+            return false;
+        }
+        if (!i18n::initialize(requested))
+            std::fprintf(stderr, "%s\n", "Cannot enable the requested message locale; using English");
+        return true;
+    };
     try {
         app.parse(argc, argv);
+        if (!select_language()) return ParseResult::Error;
         if (!std::all_of(o.test_touch.begin(), o.test_touch.end(), [](double value) {
                 return std::isfinite(value) && value >= 0 && value <= 1;
             })) {
-            throw CLI::ValidationError("--test-touch", "坐标必须是 [0, 1] 内的有限数");
+            throw CLI::ValidationError("--test-touch", SCRCTL_TR("Coordinates must be finite numbers in [0, 1]"));
         }
         if (!o.test_button.empty()) {
             o.test_button_code = button_codes.at(o.test_button);
         }
         o.scale_given = scale->count() != 0;
         if (!std::isfinite(o.scale) || o.scale <= 0) {
-            throw CLI::ValidationError("--scale", "需要有限正数");
+            throw CLI::ValidationError("--scale", SCRCTL_TR("Requires a finite positive number"));
         }
         if (!orientation.empty())
             o.orientation = orientation == "auto" ? -1 : std::stoi(orientation);
@@ -103,14 +123,14 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
             if (consumed != static_cast<int>(crop.size()) || consumed == 0 || o.crop_w <= 0 ||
                 o.crop_h <= 0 || o.crop_x < 0 || o.crop_y < 0) {
                 throw CLI::ValidationError("--crop",
-                                           "格式应为 WxH+X+Y 或 W:H:X:Y，尺寸为正、偏移非负");
+                                           SCRCTL_TR("Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"));
             }
             o.crop_set = true;
         }
         if (app.count("--background-color")) {
             if (background.size() != 7 || background[0] != '#' ||
                 background.find_first_not_of("0123456789abcdefABCDEF", 1) != std::string::npos) {
-                throw CLI::ValidationError("--background-color", "需要 #RRGGBB");
+                throw CLI::ValidationError("--background-color", SCRCTL_TR("Expected #RRGGBB"));
             }
             for (int i = 0; i < 3; ++i) {
                 o.bg[i] =
@@ -123,17 +143,29 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
                 std::from_chars(number.data(), number.data() + number.size(), o.verify_at);
             if (converted.ec != std::errc{} || converted.ptr != number.data() + number.size() ||
                 o.verify_at <= 0) {
-                throw CLI::ValidationError("--verify", "帧号需要正整数");
+                throw CLI::ValidationError("--verify", SCRCTL_TR("Frame number must be a positive integer"));
             }
             o.verify_path = verify[1];
         }
         if (o.no_window && o.verify_at > 0) {
-            throw CLI::ValidationError("--verify", "需要窗口，不能与 --no-window 同用");
+            throw CLI::ValidationError("--verify", SCRCTL_TR("Requires a window; incompatible with --no-window"));
         }
     } catch (const CLI::CallForHelp &) {
+        if (!select_language()) return ParseResult::Error;
+        app.description(SCRCTL_TR(app.get_description().c_str()));
+        app.footer(SCRCTL_TR(app.get_footer().c_str()));
+        for (auto *option : app.get_options()) {
+            const auto description = option->get_description();
+            option->description(SCRCTL_TR(description.c_str()));
+        }
+        auto formatter = app.get_formatter();
+        formatter->label("Usage", SCRCTL_TR("Usage"));
+        formatter->label("Options", SCRCTL_TR("Options"));
+        formatter->label("OPTIONS", SCRCTL_TR("Options"));
         std::printf("%s", app.help().c_str());
         return ParseResult::ExitSuccess;
     } catch (const CLI::ParseError &e) {
+        select_language();
         std::fprintf(stderr, "%s\n", e.what());
         return ParseResult::Error;
     }

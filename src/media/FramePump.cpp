@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "media/FramePump.h"
 
 #include <algorithm>
@@ -66,10 +67,12 @@ void warn_no_software() {
     }
     warned = true;
     std::fprintf(stderr,
-                 "构建未包含软件解码后端（libavcodec），继续使用平台后端。"
-                 "当前平台适配使用 2 字节 NAL 长度前缀，无法处理超过其长度上限的 NAL。"
-                 "遇到此类帧会丢弃 AU 并尝试重建会话，可能暂时无新画面。\n"
-                 "请安装 FFmpeg 开发包并重新配置、构建项目。\n");
+                 SCRCTL_TR(
+                     "Software decoder (libavcodec) is not included; continuing with the platform "
+                     "decoder. The current adapter uses 2-byte NAL lengths and cannot process larger "
+                     "NALs. Such access units are dropped and the session is recreated, which may "
+                     "interrupt video.\nInstall FFmpeg development packages and reconfigure the "
+                     "build.\n"));
 }
 
 }  // namespace
@@ -91,7 +94,7 @@ std::unique_ptr<FramePump> FramePump::start(remote::Device &device, const Option
     // 缺少解码后端时不建立设备媒体会话，避免占用设备资源。
     // 使用编译期能力常量，无需创建平台解码会话试探。
     if (!scrctl::kHaveDecoder) {
-        err = scrctl::kNoDecoderMessage;
+        err = SCRCTL_TR(scrctl::kNoDecoderMessage);
         return nullptr;
     }
     // restart() 仅建立会话；record_ 和 last_keyframe_ms_ 等字段完成初始化
@@ -102,7 +105,7 @@ std::unique_ptr<FramePump> FramePump::start(remote::Device &device, const Option
     if (!options.record_path.empty()) {
         pump->record_ = std::fopen(options.record_path.c_str(), "wb");
         if (pump->record_ == nullptr) {
-            err = "打不开录制文件 " + options.record_path;
+            err = SCRCTL_TR("Cannot open recording file ") + options.record_path;
             return nullptr;
         }
     }
@@ -128,7 +131,7 @@ FramePump::~FramePump() {
     if (session_ != nullptr) {
         std::string stop_err;
         if (!session_->stop(device_, stop_err, verbose_)) {
-            std::fprintf(stderr, "停止设备视频会话失败（设备端将在租期到期后释放）: %s\n",
+            std::fprintf(stderr, SCRCTL_TR("Failed to stop device video session (device will release it when the lease expires): %s\n"),
                          stop_err.c_str());
         }
         session_.reset();
@@ -146,7 +149,7 @@ bool FramePump::restart(std::string &err) {
         std::string stop_err;
         if (!session_->stop(device_, stop_err, verbose_)) {
             // 停止旧会话失败仍尝试新会话，保留错误供排查设备端残留状态。
-            std::fprintf(stderr, "停止旧视频会话失败（仍尝试重建）: %s\n", stop_err.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to stop previous video session (still attempting restart): %s\n"), stop_err.c_str());
         }
         session_.reset();
     }
@@ -172,7 +175,7 @@ bool FramePump::restart(std::string &err) {
         std::lock_guard<std::mutex> lock(mutex_);
         ++stats_.restarts;
     }
-    std::printf("视频会话已重建，收流端口=%u\n", session_->receiver_port());
+    std::printf(SCRCTL_TR("Video session recreated, receive port=%u\n"), session_->receiver_port());
     return true;
 }
 
@@ -196,7 +199,7 @@ void FramePump::loop() {
     // 两种后端都不可用时退出，避免解引用空 decoder。start() 通常已通过
     // 编译期能力检查拦截，此处仍保留防御检查。
     if (decoder == nullptr) {
-        std::fprintf(stderr, "%s", scrctl::kNoDecoderMessage);
+        std::fprintf(stderr, "%s", SCRCTL_TR(scrctl::kNoDecoderMessage));
         return;
     }
     bool configured = false;
@@ -233,7 +236,7 @@ void FramePump::loop() {
             ++stats_.pli_sent;
         } else {
             // 发送失败保留诊断；后续静默与关键帧等待策略负责恢复。
-            std::fprintf(stderr, "PLI 发送失败: %s\n", serr.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to send PLI: %s\n"), serr.c_str());
         }
     };
 
@@ -253,7 +256,7 @@ void FramePump::loop() {
         awaiting_idr_from_loss_ = true;
         if (!need_keyframe_) {
             // 仅在进入关键帧等待状态时输出一次。
-            std::printf("检测到序号缺口或丢弃分片：请求关键帧，等待上限 %d ms\n",
+            std::printf(SCRCTL_TR("Sequence gap or discarded fragment detected: requesting keyframe, wait limit %d ms\n"),
                         options_.stall_restart_ms);
         }
         need_keyframe_ = true;
@@ -287,7 +290,7 @@ void FramePump::loop() {
                     auto soft = create_software_decoder();
                     if (soft != nullptr) {
                         decoder = std::move(soft);
-                        std::printf("解码后端已切换为 %s\n", decoder->backend_name());
+                        std::printf(SCRCTL_TR("Decoder switched to %s\n"), decoder->backend_name());
                     } else {
                         // 软件后端未编入时保留平台后端并提示构建条件。
                         warn_no_software();
@@ -324,9 +327,9 @@ void FramePump::loop() {
                 if (oversized_restarts_ >= kMaxOversizedRestarts) {
                     if (!video_unusable_) {
                         video_unusable_ = true;
-                        std::printf("连续 %d 次重建仍因 NAL 超过后端长度上限而无画面输出。"
-                                    "视频暂不可用，将每 %llu 秒重试；"
-                                    "调用方可切换至截图服务。\n",
+                        std::printf(SCRCTL_TR(
+                            "After %d restarts, NALs still exceed the decoder limit. Video is unavailable; "
+                            "retrying every %llu seconds. Callers can use screenshots.\n"),
                                     oversized_restarts_,
                                     static_cast<unsigned long long>(kOversizedRetryMs / 1000));
                     }
@@ -379,10 +382,9 @@ void FramePump::loop() {
                     std::lock_guard<std::mutex> lock(mutex_);
                     ++stats_.forced_decode_failures;
                 }
-                std::printf("测试：注入关键帧解码失败（"
-                            "%s）\n",
-                            options_.debug_suppress_pli_after_fail ? "后续禁止 PLI"
-                                                                   : "继续发送 PLI");
+                std::printf(SCRCTL_TR("Test: injected keyframe decode failure (%s)\n"),
+                            options_.debug_suppress_pli_after_fail ? SCRCTL_TR("further PLI disabled")
+                                                                   : SCRCTL_TR("PLI continues"));
             } else {
                 ok = decoder->decode(au, f);
             }
@@ -470,19 +472,19 @@ void FramePump::loop() {
         if (state == StreamSession::ServerState::Alive) {
             reviving_ = false;
             if (verbose_) {
-                std::printf("%s：%llu ms 未收到数据，设备报告会话仍运行，继续等待\n",
+                std::printf(SCRCTL_TR("%s: no data for %llu ms; device reports session alive, continuing to wait\n"),
                             why, static_cast<unsigned long long>(quiet_ms));
             }
             return false;  // 设备报告会话仍运行，暂不重建。
         }
-        std::printf("%s：%llu ms 未收到数据，%s，重建视频会话\n", why,
+        std::printf(SCRCTL_TR("%s: no data for %llu ms, %s; recreating video session\n"), why,
                     static_cast<unsigned long long>(quiet_ms),
                     state == StreamSession::ServerState::Ended
-                        ? "设备会话已结束"
-                        : ("查询会话状态失败（" + perr + "）").c_str());
+                        ? SCRCTL_TR("device session ended")
+                        : (SCRCTL_TR("session status query failed (") + perr + SCRCTL_TR(")")).c_str());
         std::string restart_err;
         if (!restart(restart_err)) {
-            std::fprintf(stderr, "重建视频会话失败: %s\n", restart_err.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to recreate video session: %s\n"), restart_err.c_str());
             reviving_ = false;
             return false;
         }
@@ -495,7 +497,7 @@ void FramePump::loop() {
     auto restart_now = [&]() {
         std::string restart_err;
         if (!restart(restart_err)) {
-            std::fprintf(stderr, "重建视频会话失败: %s\n", restart_err.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to recreate video session: %s\n"), restart_err.c_str());
             return false;
         }
         new_session_state();
@@ -510,7 +512,7 @@ void FramePump::loop() {
     auto judge_quiet = [&](uint64_t quiet, uint64_t blind_at, uint64_t ask_every_ms,
                            const char *why) {
         if (quiet > blind_at) {
-            std::printf("%s：%llu ms 未收到数据，超过恢复阈值，重建视频会话\n",
+            std::printf(SCRCTL_TR("%s: no data for %llu ms; recovery threshold exceeded, recreating video session\n"),
                         why, static_cast<unsigned long long>(quiet));
             restart_now();
         } else if (quiet > kQuietSuspiciousMs) {
@@ -531,7 +533,7 @@ void FramePump::loop() {
                 new_session_state();
                 continue;
             }
-            std::fprintf(stderr, "重建视频会话失败: %s（1 秒后再试）\n", rerr.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to recreate video session: %s (retry in 1 second)\n"), rerr.c_str());
             std::unique_lock<std::mutex> lock(mutex_);
             cv_.wait_for(lock, std::chrono::seconds(1), [this] { return stopping_; });
             if (stopping_) {
@@ -561,12 +563,12 @@ void FramePump::loop() {
             }
             if (failed_after == 1) {
                 // 每个会话只输出第一次发送失败，避免重复日志掩盖恢复结果。
-                std::fprintf(stderr, "RTCP 保活包发送失败: %s\n", serr.c_str());
+                std::fprintf(stderr, SCRCTL_TR("Failed to send RTCP keepalive: %s\n"), serr.c_str());
             }
         }
         // 收到取帧或输入触发的 wake 请求后，按相同静默策略检查会话。
         if (wake_requested_.exchange(false)) {
-            judge_quiet(now_ms() - last_packet_ms_, kQuietCertainMs, 0, "收到操作");
+            judge_quiet(now_ms() - last_packet_ms_, kQuietCertainMs, 0, SCRCTL_TR("Input or frame request"));
             continue;
         }
         // 降级重试计时每轮检查，不依赖收到超大 AU 或发生读超时。
@@ -574,17 +576,16 @@ void FramePump::loop() {
         if (video_unusable_ && now_ms() - last_restart_ms_ >= kOversizedRetryMs) {
             last_restart_ms_ = now_ms();
             oversized_restart_ = true;
-            std::printf("视频降级已满 %llu 秒，重试视频会话"
-                        "\n",
+            std::printf(SCRCTL_TR("Video fallback active for %llu seconds; retrying video session\n"),
                         static_cast<unsigned long long>(kOversizedRetryMs / 1000));
         }
         if (oversized_restart_) {
             oversized_restart_ = false;
             // 降级既可能来自尺寸限制，也可能来自连续无关键帧输出，日志不能
             // 将定时重试一律归因于后端尺寸限制。
-            std::printf("%s，重建视频会话以取得关键帧\n",
-                        video_unusable_ ? "视频降级后的定时重试"
-                                        : "NAL 超过平台后端长度上限");
+            std::printf(SCRCTL_TR("%s; recreating video session to obtain a keyframe\n"),
+                        video_unusable_ ? SCRCTL_TR("Scheduled video retry after fallback")
+                                        : SCRCTL_TR("NAL exceeds platform decoder length limit"));
             // 失败后的空会话由循环顶部统一退避重试。
             restart_now();
             continue;
@@ -618,7 +619,7 @@ void FramePump::loop() {
                     std::lock_guard<std::mutex> lock(mutex_);
                     ++stats_.stall_restarts;
                 }
-                std::printf("等待关键帧达到 %d ms，重建视频会话\n",
+                std::printf(SCRCTL_TR("Keyframe wait reached %d ms; recreating video session\n"),
                             options_.stall_restart_ms);
                 restart_now();  // 失败由循环顶端的空会话兜底接手退避重试
                 continue;       // 这一轮的包属于上一条会话了
@@ -633,16 +634,16 @@ void FramePump::loop() {
             case NokeyAction::kRetry:
                 ++nokey_restarts_;
                 session_start_ms_ = now_ms();
-                std::printf("启动 %llu 秒仍无关键帧输出，重建视频会话 (%d/%d)\n",
+                std::printf(SCRCTL_TR("No keyframe output after %llu seconds; recreating video session (%d/%d)\n"),
                             static_cast<unsigned long long>(kNokeyBlindMs / 1000),
                             nokey_restarts_, kMaxNokeyRestarts);
                 restart_now();
                 continue;  // 这一轮的包属于上一条会话了
             case NokeyAction::kDegrade:
                 video_unusable_ = true;
-                std::printf("连续 %d 次重建仍未输出关键帧，视频暂不可用。"
-                            "调用方可切换至截图服务；将每 %llu 秒重试视频会话。"
-                            "\n",
+                std::printf(SCRCTL_TR(
+                    "No keyframe output after %d restarts. Video is unavailable; callers can use "
+                    "screenshots. Retrying every %llu seconds.\n"),
                             kMaxNokeyRestarts,
                             static_cast<unsigned long long>(kOversizedRetryMs / 1000));
                 break;
@@ -664,7 +665,7 @@ void FramePump::loop() {
                 const uint64_t quiet = now_ms() - last_packet_ms_;
                 judge_quiet(quiet, std::max<uint64_t>(kQuietCertainMs,
                                                        static_cast<uint64_t>(options_.silence_restart_ms)),
-                            kSrPeriodMs, "静默超时");
+                            kSrPeriodMs, SCRCTL_TR("Receive silence timeout"));
             }
             continue;  // 超时不是结束
         }
@@ -703,7 +704,7 @@ void FramePump::loop() {
         }
         if (options_.debug_drop_nth_packet > 0 && !is_sr &&
             static_cast<int>(video_seen) == options_.debug_drop_nth_packet) {
-            std::printf("测试：丢弃第 %d 个视频包以注入序号缺口\n",
+            std::printf(SCRCTL_TR("Test: dropped video packet %d to inject a sequence gap\n"),
                         options_.debug_drop_nth_packet);
             options_.debug_drop_nth_packet = 0;  // 一次性：重起之后的新会话不该再被丢
             std::lock_guard<std::mutex> lock(mutex_);

@@ -19,6 +19,7 @@ endif()
 
 include(cmake/Dependencies.cmake)
 include(cmake/Lwip.cmake)
+include(cmake/Translations.cmake)
 
 option(SCRCTL_BUILD_TESTS "构建无头自检" ON)
 option(SCRCTL_FETCH_SDL2 "用 FetchContent 拉取 SDL2，而不是找系统安装" OFF)
@@ -103,6 +104,7 @@ endif()
 
 # ------------------------------------------------------------- core lib -----
 add_library(scrctl_core STATIC
+        src/i18n/Translation.cpp
         src/json/Json.cpp
         src/plist/Plist.cpp
         src/plist/PlistValue.cpp
@@ -149,6 +151,12 @@ add_library(scrctl_core STATIC
 target_include_directories(scrctl_core PUBLIC src)
 target_link_libraries(scrctl_core PUBLIC ScrctlAppleFrameworks OpenSSL::SSL OpenSSL::Crypto nlohmann_json::nlohmann_json)
 target_link_libraries(scrctl_core PRIVATE pugixml::pugixml scrctl_lwip)
+target_link_libraries(scrctl_core PRIVATE Intl::Intl)
+target_compile_definitions(scrctl_core PRIVATE
+        SCRCTL_BUILD_LOCALEDIR="${CMAKE_BINARY_DIR}/locale"
+        SCRCTL_RELATIVE_LOCALEDIR="${SCRCTL_RELATIVE_LOCALEDIR}"
+        SCRCTL_INSTALL_LOCALEDIR="${CMAKE_INSTALL_FULL_LOCALEDIR}")
+add_dependencies(scrctl_core scrctl_translations)
 target_compile_options(scrctl_core PRIVATE -Wall -Wextra)
 
 # 解码后端按平台与依赖挑：平台后端在 Apple 上是 VideoToolbox，别处只能借用软解；
@@ -274,6 +282,11 @@ if(SCRCTL_BUILD_TESTS)
         add_test(NAME nghttp2_compat COMMAND nghttp2_probe)
         set_tests_properties(nghttp2_compat PROPERTIES TIMEOUT 10)
     endif()
+
+    find_package(Python3 3.7 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME i18n COMMAND "${Python3_EXECUTABLE}"
+        "${PROJECT_SOURCE_DIR}/tests/i18n_test.py" "$<TARGET_FILE:scrctl>")
+    set_tests_properties(i18n PROPERTIES TIMEOUT 30)
 
     add_executable(cli_test tests/cli_test.cpp)
     target_link_libraries(cli_test PRIVATE scrctl_app)

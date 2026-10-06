@@ -1,5 +1,7 @@
 #pragma once
 
+#include "i18n/Translation.h"
+
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -70,8 +72,10 @@ inline constexpr bool kHaveDecoder = false;
 
 /// 一个后端都没有时给用户的那句话。两条取帧的路共用，免得两边各说一半。
 inline constexpr const char *kNoDecoderMessage =
-    "这个构建里没有可用的 HEVC 解码后端：非 Apple 平台只能靠 libavcodec 软解，"
-    "而配置构建时没找到它。装开发包之后重新配置构建（Debian/Ubuntu: "
-    "apt install libavcodec-dev libavutil-dev； Fedora: dnf install ffmpeg-devel）。\n";
+    SCRCTL_N_(
+        "No HEVC decoder in this build. Non-Apple platforms require FFmpeg development "
+        "packages. Install them and reconfigure (Debian/Ubuntu: apt install "
+        "libavcodec-dev libavutil-dev libswscale-dev; Fedora: dnf install "
+        "ffmpeg-devel).\n");
 
 }  // namespace scrctl

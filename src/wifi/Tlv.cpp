@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "wifi/Tlv.h"
 
 #include <algorithm>
@@ -26,7 +27,7 @@ std::map<uint8_t, Bytes> tlv_parse(const Bytes &data, std::string &err, bool *tr
     size_t i = 0;
     while (i < data.size()) {
         if (i + 2 > data.size()) {
-            err = "TLV 头被截断";
+            err = SCRCTL_TR("TLV header truncated");
             if (truncated != nullptr) {
                 *truncated = true;
             }
@@ -35,7 +36,7 @@ std::map<uint8_t, Bytes> tlv_parse(const Bytes &data, std::string &err, bool *tr
         const uint8_t type = data[i];
         const size_t len = data[i + 1];
         if (i + 2 + len > data.size()) {
-            err = "TLV 长度超出缓冲区";
+            err = SCRCTL_TR("TLV length exceeds buffer");
             if (truncated != nullptr) {
                 *truncated = true;
             }

@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "media/StreamSession.h"
 
 #include <array>
@@ -123,7 +124,7 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
     const uint16_t port = request.receiver_port != 0 ? request.receiver_port : pick_port();
     auto socket = std::make_unique<net::UdpSocket>(device.rsd().stack(), port);
     if (!socket->bind(err)) {
-        err = "绑 UDP 端口 " + std::to_string(port) + " 失败: " + err;
+        err = SCRCTL_TR("Failed to bind UDP port ") + std::to_string(port) + SCRCTL_TR(": ") + err;
         return nullptr;
     }
 
@@ -156,7 +157,7 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
                                        output, 30000, err);
         if (r != remote::CallResult::Ok) {
             if (r == remote::CallResult::TransportError && err.empty()) {
-                err = "在持有的连接上发 startmediastream 失败（链路断了）";
+                err = SCRCTL_TR("startmediastream failed on the retained connection (transport failed)");
             }
             return nullptr;
         }
@@ -258,7 +259,7 @@ StreamSession::ServerState StreamSession::probe(remote::Device &device,
     // running: false, runDurationSeconds: 0}。
     const auto *sessions = output.find("sessions");
     if (sessions == nullptr || !sessions->is_array()) {
-        err = "getmediastreamserverstatus 的回复里没有 sessions 数组";
+        err = SCRCTL_TR("getmediastreamserverstatus response missing sessions array");
         return ServerState::Unknown;
     }
     for (const auto &s : sessions->array) {

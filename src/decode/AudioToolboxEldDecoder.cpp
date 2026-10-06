@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 // AAC-ELD 的 AudioToolbox 后端。见 AudioDecoder.h 上那段"为什么只能走这里"。
 #include "decode/AudioDecoder.h"
 
@@ -96,7 +97,7 @@ public:
         auto *list = static_cast<AudioBufferList *>(
             std::malloc(offsetof(AudioBufferList, mBuffers) + sizeof(AudioBuffer)));
         if (list == nullptr) {
-            err = "分配 AudioBufferList 失败";
+            err = SCRCTL_TR("Failed to allocate AudioBufferList");
             return false;
         }
         list->mNumberBuffers = 1;
@@ -109,7 +110,7 @@ public:
             AudioConverterFillComplexBuffer(conv_, input_proc, &in, &frames, list, nullptr);
         if (st != noErr) {
             std::free(list);
-            err = "AudioConverterFillComplexBuffer 失败: " + osstatus_text(st);
+            err = SCRCTL_TR("AudioConverterFillComplexBuffer failed: ") + osstatus_text(st);
             return false;
         }
         const std::size_t samples =
@@ -156,7 +157,7 @@ std::unique_ptr<AudioDecoder> create_audio_decoder(int sample_rate, int channels
     AudioConverterRef conv = nullptr;
     const OSStatus st = AudioConverterNew(&src, &dst, &conv);
     if (st != noErr) {
-        err = "AudioConverterNew 失败: " + osstatus_text(st);
+        err = SCRCTL_TR("AudioConverterNew failed: ") + osstatus_text(st);
         return nullptr;
     }
     // 这里**不设** kAudioConverterDecompressionMagicCookie（'dmgc'）。试过：这台

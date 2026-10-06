@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "transport/TcpConnect.h"
 
 #include <fcntl.h>
@@ -24,7 +25,7 @@ std::optional<Socket> connect_tcp(const std::string &host, uint16_t port, int ti
     addrinfo *first = nullptr;
     const int rc = ::getaddrinfo(host.c_str(), service.c_str(), &hints, &first);
     if (rc != 0 || first == nullptr) {
-        err = "解析地址 " + host + " 失败: " + (rc == 0 ? "没有结果" : gai_strerror(rc));
+        err = SCRCTL_TR("Failed to resolve address ") + host + SCRCTL_TR(": ") + (rc == 0 ? SCRCTL_TR("no results") : gai_strerror(rc));
         return std::nullopt;
     }
     std::unique_ptr<addrinfo, void (*)(addrinfo *)> addresses(first, ::freeaddrinfo);
@@ -45,7 +46,7 @@ std::optional<Socket> connect_tcp(const std::string &host, uint16_t port, int ti
         if (nonblocking) {
             flags = ::fcntl(fd, F_GETFL, 0);
             if (flags < 0 || ::fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0) {
-                last_error = "设置非阻塞失败：" + std::string(std::strerror(errno));
+                last_error = SCRCTL_TR("Failed to enable nonblocking mode: ") + std::string(std::strerror(errno));
                 continue;
             }
         }
@@ -69,8 +70,8 @@ std::optional<Socket> connect_tcp(const std::string &host, uint16_t port, int ti
                 ready = ::poll(&pfd, 1, static_cast<int>(remaining));
             } while (ready < 0 && errno == EINTR);
             if (ready <= 0) {
-                last_error = ready == 0 ? "连接超时" + std::to_string(timeout_ms) + "ms"
-                                        : "等待连接失败：" + std::string(std::strerror(errno));
+                last_error = ready == 0 ? SCRCTL_TR("Connection timed out") + std::to_string(timeout_ms) + "ms"
+                                        : SCRCTL_TR("Failed to wait for connection: ") + std::string(std::strerror(errno));
                 continue;
             }
             int so_error = 0;
@@ -82,12 +83,12 @@ std::optional<Socket> connect_tcp(const std::string &host, uint16_t port, int ti
         }
         // 交出去的 Socket read_exact/write_all 按阻塞 fd 工作，恢复失败就不交付它。
         if (nonblocking && ::fcntl(fd, F_SETFL, flags) != 0) {
-            last_error = "恢复阻塞模式失败：" + std::string(std::strerror(errno));
+            last_error = SCRCTL_TR("Failed to restore blocking mode: ") + std::string(std::strerror(errno));
             continue;
         }
         return socket;
     }
-    err = "连不上 " + host + ":" + service + (last_error.empty() ? std::string() : "：" + last_error);
+    err = SCRCTL_TR("Cannot connect to ") + host + ":" + service + (last_error.empty() ? std::string() : "：" + last_error);
     return std::nullopt;
 }
 

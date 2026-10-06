@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "rt/RtpHevc.h"
 
 #include <cstring>
@@ -81,7 +82,7 @@ bool HevcRtpDepacketizer::push(std::span<const uint8_t> datagram, std::vector<ui
     PacketInfo info;
     if (!parse_rtp_header(datagram, info)) {
         ++stats_.malformed;
-        err = "不是 RTP 包";
+        err = SCRCTL_TR("Not an RTP packet");
         return false;
     }
     if (info.payload_type != video_pt_) {
