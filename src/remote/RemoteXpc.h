@@ -107,7 +107,7 @@ private:
     /// false 且 err 为空表示消息尚未收全；err 非空表示解析或文件接收失败。
     bool take_message(xpc::Value &out, std::chrono::steady_clock::time_point deadline,
                       std::string &err);
-    void replenish_inbound_window(uint32_t stream_id);
+    bool replenish_inbound_window(uint32_t stream_id, std::string &err);
     /// 发送完整帧；verbose 模式记录原始字节，供协议排查。
     bool send_bytes(std::span<const uint8_t> data, std::string &err);
 

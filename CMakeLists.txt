@@ -380,6 +380,11 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(http2_test PRIVATE scrctl_core)
     add_test(NAME http2 COMMAND http2_test)
 
+    add_executable(remote_channel_test tests/remote_channel_test.cpp)
+    target_link_libraries(remote_channel_test PRIVATE scrctl_core)
+    add_test(NAME remote_channel COMMAND remote_channel_test)
+    set_tests_properties(remote_channel PROPERTIES TIMEOUT 10)
+
     add_executable(decode_test tests/decode_test.cpp)
     target_link_libraries(decode_test PRIVATE scrctl_core)
 

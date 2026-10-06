@@ -212,6 +212,11 @@ std::optional<Channel> Channel::open(net::ByteStream &socket, std::string &err, 
 }
 
 bool Channel::pump(int timeout_ms, std::string &err) {
+    err.clear();
+    if (terminated_) {
+        err = SCRCTL_TR("Connection terminated");
+        return false;
+    }
     maybe_open_dump();
     bool processed = false;
     for (;;) {
@@ -392,9 +397,13 @@ bool Channel::handle_frame(const http2::Frame &f, std::string &err) {
             // 偶数号流是设备发起的，上面跑的是文件裸字节，不是 XPC 消息。
             auto &buf = (f.stream_id % 2 == 0) ? raw_[f.stream_id] : pending_[f.stream_id];
             buf.insert(buf.end(), body.begin(), body.end());
-            consumed_per_stream_[f.stream_id] += body.size();
-            consumed_connection_ += body.size();
-            replenish_inbound_window(f.stream_id);
+            // 流控包括 Pad Length 和填充；XPC / 文件缓冲只保存业务载荷。
+            consumed_per_stream_[f.stream_id] += f.payload.size();
+            consumed_connection_ += f.payload.size();
+            if (!replenish_inbound_window(f.stream_id, err)) {
+                terminated_ = true;
+                return false;
+            }
             if ((f.flags & http2::kFlagEndStream) != 0 && f.stream_id == kRootStream) {
                 terminated_ = true;
                 err = SCRCTL_TR("Device set END_STREAM on primary channel; connection ended");
@@ -409,20 +418,25 @@ bool Channel::handle_frame(const http2::Frame &f, std::string &err) {
     }
 }
 
-void Channel::replenish_inbound_window(uint32_t stream_id) {
+bool Channel::replenish_inbound_window(uint32_t stream_id, std::string &err) {
     if (consumed_connection_ >= kReplenishThreshold) {
         const auto n = static_cast<uint32_t>(std::min<uint64_t>(consumed_connection_, 0x7FFFFFFF));
-        std::string ignored;
-        write_all(socket_, http2::window_update_frame(0, n), ignored);
+        if (!send_bytes(http2::window_update_frame(0, n), err)) {
+            err = SCRCTL_TR("Failed to replenish connection receive window: ") + err;
+            return false;
+        }
         consumed_connection_ -= n;
     }
     auto it = consumed_per_stream_.find(stream_id);
     if (it != consumed_per_stream_.end() && it->second >= kReplenishThreshold) {
         const auto n = static_cast<uint32_t>(std::min<uint64_t>(it->second, 0x7FFFFFFF));
-        std::string ignored;
-        write_all(socket_, http2::window_update_frame(stream_id, n), ignored);
+        if (!send_bytes(http2::window_update_frame(stream_id, n), err)) {
+            err = SCRCTL_TR("Failed to replenish stream receive window: ") + err;
+            return false;
+        }
         it->second -= n;
     }
+    return true;
 }
 
 bool Channel::send_data(uint32_t stream_id, std::span<const uint8_t> payload, std::string &err) {
@@ -463,6 +477,11 @@ bool Channel::send_data(uint32_t stream_id, std::span<const uint8_t> payload, st
 }
 
 bool Channel::send_request(const xpc::Value &body, bool want_reply, std::string &err) {
+    err.clear();
+    if (terminated_) {
+        err = SCRCTL_TR("Connection terminated");
+        return false;
+    }
     const auto flags = wrapper_flags(&body, want_reply);
     auto wire = xpc::encode_message(flags, next_message_id_, &body);
     if (wire.empty()) {
@@ -599,6 +618,7 @@ bool Channel::take_message(xpc::Value &out,
 }
 
 Channel::Wait Channel::wait(xpc::Value &out, int timeout_ms, std::string &err) {
+    err.clear();
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
     for (;;) {
         if (take_message(out, deadline, err)) {

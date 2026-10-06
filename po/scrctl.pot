@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 03:06+0800\n"
+"POT-Creation-Date: 2026-10-07 03:16+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -81,7 +81,7 @@ msgstr ""
 msgid " port "
 msgstr ""
 
-#: src/remote/Rsd.cpp:168 src/remote/Rsd.cpp:378 src/remote/Device.cpp:132
+#: src/remote/Device.cpp:132 src/remote/Rsd.cpp:168 src/remote/Rsd.cpp:378
 #: src/transport/Usbmux.cpp:261 src/wifi/PairRecord.cpp:285
 msgid " failed: "
 msgstr ""
@@ -104,10 +104,10 @@ msgid "(code "
 msgstr ""
 
 #: src/remote/Rsd.cpp:232 src/media/ScreenshotSource.cpp:72
-#: src/media/FramePump.cpp:480 src/net/Stack.cpp:350 src/net/TcpStream.cpp:41
+#: src/media/FramePump.cpp:480 src/transport/Usbmux.cpp:168
+#: src/wifi/RemotePairing.cpp:35 src/net/Stack.cpp:350 src/net/TcpStream.cpp:41
 #: src/net/TcpStream.cpp:118 src/net/TcpStream.cpp:122
 #: src/net/UdpSocket.cpp:104 src/net/UdpSocket.cpp:130
-#: src/transport/Usbmux.cpp:168 src/wifi/RemotePairing.cpp:35
 msgid ")"
 msgstr ""
 
@@ -258,60 +258,60 @@ msgstr ""
 msgid " (value field missing): "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:112
+#: src/remote/RemoteXpc.cpp:111
 #, c-format
 msgid "    >> %zu bytes: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:125
+#: src/remote/RemoteXpc.cpp:124
 msgid "Failed to send HTTP/2 preface: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:135
+#: src/remote/RemoteXpc.cpp:132
 msgid "Failed to send SETTINGS: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:142
+#: src/remote/RemoteXpc.cpp:138
 msgid "Failed to send WINDOW_UPDATE: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:152
+#: src/remote/RemoteXpc.cpp:146
 msgid "Failed to send primary channel HEADERS: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:158
+#: src/remote/RemoteXpc.cpp:152
 msgid "Failed to send first frame: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:163
+#: src/remote/RemoteXpc.cpp:157
 msgid "Failed to send reply channel HEADERS: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:169
+#: src/remote/RemoteXpc.cpp:163
 msgid "Failed to send terminating frame: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:174
+#: src/remote/RemoteXpc.cpp:168
 msgid "Failed to send INIT_HANDSHAKE frame: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:183
+#: src/remote/RemoteXpc.cpp:177
 msgid "Timed out waiting for device SETTINGS"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:187
+#: src/remote/RemoteXpc.cpp:181
 msgid "Disconnected while waiting for device SETTINGS: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:198
+#: src/remote/RemoteXpc.cpp:192
 msgid "Failed to send RemoteXPC identity: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:203
+#: src/remote/RemoteXpc.cpp:197
 msgid "Failed to read peer_info: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:248
+#: src/remote/RemoteXpc.cpp:244
 #, c-format
 msgid ""
 "    HTTP/2 parse failed: %s; buffered %zu bytes, stream offset %llu (total "
@@ -319,96 +319,97 @@ msgid ""
 "      "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:307
+#: src/remote/RemoteXpc.cpp:298
 #, c-format
 msgid "    HTTP/2 input dump -> %s\n"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:368
+#: src/remote/RemoteXpc.cpp:358
 msgid "PING payload shorter than 8 bytes"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:384
+#: src/remote/RemoteXpc.cpp:374
 msgid "Device sent GOAWAY "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:397
+#: src/remote/RemoteXpc.cpp:387
 msgid "Primary channel reset: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:415
+#: src/remote/RemoteXpc.cpp:409
 msgid "Device set END_STREAM on primary channel; connection ended"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:455
+#: src/remote/RemoteXpc.cpp:454
 msgid "Peer did not replenish flow-control window; sent "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:456 src/remote/RemoteXpc.cpp:537
+#: src/remote/RemoteXpc.cpp:455 src/remote/RemoteXpc.cpp:541
 #: src/xpc/XpcValue.cpp:649 src/http2/Framing.cpp:152
 msgid " bytes"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:460
+#: src/remote/RemoteXpc.cpp:459
 msgid "Disconnected while waiting for flow-control window: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:470
+#: src/remote/RemoteXpc.cpp:469
 msgid "Failed to send DATA: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:484
+#: src/remote/RemoteXpc.cpp:488
 msgid "XPC encoding failed (depth or length limit exceeded)"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:526
+#: src/remote/RemoteXpc.cpp:530
 msgid "Failed to accept file stream: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:536
+#: src/remote/RemoteXpc.cpp:540
 msgid "File receive timed out: stream "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:536
+#: src/remote/RemoteXpc.cpp:540
 msgid " has received "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:544
+#: src/remote/RemoteXpc.cpp:548
 msgid "Disconnected while receiving file: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:570
+#: src/remote/RemoteXpc.cpp:574
 #, c-format
 msgid "    Receiving file: %llu bytes on stream %u\n"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:589
+#: src/remote/RemoteXpc.cpp:593
 msgid "Stream "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:589
+#: src/remote/RemoteXpc.cpp:593
 msgid " contains malformed message: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:596
+#: src/remote/RemoteXpc.cpp:600
 #, c-format
 msgid "    Stream %u message incomplete: %s\n"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:606
+#: src/remote/RemoteXpc.cpp:608
 #, c-format
 msgid "    => stream %u id=%llu %s\n"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:629
+#: src/remote/RemoteXpc.cpp:632
 msgid "Timed out waiting for device reply"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:633
+#: src/remote/RemoteXpc.cpp:217 src/remote/RemoteXpc.cpp:482
+#: src/remote/RemoteXpc.cpp:636
 msgid "Connection terminated"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:643
+#: src/remote/RemoteXpc.cpp:645
 msgid "Disconnected while waiting for device reply: "
 msgstr ""
 
@@ -998,27 +999,27 @@ msgstr ""
 msgid "Frame length too large: "
 msgstr ""
 
-#: src/http2/Framing.cpp:171
+#: src/http2/Framing.cpp:170
 msgid "PADDED DATA missing Pad Length byte"
 msgstr ""
 
-#: src/http2/Framing.cpp:178
+#: src/http2/Framing.cpp:177
 msgid "Pad Length exceeds available payload: "
 msgstr ""
 
-#: src/http2/Framing.cpp:197
+#: src/http2/Framing.cpp:196
 msgid "SETTINGS payload length is not a multiple of 6: "
 msgstr ""
 
-#: src/http2/Framing.cpp:208
+#: src/http2/Framing.cpp:207
 msgid "WINDOW_UPDATE payload must be 4 bytes; got "
 msgstr ""
 
-#: src/http2/Framing.cpp:217
+#: src/http2/Framing.cpp:216
 msgid "GOAWAY payload shorter than 8 bytes"
 msgstr ""
 
-#: src/http2/Framing.cpp:234
+#: src/http2/Framing.cpp:233
 msgid "RST_STREAM payload must be 4 bytes; got "
 msgstr ""
 
@@ -2814,4 +2815,12 @@ msgstr ""
 
 #: src/wifi/Crypto.cpp:272
 msgid "HKDF-SHA512 derivation failed"
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:425
+msgid "Failed to replenish connection receive window: "
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:434
+msgid "Failed to replenish stream receive window: "
 msgstr ""
