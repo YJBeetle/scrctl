@@ -1,22 +1,6 @@
-// 传输层 SIGPIPE 防护自检。
-//
-// 钉的是 SIGPIPE：对端 RST/半关闭之后写一次的**默认动作是杀进程**，不是返回错误。
-// 真机上的表现是"拔线/设备睡觉时 scrctl 无声退出"，日志里什么都没有，只能靠 core 猜，
-// 所以离线把它逼出来比在设备上复现便宜得多。
-//
-// 有**两条**写路径，防护机制不同，必须分开判：
-//   1. 我们自己的 `Socket::write_all` —— send 带 MSG_NOSIGNAL（Linux 一直有；macOS 27
-//      的 SDK 也开始定义了，实测 0x80000），fd 上的 SO_NOSIGPIPE 再兜一层。
-//   2. OpenSSL 的 socket BIO —— `SSL_set_fd` 之后是它自己的裸 `write()`，拿不到任何
-//      send 标志，**只有 fd 上的 SO_NOSIGPIPE 或进程级 SIG_IGN 盖得住**。usbmux 交出来
-//      的那条 AF_UNIX 隧道（lockdown→TLS 用的正是它）曾经两样都没有（审查 P1）。
-// 第 2 条才是这里要抓的，所以用裸 write()、并且在 fork 出来的子进程里做：防护失效时给
-// 一条明确的 FAIL，而不是让整个测试被信号打死、后面的判据全看不到。
-//
-// 一个实测事实决定了测试的写法：macOS 上**对端已经关掉时** setsockopt(SO_NOSIGPIPE)
-// 返回 EINVAL（选项设不上），所以必须"先接管 fd、后关对端"——这也正是生产路径的顺序
-// （usbmux open、connect_tcp 都是在连接活着时接管）。反过来，这个 EINVAL 也说明 fd 级
-// 那层不是万无一失，进程级 SIG_IGN 必须无条件装上。
+// POSIX 传输回归：普通 send 与 OpenSSL socket BIO 分别检查 SIGPIPE 防护。
+// 子进程保留默认 SIGPIPE 行为，便于将缺失防护明确报告为失败。
+// 先接管活连接、再关闭对端，保持与生产创建和转发连接的顺序一致。
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -28,6 +12,7 @@
 #include <string>
 
 #include "transport/TlsChannel.h"
+#include "tls_psk_move.h"
 #include "transport/Usbmux.h"
 
 namespace {
@@ -189,6 +174,7 @@ int main() {
     tls_write_path();
     still_works_as_a_socket();
     readable_wait_results();
+    scrctl_test::tls_psk_moves(check);
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;
 }

@@ -55,17 +55,9 @@ EVP_PKEY *read_key_pem(const std::vector<uint8_t> &pem, std::string &err) {
     return key;
 }
 
-/// lockdown 的 TLS 里设备故意出示一张空证书（实测 depth=0、err=18
-/// self-signed，且 subject 与 issuer 都是空串）——Apple 的设计是只让主机侧
-/// 用配对记录做认证，设备侧不自证身份。
-///
-/// 所以必须无条件接受对端证书，否则握手永远失败。这不是偷懒：
-///  - 设备证书不携带任何可校验的身份信息，不存在"验对了该是什么"；
-///  - 真正起作用的是反向认证——我们用 HostCertificate/HostPrivateKey 向设备
-///    证明"这台 Mac 曾被该 iPhone 信任过"，设备据此才肯起 CoreDeviceProxy；
-///  - 配对材料取自本机 usbmuxd（本地 socket），不经过网络。
-/// 净效果是这条 TLS 提供机密性与主机认证，不提供设备认证，与 Apple 自身
-/// 工具的行为一致。
+/// 已验证的 lockdown 会话中，设备返回空 subject/issuer 的自签证书。
+/// 当前兼容策略接受对端证书，以本机 usbmux 配对记录中的主机证书向设备认证。
+/// 本回调跳过链校验，不提供独立的设备身份认证；安全边界包括本机配对服务。
 int verify_accept_peer(int preverify_ok, X509_STORE_CTX *ctx) {
     (void)preverify_ok;
     (void)ctx;
@@ -88,8 +80,7 @@ unsigned int psk_client_callback(SSL *ssl, const char *hint, char *identity,
         max_identity_len < 1) {
         return 0;
     }
-    // 身份是**空串**：参考实现发的就是空身份（它把 identity 传成 None），这边照抄。
-    // 传别的会怎样没测过，所以不给自己留一个"看起来能用、实际是不是设备说了算"的变量。
+    // 空身份已通过设备与本地 PSK 服务验证，当前不提供其他身份格式。
     identity[0] = '\0';
     std::memcpy(psk, stored->data(), stored->size());
     return static_cast<unsigned int>(stored->size());
@@ -101,7 +92,8 @@ TlsChannel::TlsChannel() = default;
 
 TlsChannel::~TlsChannel() { release(); }
 
-TlsChannel::TlsChannel(TlsChannel &&other) noexcept : ctx_(other.ctx_), ssl_(other.ssl_) {
+TlsChannel::TlsChannel(TlsChannel &&other) noexcept
+    : ctx_(other.ctx_), ssl_(other.ssl_), psk_(std::move(other.psk_)) {
     other.ctx_ = nullptr;
     other.ssl_ = nullptr;
 }
@@ -111,6 +103,7 @@ TlsChannel &TlsChannel::operator=(TlsChannel &&other) noexcept {
         release();
         ctx_ = other.ctx_;
         ssl_ = other.ssl_;
+        psk_ = std::move(other.psk_);
         other.ctx_ = nullptr;
         other.ssl_ = nullptr;
     }
@@ -127,6 +120,7 @@ void TlsChannel::release() {
         SSL_CTX_free(ctx_);
         ctx_ = nullptr;
     }
+    psk_.reset();
 }
 
 namespace {
@@ -201,8 +195,7 @@ bool TlsChannel::handshake(Socket &sock, const PemIdentity &id, std::string &err
     if (ssl_ == nullptr) {
         return err = SCRCTL_TR("SSL_new failed"), false;
     }
-    // 设备证书没有 SAN/IP，所以只验链可信、不做主机名校验
-    // （OpenSSL 默认即如此，无需显式关闭）。
+    // 不校验设备证书身份；证书兼容策略见 verify_accept_peer。
     // OpenSSL 的 socket BIO 接口使用 int；拒绝无法无损表示的本机句柄。
     if (sock.fd() > static_cast<NativeSocket>(INT_MAX) ||
         SSL_set_fd(ssl_, static_cast<int>(sock.fd())) != 1) {
@@ -226,13 +219,12 @@ bool TlsChannel::handshake_psk(Socket &sock, const std::vector<uint8_t> &psk, st
         err = SCRCTL_TR("PSK is empty");
         return false;
     }
-    psk_ = psk;
+    psk_ = std::make_unique<std::vector<uint8_t>>(psk);
     ctx_ = SSL_CTX_new(TLS_client_method());
     if (ctx_ == nullptr) {
         return err = openssl_error(SCRCTL_TR("SSL_CTX_new failed")), false;
     }
-    // 钉在 TLS 1.2：设备的隧道监听器只给 PSK 那批密码套件，而 TLS 1.3 里的 PSK 是
-    // 另一套机制（external PSK），1.3 的 ClientHello 长那样、对方根本不认。
+    // 使用已验证的 TLS 1.2 PSK 路径，未接入 TLS 1.3 external PSK。
     SSL_CTX_set_min_proto_version(ctx_, TLS1_2_VERSION);
     SSL_CTX_set_max_proto_version(ctx_, TLS1_2_VERSION);
     if (SSL_CTX_set_cipher_list(ctx_, "PSK") != 1) {
@@ -240,7 +232,7 @@ bool TlsChannel::handshake_psk(Socket &sock, const std::vector<uint8_t> &psk, st
         release();
         return false;
     }
-    // 两边都没有身份，只有共享密钥：不发证书也不验证书。
+    // 不使用证书认证；双方通过共享密钥完成认证。
     SSL_CTX_set_verify(ctx_, SSL_VERIFY_NONE, nullptr);
     SSL_CTX_set_psk_client_callback(ctx_, psk_client_callback);
 
@@ -248,7 +240,7 @@ bool TlsChannel::handshake_psk(Socket &sock, const std::vector<uint8_t> &psk, st
     if (ssl_ == nullptr) {
         return err = SCRCTL_TR("SSL_new failed"), false;
     }
-    if (SSL_set_ex_data(ssl_, psk_ex_index(), &psk_) != 1) {
+    if (SSL_set_ex_data(ssl_, psk_ex_index(), psk_.get()) != 1) {
         return err = SCRCTL_TR("Failed to attach PSK to TLS channel"), false;
     }
     // OpenSSL 的 socket BIO 接口使用 int；拒绝无法无损表示的本机句柄。
@@ -260,8 +252,7 @@ bool TlsChannel::handshake_psk(Socket &sock, const std::vector<uint8_t> &psk, st
         const int ssl_err = SSL_get_error(ssl_, -1);
         char buf[256] = {0};
         ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
-        // "unknown psk identity" 这一句值单独说：它的意思不是网络不通，而是
-        // pair-verify 那一步的共享密钥算错了——差的往往就是某个 HKDF 的 salt/info。
+        // PSK 拒绝可能来自 pair-verify 派生结果；保留 OpenSSL 原始原因供排查。
         err = SCRCTL_TR("PSK handshake failed, ssl_err=") + std::to_string(ssl_err) + " " + buf +
               (std::strstr(buf, "psk") != nullptr
                    ? SCRCTL_TR(" (device tunnel listener rejected the PSK; check pair-verify key derivation)")
