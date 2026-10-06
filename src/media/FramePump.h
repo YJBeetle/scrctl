@@ -219,8 +219,9 @@ private:
     bool awaiting_idr_from_loss_ = false;
     /// 测试选项首次注入失败后禁止 PLI 的状态，仅在工作线程访问。
     bool pli_off_ = false;
-    /// 最近解析到关键帧 AU 的时刻（不保证解码输出），避免刚收到关键帧时立即重建。
-    uint64_t last_keyframe_ms_ = 0;
+    /// 最近成功输出关键帧的时刻；启动和后备重建前以当前时刻建立等待基线。
+    /// 解析到但未成功解码的关键帧不更新该时刻，避免持续失败无限延后恢复。
+    uint64_t last_decoded_keyframe_ms_ = 0;
     /// 有超大 NAL 被丢、需要重起会话。由 AU 回调置位，收包线程消费。
     std::atomic<bool> oversized_restart_ { false };
     /// 用户刚刚动过（见 wake()）。由收包线程取走并做一次"流还活着吗"的检查。

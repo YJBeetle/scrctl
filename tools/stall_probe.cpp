@@ -39,11 +39,13 @@
 // 默认值是臂 A 的一整套。跑臂 B 要显式给 `--fail-decode 1`，此时 `--ignore-video-after`
 // 不参与（那一臂要的就是后面的 AU 继续上门）。
 // 退出码：0 判据成立，1 判据不成立（被测代码有问题），2 这一臂白跑（现场没造出来）。
+#include <CLI/CLI.hpp>
 #include <chrono>
 #include <cstdio>
 #include <string>
 #include <thread>
 
+#include "app/DeviceConnection.h"
 #include "decode/Decoder.h"
 #include "media/FramePump.h"
 #include "remote/Device.h"
@@ -73,23 +75,34 @@ int main(int argc, char **argv) {
     int fail_every = 0;
     int watch_ms = 20000;
     bool verbose = false;
-    for (int i = 1; i < argc; ++i) {
-        const std::string a = argv[i];
-        if (a == "-v" || a == "--verbose") {
-            verbose = true;
-        } else if (a == "--stall-ms" && i + 1 < argc) {
-            stall_ms = std::stoi(argv[++i]);
-        } else if (a == "--drop-at-packet" && i + 1 < argc) {
-            drop_at = std::stoi(argv[++i]);
-        } else if (a == "--ignore-video-after" && i + 1 < argc) {
-            ignore_after = std::stoi(argv[++i]);
-        } else if (a == "--fail-decode" && i + 1 < argc) {
-            fail_decode = std::stoi(argv[++i]);
-        } else if (a == "--fail-every-keyframe" && i + 1 < argc) {
-            fail_every = std::stoi(argv[++i]);
-        } else if (a == "--watch" && i + 1 < argc) {
-            watch_ms = std::stoi(argv[++i]);
-        }
+    bool keep_pli = false;
+    std::string wifi, serial;
+    CLI::App cli{"Media recovery fault-injection probe"};
+    cli.add_option("--wifi", wifi, "LAN address; requires an existing pairing record");
+    cli.add_option("-s,--serial", serial, "Device UDID");
+    cli.add_flag("-v,--verbose", verbose, "Verbose protocol logging");
+    cli.add_option("--stall-ms", stall_ms, "Keyframe wait limit in milliseconds")
+        ->check(CLI::PositiveNumber);
+    cli.add_option("--drop-at-packet", drop_at, "Drop this video packet; 0 disables")
+        ->check(CLI::NonNegativeNumber);
+    cli.add_option("--ignore-video-after", ignore_after, "Ignore later video packets; 0 disables")
+        ->check(CLI::NonNegativeNumber);
+    cli.add_option("--fail-decode", fail_decode, "Fail this many recovery keyframes")
+        ->check(CLI::NonNegativeNumber);
+    cli.add_option("--fail-every-keyframe", fail_every, "Fail keyframes including startup")
+        ->check(CLI::NonNegativeNumber);
+    cli.add_option("--watch", watch_ms, "Observation duration in milliseconds")
+        ->check(CLI::PositiveNumber);
+    cli.add_flag("--keep-pli", keep_pli,
+                 "Keep requesting keyframes after injected failures to test repeated no-output recovery");
+    try {
+        cli.parse(argc, argv);
+    } catch (const CLI::ParseError &e) {
+        return cli.exit(e);
+    }
+    if (keep_pli && (fail_decode == 0 || fail_every > 0)) {
+        std::fprintf(stderr, "--keep-pli requires --fail-decode and is incompatible with --fail-every-keyframe\n");
+        return 2;
     }
 
     // 两个档位之间有硬约束：**缺口只有在"后面的包到了"之后才看得见**。丢包点之后
@@ -127,7 +140,7 @@ int main(int argc, char **argv) {
     }
 
     std::string err;
-    auto dev = scrctl::remote::Device::establish({}, err, verbose);
+    auto dev = scrctl::app::open_device(serial, wifi, err);
     if (!dev) {
         std::fprintf(stderr, "建立会话失败: %s\n", err.c_str());
         return 1;
@@ -153,7 +166,7 @@ int main(int argc, char **argv) {
             // 臂 B：PLI 照发（不然没有 IDR 可以判死），视频照吃（要后面的 AU 继续上门才有
             // 东西可数），但从假装失败那一刻起把 PLI 掐断。
             o.debug_fail_decode_of_keyframe = fail_decode;
-            o.debug_suppress_pli_after_fail = true;
+            o.debug_suppress_pli_after_fail = !keep_pli;
         }
     }
     auto pump = scrctl::media::FramePump::start(*dev, o, err, verbose);
@@ -169,11 +182,16 @@ int main(int argc, char **argv) {
         std::printf("档位在跑：第 %d 个视频包不吃、第 %d 个之后只剩 SR、PLI 一个不发、"
                     "静默重起关闭、等满 %d 毫秒就重起\n",
                     drop_at, ignore_after, stall_ms);
+    } else if (keep_pli) {
+        std::printf("Test: drop packet %d, fail %d recovery keyframes, continue PLI; restart deadline %d ms\n",
+                    drop_at, fail_decode, stall_ms);
     } else {
         std::printf("档位在跑：第 %d 个视频包不吃、静默重起关闭、等满 %d 毫秒就重起；"
                     "PLI 照发直到把接下来 %d 个\"来修丢包的 IDR\"判死，此后 PLI 全按住\n",
                     drop_at, stall_ms, fail_decode);
     }
+
+    if (keep_pli) std::printf("Test: keep PLI enabled while recovery keyframes repeatedly fail decoding\n");
 
     const uint64_t t0 = now_ms();
     uint64_t armed_at = 0;
@@ -337,6 +355,11 @@ int main(int argc, char **argv) {
                         "救场的那一步没跟上，再看一眼 stalled 那段的三个条件\n",
                         static_cast<unsigned long long>(win_awaiting),
                         restarted_at == 0 ? "一次都没发生" : "只发生在失败之前");
+            return 1;
+        }
+        if (keep_pli && restarted_at - fail_snap_at > static_cast<uint64_t>(stall_ms) + 1000) {
+            std::printf("FAIL: repeated failed keyframes delayed restart by %llu ms (limit %d ms plus 1000 ms tolerance)\n",
+                        static_cast<unsigned long long>(restarted_at - fail_snap_at), stall_ms);
             return 1;
         }
         std::printf("P1 判据：修过的。假装失败 +%-llu ms -> 此后 %llu 毫秒挡下 %llu 个 AU、发布 0 "

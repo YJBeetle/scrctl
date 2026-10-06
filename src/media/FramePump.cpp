@@ -61,18 +61,16 @@ size_t largest_nal(const std::vector<Nal> &au) {
 
 /// 软件解码不可用的提示只输出一次，避免每次重建重复提示同一构建条件。
 void warn_no_software() {
-    static bool warned = false;
-    if (warned) {
-        return;
-    }
-    warned = true;
-    std::fprintf(stderr,
+    static std::once_flag warned;
+    std::call_once(warned, [] {
+        std::fprintf(stderr,
                  SCRCTL_TR(
                      "Software decoder (libavcodec) is not included; continuing with the platform "
                      "decoder. The current adapter uses 2-byte NAL lengths and cannot process larger "
                      "NALs. Such access units are dropped and the session is recreated, which may "
                      "interrupt video.\nInstall FFmpeg development packages and reconfigure the "
                      "build.\n"));
+    });
 }
 
 }  // namespace
@@ -97,7 +95,7 @@ std::unique_ptr<FramePump> FramePump::start(remote::Device &device, const Option
         err = SCRCTL_TR(scrctl::kNoDecoderMessage);
         return nullptr;
     }
-    // restart() 仅建立会话；record_ 和 last_keyframe_ms_ 等字段完成初始化
+    // restart() 仅建立会话；record_ 和 last_decoded_keyframe_ms_ 等字段完成初始化
     // 后才创建 worker，避免线程读到尚未初始化的无锁状态。
     if (!pump->restart(err)) {
         return nullptr;
@@ -110,7 +108,7 @@ std::unique_ptr<FramePump> FramePump::start(remote::Device &device, const Option
         }
     }
     // 首次关键帧尚未到达时不立即判定停顿；last_packet_ms_ 由 restart() 设置。
-    pump->last_keyframe_ms_ = now_ms();
+    pump->last_decoded_keyframe_ms_ = now_ms();
     pump->worker_running_ = true;
     pump->worker_ = std::thread(&FramePump::loop, pump.get());
     return pump;
@@ -270,10 +268,6 @@ void FramePump::loop() {
                 std::lock_guard<std::mutex> lock(mutex_);
                 ++stats_.aus;
             }
-            if (keyframe) {
-                std::lock_guard<std::mutex> lock(mutex_);
-                last_keyframe_ms_ = now_ms();
-            }
             // NAL 超过平台后端的长度上限时尝试软件解码。实测 IDR 可达
             // 49652–70101 字节，转场中的非关键帧切片也曾达到 256278 字节。
             const size_t biggest = largest_nal(au);
@@ -407,6 +401,8 @@ void FramePump::loop() {
                 first_pli_ms_ = 0;
             }
             if (keyframe) {
+                // 收到关键帧但未输出图像不能延后恢复期限。
+                last_decoded_keyframe_ms_ = now_ms();
                 ever_keyframe_ = true;
                 nokey_restarts_ = 0;  // 成功输出关键帧后重置快速重试计数。
                 // 成功解码后退出降级并重置尺寸限制重试计数。
@@ -592,6 +588,8 @@ void FramePump::loop() {
         }
         // PLI 后的后备重建每轮检查，即使只收到 SR 而没有视频字节也要推进
         // 等待计时。条件同时要求丢包后的等待未结束及关键帧等待达到期限。
+        // PLI 重发按时间调度，不能依赖新的 AU。只剩 SR 时也需要继续请求。
+        if (awaiting_idr_from_loss_) request_keyframe();
         if (options_.stall_restart_ms > 0 && depacketizer != nullptr) {
             const auto &dst = depacketizer->stats();
             const uint64_t gaps = dst.seq_gaps;
@@ -599,19 +597,19 @@ void FramePump::loop() {
             {
                 std::lock_guard<std::mutex> lock(mutex_);
                 // awaiting_idr_from_loss_ 表示丢包后的等待，成功解码关键帧才清除；
-                // first_pli_ms_ 是首次请求时间，重发不延后期限；last_keyframe_ms_
-                // 记录最近解析到关键帧 AU 的时间，避免刚收到关键帧便重建。
+                // first_pli_ms_ 是首次请求时间，重发不延后期限；last_decoded_keyframe_ms_
+                // 记录最近成功输出关键帧的时间，收到但解码失败的 AU 不延后期限。
                 // 不能以本轮新增缺口代替持续等待：缺口发生时超时尚未到达，
                 // 期限到达时又不再有新缺口，会使两项条件永远无法同时成立。
                 stalled = awaiting_idr_from_loss_ && first_pli_ms_ != 0 &&
                           now_ms() - first_pli_ms_ >=
                               static_cast<uint64_t>(options_.stall_restart_ms) &&
-                          now_ms() - last_keyframe_ms_ >
+                          now_ms() - last_decoded_keyframe_ms_ >
                               static_cast<uint64_t>(options_.stall_restart_ms);
                 stats_.gaps = gaps;
                 stats_.dropped_fragments = dst.dropped_fragments;
                 if (stalled) {
-                    last_keyframe_ms_ = now_ms();  // 为新会话留出等待时间。
+                    last_decoded_keyframe_ms_ = now_ms();  // 为新会话留出等待时间。
                 }
             }
             if (stalled) {
