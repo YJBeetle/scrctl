@@ -1,7 +1,4 @@
 include(FetchContent)
-if(POLICY CMP0135)
-    cmake_policy(SET CMP0135 NEW)
-endif()
 option(SCRCTL_FETCH_DEPENDENCIES "下载缺失的依赖（固定版本及 SHA256）" ON)
 
 find_package(nlohmann_json 3.12.0 QUIET CONFIG)

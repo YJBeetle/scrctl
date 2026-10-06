@@ -1,8 +1,10 @@
-# 3.20 而不是更高：这一条决定的是"哪些机器还能构建"。跨平台是硬要求，而发行版自带的
-# cmake 普遍比 Homebrew 的老（Ubuntu 22.04 是 3.22，Debian 11 是 3.18）。仓库里用到的
-# 最"新"的特性是 pkg_check_modules 的 IMPORTED_TARGET（3.16）与 C++20（3.12），
-# 没有理由为一个用不上的版本号把一半潜在平台挡在外面。
+# 最低版本保持 3.20；较新 CMake 的行为通过可用性检查显式启用。
 cmake_minimum_required(VERSION 3.20)
+# 下载源码解包后使用当前时间，确保依赖归档更新能触发重新构建。
+# 在顶层设置，作用于全部 FetchContent 声明；include() 的策略作用域不会外传。
+if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+endif()
 
 project(scrctl
         VERSION 0.1.0
