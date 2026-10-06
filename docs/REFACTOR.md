@@ -10,7 +10,7 @@ scrctl 是独立产品，也是设备协议与恢复行为的验证项目。MaaF
 | JSON | 已使用 nlohmann/json，删除 jsonlite | 通用解析替换已完成，保留输入限制和协议取值辅助 |
 | CLI | 已使用 CLI11，触摸和按键校验前移 | crop、颜色、测试时刻表等领域规则仍由项目处理 |
 | main 职责拆分 | 主要拆分已完成，入口 5 行 | Application 的应用命令、LiveSource 的统计仍可继续收敛 |
-| XML / binary plist | XML 已使用 pugixml，binary 仍自实现 | binary plist 库方案尚未评估、替换 |
+| XML / binary plist | XML 已使用 pugixml，binary 仍自实现 | 库方案已评估；libplist 会截断 NUL，PlistCpp 不支持 Unicode，暂保留并修复边界 |
 | IPv6 / TCP / UDP 用户态栈 | 已使用 lwIP；删除旧 TCP 和手工 UDP 收发 | USB / Wi-Fi 视频、截图切换已通过；物理断线、多设备及长时间运行待验证 |
 | HTTP/2 | 已完成 nghttp2 第一轮评估，生产仍自实现 | 控制流和内联大回复兼容；偶数文件流存在限制，真机 FileTransfer 子流尚未触发 |
 | 基础资源管理 | Base64 使用 OpenSSL；SDL 和系统 TCP 建连已收敛 | 本轮系统 socket 建连不替代隧道内 TCP 栈 |
@@ -58,8 +58,8 @@ XPC、OPACK、Apple 配对和控制语义、SRP 的 Apple 适配、Deflate 小�
 
 ## 后续阶段
 
-1. 评估 binary plist 的库方案及接口兼容性。
-2. 重写现有注释与命令行输出，保留协议约束和诊断信息。
+1. 重写现有注释与命令行输出，保留协议约束和诊断信息。
+2. 继续应用职责和生命周期复审，覆盖旧 review 中仍有效的事项。
 
 nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客户端会话，暂不替换生产实现。
 详情见 [nghttp2 适配验证](NGHTTP2_COMPATIBILITY.md)。
@@ -172,3 +172,12 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
 - USB 视频运行 35 秒，705 帧；Wi-Fi 运行 30 秒，406 帧并完成两轮截图切换。
   测试设备仍为 iPhone14,4 / iOS 27.0。
 - 上述结果不证明物理拔插恢复、长期运行或多台真机并发。
+
+
+## 第十轮：binary plist 评估与边界修复
+
+- libplist 2.7.0 的常规类型可用，但内嵌 NUL 实测截断；PlistCpp 不支持 Unicode。
+  暂保留 binary 实现，详细理由见 [库评估](BPLIST_COMPATIBILITY.md)。
+- 修复超过 65535 字节的长度写入，限制对象区域、展开量与写入结构。
+- UTF-8 校验复用 OpenSSL，拒绝无效 UTF-16；新增资源限制与大 data 往返测试。
+- bplist / media 离线测试及 ASan 通过。

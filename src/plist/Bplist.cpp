@@ -3,12 +3,17 @@
 #include <algorithm>
 #include <cstring>
 #include <limits>
+#include <openssl/asn1.h>
+#include <openssl/err.h>
 
 namespace scrctl::plist {
 namespace {
 
 constexpr int kMaxDepth = 64;
 constexpr std::size_t kMaxObjects = 1u << 20;
+constexpr std::size_t kMaxInput = 8u << 20;
+constexpr std::size_t kMaxExpandedNodes = 65536;
+constexpr std::size_t kMaxExpandedBytes = 16u << 20;
 
 std::size_t be_at(const uint8_t *p, std::size_t n) {
     std::size_t v = 0;
@@ -44,11 +49,15 @@ public:
     BinaryParser(const uint8_t *data, std::size_t len) : d_(data), n_(len) {}
 
     std::optional<Value> run(std::string &err) {
+        if (!d_ || n_ > kMaxInput) {
+            err = "bplist 输入为空或超过 8 MiB";
+            return std::nullopt;
+        }
         if (n_ < 40) {
             err = "bplist 太短";
             return std::nullopt;
         }
-        if (std::memcmp(d_, "bplist", 6) != 0) {
+        if (std::memcmp(d_, "bplist00", 8) != 0) {
             err = "缺 bplist 魔数";
             return std::nullopt;
         }
@@ -67,7 +76,7 @@ public:
             err = "bplist 对象数不合理: " + std::to_string(count);
             return std::nullopt;
         }
-        if (table > n_ - 32 || count > (n_ - 32 - table) / offset_size_) {
+        if (table < 8 || table > n_ - 32 || count > (n_ - 32 - table) / offset_size_) {
             err = "偏移表越界或被截断";
             return std::nullopt;
         }
@@ -76,9 +85,10 @@ public:
             return std::nullopt;
         }
         offsets_.resize(count);
+        object_end_ = table;
         for (std::size_t i = 0; i < count; ++i) {
             offsets_[i] = be_at(d_ + table + i * offset_size_, offset_size_);
-            if (offsets_[i] >= n_ - 32) {
+            if (offsets_[i] < 8 || offsets_[i] >= object_end_) {
                 err = "对象偏移落在尾部之后";
                 return std::nullopt;
             }
@@ -105,7 +115,7 @@ private:
             out = low;
             return true;
         }
-        if (pos + 1 > n_) {
+        if (!fits(pos, 1)) {
             return fail("长度字段被截断");
         }
         const uint8_t wide = d_[pos++];
@@ -118,7 +128,7 @@ private:
             return fail("计数宽度不合理");
         }
         const std::size_t width = std::size_t{1} << (wide & 0xF);
-        if (pos + width > n_) {
+        if (!fits(pos, width)) {
             return fail("计数字节被截断");
         }
         out = be_at(d_ + pos, width);
@@ -130,10 +140,13 @@ private:
     /// 64 位值，写成 `pos + len > n_` 时加法会绕回一个小数，守卫直接失效，
     /// 后面就拿着这个假长度去拷贝/遍历。
     [[nodiscard]] bool fits(std::size_t pos, std::size_t len) const {
-        return pos <= n_ && len <= n_ - pos;
+        return pos <= object_end_ && len <= object_end_ - pos;
     }
 
     bool decode(std::size_t idx, int depth, Value &out) {
+        // 文件对象数不能限制展开量：同一子树可被多次引用，造成指数级复制。
+        if (++expanded_nodes_ > kMaxExpandedNodes)
+            return fail("bplist 展开节点超过 65536 个");
         if (depth > kMaxDepth) {
             return fail("嵌套过深（可能有环）");
         }
@@ -157,11 +170,11 @@ private:
                 }
                 return fail("保留标志位");
             case 0x1: {  // 整数，字节数 = 2^low
-                if (low > 4) {
+                if (low > 3) {
                     return fail("整数宽度超过 8 字节");
                 }
                 const std::size_t width = std::size_t{1} << low;
-                if (pos + width > n_) {
+                if (!fits(pos, width)) {
                     return fail("整数被截断");
                 }
                 // 窄形态一律按**无符号**读：这个格式里没有"有符号窄整数"的概念，
@@ -175,7 +188,7 @@ private:
                 if (low != 3) {
                     return fail("只支持 8 字节浮点");
                 }
-                if (pos + 8 > n_) {
+                if (!fits(pos, 8)) {
                     return fail("浮点被截断");
                 }
                 const uint64_t bits = be_at(d_ + pos, 8);
@@ -187,7 +200,7 @@ private:
             }
             case 0x4: {  // data
                 std::size_t len = 0;
-                if (!read_length(pos, low, len) || !fits(pos, len)) {
+                if (!read_length(pos, low, len) || !fits(pos, len) || !consume_bytes(len)) {
                     return fail("data 越界");
                 }
                 out = Value::OfData(std::vector<uint8_t>(d_ + pos, d_ + pos + len));
@@ -195,7 +208,7 @@ private:
             }
             case 0x5: {  // ASCII
                 std::size_t len = 0;
-                if (!read_length(pos, low, len) || !fits(pos, len)) {
+                if (!read_length(pos, low, len) || !fits(pos, len) || !consume_bytes(len)) {
                     return fail("字符串越界");
                 }
                 out.kind = Kind::String;
@@ -205,20 +218,26 @@ private:
             case 0x6: {  // UTF-16BE -> UTF-8
                 std::size_t chars = 0;
                 // 除过去而不是乘过去：chars * 2 会绕回，绕回之后守卫形同不存在。
-                if (!read_length(pos, low, chars) || pos > n_ || chars > (n_ - pos) / 2) {
+                if (!read_length(pos, low, chars) || pos > object_end_ ||
+                    chars > (object_end_ - pos) / 2 || !consume_bytes(chars * 3)) {
                     return fail("UTF-16 串越界");
                 }
                 out.kind = Kind::String;
                 for (std::size_t i = 0; i < chars; ++i) {
                     uint32_t u = static_cast<uint32_t>(d_[pos + i * 2]) << 8 | d_[pos + i * 2 + 1];
-                    if (u >= 0xD800 && u < 0xDC00 && i + 1 < chars) {
+                    if (u >= 0xD800 && u < 0xDC00) {
+                        if (i + 1 == chars)
+                            return fail("UTF-16 缺少低代理项");
                         const uint32_t lo =
                             static_cast<uint32_t>(d_[pos + (i + 1) * 2]) << 8 |
                             d_[pos + (i + 1) * 2 + 1];
                         if (lo >= 0xDC00 && lo < 0xE000) {
                             u = 0x10000 + ((u - 0xD800) << 10) + (lo - 0xDC00);
                             ++i;
-                        }
+                        } else
+                            return fail("UTF-16 代理项不匹配");
+                    } else if (u >= 0xDC00 && u < 0xE000) {
+                        return fail("UTF-16 出现孤立低代理项");
                     }
                     append_utf8(out.string, u);
                 }
@@ -231,16 +250,18 @@ private:
                     return false;
                 }
                 // pos > n_ 时 (n_ - pos) 会绕回一个巨大值，下面的除法守卫就形同不存在。
-                if (pos > n_ || count > (n_ - pos) / ref_size_) {
+                if (pos > object_end_ || count > (object_end_ - pos) / ref_size_) {
                     return fail("元素引用数超出剩余字节");
                 }
                 // 字典的引用表是"先全部键、再全部值"连着排的两段，所以下面按
                 // (count + i) 取值。只按 count 检查长度的话，值那半截落在缓冲区
                 // 之外——count 只要超过剩余引用数的一半就会越界读。
                 const std::size_t refs = high == 0xD ? count * 2 : count;
-                if (refs > (n_ - pos) / ref_size_) {
+                if (refs > (object_end_ - pos) / ref_size_) {
                     return fail("字典的键值两段引用放不下");
                 }
+                if (refs > kMaxExpandedNodes - expanded_nodes_)
+                    return fail("bplist 容器展开节点超过限制");
                 if (high == 0xA) {
                     out = Value::Array();
                     out.array.resize(count);
@@ -295,6 +316,13 @@ private:
 
     const uint8_t *d_;
     std::size_t n_;
+    std::size_t object_end_ = 0, expanded_nodes_ = 0, expanded_bytes_ = 0;
+    bool consume_bytes(std::size_t n) {
+        if (n > kMaxExpandedBytes - expanded_bytes_)
+            return fail("bplist 展开数据超过 16 MiB");
+        expanded_bytes_ += n;
+        return true;
+    }
     std::size_t offset_size_ = 1;
     std::size_t ref_size_ = 1;
     std::vector<std::size_t> offsets_;
@@ -310,8 +338,9 @@ void put_count(std::vector<uint8_t> &out, uint8_t high, std::size_t len) {
         return;
     }
     out.push_back(static_cast<uint8_t>(high << 4 | 0xF));
-    const int width = width_for(len);
-    out.push_back(static_cast<uint8_t>(0x10 | (width == 1 ? 0 : width == 2 ? 1 : 2)));
+    // 长度对象是整数，宽度只能是 1、2、4、8；偏移和引用宽度则允许 3 字节。
+    const int width = len <= 0xff ? 1 : len <= 0xffff ? 2 : len <= 0xffffffffULL ? 4 : 8;
+    out.push_back(static_cast<uint8_t>(0x10 | (width == 1 ? 0 : width == 2 ? 1 : width == 4 ? 2 : 3)));
     put_be(out, len, width);
 }
 
@@ -412,11 +441,57 @@ void put_ref(std::vector<uint8_t> &out, std::size_t id, int ref_size) {
     put_be(out, id, ref_size);
 }
 
+// 在递归构建对象表及 UTF-16 转换前检查 Value。OpenSSL 已是生产依赖，
+// ASN1_mbstring_copy 的空输出模式只验证 UTF-8，不分配 ASN.1 对象。
+bool valid_tree(const Value &value, int depth, size_t &nodes, size_t &bytes) {
+    if (depth > kMaxDepth || ++nodes > kMaxExpandedNodes)
+        return false;
+    const auto consume = [&](size_t count) {
+        if (count > kMaxExpandedBytes - bytes)
+            return false;
+        bytes += count;
+        return true;
+    };
+    const auto string_ok = [&](const std::string &text) {
+        if (text.size() > kMaxInput || !consume(text.size()))
+            return false;
+        const bool marked = ERR_set_mark() == 1;
+        const bool valid = ASN1_mbstring_copy(nullptr,
+            reinterpret_cast<const unsigned char *>(text.data()),
+            static_cast<int>(text.size()), MBSTRING_UTF8, B_ASN1_UTF8STRING) > 0;
+        if (marked)
+            ERR_pop_to_mark();
+        else
+            ERR_clear_error();
+        return valid;
+    };
+    if (value.kind == Kind::String)
+        return string_ok(value.string);
+    if (value.kind == Kind::Data)
+        return consume(value.data.size());
+    if (value.is_array()) {
+        for (const auto &item : value.array)
+            if (!valid_tree(item, depth + 1, nodes, bytes))
+                return false;
+    } else if (value.is_dict()) {
+        if (value.keys.size() != value.values.size() ||
+            (depth == kMaxDepth && !value.keys.empty()))
+            return false;
+        for (size_t n = 0; n < value.keys.size(); ++n)
+            if (++nodes > kMaxExpandedNodes || !string_ok(value.keys[n]) ||
+                !valid_tree(value.values[n], depth + 1, nodes, bytes))
+                return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 std::optional<Value> parse_binary(const uint8_t *data, std::size_t len, std::string *err) {
     std::string local;
     auto out = BinaryParser(data, len).run(local);
+    if (err != nullptr)
+        err->clear();
     if (!out && err != nullptr) {
         *err = local;
     }
@@ -428,6 +503,9 @@ std::optional<Value> parse_binary(const std::vector<uint8_t> &bytes, std::string
 }
 
 std::vector<uint8_t> write_binary(const Value &root) {
+    size_t node_count = 0, bytes = 0;
+    if (!valid_tree(root, 0, node_count, bytes))
+        return {};
     std::vector<Node> nodes;
     build(nodes, root);
     const std::size_t count = nodes.size();
@@ -526,6 +604,8 @@ std::vector<uint8_t> write_binary(const Value &root) {
         for (const auto &b : bodies) {
             total += b.size();
         }
+        if (total > kMaxInput)
+            return {};
         const int needed = static_cast<int>(width_for(total));
         if (needed == offset_size) {
             std::vector<uint8_t> out;

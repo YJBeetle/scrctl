@@ -228,6 +228,63 @@ void test_truncation_is_safe() {
     check(rejected == full.size(), "除全长外的每个前缀都被干净地拒绝");
 }
 
+void test_resource_and_encoding_bounds() {
+    std::string err;
+    auto data = Value::OfData(std::vector<uint8_t>(65536, 0xa5));
+    const auto wire = scrctl::plist::write_binary(data);
+    auto parsed = scrctl::plist::parse_binary(wire, &err);
+    check(parsed && parsed->data == data.data, "65536 字节 data 往返，长度整数使用 4 字节");
+    check(wire.size() > 14 && wire[8] == 0x4f && wire[9] == 0x12,
+          "长 data 的长度头为 0x12，而非 3 字节整数");
+    const auto nul = Value::Str(std::string("A\0B", 3));
+    parsed = scrctl::plist::parse_binary(scrctl::plist::write_binary(nul), &err);
+    check(parsed && parsed->string == nul.string, "binary 字符串保留内嵌 NUL");
+    for (const auto &bad : {std::string("\xc2", 1), std::string("\xe0\x80\x80", 3),
+                           std::string("\xed\xa0\x80", 3), std::string("\xf4\x90\x80\x80", 4)})
+        check(scrctl::plist::write_binary(Value::Str(bad)).empty(), "拒绝非法 UTF-8 写入");
+    auto dict = Value::Dict();
+    dict.keys.push_back("missing value");
+    check(scrctl::plist::write_binary(dict).empty(), "拒绝键值数量不匹配的字典");
+    auto nested = Value::Bool(true);
+    for (int n = 0; n < 66; ++n) {
+        auto parent = Value::Array();
+        parent.push(std::move(nested));
+        nested = std::move(parent);
+    }
+    check(scrctl::plist::write_binary(nested).empty(), "写入也限制嵌套深度");
+    check(!scrctl::plist::parse_binary(nullptr, 40, &err), "空指针输入返回错误");
+    check(!scrctl::plist::parse_binary(nullptr, (8u << 20) + 1, &err), "超限输入在访问前拒绝");
+    auto version = unhex(kReference);
+    version[7] = '1';
+    check(!scrctl::plist::parse_binary(version, &err), "拒绝未支持的 bplist 版本");
+    auto bad_string = scrctl::plist::write_binary(Value::Str("abc"));
+    bad_string[8] = 0x57;
+    check(!scrctl::plist::parse_binary(bad_string, &err), "字符串不能跨入偏移表");
+    auto bad_surrogate = scrctl::plist::write_binary(Value::Str("中"));
+    bad_surrogate[9] = 0xdc;
+    bad_surrogate[10] = 0x00;
+    check(!scrctl::plist::parse_binary(bad_surrogate, &err), "拒绝孤立 UTF-16 低代理项");
+
+    // 每层数组两次引用下一层。仅 21 个对象，却会展开为超过百万个 Value。
+    std::vector<uint8_t> dag{'b', 'p', 'l', 'i', 's', 't', '0', '0'};
+    std::vector<uint8_t> offsets;
+    for (uint8_t n = 0; n < 20; ++n) {
+        offsets.push_back(static_cast<uint8_t>(dag.size()));
+        dag.insert(dag.end(), {0xa2, static_cast<uint8_t>(n + 1), static_cast<uint8_t>(n + 1)});
+    }
+    offsets.push_back(static_cast<uint8_t>(dag.size()));
+    dag.push_back(0x09);
+    const auto table = dag.size();
+    dag.insert(dag.end(), offsets.begin(), offsets.end());
+    dag.insert(dag.end(), 6, 0);
+    dag.insert(dag.end(), {1, 1});
+    for (const uint64_t n : {uint64_t(offsets.size()), uint64_t(0), uint64_t(table)})
+        for (int shift = 56; shift >= 0; shift -= 8)
+            dag.push_back(static_cast<uint8_t>(n >> shift));
+    check(!scrctl::plist::parse_binary(dag, &err) && err.find("节点") != std::string::npos,
+          "重复引用的展开量受限");
+}
+
 }  // namespace
 
 int main() {
@@ -237,6 +294,7 @@ int main() {
     test_reject_malformed();
     test_hostile_lengths_rejected();
     test_truncation_is_safe();
+    test_resource_and_encoding_bounds();
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;
 }
