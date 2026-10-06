@@ -142,13 +142,14 @@ bool PacketTunnel::client_handshake(std::string &err) {
     return true;
 }
 
-bool PacketTunnel::wait_readable(int ms, std::string &err) {
+bool PacketTunnel::wait_readable(int ms, std::string &err, bool *timed_out) {
+    if (timed_out) *timed_out = false;
     // TLS 记录可能已被 SSL_read 拆进内部缓冲，此时 fd 上无可读事件，
     // 必须先问 SSL_pending，否则会白等超时。
     if (tls_.handle() != nullptr && SSL_pending(tls_.handle()) > 0) {
         return true;
     }
-    return sock_.wait_readable(ms, err);
+    return sock_.wait_readable(ms, err, timed_out);
 }
 
 bool PacketTunnel::send_ipv6(const uint8_t *packet, size_t len, std::string &err) {

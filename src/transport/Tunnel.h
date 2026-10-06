@@ -60,7 +60,8 @@ public:
     bool recv_ipv6(std::vector<uint8_t> &out, std::string &err);
 
     /// 是否有数据可读（TLS 下要先看 SSL 内部缓冲，否则会把已解密的字节等丢）。
-    bool wait_readable(int ms, std::string &err);
+    /// timed_out 用于区分正常的等待超时与传输错误。
+    bool wait_readable(int ms, std::string &err, bool *timed_out = nullptr);
 
 private:
     /// 发 clientHandshakeRequest 并解析回复。两条路（证书 TLS / PSK）共用这一段。

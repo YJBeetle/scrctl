@@ -39,7 +39,8 @@ public:
     bool read_exact(void *data, size_t len, std::string &err);
 
     /// 等待可读，最多 ms 毫秒。返回 false 表示超时或出错。
-    bool wait_readable(int ms, std::string &err);
+    /// 给出 timed_out 时，超时会置 true 并清空 err；系统错误仍返回原因。
+    bool wait_readable(int ms, std::string &err, bool *timed_out = nullptr);
 
     /// 给 recv 设一个超时（SO_RCVTIMEO）。控制面这类"对端可能一声不吭把连接掐掉又
     /// 不发 FIN"的路，没有它 read 会永久挂着——症状像我们卡死，其实是设备早走了。

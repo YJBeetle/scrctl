@@ -156,6 +156,31 @@ void still_works_as_a_socket() {
     check(std::string(buf, 5) == "hello", "字节原样往返");
 }
 
+void readable_wait_results() {
+    scrctl::transport::Socket a, b;
+    std::string err;
+    if (!make_pair(a, b, err)) {
+        check(false, err);
+        return;
+    }
+    bool timed_out = false;
+    err = "previous error";
+    check(!b.wait_readable(0, err, &timed_out) && timed_out && err.empty(),
+          "空队列：等待超时，与传输错误区分");
+    check(a.write_all("x", 1, err), "准备可读数据");
+    timed_out = true;
+    check(b.wait_readable(100, err, &timed_out) && !timed_out,
+          "数据到达：清除超时标志");
+    char byte = 0;
+    check(b.read_exact(&byte, 1, err), "取走可读数据");
+    check(!b.wait_readable(0, err) && err == "等待超时",
+          "未提供超时标志时保留原有错误语义");
+    b.close();
+    timed_out = true;
+    check(!b.wait_readable(0, err, &timed_out) && !timed_out && !err.empty(),
+          "本地已关闭：返回错误原因，不标记超时");
+}
+
 }  // namespace
 
 int main() {
@@ -163,6 +188,7 @@ int main() {
     own_send_path();
     tls_write_path();
     still_works_as_a_socket();
+    readable_wait_results();
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;
 }

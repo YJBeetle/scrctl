@@ -183,7 +183,8 @@ bool Socket::set_read_timeout(int ms, std::string &err) {
     return true;
 }
 
-bool Socket::wait_readable(int ms, std::string &err) {
+bool Socket::wait_readable(int ms, std::string &err, bool *timed_out) {
+    if (timed_out) *timed_out = false;
     if (fd_ < 0) {
         err = "socket 已关闭";
         return false;
@@ -195,7 +196,12 @@ bool Socket::wait_readable(int ms, std::string &err) {
             return true;
         }
         if (n == 0) {
-            err = "等待超时";
+            if (timed_out) {
+                *timed_out = true;
+                err.clear();
+            } else {
+                err = "等待超时";
+            }
             return false;
         }
         if (errno != EINTR) {
