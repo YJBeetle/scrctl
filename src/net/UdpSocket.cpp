@@ -1,146 +1,159 @@
 #include "net/UdpSocket.h"
-
+#include "net/LwipRuntime.h"
 #include <algorithm>
 #include <chrono>
-
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+extern "C" {
+#include "lwip/udp.h"
+}
 namespace scrctl::net {
-namespace {
-
-constexpr std::size_t kUdpHeaderLen = 8;
-constexpr uint8_t kNextHeaderUdp = 17;
-
-uint16_t get16(const uint8_t *p) { return static_cast<uint16_t>(p[0] << 8 | p[1]); }
-void put16(uint8_t *p, uint16_t v) {
-    p[0] = static_cast<uint8_t>(v >> 8);
-    p[1] = static_cast<uint8_t>(v);
-}
-
-}  // namespace
-
-std::vector<uint8_t> build_udp_datagram(uint16_t local_port, uint16_t peer_port,
-                                        const uint8_t src[16], const uint8_t dst[16],
-                                        const std::vector<uint8_t> &payload) {
-    std::vector<uint8_t> dgram(kUdpHeaderLen + payload.size());
-    put16(dgram.data(), local_port);
-    put16(dgram.data() + 2, peer_port);
-    put16(dgram.data() + 4, static_cast<uint16_t>(dgram.size()));
-    put16(dgram.data() + 6, 0);  // 校验和先置零，算完回填
-    std::copy(payload.begin(), payload.end(), dgram.begin() + kUdpHeaderLen);
-    const uint16_t sum = l4_checksum(src, dst, dgram.data(), dgram.size(), kNextHeaderUdp);
-    // IPv6 里 UDP 校验和为 0 的含义是"没算"，对端会直接丢包，所以算出 0 也要
-    // 按规范改写成 0xFFFF（它等价于全一的补码）。
-    put16(dgram.data() + 6, sum == 0 ? 0xFFFF : sum);
-    return dgram;
-}
-
-UdpSocket::~UdpSocket() {
-    if (bound_) {
-        stack_.detach_udp(local_port_);
+struct UdpSocket::Impl {
+  struct Packet {
+    uint16_t port;
+    std::vector<uint8_t> bytes;
+  };
+  Stack &stack;
+  uint16_t port;
+  udp_pcb *pcb = nullptr;
+  mutable std::mutex mutex;
+  std::condition_variable cv;
+  std::deque<Packet> queue;
+  size_t bytes = 0, dropped = 0;
+  std::string failure;
+  Impl(Stack &s, uint16_t p) : stack(s), port(p) {}
+  void fail(const std::string &why) {
+    if (pcb) {
+      udp_remove(pcb);
+      pcb = nullptr;
     }
-}
-
-bool UdpSocket::bind(std::string &err) {
-    if (local_port_ == 0) {
-        err = "未指定本地端口";
-        return false;
-    }
-    if (!stack_.addresses_ok()) {
-        err = "隧道地址不是合法 IPv6";
-        return false;
-    }
-    stack_.attach_udp(local_port_, this);
-    bound_ = true;
-    return true;
-}
-
-bool UdpSocket::send(const std::vector<uint8_t> &payload, uint16_t peer_port, std::string &err) {
-    if (!bound_) {
-        err = "套接字没绑定就发";
-        return false;
-    }
-    const auto dgram = build_udp_datagram(local_port_, peer_port, stack_.local_addr().data(),
-                                          stack_.peer_addr().data(), payload);
-    return stack_.send(stack_.wrap(dgram, kNextHeaderUdp), err);
-}
-
-void UdpSocket::on_datagram(const uint8_t *l4, std::size_t len) {
-    bool queued = false;
     {
-        std::lock_guard<std::mutex> lock(m_);
-        auto reject = [&] {
-            ++dropped_;
-            return;
-        };
-        if (len < kUdpHeaderLen) {
-            reject();
-            return;
-        }
-        const std::size_t declared = get16(l4 + 4);
-        if (declared < kUdpHeaderLen || declared > len) {
-            reject();
-            return;
-        }
-        const uint16_t wire_sum = get16(l4 + 6);
-        if (wire_sum == 0) {
-            reject();  // IPv6 下 0 表示未计算，按规范丢弃
-            return;
-        }
-        std::vector<uint8_t> copy(l4, l4 + declared);
-        const uint16_t check = l4_checksum(stack_.peer_addr().data(), stack_.local_addr().data(),
-                                           copy.data(), copy.size(), kNextHeaderUdp);
-        if (check != 0) {
-            reject();
-            return;
-        }
-        if (queue_.size() >= kMaxQueue) {
-            // 丢最老的、留下这个新的：消费者要的是"现在"而不是三秒前。
-            // 这里不能 pop 完就 return——那等于一次丢两个包（最老的和新到的都没
-            // 进队列），而 RTP 侧的序号缺口又会被上层当成网络丢包去重起会话。
-            queue_.pop_front();
-            ++dropped_;
-        }
-        queue_.emplace_back(Packet{get16(l4 + 0),
-                                   std::vector<uint8_t>(l4 + kUdpHeaderLen, l4 + declared)});
-        queued = true;
+      std::lock_guard lock(mutex);
+      failure = why;
     }
-    if (queued) {
-        cv_.notify_all();
+    cv.notify_all();
+  }
+  static void received(void *arg, udp_pcb *, pbuf *p, const ip_addr_t *address,
+                       u16_t port) {
+    auto &self = *static_cast<Impl *>(arg);
+    ip_addr_t peer{};
+    ipaddr_aton(self.stack.peer_text().c_str(), &peer);
+    if (!ip_addr_cmp(address, &peer)) {
+      pbuf_free(p);
+      return;
     }
+    {
+      std::lock_guard lock(self.mutex);
+      try {
+        std::vector<uint8_t> data(p->tot_len);
+        pbuf_copy_partial(p, data.data(), p->tot_len, 0);
+        while (!self.queue.empty() &&
+               (self.queue.size() >= 4096 ||
+                self.bytes + data.size() > (16u << 20))) {
+          self.bytes -= self.queue.front().bytes.size();
+          self.queue.pop_front();
+          ++self.dropped;
+        }
+        self.queue.push_back({port, std::move(data)});
+        self.bytes += p->tot_len;
+      } catch (const std::bad_alloc &) {
+        ++self.dropped;
+      }
+    }
+    pbuf_free(p);
+    self.cv.notify_all();
+  }
+};
+UdpSocket::UdpSocket(Stack &s, uint16_t port)
+    : impl_(std::make_shared<Impl>(s, port)) {}
+UdpSocket::~UdpSocket() {
+  auto s = impl_;
+  LwipRuntime::instance().call([s] {
+    s->fail("UDP 端点已关闭");
+    s->stack.detach_endpoint(s.get());
+  });
 }
-
-bool UdpSocket::recv(std::vector<uint8_t> &payload, uint16_t &peer_port, int timeout_ms,
+bool UdpSocket::bind(std::string &err) {
+  auto s = impl_;
+  err.clear();
+  const auto result = LwipRuntime::instance().call([s]() -> err_t {
+    auto *nic = s->stack.interface();
+    if (!nic || !s->port || s->pcb)
+      return ERR_ARG;
+    s->pcb = udp_new_ip_type(IPADDR_TYPE_V6);
+    if (!s->pcb)
+      return ERR_MEM;
+    ip_addr_t address{};
+    ipaddr_aton(s->stack.local_text().c_str(), &address);
+    udp_bind_netif(s->pcb, nic);
+    const auto result = udp_bind(s->pcb, &address, s->port);
+    if (result != ERR_OK) {
+      udp_remove(s->pcb);
+      s->pcb = nullptr;
+      return result;
+    }
+    udp_recv(s->pcb, Impl::received, s.get());
+    s->stack.attach_endpoint(s.get(),
+                             [s](const std::string &why) { s->fail(why); });
+    return ERR_OK;
+  });
+  return result == ERR_OK
+             ? true
+             : (err = "UDP 绑定失败（lwIP " + std::to_string(result) + "）",
+                false);
+}
+bool UdpSocket::send(const std::vector<uint8_t> &payload, uint16_t port,
                      std::string &err) {
-    std::unique_lock<std::mutex> lock(m_);
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
-    for (;;) {
-        if (!queue_.empty()) {
-            peer_port = queue_.front().peer_port;
-            payload = std::move(queue_.front().payload);
-            queue_.pop_front();
-            return true;
-        }
-        // 泵线程退出后再等也不会有包进来，立刻把原因交出去。
-        const std::string why = stack_.pump_error();
-        if (!why.empty()) {
-            err = why;
-            return false;
-        }
-        if (std::chrono::steady_clock::now() >= deadline) {
-            err = "收数据报超时";
-            return false;
-        }
-        cv_.wait_for(lock, std::chrono::milliseconds(50));
-    }
+  auto s = impl_;
+  err.clear();
+  const auto result = LwipRuntime::instance().call([&]() -> err_t {
+    auto *nic = s->stack.interface();
+    if (!nic || !s->pcb || !port)
+      return ERR_CONN;
+    if (payload.size() > nic->mtu - 48u)
+      return ERR_VAL;
+    pbuf *p = pbuf_alloc(PBUF_TRANSPORT, static_cast<u16_t>(payload.size()),
+                         PBUF_RAM);
+    if (!p)
+      return ERR_MEM;
+    pbuf_take(p, payload.data(), static_cast<u16_t>(payload.size()));
+    ip_addr_t peer{};
+    ipaddr_aton(s->stack.peer_text().c_str(), &peer);
+    const auto result = udp_sendto(s->pcb, p, &peer, port);
+    pbuf_free(p);
+    return result;
+  });
+  return result == ERR_OK
+             ? true
+             : (err = "UDP 发送失败（lwIP " + std::to_string(result) + "）",
+                false);
 }
-
-std::size_t UdpSocket::buffered() const {
-    std::lock_guard<std::mutex> lock(m_);
-    return queue_.size();
+bool UdpSocket::recv(std::vector<uint8_t> &payload, uint16_t &port,
+                     int timeout_ms, std::string &err) {
+  auto s = impl_;
+  payload.clear();
+  err.clear();
+  std::unique_lock lock(s->mutex);
+  if (!s->cv.wait_for(lock, std::chrono::milliseconds(std::max(timeout_ms, 0)),
+                      [&] { return !s->queue.empty() || !s->failure.empty(); }))
+    return err = "UDP 接收超时", false;
+  if (s->queue.empty())
+    return err = s->failure, false;
+  auto packet = std::move(s->queue.front());
+  s->queue.pop_front();
+  s->bytes -= packet.bytes.size();
+  payload = std::move(packet.bytes);
+  port = packet.port;
+  return true;
 }
-
-std::size_t UdpSocket::dropped() const {
-    std::lock_guard<std::mutex> lock(m_);
-    return dropped_;
+uint16_t UdpSocket::local_port() const { return impl_->port; }
+size_t UdpSocket::buffered() const {
+  std::lock_guard lock(impl_->mutex);
+  return impl_->queue.size();
 }
-
-}  // namespace scrctl::net
+size_t UdpSocket::dropped() const {
+  std::lock_guard lock(impl_->mutex);
+  return impl_->dropped;
+}
+} // namespace scrctl::net

@@ -18,6 +18,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 include(cmake/Dependencies.cmake)
+include(cmake/Lwip.cmake)
 
 option(SCRCTL_BUILD_TESTS "构建无头自检" ON)
 option(SCRCTL_FETCH_SDL2 "用 FetchContent 拉取 SDL2，而不是找系统安装" OFF)
@@ -123,6 +124,7 @@ add_library(scrctl_core STATIC
         src/transport/TlsChannel.cpp
         src/transport/Lockdown.cpp
         src/transport/Tunnel.cpp
+        src/net/LwipRuntime.cpp
         src/net/Stack.cpp
         src/net/TcpStream.cpp
         src/net/UdpSocket.cpp
@@ -146,7 +148,7 @@ add_library(scrctl_core STATIC
         src/wifi/RemotePairing.cpp)
 target_include_directories(scrctl_core PUBLIC src)
 target_link_libraries(scrctl_core PUBLIC ScrctlAppleFrameworks OpenSSL::SSL OpenSSL::Crypto nlohmann_json::nlohmann_json)
-target_link_libraries(scrctl_core PRIVATE pugixml::pugixml)
+target_link_libraries(scrctl_core PRIVATE pugixml::pugixml scrctl_lwip)
 target_compile_options(scrctl_core PRIVATE -Wall -Wextra)
 
 # 解码后端按平台与依赖挑：平台后端在 Apple 上是 VideoToolbox，别处只能借用软解；
@@ -317,6 +319,11 @@ if(SCRCTL_BUILD_TESTS)
     add_executable(render_test tests/render_test.cpp)
     target_link_libraries(render_test PRIVATE scrctl_core Scrctl::SDL2)
     add_test(NAME render COMMAND render_test)
+
+    add_executable(net_runtime_test tests/net_runtime_test.cpp)
+    target_link_libraries(net_runtime_test PRIVATE scrctl_core scrctl_lwip)
+    add_test(NAME net_runtime COMMAND net_runtime_test)
+    set_tests_properties(net_runtime PROPERTIES TIMEOUT 40)
 
     add_executable(net_test tests/net_test.cpp)
     target_link_libraries(net_test PRIVATE scrctl_core)

@@ -1,335 +1,248 @@
 #include "net/TcpStream.h"
-
+#include "net/LwipRuntime.h"
 #include <algorithm>
 #include <chrono>
-#include <cstdio>
-#include <cstring>
-#include <random>
-
+#include <condition_variable>
+#include <mutex>
+extern "C" {
+#include "lwip/tcp.h"
+}
 namespace scrctl::net {
-namespace {
-
-// TCP 标志位
-constexpr uint8_t kFin = 0x01;
-constexpr uint8_t kSyn = 0x02;
-constexpr uint8_t kRst = 0x04;
-constexpr uint8_t kPsh = 0x08;
-constexpr uint8_t kAck = 0x10;
-
-void put16(uint8_t *p, uint16_t v) {
-    p[0] = static_cast<uint8_t>(v >> 8);
-    p[1] = static_cast<uint8_t>(v);
-}
-
-void put32(uint8_t *p, uint32_t v) {
-    p[0] = static_cast<uint8_t>(v >> 24);
-    p[1] = static_cast<uint8_t>(v >> 16);
-    p[2] = static_cast<uint8_t>(v >> 8);
-    p[3] = static_cast<uint8_t>(v);
-}
-
-uint16_t get16(const uint8_t *p) { return static_cast<uint16_t>(p[0] << 8 | p[1]); }
-uint32_t get32(const uint8_t *p) {
-    return uint32_t(p[0]) << 24 | uint32_t(p[1]) << 16 | uint32_t(p[2]) << 8 | p[3];
-}
-
-/// 序号比较，按回绕处理。
-bool seq_lt(uint32_t a, uint32_t b) { return int32_t(a - b) < 0; }
-bool seq_ge(uint32_t a, uint32_t b) { return !seq_lt(a, b); }
-
-// 这两个 `static` 都是 `thread_local`，不是随手加的：`mt19937` 的 `operator()` 会改
-// 内部状态，而"两条腿各自一个线程、各自重起自己的会话"是现在真实存在的形状
-// （media/FramePump 与 media/AudioPump 会在各自的 worker 里同时走到这里）。
-// 共享一个非原子 RNG 是数据竞争，而它的表现不是崩，是两条腿拿到相关的"随机"数。
-uint16_t random_port() {
-    static thread_local std::mt19937 rng { std::random_device {} () };
-    return static_cast<uint16_t>(49152 + rng() % 16383);
-}
-
-uint32_t random_seq() {
-    static thread_local std::mt19937 rng { std::random_device {} () };
-    return rng();
-}
-
-int64_t now_ms() {
-    using namespace std::chrono;
-    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-}
-
-}  // namespace
-
-TcpStream::TcpStream(Stack &stack) : stack_(stack) {}
-
-TcpStream::~TcpStream() {
-    if (sport_ != 0) {
-        stack_.detach_tcp(sport_);
-    }
-}
-
-bool TcpStream::send_segment(uint8_t flags, const std::vector<uint8_t> &payload,
-                             std::string &err) {
-    if (!stack_.addresses_ok()) {
-        return err = "隧道地址不是合法 IPv6", false;
-    }
-    // 20 字节基本头 + 4 字节 MSS 选项（仅 SYN 带）。
-    const bool with_options = (flags & kSyn) != 0 && (flags & kAck) == 0;
-    const size_t hdr_len = with_options ? 24 : 20;
-
-    std::vector<uint8_t> seg(hdr_len + payload.size());
-    put16(seg.data(), sport_);
-    put16(seg.data() + 2, dport_);
-    put32(seg.data() + 4, snd_nxt_);
-    put32(seg.data() + 8, rcv_nxt_);
-    seg[12] = static_cast<uint8_t>((hdr_len / 4) << 4);
-    seg[13] = flags;
-    put16(seg.data() + 14, 65535);  // 接收窗口
-    put16(seg.data() + 16, 0);      // 校验和，先置零
-    put16(seg.data() + 18, 0);
-    if (with_options) {
-        seg[20] = 2;  // MSS
-        seg[21] = 4;
-        put16(seg.data() + 22, 15940);  // 16000 MTU - 40 IPv6 - 20 TCP
-    }
-    std::memcpy(seg.data() + hdr_len, payload.data(), payload.size());
-
-    put16(seg.data() + 16, l4_checksum(stack_.local_addr().data(), stack_.peer_addr().data(),
-                                       seg.data(), seg.size(), 6));
-    return stack_.send(stack_.wrap(seg, 6), err);
-}
-
-void TcpStream::on_segment(const uint8_t *l4, std::size_t len) {
-    std::string err;
+struct TcpStream::Impl {
+  Stack &stack;
+  tcp_pcb *pcb = nullptr; // 只在核心线程访问。
+  std::mutex mutex, send_mutex;
+  std::condition_variable cv;
+  bool started = false, established = false, eof = false, closed = false;
+  uint64_t progress = 0;
+  std::string failure;
+  std::vector<uint8_t> received;
+  explicit Impl(Stack &s) : stack(s) {}
+  void fail(const std::string &reason) {
+    auto *p = pcb;
+    pcb = nullptr;
     {
-        std::lock_guard<std::mutex> lock(m_);
-        if (!handle_segment(l4, len, err)) {
-            pending_err_ = err;
+      std::lock_guard lock(mutex);
+      failure = reason;
+      established = false;
+      ++progress;
+    }
+    cv.notify_all();
+    if (p) {
+      tcp_arg(p, nullptr);
+      tcp_err(p, nullptr);
+      tcp_abort(p);
+    }
+  }
+  static void error(void *arg, err_t code) {
+    auto &self = *static_cast<Impl *>(arg);
+    self.pcb = nullptr; // 此时 lwIP 已释放 PCB。
+    self.fail("TCP 连接终止（lwIP " + std::to_string(code) + "）");
+  }
+  static err_t connected(void *arg, tcp_pcb *, err_t code) {
+    auto &self = *static_cast<Impl *>(arg);
+    {
+      std::lock_guard lock(self.mutex);
+      self.established = code == ERR_OK;
+      ++self.progress;
+    }
+    self.cv.notify_all();
+    return code;
+  }
+  static err_t receive(void *arg, tcp_pcb *, pbuf *p, err_t code) {
+    auto &self = *static_cast<Impl *>(arg);
+    if (code != ERR_OK)
+      return code;
+    {
+      std::lock_guard lock(self.mutex);
+      if (!p)
+        self.eof = true;
+      else {
+        if (self.received.size() + p->tot_len > (4u << 20))
+          return ERR_MEM;
+        try {
+          const auto offset = self.received.size();
+          self.received.resize(offset + p->tot_len);
+          pbuf_copy_partial(p, self.received.data() + offset, p->tot_len, 0);
+        } catch (const std::bad_alloc &) {
+          return ERR_MEM;
         }
+        self.stack.note_tcp_recv(p->tot_len);
+        pbuf_free(p);
+        // 应用取走字节后再 tcp_recved；慢读者会收紧 TCP 接收窗口。
+      }
+      ++self.progress;
     }
-    cv_.notify_all();
-}
-
-bool TcpStream::handle_segment(const uint8_t *l4, std::size_t len, std::string &err) {
-    if (len < 20) {
-        return true;  // 太短，忽略
+    self.cv.notify_all();
+    return ERR_OK;
+  }
+  static err_t sent(void *arg, tcp_pcb *, u16_t) {
+    auto &self = *static_cast<Impl *>(arg);
+    {
+      std::lock_guard lock(self.mutex);
+      ++self.progress;
     }
-    const uint16_t their_sport = get16(l4 + 0);
-    const uint16_t their_dport = get16(l4 + 2);
-    if (their_dport != sport_ || their_sport != dport_) {
-        return true;  // 不属于本连接
-    }
-    const uint32_t seq = get32(l4 + 4);
-    const uint32_t ack = get32(l4 + 8);
-    const uint8_t data_off = static_cast<uint8_t>(l4[12] >> 4);
-    const uint8_t flags = l4[13];
-    const size_t tcp_hdr = static_cast<size_t>(data_off) * 4;
-    if (tcp_hdr < 20 || tcp_hdr > len) {
-        return true;
-    }
-
-    if ((flags & kRst) != 0) {
-        peer_closed_ = true;
-        return true;
-    }
-
-    // ACK 位没置的段一律不认（RFC 793），SYN 单独处理在下面的分支里。
-    if ((flags & kAck) == 0 && (flags & kSyn) == 0) {
-        return true;
-    }
-
-    if ((flags & kSyn) != 0 && (flags & kAck) != 0) {
-        if (established_) {
-            return true;  // 重复的 SYN-ACK，忽略
-        }
-        // SYN 自己占一个序号，漏掉这一步会让后续字节整体偏一位。
-        rcv_nxt_ = seq + 1;
-        snd_nxt_ = ack;
-        established_ = true;
-        std::vector<uint8_t> empty;
-        return send_segment(kAck, empty, err);
-    }
-
-    const size_t payload_len = len - tcp_hdr;
-    if (payload_len > 0) {
-        // 只接受期望序号的数据；乱序暂不支持。
-        if (seq == rcv_nxt_) {
-            // 取走全部已收字节后 vector 不会自己缩——一条长连接收过多少字节就
-            // 永久占多少内存。所以"已经读空了"这个时刻要主动回收。
-            if (rx_pos_ == rx_.size()) {
-                rx_.clear();
-                rx_pos_ = 0;
-            }
-            rx_.insert(rx_.end(), l4 + tcp_hdr, l4 + len);
-            rcv_nxt_ += static_cast<uint32_t>(payload_len);
-            // 账记在栈上：这条连接可能马上就被销毁（截图那条路每张图一条新连接），
-            // 记在自己身上等于没人能读到。
-            stack_.note_tcp_recv(payload_len);
-            std::vector<uint8_t> empty;
-            if (!send_segment(kAck | kPsh, empty, err)) {
-                return false;
-            }
-        } else {
-            // 序号落在期望之外：不缓存、不重排，丢掉并回一个期望序号的 ACK
-            // （等价于重复 ACK，催对端重传）。逐段那行日志默认不打——Wi-Fi 上重排是
-            // 常态，实测兜底截图 8 秒刷 5 行，而聚合读数已经进了 --stats（占比才是
-            // "要不要加乱序重组"的判据）；要查具体卡在哪一段时开 --debug-net。
-            stack_.note_tcp_drop(payload_len);
-            if (stack_.net_debug()) {
-                std::fprintf(stderr, "    !! TCP 段序号不连续：期望 %u 收到 %u 长度 %zu，已丢弃\n",
-                             rcv_nxt_, seq, payload_len);
-            }
-            std::vector<uint8_t> empty;
-            send_segment(kAck, empty, err);
-        }
-    }
-
-    if ((flags & kFin) != 0) {
-        // FIN 自己占一个序号，但**只有它落在我们已收末尾之后或之上**才能推期望序号：
-        // 无条件推的话，一个重复到达的 FIN（序号比 rcv_nxt_ 小）会把期望序号拉回
-        // 去，之后每个数据段都被判成"序号不连续"而丢掉——表现是连接突然再也不来数据。
-        const uint32_t after_fin = seq + static_cast<uint32_t>(payload_len) + 1;
-        if (seq_ge(after_fin, rcv_nxt_)) {
-            rcv_nxt_ = after_fin;
-        }
-        peer_closed_ = true;
-    }
+    self.cv.notify_all();
+    return ERR_OK;
+  }
+};
+TcpStream::TcpStream(Stack &stack) : impl_(std::make_shared<Impl>(stack)) {}
+TcpStream::~TcpStream() { close(); }
+bool TcpStream::connect(uint16_t port, std::string &err) {
+  auto s = impl_;
+  err.clear();
+  const auto code = LwipRuntime::instance().call([&]() -> err_t {
+    auto *nic = s->stack.interface();
+    if (!nic || !port || s->started)
+      return ERR_ARG;
+    s->started = true;
+    s->pcb = tcp_new_ip_type(IPADDR_TYPE_V6);
+    if (!s->pcb)
+      return ERR_MEM;
+    s->stack.attach_endpoint(s.get(),
+                             [s](const std::string &why) { s->fail(why); });
+    tcp_arg(s->pcb, s.get());
+    tcp_recv(s->pcb, Impl::receive);
+    tcp_err(s->pcb, Impl::error);
+    tcp_sent(s->pcb, Impl::sent);
+    tcp_nagle_disable(s->pcb);
+    tcp_bind_netif(s->pcb, nic);
+    ip_addr_t local{}, peer{};
+    ipaddr_aton(s->stack.local_text().c_str(), &local);
+    ipaddr_aton(s->stack.peer_text().c_str(), &peer);
+    auto result = tcp_bind(s->pcb, &local, 0);
+    if (result == ERR_OK)
+      result = tcp_connect(s->pcb, &peer, port, Impl::connected);
+    if (result != ERR_OK)
+      s->fail("TCP 建连失败（lwIP " + std::to_string(result) + "）");
+    return result;
+  });
+  if (code != ERR_OK)
+    return err = "无法建立 TCP 连接（lwIP " + std::to_string(code) + "）",
+           false;
+  std::unique_lock lock(s->mutex);
+  const bool ready = s->cv.wait_for(lock, std::chrono::seconds(15), [&] {
+    return s->established || s->closed || !s->failure.empty();
+  });
+  if (ready && s->established)
     return true;
+  err = s->failure.empty() ? "TCP 建连超时或连接已关闭" : s->failure;
+  lock.unlock();
+  LwipRuntime::instance().call([s, why = err] { s->fail(why); });
+  return false;
 }
-
-template <typename Pred>
-bool TcpStream::wait_for(Pred ready, int timeout_ms, std::string &err) {
-    std::unique_lock<std::mutex> lock(m_);
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
-    for (;;) {
-        if (ready()) {
-            return true;
-        }
-        if (!pending_err_.empty()) {
-            err = pending_err_;
-            pending_err_.clear();
-            return false;
-        }
-        // 每轮都看一眼隧道状态：泵线程退出后再不会有段进来了，不查就只剩干等
-        // 满超时，而"隧道断了"和"这一时半会儿没数据"对调用方是两回事。
-        const std::string why = stack_.pump_error();
-        if (!why.empty()) {
-            err = why;
-            return false;
-        }
-        if (std::chrono::steady_clock::now() >= deadline) {
-            return false;
-        }
-        cv_.wait_for(lock, std::chrono::milliseconds(50));
-    }
-}
-
-bool TcpStream::connect(uint16_t peer_port, std::string &err) {
-    // 先把寻址状态摆好再登记。登记那一刻起泵线程就可能往这儿派段，所以这些
-    // 字段的初始化必须在登记之前、且不需要持锁（还没有别人知道这个端点）。
-    dport_ = peer_port;
-    sport_ = random_port();
-    snd_nxt_ = random_seq();
-    rcv_nxt_ = 0;
-    established_ = false;
-    peer_closed_ = false;
-    rx_.clear();
-    rx_pos_ = 0;
-    pending_err_.clear();
-    stack_.attach_tcp(sport_, this);
-
-    const int64_t deadline = now_ms() + 15000;
-    int64_t next_retry = now_ms() + 500;
-    std::vector<uint8_t> no_payload;
-    {
-        std::lock_guard<std::mutex> lock(m_);
-        if (!send_segment(kSyn, no_payload, err)) {
-            return false;
-        }
-    }
-    while (now_ms() < deadline) {
-        const int slice = static_cast<int>(std::max<int64_t>(1, next_retry - now_ms()));
-        if (wait_for([this] { return established_ || peer_closed_; }, slice, err)) {
-            if (established_) {
-                return true;
-            }
-            return err = "握手被 RST/关闭", false;
-        }
-        if (now_ms() >= next_retry) {
-            next_retry = now_ms() + 500;
-            std::lock_guard<std::mutex> lock(m_);
-            if (!send_segment(kSyn, no_payload, err)) {
-                return false;
-            }
-        }
-    }
-    return err = "TCP 握手超时（检查校验和与序号）", false;
-}
-
 bool TcpStream::send(std::string_view data, std::string &err) {
-    std::lock_guard<std::mutex> lock(m_);
-    if (!established_) {
-        return err = "连接未建立", false;
+  auto s = impl_;
+  std::lock_guard serial(s->send_mutex);
+  err.clear();
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(15);
+  size_t offset = 0;
+  while (offset < data.size()) {
+    uint64_t progress;
+    {
+      std::lock_guard lock(s->mutex);
+      progress = s->progress;
     }
-    size_t off = 0;
-    constexpr size_t kMss = 15940;
-    while (off < data.size()) {
-        const size_t n = std::min(kMss, data.size() - off);
-        std::vector<uint8_t> chunk(data.begin() + static_cast<long>(off),
-                                   data.begin() + static_cast<long>(off + n));
-        if (!send_segment(kAck | kPsh, chunk, err)) {
-            return false;
-        }
-        snd_nxt_ += static_cast<uint32_t>(n);
-        off += n;
+    const auto result = LwipRuntime::instance().call([&] {
+      {
+        std::lock_guard lock(s->mutex);
+        if (s->closed || !s->established || !s->failure.empty() || !s->pcb)
+          return std::pair<size_t, err_t>{0, ERR_CONN};
+      }
+      const auto count = static_cast<u16_t>(
+          std::min<size_t>({data.size() - offset, tcp_sndbuf(s->pcb), 16384}));
+      err_t code = count ? tcp_write(s->pcb, data.data() + offset, count,
+                                     TCP_WRITE_FLAG_COPY)
+                         : ERR_MEM;
+      const size_t accepted = code == ERR_OK ? count : 0;
+      const auto output = tcp_output(s->pcb);
+      if (output != ERR_OK && output != ERR_MEM)
+        code = output;
+      return std::pair<size_t, err_t>{accepted, code};
+    });
+    offset += result.first;
+    if (result.second != ERR_OK && result.second != ERR_MEM) {
+      std::lock_guard lock(s->mutex);
+      return err = s->failure.empty() ? "TCP 发送失败（连接关闭或网络错误）"
+                                      : s->failure,
+             false;
     }
-    return true;
+    if (offset == data.size())
+      return true;
+    std::unique_lock lock(s->mutex);
+    if (std::chrono::steady_clock::now() >= deadline) {
+      err = "TCP 发送超时";
+      lock.unlock();
+      LwipRuntime::instance().call([s, why = err] { s->fail(why); });
+      return false;
+    }
+    s->cv.wait_until(lock,
+                     std::min(deadline, std::chrono::steady_clock::now() +
+                                            std::chrono::milliseconds(50)),
+                     [&] {
+                       return s->progress != progress || s->closed ||
+                              !s->failure.empty();
+                     });
+  }
+  return connected() ? true : (err = "TCP 连接未建立", false);
 }
-
-bool TcpStream::recv(std::vector<uint8_t> &out, int timeout_ms, std::string &err,
-                     bool *timed_out) {
-    if (timed_out != nullptr) {
-        *timed_out = false;
+bool TcpStream::recv(std::vector<uint8_t> &out, int timeout_ms,
+                     std::string &err, bool *timed_out) {
+  auto s = impl_;
+  out.clear();
+  err.clear();
+  if (timed_out)
+    *timed_out = false;
+  std::unique_lock lock(s->mutex);
+  if (!s->cv.wait_for(lock, std::chrono::milliseconds(std::max(timeout_ms, 0)),
+                      [&] {
+                        return !s->received.empty() || s->eof || s->closed ||
+                               !s->failure.empty();
+                      })) {
+    if (timed_out)
+      *timed_out = true;
+    else
+      err = "TCP 读取超时";
+    return false;
+  }
+  if (s->received.empty())
+    return err = s->failure.empty() ? "TCP 对端或本地已关闭" : s->failure,
+           false;
+  out.swap(s->received);
+  lock.unlock();
+  LwipRuntime::instance().call([s, count = out.size()] {
+    if (!s->pcb)
+      return;
+    size_t remaining = count;
+    while (remaining) {
+      const auto n = static_cast<u16_t>(std::min<size_t>(remaining, 65535));
+      tcp_recved(s->pcb, n);
+      remaining -= n;
     }
-    out.clear();
-    if (!wait_for([this] { return rx_pos_ < rx_.size() || peer_closed_; }, timeout_ms, err)) {
-        if (err.empty()) {
-            err = "读超时";
-            if (timed_out != nullptr) {
-                *timed_out = true;
-                err.clear();  // 超时不是错误：调用方按自己的总 deadline 决定还要不要等
-            }
-        }
-        return false;
-    }
-    // 取字节必须和 on_segment 用同一把锁。`wait_for` 一返回，它自己的 unique_lock 就
-    // 已经放了，于是"把 [rx_pos_, end) 拷出去"和"把 rx_pos_ 推到末尾"这两步之间可以
-    // 插进来一个段：它往 rx_ 尾部追加了字节，而紧接着的 `rx_pos_ = rx_.size()` 把这些
-    // 新字节当成"已经交出去过"——静默丢掉一整段。
-    //
-    // 这就是"大回复（>1MB）在服务连接上稳定传不完"的真凶：回复越大段越多，撞上这个
-    // 窗口的概率越高，而小回复几乎碰不到。症状是上层看到 HTTP/2 帧长过大——设备会把
-    // 一个 9 字节的帧头单独写成一个段，丢掉这样一个段之后，下一个帧头正好错位成载荷
-    // 字节。TCP 序号这边完全连续（段是被我们取走之后丢的，不是没收到的），所以
-    // "序号不连续"那条日志一声不响，现场什么痕迹都没有；最后是把入流字节 dump 下来
-    // 离线重放帧序列才看出来的（见 Channel::dump_ / SCRCTL_H2_DUMP）。
-    std::lock_guard<std::mutex> lock(m_);
-    if (rx_pos_ >= rx_.size()) {
-        return err = peer_closed_ ? "对端已关闭" : "读超时", false;
-    }
-    out.assign(rx_.begin() + static_cast<long>(rx_pos_), rx_.end());
-    rx_pos_ = rx_.size();
-    return true;
+  });
+  return true;
 }
-
 void TcpStream::close() {
-    std::lock_guard<std::mutex> lock(m_);
-    if (!established_ || sent_fin_) {
-        return;
+  auto s = impl_;
+  LwipRuntime::instance().call([s] {
+    {
+      std::lock_guard lock(s->mutex);
+      s->closed = true;
+      s->established = false;
+      ++s->progress;
     }
-    sent_fin_ = true;
-    std::vector<uint8_t> empty;
-    std::string err;
-    send_segment(kFin | kAck, empty, err);
-    established_ = false;
+    s->cv.notify_all();
+    if (s->pcb) {
+      auto *p = s->pcb;
+      s->pcb = nullptr;
+      s->stack.close_tcp(p);
+    }
+    s->stack.detach_endpoint(s.get());
+  });
 }
-
-}  // namespace scrctl::net
+bool TcpStream::connected() const {
+  std::lock_guard lock(impl_->mutex);
+  return impl_->established && !impl_->closed && impl_->failure.empty();
+}
+} // namespace scrctl::net

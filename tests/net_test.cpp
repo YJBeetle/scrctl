@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "MemoryTunnel.h"
+#include <future>
 #include "net/Stack.h"
 #include "net/UdpSocket.h"
 #include "remote/Device.h"
@@ -24,6 +26,35 @@ void check(bool ok, const std::string &what) {
     if (!ok) {
         ++Failures;
     }
+}
+
+// 捕获生产 UdpSocket 经 lwIP 生成、并由隧道线程送出的 L4 字节。
+std::vector<uint8_t> capture_udp(uint16_t local_port, uint16_t peer_port,
+                                 const uint8_t src[16], const uint8_t dst[16],
+                                 const std::vector<uint8_t> &payload) {
+  char local[64], peer[64];
+  inet_ntop(AF_INET6, src, local, sizeof(local));
+  inet_ntop(AF_INET6, dst, peer, sizeof(peer));
+  MemoryTunnel tunnel;
+  std::promise<std::vector<uint8_t>> wire;
+  auto result = wire.get_future();
+  bool delivered = false;
+  tunnel.deliver = [&](std::vector<uint8_t> packet) {
+    if (packet.size() >= 48 && packet[6] == 17 && !delivered) {
+      delivered = true;
+      wire.set_value(std::vector<uint8_t>(packet.begin() + 40, packet.end()));
+    }
+  };
+  scrctl::net::Stack stack(tunnel, local, peer);
+  std::string err;
+  if (!stack.start_pump(err))
+    throw std::runtime_error(err);
+  scrctl::net::UdpSocket socket(stack, local_port);
+  if (!socket.bind(err) || !socket.send(payload, peer_port, err))
+    throw std::runtime_error(err);
+  if (result.wait_for(std::chrono::seconds(2)) != std::future_status::ready)
+    throw std::runtime_error("UDP capture timed out");
+  return result.get();
 }
 
 std::vector<uint8_t> addr(const char *text) {
@@ -158,7 +189,7 @@ int main() {
               "用苹果抓包里的校验和回验得 0");
         // 同一个向量现在改走产品代码的拼装：结果必须一模一样。
         // （曾经的版本在这里会给出完全不同的字节，而这条测当时不存在。）
-        const auto via_product = scrctl::net::build_udp_datagram(49637, 56179, a_src.data(),
+        const auto via_product = capture_udp(49637, 56179, a_src.data(),
                                                                  a_dst.data(), a_payload);
         check(via_product == wire, "产品代码拼出的苹果那个包 == 抓包字节（逐字节相等）");
     }
@@ -178,7 +209,7 @@ int main() {
         const auto s = addr("fd00::2");
         const auto d = addr("fd00::1");
         const std::vector<uint8_t> payload = {'A', 'B', 'C', 'D'};
-        const auto dgram = scrctl::net::build_udp_datagram(0x1234, 0x5678, s.data(), d.data(),
+        const auto dgram = capture_udp(0x1234, 0x5678, s.data(), d.data(),
                                                            payload);
         const uint16_t declared = static_cast<uint16_t>(dgram[4] << 8 | dgram[5]);
         check(dgram.size() == payload.size() + 8, "数据报长度 = 8 + 载荷长（不是两倍）");
@@ -191,7 +222,7 @@ int main() {
         // 偶数长度的载荷走完上面三步；奇数长度会碰上半字节进位，单独测一个。
         const std::vector<uint8_t> odd = {'X', 'Y', 'Z'};
         const auto odd_dgram =
-            scrctl::net::build_udp_datagram(0x1234, 0x5678, s.data(), d.data(), odd);
+            capture_udp(0x1234, 0x5678, s.data(), d.data(), odd);
         check(odd_dgram.size() == 11 && std::equal(odd.begin(), odd.end(), odd_dgram.begin() + 8),
               "奇数长度载荷：长度 11、载荷在第 9 字节起");
         check(scrctl::net::l4_checksum(s.data(), d.data(), odd_dgram.data(), odd_dgram[4] << 8 |

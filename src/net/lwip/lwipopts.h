@@ -1,6 +1,6 @@
 #pragma once
 
-// 探针的所有 lwIP 调用都在主线程；不使用 lwIP socket/netconn API。
+// 生产调用由统一核心线程串行执行；独立探针在其主线程执行 raw API。
 #define NO_SYS 1
 #define SYS_LIGHTWEIGHT_PROT 0
 #define LWIP_SOCKET 0
@@ -17,6 +17,7 @@
 #define IPV6_FRAG_COPYHEADER 1
 #define LWIP_IPV6_NUM_ADDRESSES 1
 #define LWIP_TCP 1
+#define LWIP_TCP_PCB_NUM_EXT_ARGS 1
 #define LWIP_UDP 1
 #define LWIP_RAW 0
 #define LWIP_DNS 0

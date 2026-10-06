@@ -128,12 +128,12 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-## lwIP 2.2.1 (BSD-3-Clause; optional compatibility probe only)
+## lwIP 2.2.1 (BSD-3-Clause)
 
 Source: https://github.com/lwip-tcpip/lwip/tree/STABLE-2_2_1_RELEASE
 
-The production scrctl target does not link lwIP. Its fixed source archive is used
-only when SCRCTL_LWIP_PROBE is enabled. Individual source files retain their
+The production scrctl target and optional SCRCTL_LWIP_PROBE link lwIP built from
+a fixed, SHA256-verified source archive. Individual source files retain their
 additional copyright notices.
 
 ```text

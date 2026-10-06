@@ -122,9 +122,7 @@ class LiveSource final : public FrameSource {
     /// 隧道内 TCP 那一行自己的尺（与画面从哪来无关，且只在真丢过东西时才打）。
     uint64_t last_tcp_ms_ = 0;
     uint64_t last_tcp_recv_ = 0;
-    uint64_t last_tcp_drop_ = 0;
     /// 那一行打过没有：第一段一定打一次，好让"丢弃 0"与"账没接上"分得清。
-    bool tcp_line_printed_ = false;
     /// 起流之前向设备要来的**可见区**尺寸（0/0 = 没问到）。见 `display_size()`。
     int display_w_ = 0;
     int display_h_ = 0;

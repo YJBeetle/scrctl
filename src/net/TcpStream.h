@@ -1,91 +1,25 @@
 #pragma once
-
-#include <condition_variable>
-#include <cstdint>
-#include <mutex>
-#include <string>
-#include <string_view>
-#include <vector>
-
-#include "net/Stack.h"
 #include "net/ByteStream.h"
-
+#include "net/Stack.h"
+#include <memory>
 namespace scrctl::net {
-
-/// 隧道上的现有 TCP 客户端，一条对象对应一条连接，由 Stack 复用多条连接。
-/// SYN 有握手重试；出站数据没有完整的重传队列，入站乱序段不会缓存重组。
-/// 尚未实现窗口缩放、选择性确认和服务端监听。
-///
-/// lwIP 的 netif、重传、乱序和真机服务访问已由独立探针验证，生产迁移还需统一
-/// 核心线程、队列与关闭行为。在完成这些工作前保留当前实现。见 docs/LWIP_COMPATIBILITY.md。
-class TcpStream : public TcpEndpoint, public ByteStream {
+// 同步字节接口适配 lwIP raw TCP。协议状态只在核心线程访问；应用线程等待
+// 独立的接收队列、连接结果与发送空间，不占用核心线程或隧道线程。
+class TcpStream : public ByteStream {
 public:
-    /// 地址来自隧道握手协商出的那一对，由 Stack 持有；这里只管一条连接。
-    explicit TcpStream(Stack &stack);
-    ~TcpStream() override;
-
-    /// 完成三次握手。peer_port 是隧道内端口（如 RSD 端口）。
-    bool connect(uint16_t peer_port, std::string &err);
-
-    /// 发送全部字节（内部按 MSS 切分）。
-    bool send(std::string_view data, std::string &err) override;
-
-    /// 读若干字节，最多等 timeout_ms。返回 false 表示超时、对端关闭或出错。
-    ///
-    /// "这次超时"与"链路坏了"必须分开：前者调用方应该继续等自己的总 deadline，
-    /// 后者才该立刻放弃。把两者混成一个 false，就会把"设备回信慢"报成"连接断开"
-    /// ——真机上见过（10 次里 1 次），而且只在回信确实还要一会儿的时候出现。
-    /// 置 `timed_out` 为 true 即表示前者，此时 err 为空。
-    bool recv(std::vector<uint8_t> &out, int timeout_ms, std::string &err,
-              bool *timed_out = nullptr) override;
-
-    void close();
-
-    [[nodiscard]] bool connected() const { return established_; }
-
-    /// 收到的"序号不连续"的段数与字节数记在**栈**上（`Stack::tcp_counters()`），不在
-    /// 这里：本实现不重排也不缓存，落在期望序号之外的段会被丢掉（同时回一个重复 ACK
-    /// 催对端重传），而这条连接随时可能被销毁——兜底截图那条路每截一张就新建一条，
-    /// 记在自己身上等于没人读得到。排查"HTTP/2 说帧长过大"这类症状时第一个要看的
-    /// 就是那个聚合读数：它是字节流缺了一段的表现。
+  explicit TcpStream(Stack &stack);
+  ~TcpStream() override;
+  TcpStream(const TcpStream &) = delete;
+  TcpStream &operator=(const TcpStream &) = delete;
+  bool connect(uint16_t peer_port, std::string &err);
+  bool send(std::string_view data, std::string &err) override;
+  bool recv(std::vector<uint8_t> &out, int timeout_ms, std::string &err,
+            bool *timed_out = nullptr) override;
+  void close();
+  bool connected() const;
 
 private:
-    struct Segment {
-        uint8_t flags = 0;
-        uint32_t seq = 0;
-        uint32_t ack = 0;
-        std::vector<uint8_t> payload;
-    };
-
-    bool send_segment(uint8_t flags, const std::vector<uint8_t> &payload, std::string &err);
-    /// 复用层把目的端口属于自己的段交进来（泵线程调用）。
-    void on_segment(const uint8_t *l4, std::size_t len) override;
-    /// 处理一个属于本连接的段。**必须持有 m_ 调用**（泵线程派发时已经持着）。
-    bool handle_segment(const uint8_t *l4, std::size_t len, std::string &err);
-    /// 等某个条件成立，或到时间/隧道断掉。返回 true 表示条件成立。
-    template <typename Pred>
-    bool wait_for(Pred ready, int timeout_ms, std::string &err);
-
-    Stack &stack_;
-
-    /// 连接状态。入站段来自泵线程、出站与读取来自应用线程，两边都会碰这些字段，
-    /// 所以全部由 m_ 保护；cv_ 在状态变化时通知（数据到达、握手完成、对端关闭）。
-    mutable std::mutex m_;
-    std::condition_variable cv_;
-
-    uint16_t sport_ = 0;
-    uint16_t dport_ = 0;
-    uint32_t snd_nxt_ = 0;
-    uint32_t rcv_nxt_ = 0;
-    bool established_ = false;
-    bool peer_closed_ = false;
-    bool sent_fin_ = false;
-
-    std::vector<uint8_t> rx_;
-    size_t rx_pos_ = 0;
-    /// 处理段时可能要从 on_segment（无返回值）里往外传错误：复用层只负责分发，
-    /// 真正的失败要由正在等这条连接的人看到。
-    std::string pending_err_;
+  struct Impl;
+  std::shared_ptr<Impl> impl_;
 };
-
-}  // namespace scrctl::net
+} // namespace scrctl::net

@@ -360,43 +360,22 @@ std::string LiveSource::end_reason() const {
 }
 
 void LiveSource::print_stats() {
-    // 隧道内 TCP 的账打在两个分支之前，因为它与"画面从哪条路来"无关——而兜底截图
-    // 那条路恰恰最容易撞见重排（每张图一条新连接、每次回复几 MB）。
-    //
-    // 什么时候打：丢过东西就打；此外**第一段一定打一次**，--debug-net 时每段都打。
-    // 那一次不是噪音，是自证——"丢弃 0"与"账根本没接到这条栈上"在日志里长得一模
-    // 一样，只有把分母（收到的字节）也打出来一次才分得清。占比是"要不要给这个栈加
-    // 乱序重组"的判据，所以它必须带分母（§20：没有分母的数不是读数）。
+    // TCP 字节统计包括实时流和截图连接；lwIP 已负责缓存和恢复乱序段。
     if (device_ != nullptr && device_->stack() != nullptr) {
         const auto c = device_->stack()->tcp_counters();
-        const bool verbose = device_->stack()->net_debug();
-        if (c.dropped_bytes > 0 || verbose || !tcp_line_printed_) {
-            const uint64_t now = SDL_GetTicks64();
-            const double tcp_secs =
-                last_tcp_ms_ == 0
-                    ? 1.0
-                    : std::max(0.001, static_cast<double>(now - last_tcp_ms_) / 1000.0);
-            const uint64_t recv_delta =
-                c.recv_bytes >= last_tcp_recv_ ? c.recv_bytes - last_tcp_recv_ : 0;
-            const uint64_t drop_delta =
-                c.dropped_bytes >= last_tcp_drop_ ? c.dropped_bytes - last_tcp_drop_ : 0;
-            const uint64_t total = c.recv_bytes + c.dropped_bytes;
-            std::printf(
-                "  隧道TCP: 收 %6.1f KB/s 乱序丢弃 %5.1f KB/s｜全程 收 %.2f MB 丢 %llu 段 / "
-                "%.2f MB，占 %.2f%%（不重排，靠重传补）\n",
-                static_cast<double>(recv_delta) / 1024.0 / tcp_secs,
-                static_cast<double>(drop_delta) / 1024.0 / tcp_secs,
-                static_cast<double>(c.recv_bytes) / (1024.0 * 1024.0),
-                static_cast<unsigned long long>(c.dropped_segments),
-                static_cast<double>(c.dropped_bytes) / (1024.0 * 1024.0),
-                total == 0
-                    ? 0.0
-                    : 100.0 * static_cast<double>(c.dropped_bytes) / static_cast<double>(total));
-            tcp_line_printed_ = true;
-            last_tcp_ms_ = now;
-            last_tcp_recv_ = c.recv_bytes;
-            last_tcp_drop_ = c.dropped_bytes;
+        const uint64_t now = SDL_GetTicks64();
+        const double span = last_tcp_ms_ == 0 ? 1.0 : std::max(0.001, (now - last_tcp_ms_) / 1000.0);
+        const auto delta = c.recv_bytes >= last_tcp_recv_ ? c.recv_bytes - last_tcp_recv_ : 0;
+        std::printf("  隧道 TCP：接收 %.1f KiB/s，累计 %.2f MiB（lwIP）\n",
+                    delta / 1024.0 / span, c.recv_bytes / (1024.0 * 1024.0));
+        if (device_->stack()->net_debug()) {
+            std::printf("  网络诊断：校验和异常 %llu，ICMPv6 %llu，回音应答 %llu\n",
+                        static_cast<unsigned long long>(device_->stack()->bad_checksums()),
+                        static_cast<unsigned long long>(device_->stack()->icmp_seen()),
+                        static_cast<unsigned long long>(device_->stack()->echo_replies()));
         }
+        last_tcp_ms_ = now;
+        last_tcp_recv_ = c.recv_bytes;
     }
     if (screenshot_.source != nullptr) {
         // 兜底路只有一把尺：截图张数。打速率不打累计（§20 那条教训：没有分母的

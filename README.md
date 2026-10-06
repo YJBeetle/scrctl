@@ -80,13 +80,16 @@ ctest --test-dir build-cmake              # 离线自检，不需要真机（项
 
 JSON、命令行和 XML plist 解析分别使用 nlohmann/json（>= 3.12.0）、CLI11（>= 2.5.0）和 pugixml（>= 1.16），许可依次为 MIT、BSD-3-Clause、MIT。
 CMake 优先找系统包，缺失时下载固定版本并校验 SHA256；首次配置需要网络。
-离线构建可以安装这三个库并设置 `-DSCRCTL_FETCH_DEPENDENCIES=OFF`，或者通过
+离线构建可以安装这三个库，或通过
 `FETCHCONTENT_SOURCE_DIR_NLOHMANN_JSON` / `FETCHCONTENT_SOURCE_DIR_CLI11` /
 `FETCHCONTENT_SOURCE_DIR_PUGIXML` 指定已有源码目录。
+隧道内的 IPv6 / TCP / UDP 使用 lwIP 2.2.1（BSD-3-Clause），固定源码构建以保证配置一致。
+离线时还需用 `FETCHCONTENT_SOURCE_DIR_LWIP` 指定该版本源码；
+`-DSCRCTL_FETCH_DEPENDENCIES=OFF` 禁止下载缺失依赖。
 第三方许可证位于对应依赖源码中，分发时应保留其许可声明。
 
 应用模块的职责与后续替换边界见 [重构说明](docs/REFACTOR.md)。
-可选的 lwIP 独立验证探针默认关闭，构建方式与判据见 [lwIP 验证记录](docs/LWIP_COMPATIBILITY.md)。
+lwIP 的生产接入与默认关闭的独立探针，构建方式与判据见 [lwIP 验证记录](docs/LWIP_COMPATIBILITY.md)。
 
 ffmpeg 是**默认解码后端**，`-DSCRCTL_LIBAV=OFF` 可以关掉，但关掉之后会退回
 VideoToolbox，而它只吃 2 字节的 NAL 长度前缀（上限 65535）——真机主屏的关键帧实测

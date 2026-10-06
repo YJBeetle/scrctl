@@ -52,7 +52,7 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.add_flag("--no-window", o.no_window, "无窗口运行");
     app.add_flag("--hw-decode", o.hw_decode, "使用平台硬件解码，默认软件解码");
     app.add_flag("--debug-input", o.debug_input, "打印输入坐标");
-    app.add_flag("--debug-net", o.debug_net, "打印 TCP 不连续段");
+    app.add_flag("--debug-net", o.debug_net, "打印隧道网络诊断");
     app.add_flag("--stats", o.stats, "每秒打印统计");
     app.add_flag("--paste", o.paste, "读取设备剪贴板；与 --copy 同用时写后读回");
     app.add_option("--window-x", o.win_x, "窗口横坐标，默认居中");
