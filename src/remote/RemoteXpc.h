@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "http2/Framing.h"
-#include "net/TcpStream.h"
+#include "net/ByteStream.h"
 #include "xpc/XpcValue.h"
 
 namespace scrctl::remote {
@@ -49,7 +49,7 @@ public:
     /// 主通道 (stream 1) 的 HEADERS 必须先于终止帧、回信通道 (stream 3) 的
     /// HEADERS 必须先于它的 INIT_HANDSHAKE 帧，否则直接被 xpc_connection_cancel()
     /// 拆掉。顺序照 Apple 自家工具抓包的结果来。
-    static std::optional<Channel> open(net::TcpStream &socket, std::string &err,
+    static std::optional<Channel> open(net::ByteStream &socket, std::string &err,
                                        bool verbose = false);
 
     /// 申报身份并读回 peer_info。**只有 RSD 控制通道需要这一步**，服务连接上
@@ -90,7 +90,7 @@ public:
         return peer_info_.has_value() ? &*peer_info_ : nullptr;
     }
 
-    [[nodiscard]] net::TcpStream &socket() { return socket_; }
+    [[nodiscard]] net::ByteStream &socket() { return socket_; }
 
     /// 主通道 / 回信通道的流号。1 发请求，3 收异步回信（服务连接上设备只用 1）。
     static constexpr uint32_t kRootStream = 1;
@@ -99,7 +99,7 @@ public:
     /// 公开只为 std::optional::emplace 能构造它——optional 的内部实现不在本类
     /// 作用域里，私有构造函数它调不动。这样造出来的实例还没握手，别直接用，
     /// 要可用的通道请走 open()。
-    explicit Channel(net::TcpStream &socket) : socket_(socket) {}
+    explicit Channel(net::ByteStream &socket) : socket_(socket) {}
 
 private:
     bool start(std::string &err);
@@ -125,7 +125,7 @@ private:
     /// 「我们究竟往线上写了什么」，靠推断排错在这里的性价比极低。
     bool send_bytes(std::span<const uint8_t> data, std::string &err);
 
-    net::TcpStream &socket_;
+    net::ByteStream &socket_;
     std::vector<uint8_t> rx_;  ///< 还没凑成一帧的原始字节
     /// 这条连接一共进来过多少字节。和 `rx_.size()` 一减就是"当前这个帧头在流里的
     /// 偏移"——诊断错位时这是唯一能把现场对回 dump 文件的坐标。

@@ -19,12 +19,12 @@ constexpr uint32_t kWindowIncr = kGrantWindow - http2::kDefaultInitialWindowSize
 /// 攒够这么多就补一次窗口。太小会把帧头开销放大成噪声，太大则要等。
 constexpr uint64_t kReplenishThreshold = 1u << 20;
 
-bool write_all(net::TcpStream &sock, std::span<const uint8_t> data, std::string &err) {
+bool write_all(net::ByteStream &sock, std::span<const uint8_t> data, std::string &err) {
     return sock.send(std::string_view(reinterpret_cast<const char *>(data.data()), data.size()),
                      err);
 }
 
-bool write_all(net::TcpStream &sock, std::string_view data, std::string &err) {
+bool write_all(net::ByteStream &sock, std::string_view data, std::string &err) {
     return sock.send(data, err);
 }
 
@@ -206,7 +206,7 @@ bool Channel::announce_device(const PeerIdentity &identity, std::string &err) {
     return true;
 }
 
-std::optional<Channel> Channel::open(net::TcpStream &socket, std::string &err, bool verbose) {
+std::optional<Channel> Channel::open(net::ByteStream &socket, std::string &err, bool verbose) {
     std::optional<Channel> ch;
     ch.emplace(socket);
     ch->verbose_ = verbose;

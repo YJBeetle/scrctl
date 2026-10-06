@@ -8,18 +8,17 @@
 #include <vector>
 
 #include "net/Stack.h"
+#include "net/ByteStream.h"
 
 namespace scrctl::net {
 
-/// 隧道之上的最小 IPv6 + TCP 客户端。
+/// 隧道上的现有 TCP 客户端，一条对象对应一条连接，由 Stack 复用多条连接。
+/// SYN 有握手重试；出站数据没有完整的重传队列，入站乱序段不会缓存重组。
+/// 尚未实现窗口缩放、选择性确认和服务端监听。
 ///
-/// 为什么不用 lwIP：本项目的需求窄到点对点、静态地址、无 ND/ARP、单连接、
-/// 纯客户端，而 lwIP 要么 FetchContent 走 https（受限）、要么 vendor 数百
-/// 文件难核验来源。手写这块的失败模式也更好判定——一旦走到 RSD 握手，
-/// 校验和或序号有任何错就只会挂起，成功则返回 85 个服务的表，是硬证据。
-///
-/// 不支持：分段重组、窗口缩放、选择性确认、并发连接、服务端监听。
-class TcpStream : public TcpEndpoint {
+/// lwIP 的 netif、重传、乱序和真机服务访问已由独立探针验证，生产迁移还需统一
+/// 核心线程、队列与关闭行为。在完成这些工作前保留当前实现。见 docs/LWIP_COMPATIBILITY.md。
+class TcpStream : public TcpEndpoint, public ByteStream {
 public:
     /// 地址来自隧道握手协商出的那一对，由 Stack 持有；这里只管一条连接。
     explicit TcpStream(Stack &stack);
@@ -29,7 +28,7 @@ public:
     bool connect(uint16_t peer_port, std::string &err);
 
     /// 发送全部字节（内部按 MSS 切分）。
-    bool send(std::string_view data, std::string &err);
+    bool send(std::string_view data, std::string &err) override;
 
     /// 读若干字节，最多等 timeout_ms。返回 false 表示超时、对端关闭或出错。
     ///
@@ -38,7 +37,7 @@ public:
     /// ——真机上见过（10 次里 1 次），而且只在回信确实还要一会儿的时候出现。
     /// 置 `timed_out` 为 true 即表示前者，此时 err 为空。
     bool recv(std::vector<uint8_t> &out, int timeout_ms, std::string &err,
-              bool *timed_out = nullptr);
+              bool *timed_out = nullptr) override;
 
     void close();
 
