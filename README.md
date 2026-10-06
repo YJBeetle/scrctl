@@ -87,6 +87,11 @@ scrctl --lang zh-CN --stats
 项目自己的帮助、状态和错误提示已接入翻译；设备响应、系统错误与 CLI11 自带校验文字保留其原文。
 开发探针 `tools/` 的独立输出暂不属于这次应用文案翻译范围。
 
+修改用户提示时，英文消息使用 `SCRCTL_TR`（延后翻译的常量使用 `SCRCTL_N_`）。
+运行 `python3 tools/update_translations.py` 更新模板与中文目录，补齐 `po/zh_CN.po`
+后再运行 `python3 tools/update_translations.py --check`。该检查使用 gettext 的
+`msgcmp` / `msgfmt`，会发现源消息未同步、缺失译文或 printf 占位符错误；离线测试也会执行。
+
 ## 构建
 
 ```bash

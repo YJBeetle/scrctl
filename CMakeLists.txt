@@ -289,6 +289,9 @@ if(SCRCTL_BUILD_TESTS)
     add_test(NAME i18n COMMAND "${Python3_EXECUTABLE}"
         "${PROJECT_SOURCE_DIR}/tests/i18n_test.py" "$<TARGET_FILE:scrctl>")
     set_tests_properties(i18n PROPERTIES TIMEOUT 30)
+    add_test(NAME translation_catalogs COMMAND "${Python3_EXECUTABLE}"
+        "${PROJECT_SOURCE_DIR}/tools/update_translations.py" --check)
+    set_tests_properties(translation_catalogs PROPERTIES TIMEOUT 30)
 
     add_executable(cli_test tests/cli_test.cpp)
     target_link_libraries(cli_test PRIVATE scrctl_app)

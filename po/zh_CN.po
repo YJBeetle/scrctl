@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 03:16+0800\n"
+"POT-Creation-Date: 2026-10-07 03:18+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -12,1067 +12,184 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: src/remote/App.cpp:105
+#: src/app/Application.cpp:41
 #, c-format
 msgid ""
-"Launching %s: previous process has not exited (attempt %d); retry in 500 ms\n"
-msgstr "启动 %s 时原进程尚未退出（第 %d 次尝试），500 ms 后重试\n"
+"Visible area %ux%u -> %dx%d (device did not report dimensions; using model "
+"table)\n"
+msgstr "可见区 %ux%u -> %dx%d（设备未报告尺寸，使用机型表）\n"
 
-#: src/remote/App.cpp:133
-msgid ""
-"Device appservice does not advertise streamapplist; large listapps fallback "
-"is disabled"
-msgstr "设备 appservice 未声明 streamapplist，未启用大回复 listapps 的回退"
-
-#: src/remote/App.cpp:192
-msgid "Device has no app with bundle ID "
-msgstr "设备上找不到 bundle id "
-
-#: src/remote/App.cpp:205
+#: src/app/Application.cpp:89 src/app/Application.cpp:108
 #, c-format
-msgid "stop_app(%s): app is not running\n"
-msgstr "stop_app(%s)：应用未运行\n"
+msgid "Failed to establish session: %s\n"
+msgstr "建立会话失败: %s\n"
 
-#: src/remote/App.cpp:226 src/remote/App.cpp:231
-msgid "Failed to terminate "
-msgstr "无法终止 "
+#: src/app/Application.cpp:94
+#, c-format
+msgid "Failed to list apps: %s\n"
+msgstr "列 App 失败: %s\n"
 
-#: src/remote/App.cpp:226 src/remote/App.cpp:231
-msgid " process "
-msgstr " 的进程 "
+#: src/app/Application.cpp:100
+#, c-format
+msgid "Total: %zu\n"
+msgstr "共 %zu 个\n"
 
-#: src/remote/App.cpp:226 src/media/StreamSession.cpp:127
-#: src/transport/TcpConnect.cpp:28
-msgid ": "
-msgstr " 失败: "
+#: src/app/Application.cpp:114
+#, c-format
+msgid "Wrote %zu bytes to device clipboard\n"
+msgstr "已写入设备剪贴板：%zu 字节\n"
 
-#: src/remote/App.cpp:232
-msgid "; no reply after three attempts: "
-msgstr "；三次尝试均未收到响应："
+#: src/app/Application.cpp:116
+#, c-format
+msgid "--copy failed: %s\n"
+msgstr "--copy 写入失败: %s\n"
 
-#: src/remote/App.cpp:253
+#: src/app/Application.cpp:123
+#, c-format
+msgid "Device clipboard (%zu bytes): %s\n"
+msgstr "设备剪贴板（%zu 字节）：%s\n"
+
+#: src/app/Application.cpp:125
+#, c-format
+msgid "--paste failed: %s\n"
+msgstr "--paste 读取失败: %s\n"
+
+#: src/app/Application.cpp:143
+#, c-format
+msgid "Failed to start video: %s\n"
+msgstr "启动视频失败: %s\n"
+
+#: src/app/Application.cpp:149
+#, c-format
+msgid "Device is in a call. End the call and try again.\n"
+msgstr "设备正在通话，请结束通话后重试。\n"
+
+#: src/app/Application.cpp:163
+#, c-format
+msgid "File playback cannot launch a device app; ignoring --start-app\n"
+msgstr "文件回放模式无法启动设备应用，已忽略 --start-app\n"
+
+#: src/app/Application.cpp:181
+#, c-format
+msgid "--start-app requires a nonempty app name\n"
+msgstr "--start-app 的名字是空的\n"
+
+#: src/app/Application.cpp:191
+#, c-format
+msgid "Failed to find app by name: %s\n"
+msgstr "按名字找 App 失败: %s\n"
+
+#: src/app/Application.cpp:209
+#, c-format
+msgid "No app name starts with %s\n"
+msgstr "没有名字以 %s 开头的 App\n"
+
+#: src/app/Application.cpp:217
+#, c-format
+msgid "Failed to launch %s: %s\n"
+msgstr "启动 %s 失败: %s\n"
+
+#: src/app/Application.cpp:220
+msgid " (previous instance terminated)"
+msgstr "（已先终止原实例）"
+
+#: src/app/Application.cpp:220
+#, c-format
+msgid "Launched %s%s\n"
+msgstr "已启动 %s%s\n"
+
+#: src/app/Application.cpp:237
+#, c-format
+msgid "SDL initialization failed: %s\n"
+msgstr "SDL 初始化失败: %s\n"
+
+#: src/app/Application.cpp:246
+#, c-format
+msgid "Failed to open audio output: %s (receiving and decoding continue)\n"
+msgstr "打开音频输出失败: %s（继续接收和解码音频）\n"
+
+#: src/app/Application.cpp:249
+#, c-format
+msgid "Local audio playback disabled; receiving and decoding continue\n"
+msgstr "已禁用本机音频播放，继续接收和解码音频\n"
+
+#: src/app/Application.cpp:270
+msgid "failed"
+msgstr "失败"
+
+#: src/app/Application.cpp:270
+msgid "injected"
+msgstr "已注入"
+
+#: src/app/Application.cpp:279
+#, c-format
+msgid "--test-button %s: pressed\n"
+msgstr "--test-button %s: 已按下\n"
+
+#: src/app/Application.cpp:281
+#, c-format
+msgid "--test-button %s failed: %s\n"
+msgstr "--test-button %s 失败: %s\n"
+
+#: src/app/Application.cpp:290
+#, c-format
+msgid "--test-type %s: injected\n"
+msgstr "--test-type %s: 已注入\n"
+
+#: src/app/Application.cpp:292
+#, c-format
+msgid "--test-type failed: %s\n"
+msgstr "--test-type 失败: %s\n"
+
+#: src/app/Application.cpp:317
+#, c-format
+msgid "Input injection failed (further attempts disabled): %s\n"
+msgstr "注入输入失败（已停止尝试）: %s\n"
+
+#: src/app/Application.cpp:328
+#, c-format
+msgid "Reached --time-limit %d seconds\n"
+msgstr "达到 --time-limit %d 秒\n"
+
+#: src/app/Application.cpp:332
+#, c-format
+msgid "Received exit signal; closing device session\n"
+msgstr "收到退出信号，正在关闭设备会话\n"
+
+#: src/app/Application.cpp:342
 #, c-format
 msgid ""
-"stop_app(%s): signal sent, but process is still listed (exit may be "
-"pending)\n"
-msgstr "stop_app(%s)：已发送信号，但进程仍在列表中（可能仍在退出）\n"
+"  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
+msgstr "  渲染：累计 %d 帧，本次 %d 帧 / %.1f fps，全程平均 %.1f fps\n"
 
-#: src/remote/Rsd.cpp:99
+#: src/app/Application.cpp:367 src/app/Application.cpp:419
+#, c-format
+msgid "Reached --exit-after %d\n"
+msgstr "达到 --exit-after %d\n"
+
+#: src/app/Application.cpp:401
+#, c-format
+msgid "Display orientation changed to %d degrees clockwise; window recreated\n"
+msgstr "显示方向已改为顺时针 %d°，窗口已重建\n"
+
+#: src/app/Application.cpp:425
+#, c-format
+msgid "Finished: rendered %d frames\n"
+msgstr "完成：渲染 %d 帧\n"
+
+#: src/app/AudioOut.cpp:39
 #, c-format
 msgid ""
-"Invalid numeric component in SCRCTL_COREDEVICE_VERSION: %s (using 629.3)\n"
-msgstr "SCRCTL_COREDEVICE_VERSION 包含无效数字分段：%s（使用 629.3）\n"
-
-#: src/remote/Rsd.cpp:112
-#, c-format
-msgid "  coreDeviceVersion overridden by environment: %s (default: 629.3)\n"
-msgstr "  coreDeviceVersion 已由环境变量覆盖为 %s（默认 629.3）\n"
-
-#: src/remote/Rsd.cpp:168 src/transport/Usbmux.cpp:261
-msgid "Connect to "
-msgstr "连 "
-
-#: src/remote/Rsd.cpp:168
-msgid " port "
-msgstr " 端口 "
-
-#: src/remote/Device.cpp:132 src/remote/Rsd.cpp:168 src/remote/Rsd.cpp:378
-#: src/transport/Usbmux.cpp:261 src/wifi/PairRecord.cpp:285
-msgid " failed: "
-msgstr " 失败: "
-
-#: src/remote/Rsd.cpp:177
-msgid " HTTP/2 handshake failed: "
-msgstr " 的 HTTP/2 握手失败: "
-
-#: src/remote/Rsd.cpp:189 src/remote/Rsd.cpp:197 src/remote/Rsd.cpp:205
-#: src/remote/Rsd.cpp:213
-msgid "Service connection is not RemoteXPC"
-msgstr "这条服务连接不是 RemoteXPC 服务"
-
-#: src/remote/Rsd.cpp:228
-msgid " failed"
-msgstr " 失败"
-
-#: src/remote/Rsd.cpp:232
-msgid "(code "
-msgstr "（code "
-
-#: src/remote/Rsd.cpp:232 src/media/ScreenshotSource.cpp:72
-#: src/media/FramePump.cpp:480 src/transport/Usbmux.cpp:168
-#: src/wifi/RemotePairing.cpp:35 src/net/Stack.cpp:350 src/net/TcpStream.cpp:41
-#: src/net/TcpStream.cpp:118 src/net/TcpStream.cpp:122
-#: src/net/UdpSocket.cpp:104 src/net/UdpSocket.cpp:130
-msgid ")"
-msgstr "）"
-
-#: src/remote/Rsd.cpp:245
-msgid "; original error: "
-msgstr "；error 原文: "
-
-#: src/remote/Rsd.cpp:270
-msgid " failed; response missing CoreDevice.output: "
-msgstr " 失败，回信里没有 CoreDevice.output: "
-
-#: src/remote/Rsd.cpp:282
-msgid "Streaming feature requires an XPC service connection"
-msgstr "这条服务连接不是 XPC 通道，流式 feature 走不了"
-
-#: src/remote/Rsd.cpp:297
-msgid "Service connection is not an XPC channel"
-msgstr "这条服务连接不是 XPC 通道"
-
-#: src/remote/Rsd.cpp:316
-msgid " response missing both sideChannelStatus and error: "
-msgstr " 的回信里既没有 sideChannelStatus 也没有 error: "
-
-#: src/remote/Rsd.cpp:322
-msgid " failed mid-stream: "
-msgstr " 中途失败："
-
-#: src/remote/Rsd.cpp:378
-msgid "Connect to RSD port "
-msgstr "连 RSD 端口 "
-
-#: src/remote/Rsd.cpp:383
-msgid "RSD control channel handshake failed: "
-msgstr "RSD 控制通道握手失败: "
-
-#: src/remote/Rsd.cpp:393
-msgid "peer_info missing Services"
-msgstr "peer_info 里没有 Services"
-
-#: src/remote/Rsd.cpp:470
-msgid "Device directory missing service "
-msgstr "设备目录里没有服务 "
-
-#: src/remote/Rsd.cpp:470
-msgid "."
-msgstr "。"
-
-#: src/remote/Rsd.cpp:472
-msgid "Directory is empty; check tunnel setup and DDI mounting."
-msgstr "目录为空；请检查隧道建立及 DDI 挂载。"
-
-#: src/remote/Rsd.cpp:481
-msgid "Device directory contains "
-msgstr "设备目录包含 "
-
-#: src/remote/Rsd.cpp:481
-msgid " services, including "
-msgstr " 条服务，其中 "
-
-#: src/remote/Rsd.cpp:482
-msgid " com.apple.coredevice.* services:\n"
-msgstr " 条为 com.apple.coredevice.*：\n"
-
-#: src/remote/Rsd.cpp:485
-msgid ""
-"  (none found; check DDI mounting through Xcode and the CoreDevice services "
-"available on this device)\n"
+"Audio device returned %d Hz / %d channels / format 0x%x; stream requires %d "
+"Hz / %d channels / 0x%x. Direct playback unavailable"
 msgstr ""
-"  （未找到相关服务；请检查 Xcode 的 DDI 挂载及此设备提供的 CoreDevice 服"
-"务）\n"
+"音频设备返回 %d Hz / %d 声道 / 格式 0x%x，流要求 %d Hz / %d 声道 / 0x%x，无法"
+"直接播放"
 
-#: src/remote/Rsd.cpp:492
-msgid ""
-"Include this diagnostic when reporting the issue. For the full directory and "
-"feature lists, run feature_probe --all to print all "
-msgstr ""
-"报告问题时请附上这段诊断。完整目录及 feature 列表可通过 feature_probe --all "
-"打印，共 "
-
-#: src/remote/Rsd.cpp:494
-msgid " services.\n"
-msgstr " 条。\n"
-
-#: src/remote/Rsd.cpp:506
-msgid ""
-" (device rejected the system version: live media worked on tested iOS 27 "
-"devices and was rejected on tested iOS 18 devices. Screenshot fallback and "
-"button input may still be available; see docs/coredevice.md section 23)"
-msgstr ""
-"（设备拒绝此系统版本：已测试 iOS 27 设备支持实时媒体，已测试 iOS 18 设备拒"
-"绝；截图回退和按键输入可能仍可用，见 docs/coredevice.md §23）"
-
-#: src/remote/Pasteboard.cpp:92
-msgid "SET failed: "
-msgstr "SET 失败: "
-
-#: src/remote/Pasteboard.cpp:97
-msgid "SET response is not SET_REPLY: "
-msgstr "SET 的回信不是 SET_REPLY: "
-
-#: src/remote/Pasteboard.cpp:110
-msgid "PULL failed: "
-msgstr "PULL 失败: "
-
-#: src/remote/Pasteboard.cpp:117
-msgid "Response has no plain-text representation: "
-msgstr "响应缺少纯文本表示形式："
-
-#: src/remote/PairingChannel.cpp:59
-msgid "JSON integer exceeds XPC int64 range"
-msgstr "JSON 整数超出 XPC int64 范围"
-
-#: src/remote/PairingChannel.cpp:75
-msgid "Field "
-msgstr "字段 "
-
-#: src/remote/PairingChannel.cpp:75
-msgid " must contain base64 binary data; decode failed: "
-msgstr " 该是二进制的 base64，解不出来: "
-
-#: src/remote/PairingChannel.cpp:96
-msgid "Unknown JSON value type"
-msgstr "未知的 JSON 值类型"
-
-#: src/remote/PairingChannel.cpp:151
-msgid "UUID field must contain 16 bytes"
-msgstr "UUID 字段不是 16 字节"
-
-#: src/remote/PairingChannel.cpp:177
-msgid "File transfer placeholder is not supported on the pairing channel"
-msgstr "配对通道不支持文件传输占位"
-
-#: src/remote/PairingChannel.cpp:180
-msgid "Unknown XPC type marker"
-msgstr "未知的 XPC 类型标记"
-
-#: src/remote/PairingChannel.cpp:219
-msgid "Pairing reply timed out ("
-msgstr "等配对回信超时（"
-
-#: src/remote/PairingChannel.cpp:219
-msgid " ms without device data)"
-msgstr " ms 内未收到设备数据）"
-
-#: src/remote/PairingChannel.cpp:224 src/remote/PairingChannel.cpp:228
-msgid "Pairing control channel disconnected"
-msgstr "配对控制通道断了"
-
-#: src/remote/PairingChannel.cpp:242
-msgid "Channel received unexpected type; expected "
-msgstr "收到的消息类型不匹配，预期为 "
-
-#: src/remote/PairingChannel.cpp:243
-msgid " (value field missing): "
-msgstr "（缺少 value 字段）："
-
-#: src/remote/RemoteXpc.cpp:111
+#: src/app/AudioOut.cpp:47
 #, c-format
-msgid "    >> %zu bytes: "
-msgstr "    >> %zu 字节: "
-
-#: src/remote/RemoteXpc.cpp:124
-msgid "Failed to send HTTP/2 preface: "
-msgstr "发 HTTP/2 前置签名失败: "
-
-#: src/remote/RemoteXpc.cpp:132
-msgid "Failed to send SETTINGS: "
-msgstr "发 SETTINGS 失败: "
-
-#: src/remote/RemoteXpc.cpp:138
-msgid "Failed to send WINDOW_UPDATE: "
-msgstr "发 WINDOW_UPDATE 失败: "
-
-#: src/remote/RemoteXpc.cpp:146
-msgid "Failed to send primary channel HEADERS: "
-msgstr "发主通道 HEADERS 失败: "
-
-#: src/remote/RemoteXpc.cpp:152
-msgid "Failed to send first frame: "
-msgstr "发首帧失败: "
-
-#: src/remote/RemoteXpc.cpp:157
-msgid "Failed to send reply channel HEADERS: "
-msgstr "发回信通道 HEADERS 失败: "
-
-#: src/remote/RemoteXpc.cpp:163
-msgid "Failed to send terminating frame: "
-msgstr "发终止帧失败: "
-
-#: src/remote/RemoteXpc.cpp:168
-msgid "Failed to send INIT_HANDSHAKE frame: "
-msgstr "发 INIT_HANDSHAKE 帧失败: "
-
-#: src/remote/RemoteXpc.cpp:177
-msgid "Timed out waiting for device SETTINGS"
-msgstr "等待设备 SETTINGS 超时"
-
-#: src/remote/RemoteXpc.cpp:181
-msgid "Disconnected while waiting for device SETTINGS: "
-msgstr "等设备 SETTINGS 时断开: "
-
-#: src/remote/RemoteXpc.cpp:192
-msgid "Failed to send RemoteXPC identity: "
-msgstr "发 RemoteXPC 身份申报失败: "
-
-#: src/remote/RemoteXpc.cpp:197
-msgid "Failed to read peer_info: "
-msgstr "读 peer_info 失败: "
-
-#: src/remote/RemoteXpc.cpp:244
-#, c-format
-msgid ""
-"    HTTP/2 parse failed: %s; buffered %zu bytes, stream offset %llu (total "
-"received %llu), first 64 bytes:\n"
-"      "
-msgstr ""
-"    HTTP/2 解析失败：%s；缓冲 %zu 字节，流内偏移 %llu（累计收到 %llu），前 "
-"64 字节：\n"
-"      "
-
-#: src/remote/RemoteXpc.cpp:298
-#, c-format
-msgid "    HTTP/2 input dump -> %s\n"
-msgstr "    HTTP/2 输入 dump -> %s\n"
-
-#: src/remote/RemoteXpc.cpp:358
-msgid "PING payload shorter than 8 bytes"
-msgstr "PING 载荷不足 8 字节"
-
-#: src/remote/RemoteXpc.cpp:374
-msgid "Device sent GOAWAY "
-msgstr "设备发来 GOAWAY "
-
-#: src/remote/RemoteXpc.cpp:387
-msgid "Primary channel reset: "
-msgstr "主通道被 RST："
-
-#: src/remote/RemoteXpc.cpp:409
-msgid "Device set END_STREAM on primary channel; connection ended"
-msgstr "设备在主通道上置了 END_STREAM，连接已经结束"
-
-#: src/remote/RemoteXpc.cpp:454
-msgid "Peer did not replenish flow-control window; sent "
-msgstr "对端未补充流控窗口，已发送 "
-
-#: src/remote/RemoteXpc.cpp:455 src/remote/RemoteXpc.cpp:541
-#: src/xpc/XpcValue.cpp:649 src/http2/Framing.cpp:152
-msgid " bytes"
-msgstr " 字节"
-
-#: src/remote/RemoteXpc.cpp:459
-msgid "Disconnected while waiting for flow-control window: "
-msgstr "等流控窗口时断开: "
-
-#: src/remote/RemoteXpc.cpp:469
-msgid "Failed to send DATA: "
-msgstr "发 DATA 失败: "
-
-#: src/remote/RemoteXpc.cpp:488
-msgid "XPC encoding failed (depth or length limit exceeded)"
-msgstr "XPC 编码失败（深度或长度超限）"
-
-#: src/remote/RemoteXpc.cpp:530
-msgid "Failed to accept file stream: "
-msgstr "接受文件流失败: "
-
-#: src/remote/RemoteXpc.cpp:540
-msgid "File receive timed out: stream "
-msgstr "收文件超时：流 "
-
-#: src/remote/RemoteXpc.cpp:540
-msgid " has received "
-msgstr " 上已到 "
-
-#: src/remote/RemoteXpc.cpp:548
-msgid "Disconnected while receiving file: "
-msgstr "收文件时断开: "
-
-#: src/remote/RemoteXpc.cpp:574
-#, c-format
-msgid "    Receiving file: %llu bytes on stream %u\n"
-msgstr "    接收文件：%llu 字节，流 %u\n"
-
-#: src/remote/RemoteXpc.cpp:593
-msgid "Stream "
-msgstr "流 "
-
-#: src/remote/RemoteXpc.cpp:593
-msgid " contains malformed message: "
-msgstr " 上的消息畸形: "
-
-#: src/remote/RemoteXpc.cpp:600
-#, c-format
-msgid "    Stream %u message incomplete: %s\n"
-msgstr "    流 %u 的消息尚未完整：%s\n"
-
-#: src/remote/RemoteXpc.cpp:608
-#, c-format
-msgid "    => stream %u id=%llu %s\n"
-msgstr "    => 流%u id=%llu %s\n"
-
-#: src/remote/RemoteXpc.cpp:632
-msgid "Timed out waiting for device reply"
-msgstr "等设备回信超时"
-
-#: src/remote/RemoteXpc.cpp:217 src/remote/RemoteXpc.cpp:482
-#: src/remote/RemoteXpc.cpp:636
-msgid "Connection terminated"
-msgstr "连接已终止"
-
-#: src/remote/RemoteXpc.cpp:645
-msgid "Disconnected while waiting for device reply: "
-msgstr "等设备回信时断开: "
-
-#: src/remote/Device.cpp:22
-#, c-format
-msgid "  [stage] %s\n"
-msgstr "  [阶段] %s\n"
-
-#: src/remote/Device.cpp:33
-msgid ""
-" (device is locked; unlock it and keep the screen awake before retrying)"
-msgstr "（设备已锁定；请解锁并保持屏幕唤醒后重试）"
-
-#: src/remote/Device.cpp:36
-msgid " (computer not trusted; unlock the device and confirm Trust)"
-msgstr "（电脑尚未受信任；请解锁设备并确认信任）"
-
-#: src/remote/Device.cpp:39
-msgid ""
-" (service unavailable; check Developer Mode and DDI mounting through Xcode)"
-msgstr "（服务不可用；请检查开发者模式及 Xcode 的 DDI 挂载）"
-
-#: src/remote/Device.cpp:41
-msgid " (check DDI mounting and Developer Mode)"
-msgstr "（请检查 DDI 挂载及开发者模式）"
-
-#: src/remote/Device.cpp:80
-msgid ""
-"No USB device found (usbmux list is empty). Check the data cable and USB "
-"connection, then reconnect the device. Untrusted devices normally appear in "
-"this list too."
-msgstr ""
-"未发现 USB 设备（usbmux 列表为空）。请检查数据线与 USB 连接，再重新连接设备。"
-"未信任的设备通常也会出现在此列表中。"
-
-#: src/remote/Device.cpp:91
-msgid "Connected devices: "
-msgstr "已连接设备数："
-
-#: src/remote/Device.cpp:91
-msgid "; select one: "
-msgstr "；请选择设备："
-
-#: src/remote/Device.cpp:109
-msgid "No connected device matches "
-msgstr "没有已连接设备匹配 "
-
-#: src/remote/Device.cpp:109
-msgid "; connected devices: "
-msgstr "；当前连接设备："
-
-#: src/remote/Device.cpp:113
-msgid " (total "
-msgstr "（共 "
-
-#: src/remote/Device.cpp:113
-msgid "). Check the selected UDID and USB connection."
-msgstr " 台）。请检查所选 UDID 与 USB 连接。"
-
-#: src/remote/Device.cpp:123
-msgid "lockdown pairing session"
-msgstr "lockdown 配对 session"
-
-#: src/remote/Device.cpp:126
-msgid "Failed to establish lockdown session: "
-msgstr "lockdown 会话建立失败: "
-
-#: src/remote/Device.cpp:129
-msgid "Start CoreDeviceProxy"
-msgstr "启动 CoreDeviceProxy"
-
-#: src/remote/Device.cpp:132
-msgid "Start "
-msgstr "启动 "
-
-#: src/remote/Device.cpp:135
-msgid "CDTunnel handshake"
-msgstr "CDTunnel 握手"
-
-#: src/remote/Device.cpp:140 src/remote/Device.cpp:232
-msgid "Failed to establish packet tunnel: "
-msgstr "包隧道建立失败: "
-
-#: src/remote/Device.cpp:148
-msgid ""
-"Pairing HostID is not a valid UUID; cannot construct a stable peer identity"
-msgstr "配对记录里的 HostID 不是合法 UUID，无法给出稳定的 peer 身份"
-
-#: src/remote/Device.cpp:154 src/remote/Device.cpp:164
-msgid "Connect to RSD inside tunnel and read directory"
-msgstr "连接隧道内 RSD 并读取目录"
-
-#: src/remote/Device.cpp:170
-msgid "Tunnel returned an invalid IPv6 address"
-msgstr "隧道给的地址不是合法 IPv6"
-
-#: src/remote/Device.cpp:181
-msgid "Ready"
-msgstr "就绪"
-
-#: src/remote/Device.cpp:193
-msgid "LAN pair-verify"
-msgstr "局域网配对验证"
-
-#: src/remote/Device.cpp:196
-msgid "Cannot connect to device RemotePairing port "
-msgstr "连不上设备的 RemotePairing 端口 "
-
-#: src/remote/Device.cpp:197
-msgid ""
-" (check that the device is reachable on this network and has been paired)"
-msgstr "（请检查设备在当前网络是否可达，以及是否已配对）"
-
-#: src/remote/Device.cpp:206
-msgid "Device rejected pairing record: "
-msgstr "设备不认这条配对记录："
-
-#: src/remote/Device.cpp:207
-msgid " is not paired with this device, or its pairing was removed"
-msgstr " 在这台设备上没配过，或者已经在设备上被删掉了"
-
-#: src/remote/Device.cpp:209
-msgid "pair-verify failed: "
-msgstr "配对验证失败："
-
-#: src/remote/Device.cpp:214
-msgid "Request device tunnel port"
-msgstr "请求设备隧道端口"
-
-#: src/remote/Device.cpp:222
-msgid "TLS-PSK and CDTunnel handshake"
-msgstr "TLS-PSK + CDTunnel 握手"
-
-#: src/remote/Device.cpp:225
-msgid "Cannot connect to tunnel port "
-msgstr "连不上隧道端口 "
-
-#: src/remote/Device.cpp:240
-msgid ""
-"Pairing host identifier is not a valid UUID; cannot construct a stable peer "
-"identity"
-msgstr "配对记录 host identifier 不是有效 UUID，无法构造稳定的 peer 身份"
-
-#: src/remote/Device.cpp:260
-msgid "Session not established"
-msgstr "会话没有建立"
-
-#: src/remote/Device.cpp:272
-msgid " does not advertise feature "
-msgstr " 没有声明 feature "
-
-#: src/remote/DisplayInfo.cpp:115
-msgid "Update missing displays array: "
-msgstr "推送里没有 displays 数组："
-
-#: src/remote/DisplayInfo.cpp:152
-msgid "No recognized display entries"
-msgstr "没有可识别的显示条目"
-
-#: src/remote/DisplayInfo.cpp:178
-msgid " ended without an update"
-msgstr " 未发送更新便已结束"
-
-#: src/media/ScreenshotSource.cpp:38
-msgid "FFmpeg has no PNG decoder"
-msgstr "FFmpeg 不提供 PNG 解码器"
-
-#: src/media/ScreenshotSource.cpp:70
-msgid "Cannot create BGRA conversion (format="
-msgstr "无法创建 BGRA 像素转换（format="
-
-#: src/media/ScreenshotSource.cpp:75
-msgid "PNG dimensions must be positive"
-msgstr "PNG 图像尺寸必须为正数"
-
-#: src/media/ScreenshotSource.cpp:78
-msgid "FFmpeg could not decode PNG image"
-msgstr "FFmpeg 无法解码 PNG 图像"
-
-#: src/media/ScreenshotSource.cpp:81
-msgid "Failed to allocate PNG decode resources"
-msgstr "无法分配 PNG 解码资源"
-
-#: src/media/ScreenshotSource.cpp:90
-msgid "FFmpeg is not included; screenshot mode has no PNG decoder"
-msgstr "构建未包含 FFmpeg，截图模式缺少 PNG 解码后端"
-
-#: src/media/ScreenshotSource.cpp:109
-msgid "Device directory missing service: "
-msgstr "设备目录缺少服务："
-
-#: src/media/ScreenshotSource.cpp:153
-msgid "Screenshot response missing image data"
-msgstr "截图响应缺少 image 数据"
-
-#: src/media/FramePump.cpp:68
-#, c-format
-msgid ""
-"Software decoder (libavcodec) is not included; continuing with the platform "
-"decoder. The current adapter uses 2-byte NAL lengths and cannot process "
-"larger NALs. Such access units are dropped and the session is recreated, "
-"which may interrupt video.\n"
-"Install FFmpeg development packages and reconfigure the build.\n"
-msgstr ""
-"构建未包含软件解码后端（libavcodec），继续使用平台后端。当前平台适配使用 2 字"
-"节 NAL 长度前缀，无法处理超过其长度上限的 NAL。遇到此类帧会丢弃 AU 并尝试重建"
-"会话，可能暂时无新画面。\n"
-"请安装 FFmpeg 开发包并重新配置、构建项目。\n"
-
-#: src/media/FramePump.cpp:106
-msgid "Cannot open recording file "
-msgstr "打不开录制文件 "
-
-#: src/media/FramePump.cpp:132
-#, c-format
-msgid ""
-"Failed to stop device video session (device will release it when the lease "
-"expires): %s\n"
-msgstr "停止设备视频会话失败（设备端将在租期到期后释放）: %s\n"
-
-#: src/media/FramePump.cpp:150
-#, c-format
-msgid "Failed to stop previous video session (still attempting restart): %s\n"
-msgstr "停止旧视频会话失败（仍尝试重建）: %s\n"
-
-#: src/media/FramePump.cpp:176
-#, c-format
-msgid "Video session recreated, receive port=%u\n"
-msgstr "视频会话已重建，收流端口=%u\n"
-
-#: src/media/FramePump.cpp:237
-#, c-format
-msgid "Failed to send PLI: %s\n"
-msgstr "PLI 发送失败: %s\n"
-
-#: src/media/FramePump.cpp:257
-#, c-format
-msgid ""
-"Sequence gap or discarded fragment detected: requesting keyframe, wait limit "
-"%d ms\n"
-msgstr "检测到序号缺口或丢弃分片：请求关键帧，等待上限 %d ms\n"
-
-#: src/media/FramePump.cpp:287
-#, c-format
-msgid "Decoder switched to %s\n"
-msgstr "解码后端已切换为 %s\n"
-
-#: src/media/FramePump.cpp:325
-#, c-format
-msgid ""
-"After %d restarts, NALs still exceed the decoder limit. Video is "
-"unavailable; retrying every %llu seconds. Callers can use screenshots.\n"
-msgstr ""
-"连续 %d 次重建仍因 NAL 超过后端长度上限而无画面输出。视频暂不可用，将每 %llu "
-"秒重试；调用方可切换至截图服务。\n"
-
-#: src/media/FramePump.cpp:379
-#, c-format
-msgid "Test: injected keyframe decode failure (%s)\n"
-msgstr "测试：注入关键帧解码失败（%s）\n"
-
-#: src/media/FramePump.cpp:380
-msgid "further PLI disabled"
-msgstr "后续禁止 PLI"
-
-#: src/media/FramePump.cpp:381
-msgid "PLI continues"
-msgstr "继续发送 PLI"
-
-#: src/media/FramePump.cpp:471
-#, c-format
-msgid ""
-"%s: no data for %llu ms; device reports session alive, continuing to wait\n"
-msgstr "%s：%llu ms 未收到数据，设备报告会话仍运行，继续等待\n"
-
-#: src/media/FramePump.cpp:476
-#, c-format
-msgid "%s: no data for %llu ms, %s; recreating video session\n"
-msgstr "%s：%llu ms 未收到数据，%s，重建视频会话\n"
-
-#: src/media/FramePump.cpp:479
-msgid "device session ended"
-msgstr "设备会话已结束"
-
-#: src/media/FramePump.cpp:480
-msgid "session status query failed ("
-msgstr "查询会话状态失败（"
-
-#: src/media/FramePump.cpp:483 src/media/FramePump.cpp:496
-#, c-format
-msgid "Failed to recreate video session: %s\n"
-msgstr "重建视频会话失败: %s\n"
-
-#: src/media/FramePump.cpp:511
-#, c-format
-msgid ""
-"%s: no data for %llu ms; recovery threshold exceeded, recreating video "
-"session\n"
-msgstr "%s：%llu ms 未收到数据，超过恢复阈值，重建视频会话\n"
-
-#: src/media/FramePump.cpp:532
-#, c-format
-msgid "Failed to recreate video session: %s (retry in 1 second)\n"
-msgstr "重建视频会话失败: %s（1 秒后再试）\n"
-
-#: src/media/FramePump.cpp:562
-#, c-format
-msgid "Failed to send RTCP keepalive: %s\n"
-msgstr "RTCP 保活包发送失败: %s\n"
-
-#: src/media/FramePump.cpp:567
-msgid "Input or frame request"
-msgstr "收到操作"
-
-#: src/media/FramePump.cpp:575
-#, c-format
-msgid "Video fallback active for %llu seconds; retrying video session\n"
-msgstr "视频降级已满 %llu 秒，重试视频会话\n"
-
-#: src/media/FramePump.cpp:582
-#, c-format
-msgid "%s; recreating video session to obtain a keyframe\n"
-msgstr "%s，重建视频会话以取得关键帧\n"
-
-#: src/media/FramePump.cpp:583
-msgid "Scheduled video retry after fallback"
-msgstr "视频降级后的定时重试"
-
-#: src/media/FramePump.cpp:584
-msgid "NAL exceeds platform decoder length limit"
-msgstr "NAL 超过平台后端长度上限"
-
-#: src/media/FramePump.cpp:620
-#, c-format
-msgid "Keyframe wait reached %d ms; recreating video session\n"
-msgstr "等待关键帧达到 %d ms，重建视频会话\n"
-
-#: src/media/FramePump.cpp:635
-#, c-format
-msgid ""
-"No keyframe output after %llu seconds; recreating video session (%d/%d)\n"
-msgstr "启动 %llu 秒仍无关键帧输出，重建视频会话 (%d/%d)\n"
-
-#: src/media/FramePump.cpp:643
-#, c-format
-msgid ""
-"No keyframe output after %d restarts. Video is unavailable; callers can use "
-"screenshots. Retrying every %llu seconds.\n"
-msgstr ""
-"连续 %d 次重建仍未输出关键帧，视频暂不可用。调用方可切换至截图服务；将每 "
-"%llu 秒重试视频会话。\n"
-
-#: src/media/FramePump.cpp:666
-msgid "Receive silence timeout"
-msgstr "静默超时"
-
-#: src/media/FramePump.cpp:705
-#, c-format
-msgid "Test: dropped video packet %d to inject a sequence gap\n"
-msgstr "测试：丢弃第 %d 个视频包以注入序号缺口\n"
-
-#: src/media/StreamSession.cpp:127
-msgid "Failed to bind UDP port "
-msgstr "绑 UDP 端口 "
-
-#: src/media/StreamSession.cpp:160
-msgid "startmediastream failed on the retained connection (transport failed)"
-msgstr "在持有的连接上发 startmediastream 失败（链路断了）"
-
-#: src/media/StreamSession.cpp:262
-msgid "getmediastreamserverstatus response missing sessions array"
-msgstr "getmediastreamserverstatus 的回复里没有 sessions 数组"
-
-#: src/media/AudioPump.cpp:75
-#, c-format
-msgid "Clamped --audio-buffer %d to %d ms and adjusted buffer capacity\n"
-msgstr "已将 --audio-buffer %d 限制为 %d ms，并按此配置缓冲容量\n"
-
-#: src/media/AudioPump.cpp:112
-#, c-format
-msgid ""
-"Audio answer missing SSRC (RemoteSSRC=%u LocalSSRC=%u); session renewal may "
-"fail\n"
-msgstr ""
-"音频协商响应缺少 SSRC（RemoteSSRC=%u LocalSSRC=%u），音频会话可能无法续期\n"
-
-#: src/media/AudioPump.cpp:273
-#, c-format
-msgid "Audio session recreated, receive port=%u\n"
-msgstr "音频会话已重建，收流端口=%u\n"
-
-#: src/media/AudioPump.cpp:281
-#, c-format
-msgid "Failed to recreate audio session: %s (retry in 1 second)\n"
-msgstr "重建音频会话失败: %s（1 秒后再试）\n"
-
-#: src/media/AudioPump.cpp:308
-#, c-format
-msgid "Failed to send audio RTCP keepalive: %s\n"
-msgstr "音频 RTCP 保活包发送失败: %s\n"
-
-#: src/media/AudioPump.cpp:321
-#, c-format
-msgid ""
-"Audio: device session ended (%llu ms without audio); recreating session\n"
-msgstr "音频：设备会话已结束（%llu ms 未收到音频），重建会话\n"
-
-#: src/media/AudioPump.cpp:368
-#, c-format
-msgid "Audio decode failed (%zu-byte payload): %s\n"
-msgstr "音频解码失败（载荷 %zu 字节）: %s\n"
-
-#: src/xpc/XpcValue.cpp:187
-msgid "u32 read out of bounds"
-msgstr "读 u32 越界"
-
-#: src/xpc/XpcValue.cpp:197
-msgid "u64 read out of bounds"
-msgstr "读 u64 越界"
-
-#: src/xpc/XpcValue.cpp:209
-msgid "Fixed-length byte read out of bounds"
-msgstr "读定长字节越界"
-
-#: src/xpc/XpcValue.cpp:232
-msgid "Key has no NUL terminator in this segment"
-msgstr "键在本段内没有 NUL 终结符"
-
-#: src/xpc/XpcValue.cpp:245
-msgid "Length prefix exceeds remaining bytes"
-msgstr "长度前缀超出了剩余字节"
-
-#: src/xpc/XpcValue.cpp:267
-msgid "XPC nesting too deep"
-msgstr "XPC 嵌套过深"
-
-#: src/xpc/XpcValue.cpp:327
-msgid "Invalid string length"
-msgstr "字符串长度不合理"
-
-#: src/xpc/XpcValue.cpp:348
-msgid "Invalid data length: declared "
-msgstr "数据段长度不合理: 声明 "
-
-#: src/xpc/XpcValue.cpp:348
-msgid " bytes, limit "
-msgstr " 字节，上限 "
-
-#: src/xpc/XpcValue.cpp:393
-msgid "Container length cannot hold count field"
-msgstr "容器长度前缀连 count 字段都装不下"
-
-#: src/xpc/XpcValue.cpp:412
-msgid "Entry count does not match container size"
-msgstr "条目数与容器大小不符"
-
-#: src/xpc/XpcValue.cpp:431
-msgid "Container entry decode failed"
-msgstr "容器条目解码失败"
-
-#: src/xpc/XpcValue.cpp:438
-msgid "Unsupported XPC type marker 0x"
-msgstr "不支持的 XPC 类型标记 0x"
-
-#: src/xpc/XpcValue.cpp:590
-msgid "Buffer too large"
-msgstr "缓冲区过大"
-
-#: src/xpc/XpcValue.cpp:596
-msgid "Decode failed"
-msgstr "解码失败"
-
-#: src/xpc/XpcValue.cpp:630
-msgid "Envelope shorter than 24 bytes"
-msgstr "信封不足 24 字节"
-
-#: src/xpc/XpcValue.cpp:636
-msgid "Wrapper magic mismatch: 0x"
-msgstr "wrapper magic 不符：0x"
-
-#: src/xpc/XpcValue.cpp:644
-msgid "Invalid message length: "
-msgstr "消息长度不合理："
-
-#: src/xpc/XpcValue.cpp:649 src/http2/Framing.cpp:152
-msgid "Missing "
-msgstr "还差 "
-
-#: src/xpc/XpcValue.cpp:663
-msgid "Payload magic mismatch: 0x"
-msgstr "payload magic 不符：0x"
-
-#: src/xpc/XpcValue.cpp:668
-msgid "Cannot read protocol version"
-msgstr "读不到协议版本"
-
-#: src/xpc/XpcValue.cpp:672
-msgid "Unsupported XPC protocol version: 0x"
-msgstr "XPC 协议版本不支持：0x"
-
-#: src/xpc/XpcValue.cpp:677
-msgid "Payload decode failed"
-msgstr "载荷解码失败"
-
-#: src/xpc/XpcValue.cpp:718
-msgid ", received "
-msgstr ", 已到"
-
-#: src/hid/Hid.cpp:97 src/hid/Hid.cpp:244
-msgid "RSD directory missing "
-msgstr "RSD 目录里没有 "
-
-#: src/hid/Hid.cpp:119
-msgid "connectedServices response missing connectedServices: "
-msgstr "connectedServices 的回信里没有 connectedServices: "
-
-#: src/hid/Hid.cpp:176
-msgid "Stroke requires at least one point"
-msgstr "stroke 至少要一个点"
-
-#: src/json/Json.cpp:15
-msgid "Input too large"
-msgstr "输入过大"
-
-#: src/json/Json.cpp:22 src/plist/Plist.cpp:45
-msgid "Nesting too deep"
-msgstr "嵌套过深"
-
-#: src/decode/FFmpegDecoder.cpp:42
-#, c-format
-msgid "FFmpeg has no HEVC decoder\n"
-msgstr "libavcodec 里没有 HEVC 解码器\n"
-
-#: src/decode/FFmpegDecoder.cpp:58
-#, c-format
-msgid "Failed to open FFmpeg HEVC decoder: %s\n"
-msgstr "libavcodec 打开 HEVC 解码器失败: %s\n"
-
-#: src/decode/FFmpegDecoder.cpp:111
-#, c-format
-msgid "FFmpeg rejected packet: %s\n"
-msgstr "libavcodec 收包失败: %s\n"
-
-#: src/decode/FFmpegDecoder.cpp:157
-#, c-format
-msgid "Software decoder requires CPU frames; received format=%d %dx%d\n"
-msgstr "软解后端只认 CPU 帧，收到 format=%d %dx%d\n"
-
-#: src/decode/Decoder.h:76
-msgid ""
-"No HEVC decoder in this build. Non-Apple platforms require FFmpeg "
-"development packages. Install them and reconfigure (Debian/Ubuntu: apt "
-"install libavcodec-dev libavutil-dev libswscale-dev; Fedora: dnf install "
-"ffmpeg-devel).\n"
-msgstr ""
-"此构建没有 HEVC 解码后端。非 Apple 平台需要 FFmpeg 开发包；安装后重新配置构建"
-"（Debian/Ubuntu: apt install libavcodec-dev libavutil-dev libswscale-dev；"
-"Fedora: dnf install ffmpeg-devel）。\n"
-
-#: src/decode/VideoToolboxDecoder.cpp:70
-#, c-format
-msgid "Failed to parse HEVC parameter sets: %d\n"
-msgstr "HEVC 参数集解析失败: %d\n"
-
-#: src/decode/VideoToolboxDecoder.cpp:98
-#, c-format
-msgid "Failed to create VideoToolbox session: %d\n"
-msgstr "VideoToolbox 解码会话创建失败: %d\n"
-
-#: src/decode/VideoToolboxDecoder.cpp:220
-#, c-format
-msgid ""
-"NAL size %zu exceeds the 2-byte length prefix; frame dropped. This stream "
-"requires software decoding.\n"
-msgstr ""
-"NAL 尺寸 %zu 超过 2 字节长度前缀上限，已丢弃该帧。该码流需要软件解码后端。\n"
-
-#: src/decode/AudioDecoder.h:52
-msgid ""
-"AAC-ELD decoding is unavailable on this platform. This build uses "
-"AudioToolbox on macOS; the tested native FFmpeg AAC decoder does not support "
-"ELD. Video can continue without audio."
-msgstr ""
-"此平台没有 AAC-ELD 解码后端。本项目在 macOS 使用 AudioToolbox；已测试的 "
-"FFmpeg 原生 AAC 解码器不支持 ELD。视频可继续运行。"
-
-#: src/decode/AudioToolboxEldDecoder.cpp:100
-msgid "Failed to allocate AudioBufferList"
-msgstr "分配 AudioBufferList 失败"
-
-#: src/decode/AudioToolboxEldDecoder.cpp:113
-msgid "AudioConverterFillComplexBuffer failed: "
-msgstr "AudioConverterFillComplexBuffer 失败: "
-
-#: src/decode/AudioToolboxEldDecoder.cpp:160
-msgid "AudioConverterNew failed: "
-msgstr "AudioConverterNew 失败: "
-
-#: src/http2/Framing.cpp:141
-msgid "Frame header shorter than 9 bytes"
-msgstr "帧头不足 9 字节"
-
-#: src/http2/Framing.cpp:147
-msgid "Frame length too large: "
-msgstr "帧长过大: "
-
-#: src/http2/Framing.cpp:170
-msgid "PADDED DATA missing Pad Length byte"
-msgstr "DATA 带 PADDED 却没有 Pad Length 字节"
-
-#: src/http2/Framing.cpp:177
-msgid "Pad Length exceeds available payload: "
-msgstr "Pad Length 超过可用载荷: "
-
-#: src/http2/Framing.cpp:196
-msgid "SETTINGS payload length is not a multiple of 6: "
-msgstr "SETTINGS 载荷不是 6 的倍数: "
-
-#: src/http2/Framing.cpp:207
-msgid "WINDOW_UPDATE payload must be 4 bytes; got "
-msgstr "WINDOW_UPDATE 载荷长度应为 4，实际 "
-
-#: src/http2/Framing.cpp:216
-msgid "GOAWAY payload shorter than 8 bytes"
-msgstr "GOAWAY 载荷不足 8 字节"
-
-#: src/http2/Framing.cpp:233
-msgid "RST_STREAM payload must be 4 bytes; got "
-msgstr "RST_STREAM 载荷长度应为 4，实际 "
-
-#: src/rt/RtpHevc.cpp:85
-msgid "Not an RTP packet"
-msgstr "不是 RTP 包"
-
-#: src/util/Base64.cpp:13 src/util/Base64.cpp:51
-msgid "Base64 input too large"
-msgstr "base64 输入过大"
-
-#: src/util/Base64.cpp:45
-msgid "Invalid base64 character or padding"
-msgstr "base64 字符或 padding 非法"
-
-#: src/util/Base64.cpp:59
-msgid "Base64 decode failed"
-msgstr "base64 解码失败"
-
-#: src/app/FileSource.cpp:56
-msgid "Cannot open file "
-msgstr "无法打开文件 "
-
-#: src/app/FileSource.cpp:61
-#, c-format
-msgid "Read %s (%zu bytes)\n"
-msgstr "读入 %s (%zu 字节)\n"
-
-#: src/app/FileSource.cpp:69
-#, c-format
-msgid "Decoder backend: %s\n"
-msgstr "解码后端: %s\n"
+msgid "Audio output opened: %d Hz / %d channels, backend %s\n"
+msgstr "音频输出已打开：%d Hz / %d 声道，后端 %s\n"
 
 #: src/app/Cli.cpp:17
 msgid "iOS screen mirroring and control"
@@ -1305,105 +422,52 @@ msgstr "用法"
 msgid "Options"
 msgstr "选项"
 
-#: src/app/Presenter.cpp:38
+#: src/app/DeviceConnection.cpp:29
 #, c-format
-msgid "Screen %dx%d points; window scaled to %dx%d (override with --scale)\n"
-msgstr "屏幕 %dx%d 点，窗口自动缩放到 %dx%d（可用 --scale 指定比例）\n"
+msgid "Using the only remote pairing record (device suffix %s)\n"
+msgstr "使用唯一的远程配对记录（设备尾号 %s）\n"
 
-#: src/app/Presenter.cpp:57
+#: src/app/DeviceConnection.cpp:31
+msgid " contains "
+msgstr " 里有 "
+
+#: src/app/DeviceConnection.cpp:31
+msgid "Directory "
+msgstr "目录 "
+
+#: src/app/DeviceConnection.cpp:32
+msgid " pairing records; specify the device with -s. Candidate suffixes: "
+msgstr " 条配对记录，请用 -s 指定设备；候选尾号："
+
+#: src/app/DeviceConnection.cpp:43
+msgid " remote pairing record (directory "
+msgstr " 的远程配对记录（目录 "
+
+#: src/app/DeviceConnection.cpp:43
+msgid "): "
+msgstr "）："
+
+#: src/app/DeviceConnection.cpp:43
+msgid "Cannot read "
+msgstr "无法读取 "
+
+#: src/app/DeviceConnection.cpp:44
+msgid ". Establish a remote pairing record over USB first."
+msgstr "。请先通过 USB 建立该设备的远程配对记录。"
+
+#: src/app/FileSource.cpp:56
+msgid "Cannot open file "
+msgstr "无法打开文件 "
+
+#: src/app/FileSource.cpp:61
 #, c-format
-msgid "Failed to create window: %s\n"
-msgstr "创建窗口失败: %s\n"
+msgid "Read %s (%zu bytes)\n"
+msgstr "读入 %s (%zu 字节)\n"
 
-#: src/app/Presenter.cpp:70
+#: src/app/FileSource.cpp:69
 #, c-format
-msgid "Failed to create renderer: %s\n"
-msgstr "创建渲染器失败: %s\n"
-
-#: src/app/Presenter.cpp:75
-#, c-format
-msgid "Render driver: %s\n"
-msgstr "渲染驱动: %s\n"
-
-#: src/app/Presenter.cpp:90
-#, c-format
-msgid "Failed to create texture: %s\n"
-msgstr "创建纹理失败: %s\n"
-
-#: src/app/Presenter.cpp:95
-#, c-format
-msgid ""
-"Window %dx%d points / drawable %dx%d pixels / viewport %dx%d (source %dx%d, "
-"crop %dx%d+%d+%d, clockwise rotation %d degrees)\n"
-msgstr ""
-"窗口 %dx%d 点 / 绘制面 %dx%d 像素 / 视口 %dx%d（源帧 %dx%d，裁剪 %dx%d+%d+"
-"%d，转正顺时针 %d°）\n"
-
-#: src/app/Presenter.cpp:107
-#, c-format
-msgid "Failed to upload texture: %s\n"
-msgstr "上传纹理失败: %s\n"
-
-#: src/app/Presenter.cpp:122
-#, c-format
-msgid "Failed to query drawable dimensions: %s\n"
-msgstr "查询绘制面尺寸失败: %s\n"
-
-#: src/app/Presenter.cpp:127
-#, c-format
-msgid "Failed to create readback buffer: %s\n"
-msgstr "创建回读缓冲失败: %s\n"
-
-#: src/app/Presenter.cpp:131
-#, c-format
-msgid "Failed to lock readback buffer: %s\n"
-msgstr "锁定回读缓冲失败: %s\n"
-
-#: src/app/Presenter.cpp:145
-#, c-format
-msgid "Readback failed: %s\n"
-msgstr "回读失败: %s\n"
-
-#: src/app/Presenter.cpp:152
-#, c-format
-msgid "Failed to save image: %s\n"
-msgstr "存图失败: %s\n"
-
-#: src/app/Presenter.cpp:155
-#, c-format
-msgid "Window readback saved to %s (%dx%d pixels)\n"
-msgstr "窗口回读已保存到 %s (%dx%d 像素)\n"
-
-#: src/app/Presenter.cpp:165
-#, c-format
-msgid ""
-"[input] %s raw(%d,%d) viewport %d x%d (rotation %d degrees) / window %d "
-"x%d / drawable %d x%d -> (%.3f, %.3f)\n"
-msgstr ""
-"[input] %s 原始(%d,%d) 视口%d x%d（转%d°）/ 窗口%d x%d / 绘制面%d x%d -> "
-"(%.3f, %.3f)\n"
-
-#: src/app/Presenter.cpp:192
-msgid "down"
-msgstr "按下"
-
-#: src/app/Presenter.cpp:201
-msgid "move"
-msgstr "移动"
-
-#: src/app/AudioOut.cpp:39
-#, c-format
-msgid ""
-"Audio device returned %d Hz / %d channels / format 0x%x; stream requires %d "
-"Hz / %d channels / 0x%x. Direct playback unavailable"
-msgstr ""
-"音频设备返回 %d Hz / %d 声道 / 格式 0x%x，流要求 %d Hz / %d 声道 / 0x%x，无法"
-"直接播放"
-
-#: src/app/AudioOut.cpp:47
-#, c-format
-msgid "Audio output opened: %d Hz / %d channels, backend %s\n"
-msgstr "音频输出已打开：%d Hz / %d 声道，后端 %s\n"
+msgid "Decoder backend: %s\n"
+msgstr "解码后端: %s\n"
 
 #: src/app/FrameSource.h:20
 msgid "Source ended"
@@ -1553,12 +617,12 @@ msgid "Live video recovered; switched back to video stream\n"
 msgstr "实时视频已恢复，已切回视频流\n"
 
 #: src/app/LiveSource.cpp:338
-msgid "Device connection lost ("
-msgstr "设备连接已断开（"
-
-#: src/app/LiveSource.cpp:338
 msgid "); closing session"
 msgstr "），正在关闭会话"
+
+#: src/app/LiveSource.cpp:338
+msgid "Device connection lost ("
+msgstr "设备连接已断开（"
 
 #: src/app/LiveSource.cpp:348
 #, c-format
@@ -1658,203 +722,91 @@ msgstr ""
 "%llu，静音填充 %llu RR 成功/失败 %llu/%llu，重启 %llu，缓冲 %zu 帧，窗口 "
 "%.1f s\n"
 
-#: src/app/Application.cpp:41
+#: src/app/Presenter.cpp:38
+#, c-format
+msgid "Screen %dx%d points; window scaled to %dx%d (override with --scale)\n"
+msgstr "屏幕 %dx%d 点，窗口自动缩放到 %dx%d（可用 --scale 指定比例）\n"
+
+#: src/app/Presenter.cpp:57
+#, c-format
+msgid "Failed to create window: %s\n"
+msgstr "创建窗口失败: %s\n"
+
+#: src/app/Presenter.cpp:70
+#, c-format
+msgid "Failed to create renderer: %s\n"
+msgstr "创建渲染器失败: %s\n"
+
+#: src/app/Presenter.cpp:75
+#, c-format
+msgid "Render driver: %s\n"
+msgstr "渲染驱动: %s\n"
+
+#: src/app/Presenter.cpp:90
+#, c-format
+msgid "Failed to create texture: %s\n"
+msgstr "创建纹理失败: %s\n"
+
+#: src/app/Presenter.cpp:95
 #, c-format
 msgid ""
-"Visible area %ux%u -> %dx%d (device did not report dimensions; using model "
-"table)\n"
-msgstr "可见区 %ux%u -> %dx%d（设备未报告尺寸，使用机型表）\n"
+"Window %dx%d points / drawable %dx%d pixels / viewport %dx%d (source %dx%d, "
+"crop %dx%d+%d+%d, clockwise rotation %d degrees)\n"
+msgstr ""
+"窗口 %dx%d 点 / 绘制面 %dx%d 像素 / 视口 %dx%d（源帧 %dx%d，裁剪 %dx%d+%d+"
+"%d，转正顺时针 %d°）\n"
 
-#: src/app/Application.cpp:89 src/app/Application.cpp:108
+#: src/app/Presenter.cpp:107
 #, c-format
-msgid "Failed to establish session: %s\n"
-msgstr "建立会话失败: %s\n"
+msgid "Failed to upload texture: %s\n"
+msgstr "上传纹理失败: %s\n"
 
-#: src/app/Application.cpp:94
+#: src/app/Presenter.cpp:122
 #, c-format
-msgid "Failed to list apps: %s\n"
-msgstr "列 App 失败: %s\n"
+msgid "Failed to query drawable dimensions: %s\n"
+msgstr "查询绘制面尺寸失败: %s\n"
 
-#: src/app/Application.cpp:100
+#: src/app/Presenter.cpp:127
 #, c-format
-msgid "Total: %zu\n"
-msgstr "共 %zu 个\n"
+msgid "Failed to create readback buffer: %s\n"
+msgstr "创建回读缓冲失败: %s\n"
 
-#: src/app/Application.cpp:114
+#: src/app/Presenter.cpp:131
 #, c-format
-msgid "Wrote %zu bytes to device clipboard\n"
-msgstr "已写入设备剪贴板：%zu 字节\n"
+msgid "Failed to lock readback buffer: %s\n"
+msgstr "锁定回读缓冲失败: %s\n"
 
-#: src/app/Application.cpp:116
+#: src/app/Presenter.cpp:145
 #, c-format
-msgid "--copy failed: %s\n"
-msgstr "--copy 写入失败: %s\n"
+msgid "Readback failed: %s\n"
+msgstr "回读失败: %s\n"
 
-#: src/app/Application.cpp:123
+#: src/app/Presenter.cpp:152
 #, c-format
-msgid "Device clipboard (%zu bytes): %s\n"
-msgstr "设备剪贴板（%zu 字节）：%s\n"
+msgid "Failed to save image: %s\n"
+msgstr "存图失败: %s\n"
 
-#: src/app/Application.cpp:125
+#: src/app/Presenter.cpp:155
 #, c-format
-msgid "--paste failed: %s\n"
-msgstr "--paste 读取失败: %s\n"
+msgid "Window readback saved to %s (%dx%d pixels)\n"
+msgstr "窗口回读已保存到 %s (%dx%d 像素)\n"
 
-#: src/app/Application.cpp:143
-#, c-format
-msgid "Failed to start video: %s\n"
-msgstr "启动视频失败: %s\n"
-
-#: src/app/Application.cpp:149
-#, c-format
-msgid "Device is in a call. End the call and try again.\n"
-msgstr "设备正在通话，请结束通话后重试。\n"
-
-#: src/app/Application.cpp:163
-#, c-format
-msgid "File playback cannot launch a device app; ignoring --start-app\n"
-msgstr "文件回放模式无法启动设备应用，已忽略 --start-app\n"
-
-#: src/app/Application.cpp:181
-#, c-format
-msgid "--start-app requires a nonempty app name\n"
-msgstr "--start-app 的名字是空的\n"
-
-#: src/app/Application.cpp:191
-#, c-format
-msgid "Failed to find app by name: %s\n"
-msgstr "按名字找 App 失败: %s\n"
-
-#: src/app/Application.cpp:209
-#, c-format
-msgid "No app name starts with %s\n"
-msgstr "没有名字以 %s 开头的 App\n"
-
-#: src/app/Application.cpp:217
-#, c-format
-msgid "Failed to launch %s: %s\n"
-msgstr "启动 %s 失败: %s\n"
-
-#: src/app/Application.cpp:220
-#, c-format
-msgid "Launched %s%s\n"
-msgstr "已启动 %s%s\n"
-
-#: src/app/Application.cpp:220
-msgid " (previous instance terminated)"
-msgstr "（已先终止原实例）"
-
-#: src/app/Application.cpp:237
-#, c-format
-msgid "SDL initialization failed: %s\n"
-msgstr "SDL 初始化失败: %s\n"
-
-#: src/app/Application.cpp:246
-#, c-format
-msgid "Failed to open audio output: %s (receiving and decoding continue)\n"
-msgstr "打开音频输出失败: %s（继续接收和解码音频）\n"
-
-#: src/app/Application.cpp:249
-#, c-format
-msgid "Local audio playback disabled; receiving and decoding continue\n"
-msgstr "已禁用本机音频播放，继续接收和解码音频\n"
-
-#: src/app/Application.cpp:270
-msgid "injected"
-msgstr "已注入"
-
-#: src/app/Application.cpp:270
-msgid "failed"
-msgstr "失败"
-
-#: src/app/Application.cpp:279
-#, c-format
-msgid "--test-button %s: pressed\n"
-msgstr "--test-button %s: 已按下\n"
-
-#: src/app/Application.cpp:281
-#, c-format
-msgid "--test-button %s failed: %s\n"
-msgstr "--test-button %s 失败: %s\n"
-
-#: src/app/Application.cpp:290
-#, c-format
-msgid "--test-type %s: injected\n"
-msgstr "--test-type %s: 已注入\n"
-
-#: src/app/Application.cpp:292
-#, c-format
-msgid "--test-type failed: %s\n"
-msgstr "--test-type 失败: %s\n"
-
-#: src/app/Application.cpp:317
-#, c-format
-msgid "Input injection failed (further attempts disabled): %s\n"
-msgstr "注入输入失败（已停止尝试）: %s\n"
-
-#: src/app/Application.cpp:328
-#, c-format
-msgid "Reached --time-limit %d seconds\n"
-msgstr "达到 --time-limit %d 秒\n"
-
-#: src/app/Application.cpp:332
-#, c-format
-msgid "Received exit signal; closing device session\n"
-msgstr "收到退出信号，正在关闭设备会话\n"
-
-#: src/app/Application.cpp:342
+#: src/app/Presenter.cpp:165
 #, c-format
 msgid ""
-"  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
-msgstr "  渲染：累计 %d 帧，本次 %d 帧 / %.1f fps，全程平均 %.1f fps\n"
+"[input] %s raw(%d,%d) viewport %d x%d (rotation %d degrees) / window %d "
+"x%d / drawable %d x%d -> (%.3f, %.3f)\n"
+msgstr ""
+"[input] %s 原始(%d,%d) 视口%d x%d（转%d°）/ 窗口%d x%d / 绘制面%d x%d -> "
+"(%.3f, %.3f)\n"
 
-#: src/app/Application.cpp:367 src/app/Application.cpp:419
-#, c-format
-msgid "Reached --exit-after %d\n"
-msgstr "达到 --exit-after %d\n"
+#: src/app/Presenter.cpp:192
+msgid "down"
+msgstr "按下"
 
-#: src/app/Application.cpp:401
-#, c-format
-msgid "Display orientation changed to %d degrees clockwise; window recreated\n"
-msgstr "显示方向已改为顺时针 %d°，窗口已重建\n"
-
-#: src/app/Application.cpp:425
-#, c-format
-msgid "Finished: rendered %d frames\n"
-msgstr "完成：渲染 %d 帧\n"
-
-#: src/app/DeviceConnection.cpp:29
-#, c-format
-msgid "Using the only remote pairing record (device suffix %s)\n"
-msgstr "使用唯一的远程配对记录（设备尾号 %s）\n"
-
-#: src/app/DeviceConnection.cpp:31
-msgid "Directory "
-msgstr "目录 "
-
-#: src/app/DeviceConnection.cpp:31
-msgid " contains "
-msgstr " 里有 "
-
-#: src/app/DeviceConnection.cpp:32
-msgid " pairing records; specify the device with -s. Candidate suffixes: "
-msgstr " 条配对记录，请用 -s 指定设备；候选尾号："
-
-#: src/app/DeviceConnection.cpp:43
-msgid "Cannot read "
-msgstr "无法读取 "
-
-#: src/app/DeviceConnection.cpp:43
-msgid " remote pairing record (directory "
-msgstr " 的远程配对记录（目录 "
-
-#: src/app/DeviceConnection.cpp:43
-msgid "): "
-msgstr "）："
-
-#: src/app/DeviceConnection.cpp:44
-msgid ". Establish a remote pairing record over USB first."
-msgstr "。请先通过 USB 建立该设备的远程配对记录。"
+#: src/app/Presenter.cpp:201
+msgid "move"
+msgstr "移动"
 
 #: src/app/SourcePick.h:68
 msgid "Invalid number: \""
@@ -1888,235 +840,398 @@ msgstr "存在无效字符：\""
 msgid "Schedule requires at least one time"
 msgstr "时刻表至少需要一个时刻"
 
-#: src/transport/TcpConnect.cpp:28
-msgid "Failed to resolve address "
-msgstr "解析地址 "
-
-#: src/transport/TcpConnect.cpp:28
-msgid "no results"
-msgstr "没有结果"
-
-#: src/transport/TcpConnect.cpp:49
-msgid "Failed to enable nonblocking mode: "
-msgstr "设置非阻塞失败："
-
-#: src/transport/TcpConnect.cpp:73
-msgid "Connection timed out"
-msgstr "连接超时"
-
-#: src/transport/TcpConnect.cpp:74
-msgid "Failed to wait for connection: "
-msgstr "等待连接失败："
-
-#: src/transport/TcpConnect.cpp:86
-msgid "Failed to restore blocking mode: "
-msgstr "恢复阻塞模式失败："
-
-#: src/transport/TcpConnect.cpp:91
-msgid "Cannot connect to "
-msgstr "连不上 "
-
-#: src/transport/Tunnel.cpp:34
-msgid "Tunnel TLS write failed"
-msgstr "隧道 TLS 写失败"
-
-#: src/transport/Tunnel.cpp:48
-msgid "Tunnel TLS read failed"
-msgstr "隧道 TLS 读失败"
-
-#: src/transport/Tunnel.cpp:112
-msgid "Tunnel handshake response has incorrect magic"
-msgstr "隧道握手回复的 magic 不对"
-
-#: src/transport/Tunnel.cpp:124
-msgid "Tunnel handshake response is not valid JSON"
-msgstr "隧道握手回复不是合法 JSON"
-
-#: src/transport/Tunnel.cpp:140
-msgid "Tunnel handshake response missing required fields"
-msgstr "隧道握手回复缺少必要字段"
-
-#: src/transport/Tunnel.cpp:158 src/transport/Tunnel.cpp:167
-msgid "Tunnel not connected"
-msgstr "隧道未连接"
-
-#: src/transport/Tunnel.cpp:175
-msgid "Tunnel packet is not IPv6: version nibble="
-msgstr "隧道内不是 IPv6 包: version nibble="
-
-#: src/transport/TlsChannel.cpp:32 src/transport/TlsChannel.cpp:46
-msgid "BIO_new_mem_buf failed"
-msgstr "BIO_new_mem_buf 失败"
-
-#: src/transport/TlsChannel.cpp:38
-msgid "Failed to parse certificate PEM"
-msgstr "证书 PEM 解析失败"
-
-#: src/transport/TlsChannel.cpp:52
-msgid "Failed to parse private key PEM"
-msgstr "私钥 PEM 解析失败"
-
-#: src/transport/TlsChannel.cpp:167 src/transport/TlsChannel.cpp:243
-msgid "SSL_CTX_new failed"
-msgstr "SSL_CTX_new 失败"
-
-#: src/transport/TlsChannel.cpp:180
-msgid "Failed to add root certificate"
-msgstr "加入根证书失败"
-
-#: src/transport/TlsChannel.cpp:204
-msgid "Failed to load client certificate"
-msgstr "装载客户端证书失败"
-
-#: src/transport/TlsChannel.cpp:207
-msgid "Failed to load client private key"
-msgstr "装载客户端私钥失败"
-
-#: src/transport/TlsChannel.cpp:210
-msgid "Client certificate does not match private key"
-msgstr "客户端证书与私钥不匹配"
-
-#: src/transport/TlsChannel.cpp:215 src/transport/TlsChannel.cpp:260
-msgid "SSL_new failed"
-msgstr "SSL_new 失败"
-
-#: src/transport/TlsChannel.cpp:220 src/transport/TlsChannel.cpp:266
-msgid "SSL_set_fd failed"
-msgstr "SSL_set_fd 失败"
-
-#: src/transport/TlsChannel.cpp:226
-msgid "TLS handshake failed, ssl_err="
-msgstr "TLS 握手失败 ssl_err="
-
-#: src/transport/TlsChannel.cpp:237
-msgid "PSK is empty"
-msgstr "PSK 为空，无法握手"
-
-#: src/transport/TlsChannel.cpp:250
+#: src/decode/AudioDecoder.h:52
 msgid ""
-"TLS backend has no PSK cipher suite; use an OpenSSL build with PSK support"
-msgstr "TLS 后端缺少 PSK 密码套件；请使用支持 PSK 的 OpenSSL 构建"
+"AAC-ELD decoding is unavailable on this platform. This build uses "
+"AudioToolbox on macOS; the tested native FFmpeg AAC decoder does not support "
+"ELD. Video can continue without audio."
+msgstr ""
+"此平台没有 AAC-ELD 解码后端。本项目在 macOS 使用 AudioToolbox；已测试的 "
+"FFmpeg 原生 AAC 解码器不支持 ELD。视频可继续运行。"
 
-#: src/transport/TlsChannel.cpp:263
-msgid "Failed to attach PSK to TLS channel"
-msgstr "给 TLS 通道挂 PSK 失败"
+#: src/decode/AudioToolboxEldDecoder.cpp:100
+msgid "Failed to allocate AudioBufferList"
+msgstr "分配 AudioBufferList 失败"
 
-#: src/transport/TlsChannel.cpp:274
-msgid "PSK handshake failed, ssl_err="
-msgstr "PSK 握手失败 ssl_err="
+#: src/decode/AudioToolboxEldDecoder.cpp:113
+msgid "AudioConverterFillComplexBuffer failed: "
+msgstr "AudioConverterFillComplexBuffer 失败: "
 
-#: src/transport/TlsChannel.cpp:276
+#: src/decode/AudioToolboxEldDecoder.cpp:160
+msgid "AudioConverterNew failed: "
+msgstr "AudioConverterNew 失败: "
+
+#: src/decode/Decoder.h:76
 msgid ""
-" (device tunnel listener rejected the PSK; check pair-verify key derivation)"
-msgstr "（设备隧道监听器拒绝 PSK；请检查 pair-verify 密钥派生）"
+"No HEVC decoder in this build. Non-Apple platforms require FFmpeg "
+"development packages. Install them and reconfigure (Debian/Ubuntu: apt "
+"install libavcodec-dev libavutil-dev libswscale-dev; Fedora: dnf install "
+"ffmpeg-devel).\n"
+msgstr ""
+"此构建没有 HEVC 解码后端。非 Apple 平台需要 FFmpeg 开发包；安装后重新配置构建"
+"（Debian/Ubuntu: apt install libavcodec-dev libavutil-dev libswscale-dev；"
+"Fedora: dnf install ffmpeg-devel）。\n"
 
-#: src/transport/Usbmux.cpp:135
-msgid "send failed: "
-msgstr "send 失败: "
+#: src/decode/FFmpegDecoder.cpp:42
+#, c-format
+msgid "FFmpeg has no HEVC decoder\n"
+msgstr "libavcodec 里没有 HEVC 解码器\n"
 
-#: src/transport/Usbmux.cpp:139
-msgid "Peer closed write direction"
-msgstr "对端关闭了写方向"
+#: src/decode/FFmpegDecoder.cpp:58
+#, c-format
+msgid "Failed to open FFmpeg HEVC decoder: %s\n"
+msgstr "libavcodec 打开 HEVC 解码器失败: %s\n"
 
-#: src/transport/Usbmux.cpp:161
-msgid "Read timed out (no bytes before deadline)"
-msgstr "读超时（对端在时限内没给字节）"
+#: src/decode/FFmpegDecoder.cpp:111
+#, c-format
+msgid "FFmpeg rejected packet: %s\n"
+msgstr "libavcodec 收包失败: %s\n"
 
-#: src/transport/Usbmux.cpp:164
-msgid "recv failed: "
-msgstr "recv 失败: "
+#: src/decode/FFmpegDecoder.cpp:157
+#, c-format
+msgid "Software decoder requires CPU frames; received format=%d %dx%d\n"
+msgstr "软解后端只认 CPU 帧，收到 format=%d %dx%d\n"
 
-#: src/transport/Usbmux.cpp:168
-msgid "Peer closed (received only "
-msgstr "对端关闭（只读到 "
+#: src/decode/VideoToolboxDecoder.cpp:70
+#, c-format
+msgid "Failed to parse HEVC parameter sets: %d\n"
+msgstr "HEVC 参数集解析失败: %d\n"
 
-#: src/transport/Usbmux.cpp:181
-msgid "Failed to set read timeout: "
-msgstr "设读超时失败: "
+#: src/decode/VideoToolboxDecoder.cpp:98
+#, c-format
+msgid "Failed to create VideoToolbox session: %d\n"
+msgstr "VideoToolbox 解码会话创建失败: %d\n"
 
-#: src/transport/Usbmux.cpp:194
-msgid "Socket closed"
-msgstr "socket 已关闭"
+#: src/decode/VideoToolboxDecoder.cpp:220
+#, c-format
+msgid ""
+"NAL size %zu exceeds the 2-byte length prefix; frame dropped. This stream "
+"requires software decoding.\n"
+msgstr ""
+"NAL 尺寸 %zu 超过 2 字节长度前缀上限，已丢弃该帧。该码流需要软件解码后端。\n"
 
-#: src/transport/Usbmux.cpp:208
-msgid "Wait timed out"
-msgstr "等待超时"
+#: src/hid/Hid.cpp:97 src/hid/Hid.cpp:244
+msgid "RSD directory missing "
+msgstr "RSD 目录里没有 "
 
-#: src/transport/Usbmux.cpp:213
-msgid "poll failed: "
-msgstr "poll 失败: "
+#: src/hid/Hid.cpp:119
+msgid "connectedServices response missing connectedServices: "
+msgstr "connectedServices 的回信里没有 connectedServices: "
 
-#: src/transport/Usbmux.cpp:227 src/transport/Lockdown.cpp:44
-msgid "Invalid lockdown frame length: "
-msgstr "lockdown 帧长度异常: "
+#: src/hid/Hid.cpp:176
+msgid "Stroke requires at least one point"
+msgstr "stroke 至少要一个点"
 
-#: src/transport/Usbmux.cpp:254
-msgid "socket failed: "
-msgstr "socket 失败: "
+#: src/http2/Framing.cpp:141
+msgid "Frame header shorter than 9 bytes"
+msgstr "帧头不足 9 字节"
 
-#: src/transport/Usbmux.cpp:309
-msgid "Invalid mux frame length: "
-msgstr "mux 帧长度异常: "
+#: src/http2/Framing.cpp:147
+msgid "Frame length too large: "
+msgstr "帧长过大: "
 
-#: src/transport/Usbmux.cpp:322
-msgid "mux response is not a valid plist"
-msgstr "mux 回复不是合法 plist"
+#: src/http2/Framing.cpp:152 src/remote/RemoteXpc.cpp:455
+#: src/remote/RemoteXpc.cpp:541 src/xpc/XpcValue.cpp:649
+msgid " bytes"
+msgstr " 字节"
 
-#: src/transport/Usbmux.cpp:336
-msgid "ListDevices response missing DeviceList"
-msgstr "ListDevices 回复里没有 DeviceList"
+#: src/http2/Framing.cpp:152 src/xpc/XpcValue.cpp:649
+msgid "Missing "
+msgstr "还差 "
 
-#: src/transport/Usbmux.cpp:358
-msgid "Connect failed, usbmuxd returned Number="
-msgstr "Connect 失败，usbmuxd 返回 Number="
+#: src/http2/Framing.cpp:170
+msgid "PADDED DATA missing Pad Length byte"
+msgstr "DATA 带 PADDED 却没有 Pad Length 字节"
 
-#: src/transport/Usbmux.cpp:379
-msgid "ReadPairRecord response missing PairRecordData (response "
-msgstr "ReadPairRecord 没有返回 PairRecordData（回复 "
+#: src/http2/Framing.cpp:177
+msgid "Pad Length exceeds available payload: "
+msgstr "Pad Length 超过可用载荷: "
 
-#: src/transport/Usbmux.cpp:380
-msgid "); device may not trust this computer yet"
-msgstr "）；设备可能尚未信任本机"
+#: src/http2/Framing.cpp:196
+msgid "SETTINGS payload length is not a multiple of 6: "
+msgstr "SETTINGS 载荷不是 6 的倍数: "
 
-#: src/transport/Lockdown.cpp:21
-msgid "Failed to write TLS header"
-msgstr "TLS 写头失败"
+#: src/http2/Framing.cpp:207
+msgid "WINDOW_UPDATE payload must be 4 bytes; got "
+msgstr "WINDOW_UPDATE 载荷长度应为 4，实际 "
 
-#: src/transport/Lockdown.cpp:25
-msgid "Failed to write TLS body"
-msgstr "TLS 写体失败"
+#: src/http2/Framing.cpp:216
+msgid "GOAWAY payload shorter than 8 bytes"
+msgstr "GOAWAY 载荷不足 8 字节"
 
-#: src/transport/Lockdown.cpp:36
-msgid "Failed to read TLS header"
-msgstr "TLS 读头失败"
+#: src/http2/Framing.cpp:233
+msgid "RST_STREAM payload must be 4 bytes; got "
+msgstr "RST_STREAM 载荷长度应为 4，实际 "
 
-#: src/transport/Lockdown.cpp:54
-msgid "Failed to read TLS body"
-msgstr "TLS 读体失败"
+#: src/json/Json.cpp:15
+msgid "Input too large"
+msgstr "输入过大"
 
-#: src/transport/Lockdown.cpp:84
-msgid "lockdown response is not a valid plist"
-msgstr "lockdown 回复不是合法 plist"
+#: src/json/Json.cpp:22 src/plist/Plist.cpp:45
+msgid "Nesting too deep"
+msgstr "嵌套过深"
 
-#: src/transport/Lockdown.cpp:105
-msgid "Cannot parse pairing record"
-msgstr "配对记录无法解析"
+#: src/media/AudioPump.cpp:75
+#, c-format
+msgid "Clamped --audio-buffer %d to %d ms and adjusted buffer capacity\n"
+msgstr "已将 --audio-buffer %d 限制为 %d ms，并按此配置缓冲容量\n"
 
-#: src/transport/Lockdown.cpp:123
-msgid "Pairing record missing required fields"
-msgstr "配对记录缺少必要字段"
+#: src/media/AudioPump.cpp:112
+#, c-format
+msgid ""
+"Audio answer missing SSRC (RemoteSSRC=%u LocalSSRC=%u); session renewal may "
+"fail\n"
+msgstr ""
+"音频协商响应缺少 SSRC（RemoteSSRC=%u LocalSSRC=%u），音频会话可能无法续期\n"
 
-#: src/transport/Lockdown.cpp:146
-msgid "StartSession rejected: "
-msgstr "StartSession 被拒: "
+#: src/media/AudioPump.cpp:273
+#, c-format
+msgid "Audio session recreated, receive port=%u\n"
+msgstr "音频会话已重建，收流端口=%u\n"
 
-#: src/transport/Lockdown.cpp:170
-msgid ") rejected: "
-msgstr ") 被拒: "
+#: src/media/AudioPump.cpp:281
+#, c-format
+msgid "Failed to recreate audio session: %s (retry in 1 second)\n"
+msgstr "重建音频会话失败: %s（1 秒后再试）\n"
 
-#: src/transport/Lockdown.cpp:175
-msgid "StartService response missing Port"
-msgstr "StartService 回复里没有 Port"
+#: src/media/AudioPump.cpp:308
+#, c-format
+msgid "Failed to send audio RTCP keepalive: %s\n"
+msgstr "音频 RTCP 保活包发送失败: %s\n"
+
+#: src/media/AudioPump.cpp:321
+#, c-format
+msgid ""
+"Audio: device session ended (%llu ms without audio); recreating session\n"
+msgstr "音频：设备会话已结束（%llu ms 未收到音频），重建会话\n"
+
+#: src/media/AudioPump.cpp:368
+#, c-format
+msgid "Audio decode failed (%zu-byte payload): %s\n"
+msgstr "音频解码失败（载荷 %zu 字节）: %s\n"
+
+#: src/media/FramePump.cpp:68
+#, c-format
+msgid ""
+"Software decoder (libavcodec) is not included; continuing with the platform "
+"decoder. The current adapter uses 2-byte NAL lengths and cannot process "
+"larger NALs. Such access units are dropped and the session is recreated, "
+"which may interrupt video.\n"
+"Install FFmpeg development packages and reconfigure the build.\n"
+msgstr ""
+"构建未包含软件解码后端（libavcodec），继续使用平台后端。当前平台适配使用 2 字"
+"节 NAL 长度前缀，无法处理超过其长度上限的 NAL。遇到此类帧会丢弃 AU 并尝试重建"
+"会话，可能暂时无新画面。\n"
+"请安装 FFmpeg 开发包并重新配置、构建项目。\n"
+
+#: src/media/FramePump.cpp:106
+msgid "Cannot open recording file "
+msgstr "打不开录制文件 "
+
+#: src/media/FramePump.cpp:132
+#, c-format
+msgid ""
+"Failed to stop device video session (device will release it when the lease "
+"expires): %s\n"
+msgstr "停止设备视频会话失败（设备端将在租期到期后释放）: %s\n"
+
+#: src/media/FramePump.cpp:150
+#, c-format
+msgid "Failed to stop previous video session (still attempting restart): %s\n"
+msgstr "停止旧视频会话失败（仍尝试重建）: %s\n"
+
+#: src/media/FramePump.cpp:176
+#, c-format
+msgid "Video session recreated, receive port=%u\n"
+msgstr "视频会话已重建，收流端口=%u\n"
+
+#: src/media/FramePump.cpp:237
+#, c-format
+msgid "Failed to send PLI: %s\n"
+msgstr "PLI 发送失败: %s\n"
+
+#: src/media/FramePump.cpp:257
+#, c-format
+msgid ""
+"Sequence gap or discarded fragment detected: requesting keyframe, wait limit "
+"%d ms\n"
+msgstr "检测到序号缺口或丢弃分片：请求关键帧，等待上限 %d ms\n"
+
+#: src/media/FramePump.cpp:287
+#, c-format
+msgid "Decoder switched to %s\n"
+msgstr "解码后端已切换为 %s\n"
+
+#: src/media/FramePump.cpp:325
+#, c-format
+msgid ""
+"After %d restarts, NALs still exceed the decoder limit. Video is "
+"unavailable; retrying every %llu seconds. Callers can use screenshots.\n"
+msgstr ""
+"连续 %d 次重建仍因 NAL 超过后端长度上限而无画面输出。视频暂不可用，将每 %llu "
+"秒重试；调用方可切换至截图服务。\n"
+
+#: src/media/FramePump.cpp:379
+#, c-format
+msgid "Test: injected keyframe decode failure (%s)\n"
+msgstr "测试：注入关键帧解码失败（%s）\n"
+
+#: src/media/FramePump.cpp:380
+msgid "further PLI disabled"
+msgstr "后续禁止 PLI"
+
+#: src/media/FramePump.cpp:381
+msgid "PLI continues"
+msgstr "继续发送 PLI"
+
+#: src/media/FramePump.cpp:471
+#, c-format
+msgid ""
+"%s: no data for %llu ms; device reports session alive, continuing to wait\n"
+msgstr "%s：%llu ms 未收到数据，设备报告会话仍运行，继续等待\n"
+
+#: src/media/FramePump.cpp:476
+#, c-format
+msgid "%s: no data for %llu ms, %s; recreating video session\n"
+msgstr "%s：%llu ms 未收到数据，%s，重建视频会话\n"
+
+#: src/media/FramePump.cpp:479
+msgid "device session ended"
+msgstr "设备会话已结束"
+
+#: src/media/FramePump.cpp:480 src/media/ScreenshotSource.cpp:72
+#: src/net/Stack.cpp:350 src/net/TcpStream.cpp:41 src/net/TcpStream.cpp:118
+#: src/net/TcpStream.cpp:122 src/net/UdpSocket.cpp:104
+#: src/net/UdpSocket.cpp:130 src/remote/Rsd.cpp:232
+#: src/transport/Usbmux.cpp:168 src/wifi/RemotePairing.cpp:35
+msgid ")"
+msgstr "）"
+
+#: src/media/FramePump.cpp:480
+msgid "session status query failed ("
+msgstr "查询会话状态失败（"
+
+#: src/media/FramePump.cpp:483 src/media/FramePump.cpp:496
+#, c-format
+msgid "Failed to recreate video session: %s\n"
+msgstr "重建视频会话失败: %s\n"
+
+#: src/media/FramePump.cpp:511
+#, c-format
+msgid ""
+"%s: no data for %llu ms; recovery threshold exceeded, recreating video "
+"session\n"
+msgstr "%s：%llu ms 未收到数据，超过恢复阈值，重建视频会话\n"
+
+#: src/media/FramePump.cpp:532
+#, c-format
+msgid "Failed to recreate video session: %s (retry in 1 second)\n"
+msgstr "重建视频会话失败: %s（1 秒后再试）\n"
+
+#: src/media/FramePump.cpp:562
+#, c-format
+msgid "Failed to send RTCP keepalive: %s\n"
+msgstr "RTCP 保活包发送失败: %s\n"
+
+#: src/media/FramePump.cpp:567
+msgid "Input or frame request"
+msgstr "收到操作"
+
+#: src/media/FramePump.cpp:575
+#, c-format
+msgid "Video fallback active for %llu seconds; retrying video session\n"
+msgstr "视频降级已满 %llu 秒，重试视频会话\n"
+
+#: src/media/FramePump.cpp:582
+#, c-format
+msgid "%s; recreating video session to obtain a keyframe\n"
+msgstr "%s，重建视频会话以取得关键帧\n"
+
+#: src/media/FramePump.cpp:583
+msgid "Scheduled video retry after fallback"
+msgstr "视频降级后的定时重试"
+
+#: src/media/FramePump.cpp:584
+msgid "NAL exceeds platform decoder length limit"
+msgstr "NAL 超过平台后端长度上限"
+
+#: src/media/FramePump.cpp:620
+#, c-format
+msgid "Keyframe wait reached %d ms; recreating video session\n"
+msgstr "等待关键帧达到 %d ms，重建视频会话\n"
+
+#: src/media/FramePump.cpp:635
+#, c-format
+msgid ""
+"No keyframe output after %llu seconds; recreating video session (%d/%d)\n"
+msgstr "启动 %llu 秒仍无关键帧输出，重建视频会话 (%d/%d)\n"
+
+#: src/media/FramePump.cpp:643
+#, c-format
+msgid ""
+"No keyframe output after %d restarts. Video is unavailable; callers can use "
+"screenshots. Retrying every %llu seconds.\n"
+msgstr ""
+"连续 %d 次重建仍未输出关键帧，视频暂不可用。调用方可切换至截图服务；将每 "
+"%llu 秒重试视频会话。\n"
+
+#: src/media/FramePump.cpp:666
+msgid "Receive silence timeout"
+msgstr "静默超时"
+
+#: src/media/FramePump.cpp:705
+#, c-format
+msgid "Test: dropped video packet %d to inject a sequence gap\n"
+msgstr "测试：丢弃第 %d 个视频包以注入序号缺口\n"
+
+#: src/media/ScreenshotSource.cpp:38
+msgid "FFmpeg has no PNG decoder"
+msgstr "FFmpeg 不提供 PNG 解码器"
+
+#: src/media/ScreenshotSource.cpp:70
+msgid "Cannot create BGRA conversion (format="
+msgstr "无法创建 BGRA 像素转换（format="
+
+#: src/media/ScreenshotSource.cpp:75
+msgid "PNG dimensions must be positive"
+msgstr "PNG 图像尺寸必须为正数"
+
+#: src/media/ScreenshotSource.cpp:78
+msgid "FFmpeg could not decode PNG image"
+msgstr "FFmpeg 无法解码 PNG 图像"
+
+#: src/media/ScreenshotSource.cpp:81
+msgid "Failed to allocate PNG decode resources"
+msgstr "无法分配 PNG 解码资源"
+
+#: src/media/ScreenshotSource.cpp:90
+msgid "FFmpeg is not included; screenshot mode has no PNG decoder"
+msgstr "构建未包含 FFmpeg，截图模式缺少 PNG 解码后端"
+
+#: src/media/ScreenshotSource.cpp:109
+msgid "Device directory missing service: "
+msgstr "设备目录缺少服务："
+
+#: src/media/ScreenshotSource.cpp:153
+msgid "Screenshot response missing image data"
+msgstr "截图响应缺少 image 数据"
+
+#: src/media/StreamSession.cpp:127 src/remote/App.cpp:226
+#: src/transport/TcpConnect.cpp:28
+msgid ": "
+msgstr " 失败: "
+
+#: src/media/StreamSession.cpp:127
+msgid "Failed to bind UDP port "
+msgstr "绑 UDP 端口 "
+
+#: src/media/StreamSession.cpp:160
+msgid "startmediastream failed on the retained connection (transport failed)"
+msgstr "在持有的连接上发 startmediastream 失败（链路断了）"
+
+#: src/media/StreamSession.cpp:262
+msgid "getmediastreamserverstatus response missing sessions array"
+msgstr "getmediastreamserverstatus 的回复里没有 sessions 数组"
 
 #: src/net/Stack.cpp:139
 msgid ""
@@ -2152,16 +1267,16 @@ msgid "Tunnel read failed"
 msgstr "隧道读取失败"
 
 #: src/net/Stack.cpp:344
-msgid "no route to destination"
-msgstr "没有路由到目的"
+msgid "beyond source address scope"
+msgstr "超出源地址的范围"
 
 #: src/net/Stack.cpp:344
 msgid "communication administratively prohibited"
 msgstr "与管理策略禁止通信"
 
 #: src/net/Stack.cpp:344
-msgid "beyond source address scope"
-msgstr "超出源地址的范围"
+msgid "no route to destination"
+msgstr "没有路由到目的"
 
 #: src/net/Stack.cpp:345
 msgid "address unreachable"
@@ -2196,12 +1311,12 @@ msgid " (parameter problem)"
 msgstr "（参数问题）"
 
 #: src/net/Stack.cpp:358
-msgid " (echo request)"
-msgstr "（回音请求）"
-
-#: src/net/Stack.cpp:358
 msgid " (echo reply)"
 msgstr "（回音应答）"
+
+#: src/net/Stack.cpp:358
+msgid " (echo request)"
+msgstr "（回音请求）"
 
 #: src/net/Stack.cpp:372
 msgid " inner nh="
@@ -2210,22 +1325,6 @@ msgstr " 内层 nh="
 #: src/net/Stack.cpp:376
 msgid " ports "
 msgstr " 端口 "
-
-#: src/net/UdpSocket.cpp:74
-msgid "UDP endpoint closed"
-msgstr "UDP 端点已关闭"
-
-#: src/net/UdpSocket.cpp:104
-msgid "UDP bind failed (lwIP "
-msgstr "UDP 绑定失败（lwIP "
-
-#: src/net/UdpSocket.cpp:130
-msgid "UDP send failed (lwIP "
-msgstr "UDP 发送失败（lwIP "
-
-#: src/net/UdpSocket.cpp:141
-msgid "UDP receive timed out"
-msgstr "UDP 接收超时"
 
 #: src/net/TcpStream.cpp:41
 msgid "TCP connection terminated (lwIP "
@@ -2263,397 +1362,21 @@ msgstr "TCP 读取超时"
 msgid "TCP peer or local endpoint closed"
 msgstr "TCP 对端或本地已关闭"
 
-#: src/wifi/RemotePairing.cpp:35
-msgid "createListener response missing port (actual fields:"
-msgstr "createListener 回信里没有 port（实际字段:"
-
-#: src/wifi/RemotePairing.cpp:40
-msgid "createListener returned an invalid port: "
-msgstr "createListener 返回无效端口："
-
-#: src/wifi/Opack.cpp:90
-msgid "OPACK encoder does not support negative integers"
-msgstr "OPACK 编码器不支持负整数"
-
-#: src/wifi/Opack.cpp:151
-msgid "OPACK encode: unknown value type"
-msgstr "OPACK 编码：不认识的值类型"
-
-#: src/wifi/Opack.cpp:182
-msgid "OPACK decode: unknown length form"
-msgstr "OPACK 解码：未知长度形式"
-
-#: src/wifi/Opack.cpp:186
-msgid "OPACK decode: payload exceeds buffer"
-msgstr "OPACK 解码：载荷越过缓冲尾"
-
-#: src/wifi/Opack.cpp:196
-msgid "OPACK decode: nesting too deep"
-msgstr "OPACK 解码：嵌套过深"
-
-#: src/wifi/Opack.cpp:201
-msgid "OPACK decode: missing type byte"
-msgstr "OPACK 解码：缺少类型字节"
-
-#: src/wifi/Opack.cpp:205
-msgid "OPACK decode: terminator in value position"
-msgstr "OPACK 解码：值位置出现终止符"
-
-#: src/wifi/Opack.cpp:258
-msgid "OPACK decode: terminator in fixed-length array"
-msgstr "OPACK 解码：定长数组中出现终止符"
-
-#: src/wifi/Opack.cpp:280
-msgid "OPACK decode: terminator in fixed-length dictionary"
-msgstr "OPACK 解码：定长字典中出现终止符"
-
-#: src/wifi/Opack.cpp:295
-msgid "OPACK decode: unknown type byte 0x"
-msgstr "OPACK 解码：不认识的类型字节 0x"
-
-#: src/wifi/Opack.cpp:327
-msgid "OPACK decode: "
-msgstr "OPACK 解码后剩余 "
-
-#: src/wifi/Opack.cpp:327
-msgid " trailing bytes"
-msgstr " 字节"
-
-#: src/wifi/Rppairing.h:30
-msgid "This stream does not support waiting for readability"
-msgstr "这条流不支持等可读"
-
-#: src/wifi/Srp.cpp:128
-msgid "SRP B is a multiple of N; rejected"
-msgstr "SRP 的 B 是 N 的倍数，拒收"
-
-#: src/wifi/PairRecord.cpp:37
-msgid "Hex length must be even"
-msgstr "hex 长度不是偶数"
-
-#: src/wifi/PairRecord.cpp:57
-msgid "Invalid hex character"
-msgstr "hex 里有非法字符"
-
-#: src/wifi/PairRecord.cpp:92
-msgid "Cannot open temporary file "
-msgstr "无法打开临时文件 "
-
-#: src/wifi/PairRecord.cpp:97
-msgid "Failed to set record file permissions"
-msgstr "设置记录文件权限失败"
-
-#: src/wifi/PairRecord.cpp:105
-msgid "Incomplete record file write"
-msgstr "记录文件写入不完整"
-
-#: src/wifi/PairRecord.cpp:110
-msgid "Rename failed"
-msgstr "重命名失败"
-
-#: src/wifi/PairRecord.cpp:120
-msgid "Cannot open "
-msgstr "无法打开 "
-
-#: src/wifi/PairRecord.cpp:127
-msgid "Pairing record file too large"
-msgstr "配对记录文件过大"
-
-#: src/wifi/PairRecord.cpp:172
-msgid "Invalid scrctl pairing record header"
-msgstr "scrctl 配对记录头无效"
-
-#: src/wifi/PairRecord.cpp:179
-msgid "Record line is not key=value"
-msgstr "记录里有一行不是 key=value"
-
-#: src/wifi/PairRecord.cpp:190
-msgid "Incorrect field length: "
-msgstr "字段长度不对："
-
-#: src/wifi/PairRecord.cpp:190
-msgid " requires "
-msgstr " 要 "
-
-#: src/wifi/PairRecord.cpp:191
-msgid " bytes; got "
-msgstr " 字节，实际 "
-
-#: src/wifi/PairRecord.cpp:222
-msgid "Record missing host_private_key"
-msgstr "记录里没有 host_private_key"
-
-#: src/wifi/PairRecord.cpp:238
-msgid "Failed to create directory "
-msgstr "建目录失败 "
-
-#: src/wifi/PairRecord.cpp:285
-msgid "Reading directory "
-msgstr "读目录 "
-
-#: src/wifi/Rppairing.cpp:27
-msgid "Frame exceeds u16 length field"
-msgstr "帧太长，u16 长度字段放不下"
-
-#: src/wifi/Rppairing.cpp:45
-msgid "Frame header is not RPPairing; check port and stream alignment"
-msgstr "帧头不是 RPPairing；请检查端口和流对齐"
-
-#: src/wifi/Rppairing.cpp:85
-msgid "Envelope missing message field"
-msgstr "信封里没有 message 字段"
-
-#: src/wifi/Rppairing.cpp:91
-msgid "plain missing _0"
-msgstr "plain 里没有 _0"
-
-#: src/wifi/Rppairing.cpp:98
-msgid "Envelope is neither plain nor streamEncrypted"
-msgstr "信封既不是 plain 也不是 streamEncrypted"
-
-#: src/wifi/Rppairing.cpp:103
-msgid "streamEncrypted._0 is not a string"
-msgstr "streamEncrypted 的 _0 不是字符串"
-
-#: src/wifi/Rppairing.cpp:107
-msgid "Encrypted frame received before main key and nonce were ready"
-msgstr "主密钥和 nonce 尚未准备好时收到加密帧"
-
-#: src/wifi/Rppairing.cpp:126
-msgid "Decrypted message is not a response"
-msgstr "解密出来的不是 response"
-
-#: src/wifi/Rppairing.cpp:131
-msgid "response missing _1"
-msgstr "response 里没有 _1"
-
-#: src/wifi/Rppairing.cpp:140 src/wifi/Rppairing.cpp:199
-msgid "Device rejected request: "
-msgstr "设备拒绝: "
-
-#: src/wifi/Rppairing.cpp:140 src/wifi/Rppairing.cpp:199
-msgid "(no description)"
-msgstr "(没有描述)"
-
-#: src/wifi/Rppairing.cpp:187
-msgid "Expected event during pairing"
-msgstr "配对过程中设备回的不是 event"
-
-#: src/wifi/Rppairing.cpp:192
-msgid "event missing _0"
-msgstr "event 里没有 _0"
-
-#: src/wifi/Rppairing.cpp:204
-msgid "Device requested user consent twice consecutively"
-msgstr "设备连续两次请求用户确认"
-
-#: src/wifi/Rppairing.cpp:209
-msgid "Device is waiting for Trust confirmation on its screen"
-msgstr "设备正在等待屏幕上的信任确认"
-
-#: src/wifi/Rppairing.cpp:217
-msgid "event missing pairingData._0.data; actual fields: "
-msgstr "event 里没有 pairingData._0.data，实际字段："
-
-#: src/wifi/Rppairing.cpp:230
-msgid "Main key not installed; cannot send encrypted frame"
-msgstr "尚未安装主密钥，无法发送加密帧"
-
-#: src/wifi/Tlv.cpp:30
-msgid "TLV header truncated"
-msgstr "TLV 头被截断"
-
-#: src/wifi/Tlv.cpp:39
-msgid "TLV length exceeds buffer"
-msgstr "TLV 长度超出缓冲区"
-
-#: src/wifi/Crypto.cpp:45
-msgid "Failed to create private key (invalid length or unsupported platform)"
-msgstr "构造私钥失败（长度或平台不支持）"
-
-#: src/wifi/Crypto.cpp:45
-msgid "Failed to create public key (invalid length or unsupported platform)"
-msgstr "构造公钥失败（长度或平台不支持）"
-
-#: src/wifi/Crypto.cpp:59
-msgid "ChaCha20-Poly1305 requires a 32-byte key and 12-byte nonce"
-msgstr "ChaCha20-Poly1305 要 32 字节密钥 + 12 字节 nonce"
-
-#: src/wifi/Crypto.cpp:63
-msgid "Ciphertext shorter than Poly1305 tag"
-msgstr "密文比 Poly1305 标签还短"
-
-#: src/wifi/Crypto.cpp:68
-msgid "Failed to allocate EVP_CIPHER_CTX"
-msgstr "分配 EVP_CIPHER_CTX 失败"
-
-#: src/wifi/Crypto.cpp:76
-msgid "ChaCha20-Poly1305 initialization failed; check OpenSSL cipher support"
-msgstr "ChaCha20-Poly1305 初始化失败；请检查 OpenSSL 算法支持"
-
-#: src/wifi/Crypto.cpp:85
-msgid "ChaCha20-Poly1305 update failed"
-msgstr "ChaCha20-Poly1305 更新失败"
-
-#: src/wifi/Crypto.cpp:92
-msgid "Failed to set Poly1305 tag"
-msgstr "设 Poly1305 标签失败"
-
-#: src/wifi/Crypto.cpp:96
-msgid ""
-"Poly1305 authentication failed; check key derivation and frame boundaries"
-msgstr "Poly1305 认证失败；请检查密钥派生和帧边界"
-
-#: src/wifi/Crypto.cpp:103
-msgid "ChaCha20-Poly1305 finalization failed"
-msgstr "ChaCha20-Poly1305 收尾失败"
-
-#: src/wifi/Crypto.cpp:109
-msgid "Failed to get Poly1305 tag"
-msgstr "取 Poly1305 标签失败"
-
-#: src/wifi/Crypto.cpp:121
-msgid "Failed to initialize X25519 key generation"
-msgstr "初始化 X25519 密钥生成失败"
-
-#: src/wifi/Crypto.cpp:126
-msgid "Failed to generate X25519 key"
-msgstr "生成 X25519 密钥失败"
-
-#: src/wifi/Crypto.cpp:134
-msgid "Failed to get X25519 public key"
-msgstr "取 X25519 公钥失败"
-
-#: src/wifi/Crypto.cpp:140
-msgid "Failed to get X25519 private key"
-msgstr "取 X25519 私钥失败"
-
-#: src/wifi/Crypto.cpp:149
-msgid "Failed to obtain cryptographic random bytes"
-msgstr "无法取得密码学随机字节"
-
-#: src/wifi/Crypto.cpp:169
-msgid "Failed to get Ed25519 public key"
-msgstr "取 Ed25519 公钥失败"
-
-#: src/wifi/Crypto.cpp:177
-msgid "Peer X25519 public key must be 32 bytes"
-msgstr "对端 X25519 公钥长度不是 32"
-
-#: src/wifi/Crypto.cpp:195 src/wifi/Crypto.cpp:200
-msgid "X25519 shared secret computation failed"
-msgstr "X25519 共享密钥计算失败"
-
-#: src/wifi/Crypto.cpp:206
-msgid "X25519 shared secret is all zero (low-order peer public key)"
-msgstr "X25519 共享密钥全零（对端公钥是低阶点）"
-
-#: src/wifi/Crypto.cpp:214
-msgid "Ed25519 private key seed must be 32 bytes"
-msgstr "Ed25519 私钥种子长度不是 32"
-
-#: src/wifi/Crypto.cpp:223
-msgid "Failed to initialize Ed25519 signing"
-msgstr "初始化 Ed25519 签名失败"
-
-#: src/wifi/Crypto.cpp:228
-msgid "Failed to get Ed25519 signature length"
-msgstr "取 Ed25519 签名长度失败"
-
-#: src/wifi/Crypto.cpp:233
-msgid "Ed25519 signing failed"
-msgstr "Ed25519 签名失败"
-
-#: src/wifi/PairVerify.cpp:12
-msgid "Pairing record incomplete; cannot sign"
-msgstr "配对记录不完整，无法签名"
-
-#: src/wifi/PairVerify.cpp:66 src/wifi/PairVerify.cpp:128
-msgid ""
-"Device does not recognize this pairing record (not paired or pairing removed)"
-msgstr "设备不认识这条配对记录（没配过，或者在设备上被删了）"
-
-#: src/wifi/PairVerify.cpp:73
-msgid "PV-Msg02 missing 32-byte public key"
-msgstr "PV-Msg02 里没有 32 字节的公钥"
-
-#: src/wifi/PairSetup.cpp:45
-msgid "MD5 unavailable; check OpenSSL algorithm providers"
-msgstr "MD5 不可用；请检查 OpenSSL 算法 provider"
-
-#: src/wifi/PairSetup.cpp:69
-msgid "Handshake response missing response._1.handshake._0"
-msgstr "handshake 回信里没有 response._1.handshake._0"
-
-#: src/wifi/PairSetup.cpp:81
-msgid " TLV decode incomplete: "
-msgstr " 的 TLV 没解干净: "
-
-#: src/wifi/PairSetup.cpp:85
-msgid " returned error code 0x"
-msgstr " 带错误码 0x"
-
-#: src/wifi/PairSetup.cpp:103
-msgid ""
-"Control channel does not allow pair-setup "
-"(deviceOptions.allowsPairSetup=false). Tested iOS 27 devices require the "
-"RemoteXPC entry point (wifi_probe --pair-setup-xpc)"
-msgstr ""
-"此控制通道不允许 pair-setup（deviceOptions.allowsPairSetup=false）。已测试 "
-"iOS 27 设备需使用 RemoteXPC 入口（wifi_probe --pair-setup-xpc）"
-
-#: src/wifi/PairSetup.cpp:147
-msgid "Host identifier missing; provide one if hostname lookup is unavailable"
-msgstr "缺少 host identifier；主机名查询不可用时请显式提供"
-
-#: src/wifi/PairSetup.cpp:217
-msgid "Verify M2 missing 32-byte public key"
-msgstr "verify 的 M2 里没有 32 字节公钥"
-
-#: src/wifi/PairSetup.cpp:257
-msgid "verify-M4 TLV decode incomplete: "
-msgstr "verify-M4 的 TLV 没解干净: "
-
-#: src/wifi/PairSetup.cpp:264
-msgid ""
-"Device accepted this identifier; already paired, pair-setup is unnecessary"
-msgstr "设备已接受此 identifier，已配对，无需 pair-setup"
-
-#: src/wifi/PairSetup.cpp:269
-msgid "Verify completed without accepting this key; sending upgrade M1"
-msgstr "验证完成但未接受此密钥，发送 upgrade M1"
-
-#: src/wifi/PairSetup.cpp:287
-msgid "Handshake (attemptPairVerify=false) completed; sending M1"
-msgstr "handshake（attemptPairVerify=false）完成，发送 M1"
-
-#: src/wifi/PairSetup.cpp:305
-msgid "M2 missing PUBLIC_KEY or SALT"
-msgstr "M2 里缺 PUBLIC_KEY 或 SALT"
-
-#: src/wifi/PairSetup.cpp:330
-msgid "M4 missing PROOF"
-msgstr "M4 里没有 PROOF"
-
-#: src/wifi/PairSetup.cpp:336
-msgid "Device SRP proof mismatch; pairing aborted. Check PIN and peer identity"
-msgstr "设备 SRP 证明不匹配，已中止配对；请检查 PIN 和对端身份"
-
-#: src/wifi/PairSetup.cpp:340
-msgid "SRP mutual verification passed; registering host key on device (M5)"
-msgstr "SRP 双向验证通过，正在注册主机密钥（M5）"
-
-#: src/wifi/PairSetup.cpp:429
-msgid "Cannot decrypt M6: "
-msgstr "无法解密 M6："
-
-#: src/wifi/PairSetup.cpp:482
-msgid "createRemoteUnlockKey failed ("
-msgstr "createRemoteUnlockKey 失败（"
-
-#: src/wifi/PairSetup.cpp:482
-msgid "); pairing itself succeeded"
-msgstr "），配对本身已成功"
+#: src/net/UdpSocket.cpp:74
+msgid "UDP endpoint closed"
+msgstr "UDP 端点已关闭"
+
+#: src/net/UdpSocket.cpp:104
+msgid "UDP bind failed (lwIP "
+msgstr "UDP 绑定失败（lwIP "
+
+#: src/net/UdpSocket.cpp:130
+msgid "UDP send failed (lwIP "
+msgstr "UDP 发送失败（lwIP "
+
+#: src/net/UdpSocket.cpp:141
+msgid "UDP receive timed out"
+msgstr "UDP 接收超时"
 
 #: src/plist/Bplist.cpp:54
 msgid "bplist input empty or larger than 8 MiB"
@@ -2851,6 +1574,904 @@ msgstr "根元素必须是单个 <plist>"
 msgid "plist root must contain a single value"
 msgstr "plist 根必须包含单个值"
 
+#: src/remote/App.cpp:105
+#, c-format
+msgid ""
+"Launching %s: previous process has not exited (attempt %d); retry in 500 ms\n"
+msgstr "启动 %s 时原进程尚未退出（第 %d 次尝试），500 ms 后重试\n"
+
+#: src/remote/App.cpp:133
+msgid ""
+"Device appservice does not advertise streamapplist; large listapps fallback "
+"is disabled"
+msgstr "设备 appservice 未声明 streamapplist，未启用大回复 listapps 的回退"
+
+#: src/remote/App.cpp:192
+msgid "Device has no app with bundle ID "
+msgstr "设备上找不到 bundle id "
+
+#: src/remote/App.cpp:205
+#, c-format
+msgid "stop_app(%s): app is not running\n"
+msgstr "stop_app(%s)：应用未运行\n"
+
+#: src/remote/App.cpp:226 src/remote/App.cpp:231
+msgid " process "
+msgstr " 的进程 "
+
+#: src/remote/App.cpp:226 src/remote/App.cpp:231
+msgid "Failed to terminate "
+msgstr "无法终止 "
+
+#: src/remote/App.cpp:232
+msgid "; no reply after three attempts: "
+msgstr "；三次尝试均未收到响应："
+
+#: src/remote/App.cpp:253
+#, c-format
+msgid ""
+"stop_app(%s): signal sent, but process is still listed (exit may be "
+"pending)\n"
+msgstr "stop_app(%s)：已发送信号，但进程仍在列表中（可能仍在退出）\n"
+
+#: src/remote/Device.cpp:22
+#, c-format
+msgid "  [stage] %s\n"
+msgstr "  [阶段] %s\n"
+
+#: src/remote/Device.cpp:33
+msgid ""
+" (device is locked; unlock it and keep the screen awake before retrying)"
+msgstr "（设备已锁定；请解锁并保持屏幕唤醒后重试）"
+
+#: src/remote/Device.cpp:36
+msgid " (computer not trusted; unlock the device and confirm Trust)"
+msgstr "（电脑尚未受信任；请解锁设备并确认信任）"
+
+#: src/remote/Device.cpp:39
+msgid ""
+" (service unavailable; check Developer Mode and DDI mounting through Xcode)"
+msgstr "（服务不可用；请检查开发者模式及 Xcode 的 DDI 挂载）"
+
+#: src/remote/Device.cpp:41
+msgid " (check DDI mounting and Developer Mode)"
+msgstr "（请检查 DDI 挂载及开发者模式）"
+
+#: src/remote/Device.cpp:80
+msgid ""
+"No USB device found (usbmux list is empty). Check the data cable and USB "
+"connection, then reconnect the device. Untrusted devices normally appear in "
+"this list too."
+msgstr ""
+"未发现 USB 设备（usbmux 列表为空）。请检查数据线与 USB 连接，再重新连接设备。"
+"未信任的设备通常也会出现在此列表中。"
+
+#: src/remote/Device.cpp:91
+msgid "; select one: "
+msgstr "；请选择设备："
+
+#: src/remote/Device.cpp:91
+msgid "Connected devices: "
+msgstr "已连接设备数："
+
+#: src/remote/Device.cpp:109
+msgid "; connected devices: "
+msgstr "；当前连接设备："
+
+#: src/remote/Device.cpp:109
+msgid "No connected device matches "
+msgstr "没有已连接设备匹配 "
+
+#: src/remote/Device.cpp:113
+msgid " (total "
+msgstr "（共 "
+
+#: src/remote/Device.cpp:113
+msgid "). Check the selected UDID and USB connection."
+msgstr " 台）。请检查所选 UDID 与 USB 连接。"
+
+#: src/remote/Device.cpp:123
+msgid "lockdown pairing session"
+msgstr "lockdown 配对 session"
+
+#: src/remote/Device.cpp:126
+msgid "Failed to establish lockdown session: "
+msgstr "lockdown 会话建立失败: "
+
+#: src/remote/Device.cpp:129
+msgid "Start CoreDeviceProxy"
+msgstr "启动 CoreDeviceProxy"
+
+#: src/remote/Device.cpp:132 src/remote/Rsd.cpp:168 src/remote/Rsd.cpp:378
+#: src/transport/Usbmux.cpp:261 src/wifi/PairRecord.cpp:285
+msgid " failed: "
+msgstr " 失败: "
+
+#: src/remote/Device.cpp:132
+msgid "Start "
+msgstr "启动 "
+
+#: src/remote/Device.cpp:135
+msgid "CDTunnel handshake"
+msgstr "CDTunnel 握手"
+
+#: src/remote/Device.cpp:140 src/remote/Device.cpp:232
+msgid "Failed to establish packet tunnel: "
+msgstr "包隧道建立失败: "
+
+#: src/remote/Device.cpp:148
+msgid ""
+"Pairing HostID is not a valid UUID; cannot construct a stable peer identity"
+msgstr "配对记录里的 HostID 不是合法 UUID，无法给出稳定的 peer 身份"
+
+#: src/remote/Device.cpp:154 src/remote/Device.cpp:164
+msgid "Connect to RSD inside tunnel and read directory"
+msgstr "连接隧道内 RSD 并读取目录"
+
+#: src/remote/Device.cpp:170
+msgid "Tunnel returned an invalid IPv6 address"
+msgstr "隧道给的地址不是合法 IPv6"
+
+#: src/remote/Device.cpp:181
+msgid "Ready"
+msgstr "就绪"
+
+#: src/remote/Device.cpp:193
+msgid "LAN pair-verify"
+msgstr "局域网配对验证"
+
+#: src/remote/Device.cpp:196
+msgid "Cannot connect to device RemotePairing port "
+msgstr "连不上设备的 RemotePairing 端口 "
+
+#: src/remote/Device.cpp:197
+msgid ""
+" (check that the device is reachable on this network and has been paired)"
+msgstr "（请检查设备在当前网络是否可达，以及是否已配对）"
+
+#: src/remote/Device.cpp:206
+msgid "Device rejected pairing record: "
+msgstr "设备不认这条配对记录："
+
+#: src/remote/Device.cpp:207
+msgid " is not paired with this device, or its pairing was removed"
+msgstr " 在这台设备上没配过，或者已经在设备上被删掉了"
+
+#: src/remote/Device.cpp:209
+msgid "pair-verify failed: "
+msgstr "配对验证失败："
+
+#: src/remote/Device.cpp:214
+msgid "Request device tunnel port"
+msgstr "请求设备隧道端口"
+
+#: src/remote/Device.cpp:222
+msgid "TLS-PSK and CDTunnel handshake"
+msgstr "TLS-PSK + CDTunnel 握手"
+
+#: src/remote/Device.cpp:225
+msgid "Cannot connect to tunnel port "
+msgstr "连不上隧道端口 "
+
+#: src/remote/Device.cpp:240
+msgid ""
+"Pairing host identifier is not a valid UUID; cannot construct a stable peer "
+"identity"
+msgstr "配对记录 host identifier 不是有效 UUID，无法构造稳定的 peer 身份"
+
+#: src/remote/Device.cpp:260
+msgid "Session not established"
+msgstr "会话没有建立"
+
+#: src/remote/Device.cpp:272
+msgid " does not advertise feature "
+msgstr " 没有声明 feature "
+
+#: src/remote/DisplayInfo.cpp:115
+msgid "Update missing displays array: "
+msgstr "推送里没有 displays 数组："
+
+#: src/remote/DisplayInfo.cpp:152
+msgid "No recognized display entries"
+msgstr "没有可识别的显示条目"
+
+#: src/remote/DisplayInfo.cpp:178
+msgid " ended without an update"
+msgstr " 未发送更新便已结束"
+
+#: src/remote/PairingChannel.cpp:59
+msgid "JSON integer exceeds XPC int64 range"
+msgstr "JSON 整数超出 XPC int64 范围"
+
+#: src/remote/PairingChannel.cpp:75
+msgid " must contain base64 binary data; decode failed: "
+msgstr " 该是二进制的 base64，解不出来: "
+
+#: src/remote/PairingChannel.cpp:75
+msgid "Field "
+msgstr "字段 "
+
+#: src/remote/PairingChannel.cpp:96
+msgid "Unknown JSON value type"
+msgstr "未知的 JSON 值类型"
+
+#: src/remote/PairingChannel.cpp:151
+msgid "UUID field must contain 16 bytes"
+msgstr "UUID 字段不是 16 字节"
+
+#: src/remote/PairingChannel.cpp:177
+msgid "File transfer placeholder is not supported on the pairing channel"
+msgstr "配对通道不支持文件传输占位"
+
+#: src/remote/PairingChannel.cpp:180
+msgid "Unknown XPC type marker"
+msgstr "未知的 XPC 类型标记"
+
+#: src/remote/PairingChannel.cpp:219
+msgid " ms without device data)"
+msgstr " ms 内未收到设备数据）"
+
+#: src/remote/PairingChannel.cpp:219
+msgid "Pairing reply timed out ("
+msgstr "等配对回信超时（"
+
+#: src/remote/PairingChannel.cpp:224 src/remote/PairingChannel.cpp:228
+msgid "Pairing control channel disconnected"
+msgstr "配对控制通道断了"
+
+#: src/remote/PairingChannel.cpp:242
+msgid "Channel received unexpected type; expected "
+msgstr "收到的消息类型不匹配，预期为 "
+
+#: src/remote/PairingChannel.cpp:243
+msgid " (value field missing): "
+msgstr "（缺少 value 字段）："
+
+#: src/remote/Pasteboard.cpp:92
+msgid "SET failed: "
+msgstr "SET 失败: "
+
+#: src/remote/Pasteboard.cpp:97
+msgid "SET response is not SET_REPLY: "
+msgstr "SET 的回信不是 SET_REPLY: "
+
+#: src/remote/Pasteboard.cpp:110
+msgid "PULL failed: "
+msgstr "PULL 失败: "
+
+#: src/remote/Pasteboard.cpp:117
+msgid "Response has no plain-text representation: "
+msgstr "响应缺少纯文本表示形式："
+
+#: src/remote/RemoteXpc.cpp:111
+#, c-format
+msgid "    >> %zu bytes: "
+msgstr "    >> %zu 字节: "
+
+#: src/remote/RemoteXpc.cpp:124
+msgid "Failed to send HTTP/2 preface: "
+msgstr "发 HTTP/2 前置签名失败: "
+
+#: src/remote/RemoteXpc.cpp:132
+msgid "Failed to send SETTINGS: "
+msgstr "发 SETTINGS 失败: "
+
+#: src/remote/RemoteXpc.cpp:138
+msgid "Failed to send WINDOW_UPDATE: "
+msgstr "发 WINDOW_UPDATE 失败: "
+
+#: src/remote/RemoteXpc.cpp:146
+msgid "Failed to send primary channel HEADERS: "
+msgstr "发主通道 HEADERS 失败: "
+
+#: src/remote/RemoteXpc.cpp:152
+msgid "Failed to send first frame: "
+msgstr "发首帧失败: "
+
+#: src/remote/RemoteXpc.cpp:157
+msgid "Failed to send reply channel HEADERS: "
+msgstr "发回信通道 HEADERS 失败: "
+
+#: src/remote/RemoteXpc.cpp:163
+msgid "Failed to send terminating frame: "
+msgstr "发终止帧失败: "
+
+#: src/remote/RemoteXpc.cpp:168
+msgid "Failed to send INIT_HANDSHAKE frame: "
+msgstr "发 INIT_HANDSHAKE 帧失败: "
+
+#: src/remote/RemoteXpc.cpp:177
+msgid "Timed out waiting for device SETTINGS"
+msgstr "等待设备 SETTINGS 超时"
+
+#: src/remote/RemoteXpc.cpp:181
+msgid "Disconnected while waiting for device SETTINGS: "
+msgstr "等设备 SETTINGS 时断开: "
+
+#: src/remote/RemoteXpc.cpp:192
+msgid "Failed to send RemoteXPC identity: "
+msgstr "发 RemoteXPC 身份申报失败: "
+
+#: src/remote/RemoteXpc.cpp:197
+msgid "Failed to read peer_info: "
+msgstr "读 peer_info 失败: "
+
+#: src/remote/RemoteXpc.cpp:217 src/remote/RemoteXpc.cpp:482
+#: src/remote/RemoteXpc.cpp:636
+msgid "Connection terminated"
+msgstr "连接已终止"
+
+#: src/remote/RemoteXpc.cpp:244
+#, c-format
+msgid ""
+"    HTTP/2 parse failed: %s; buffered %zu bytes, stream offset %llu (total "
+"received %llu), first 64 bytes:\n"
+"      "
+msgstr ""
+"    HTTP/2 解析失败：%s；缓冲 %zu 字节，流内偏移 %llu（累计收到 %llu），前 "
+"64 字节：\n"
+"      "
+
+#: src/remote/RemoteXpc.cpp:298
+#, c-format
+msgid "    HTTP/2 input dump -> %s\n"
+msgstr "    HTTP/2 输入 dump -> %s\n"
+
+#: src/remote/RemoteXpc.cpp:358
+msgid "PING payload shorter than 8 bytes"
+msgstr "PING 载荷不足 8 字节"
+
+#: src/remote/RemoteXpc.cpp:374
+msgid "Device sent GOAWAY "
+msgstr "设备发来 GOAWAY "
+
+#: src/remote/RemoteXpc.cpp:387
+msgid "Primary channel reset: "
+msgstr "主通道被 RST："
+
+#: src/remote/RemoteXpc.cpp:409
+msgid "Device set END_STREAM on primary channel; connection ended"
+msgstr "设备在主通道上置了 END_STREAM，连接已经结束"
+
+#: src/remote/RemoteXpc.cpp:425
+msgid "Failed to replenish connection receive window: "
+msgstr "连接接收窗口补充失败："
+
+#: src/remote/RemoteXpc.cpp:434
+msgid "Failed to replenish stream receive window: "
+msgstr "流接收窗口补充失败："
+
+#: src/remote/RemoteXpc.cpp:454
+msgid "Peer did not replenish flow-control window; sent "
+msgstr "对端未补充流控窗口，已发送 "
+
+#: src/remote/RemoteXpc.cpp:459
+msgid "Disconnected while waiting for flow-control window: "
+msgstr "等流控窗口时断开: "
+
+#: src/remote/RemoteXpc.cpp:469
+msgid "Failed to send DATA: "
+msgstr "发 DATA 失败: "
+
+#: src/remote/RemoteXpc.cpp:488
+msgid "XPC encoding failed (depth or length limit exceeded)"
+msgstr "XPC 编码失败（深度或长度超限）"
+
+#: src/remote/RemoteXpc.cpp:530
+msgid "Failed to accept file stream: "
+msgstr "接受文件流失败: "
+
+#: src/remote/RemoteXpc.cpp:540
+msgid " has received "
+msgstr " 上已到 "
+
+#: src/remote/RemoteXpc.cpp:540
+msgid "File receive timed out: stream "
+msgstr "收文件超时：流 "
+
+#: src/remote/RemoteXpc.cpp:548
+msgid "Disconnected while receiving file: "
+msgstr "收文件时断开: "
+
+#: src/remote/RemoteXpc.cpp:574
+#, c-format
+msgid "    Receiving file: %llu bytes on stream %u\n"
+msgstr "    接收文件：%llu 字节，流 %u\n"
+
+#: src/remote/RemoteXpc.cpp:593
+msgid " contains malformed message: "
+msgstr " 上的消息畸形: "
+
+#: src/remote/RemoteXpc.cpp:593
+msgid "Stream "
+msgstr "流 "
+
+#: src/remote/RemoteXpc.cpp:600
+#, c-format
+msgid "    Stream %u message incomplete: %s\n"
+msgstr "    流 %u 的消息尚未完整：%s\n"
+
+#: src/remote/RemoteXpc.cpp:608
+#, c-format
+msgid "    => stream %u id=%llu %s\n"
+msgstr "    => 流%u id=%llu %s\n"
+
+#: src/remote/RemoteXpc.cpp:632
+msgid "Timed out waiting for device reply"
+msgstr "等设备回信超时"
+
+#: src/remote/RemoteXpc.cpp:645
+msgid "Disconnected while waiting for device reply: "
+msgstr "等设备回信时断开: "
+
+#: src/remote/Rsd.cpp:99
+#, c-format
+msgid ""
+"Invalid numeric component in SCRCTL_COREDEVICE_VERSION: %s (using 629.3)\n"
+msgstr "SCRCTL_COREDEVICE_VERSION 包含无效数字分段：%s（使用 629.3）\n"
+
+#: src/remote/Rsd.cpp:112
+#, c-format
+msgid "  coreDeviceVersion overridden by environment: %s (default: 629.3)\n"
+msgstr "  coreDeviceVersion 已由环境变量覆盖为 %s（默认 629.3）\n"
+
+#: src/remote/Rsd.cpp:168
+msgid " port "
+msgstr " 端口 "
+
+#: src/remote/Rsd.cpp:168 src/transport/Usbmux.cpp:261
+msgid "Connect to "
+msgstr "连 "
+
+#: src/remote/Rsd.cpp:177
+msgid " HTTP/2 handshake failed: "
+msgstr " 的 HTTP/2 握手失败: "
+
+#: src/remote/Rsd.cpp:189 src/remote/Rsd.cpp:197 src/remote/Rsd.cpp:205
+#: src/remote/Rsd.cpp:213
+msgid "Service connection is not RemoteXPC"
+msgstr "这条服务连接不是 RemoteXPC 服务"
+
+#: src/remote/Rsd.cpp:228
+msgid " failed"
+msgstr " 失败"
+
+#: src/remote/Rsd.cpp:232
+msgid "(code "
+msgstr "（code "
+
+#: src/remote/Rsd.cpp:245
+msgid "; original error: "
+msgstr "；error 原文: "
+
+#: src/remote/Rsd.cpp:270
+msgid " failed; response missing CoreDevice.output: "
+msgstr " 失败，回信里没有 CoreDevice.output: "
+
+#: src/remote/Rsd.cpp:282
+msgid "Streaming feature requires an XPC service connection"
+msgstr "这条服务连接不是 XPC 通道，流式 feature 走不了"
+
+#: src/remote/Rsd.cpp:297
+msgid "Service connection is not an XPC channel"
+msgstr "这条服务连接不是 XPC 通道"
+
+#: src/remote/Rsd.cpp:316
+msgid " response missing both sideChannelStatus and error: "
+msgstr " 的回信里既没有 sideChannelStatus 也没有 error: "
+
+#: src/remote/Rsd.cpp:322
+msgid " failed mid-stream: "
+msgstr " 中途失败："
+
+#: src/remote/Rsd.cpp:378
+msgid "Connect to RSD port "
+msgstr "连 RSD 端口 "
+
+#: src/remote/Rsd.cpp:383
+msgid "RSD control channel handshake failed: "
+msgstr "RSD 控制通道握手失败: "
+
+#: src/remote/Rsd.cpp:393
+msgid "peer_info missing Services"
+msgstr "peer_info 里没有 Services"
+
+#: src/remote/Rsd.cpp:470
+msgid "."
+msgstr "。"
+
+#: src/remote/Rsd.cpp:470
+msgid "Device directory missing service "
+msgstr "设备目录里没有服务 "
+
+#: src/remote/Rsd.cpp:472
+msgid "Directory is empty; check tunnel setup and DDI mounting."
+msgstr "目录为空；请检查隧道建立及 DDI 挂载。"
+
+#: src/remote/Rsd.cpp:481
+msgid " services, including "
+msgstr " 条服务，其中 "
+
+#: src/remote/Rsd.cpp:481
+msgid "Device directory contains "
+msgstr "设备目录包含 "
+
+#: src/remote/Rsd.cpp:482
+msgid " com.apple.coredevice.* services:\n"
+msgstr " 条为 com.apple.coredevice.*：\n"
+
+#: src/remote/Rsd.cpp:485
+msgid ""
+"  (none found; check DDI mounting through Xcode and the CoreDevice services "
+"available on this device)\n"
+msgstr ""
+"  （未找到相关服务；请检查 Xcode 的 DDI 挂载及此设备提供的 CoreDevice 服"
+"务）\n"
+
+#: src/remote/Rsd.cpp:492
+msgid ""
+"Include this diagnostic when reporting the issue. For the full directory and "
+"feature lists, run feature_probe --all to print all "
+msgstr ""
+"报告问题时请附上这段诊断。完整目录及 feature 列表可通过 feature_probe --all "
+"打印，共 "
+
+#: src/remote/Rsd.cpp:494
+msgid " services.\n"
+msgstr " 条。\n"
+
+#: src/remote/Rsd.cpp:506
+msgid ""
+" (device rejected the system version: live media worked on tested iOS 27 "
+"devices and was rejected on tested iOS 18 devices. Screenshot fallback and "
+"button input may still be available; see docs/coredevice.md section 23)"
+msgstr ""
+"（设备拒绝此系统版本：已测试 iOS 27 设备支持实时媒体，已测试 iOS 18 设备拒"
+"绝；截图回退和按键输入可能仍可用，见 docs/coredevice.md §23）"
+
+#: src/rt/RtpHevc.cpp:85
+msgid "Not an RTP packet"
+msgstr "不是 RTP 包"
+
+#: src/transport/Lockdown.cpp:21
+msgid "Failed to write TLS header"
+msgstr "TLS 写头失败"
+
+#: src/transport/Lockdown.cpp:25
+msgid "Failed to write TLS body"
+msgstr "TLS 写体失败"
+
+#: src/transport/Lockdown.cpp:36
+msgid "Failed to read TLS header"
+msgstr "TLS 读头失败"
+
+#: src/transport/Lockdown.cpp:44 src/transport/Usbmux.cpp:227
+msgid "Invalid lockdown frame length: "
+msgstr "lockdown 帧长度异常: "
+
+#: src/transport/Lockdown.cpp:54
+msgid "Failed to read TLS body"
+msgstr "TLS 读体失败"
+
+#: src/transport/Lockdown.cpp:84
+msgid "lockdown response is not a valid plist"
+msgstr "lockdown 回复不是合法 plist"
+
+#: src/transport/Lockdown.cpp:105
+msgid "Cannot parse pairing record"
+msgstr "配对记录无法解析"
+
+#: src/transport/Lockdown.cpp:123
+msgid "Pairing record missing required fields"
+msgstr "配对记录缺少必要字段"
+
+#: src/transport/Lockdown.cpp:146
+msgid "StartSession rejected: "
+msgstr "StartSession 被拒: "
+
+#: src/transport/Lockdown.cpp:170
+msgid ") rejected: "
+msgstr ") 被拒: "
+
+#: src/transport/Lockdown.cpp:175
+msgid "StartService response missing Port"
+msgstr "StartService 回复里没有 Port"
+
+#: src/transport/TcpConnect.cpp:28
+msgid "Failed to resolve address "
+msgstr "解析地址 "
+
+#: src/transport/TcpConnect.cpp:28
+msgid "no results"
+msgstr "没有结果"
+
+#: src/transport/TcpConnect.cpp:49
+msgid "Failed to enable nonblocking mode: "
+msgstr "设置非阻塞失败："
+
+#: src/transport/TcpConnect.cpp:73
+msgid "Connection timed out"
+msgstr "连接超时"
+
+#: src/transport/TcpConnect.cpp:74
+msgid "Failed to wait for connection: "
+msgstr "等待连接失败："
+
+#: src/transport/TcpConnect.cpp:86
+msgid "Failed to restore blocking mode: "
+msgstr "恢复阻塞模式失败："
+
+#: src/transport/TcpConnect.cpp:91
+msgid "Cannot connect to "
+msgstr "连不上 "
+
+#: src/transport/TlsChannel.cpp:32 src/transport/TlsChannel.cpp:46
+msgid "BIO_new_mem_buf failed"
+msgstr "BIO_new_mem_buf 失败"
+
+#: src/transport/TlsChannel.cpp:38
+msgid "Failed to parse certificate PEM"
+msgstr "证书 PEM 解析失败"
+
+#: src/transport/TlsChannel.cpp:52
+msgid "Failed to parse private key PEM"
+msgstr "私钥 PEM 解析失败"
+
+#: src/transport/TlsChannel.cpp:167 src/transport/TlsChannel.cpp:243
+msgid "SSL_CTX_new failed"
+msgstr "SSL_CTX_new 失败"
+
+#: src/transport/TlsChannel.cpp:180
+msgid "Failed to add root certificate"
+msgstr "加入根证书失败"
+
+#: src/transport/TlsChannel.cpp:204
+msgid "Failed to load client certificate"
+msgstr "装载客户端证书失败"
+
+#: src/transport/TlsChannel.cpp:207
+msgid "Failed to load client private key"
+msgstr "装载客户端私钥失败"
+
+#: src/transport/TlsChannel.cpp:210
+msgid "Client certificate does not match private key"
+msgstr "客户端证书与私钥不匹配"
+
+#: src/transport/TlsChannel.cpp:215 src/transport/TlsChannel.cpp:260
+msgid "SSL_new failed"
+msgstr "SSL_new 失败"
+
+#: src/transport/TlsChannel.cpp:220 src/transport/TlsChannel.cpp:266
+msgid "SSL_set_fd failed"
+msgstr "SSL_set_fd 失败"
+
+#: src/transport/TlsChannel.cpp:226
+msgid "TLS handshake failed, ssl_err="
+msgstr "TLS 握手失败 ssl_err="
+
+#: src/transport/TlsChannel.cpp:237
+msgid "PSK is empty"
+msgstr "PSK 为空，无法握手"
+
+#: src/transport/TlsChannel.cpp:250
+msgid ""
+"TLS backend has no PSK cipher suite; use an OpenSSL build with PSK support"
+msgstr "TLS 后端缺少 PSK 密码套件；请使用支持 PSK 的 OpenSSL 构建"
+
+#: src/transport/TlsChannel.cpp:263
+msgid "Failed to attach PSK to TLS channel"
+msgstr "给 TLS 通道挂 PSK 失败"
+
+#: src/transport/TlsChannel.cpp:274
+msgid "PSK handshake failed, ssl_err="
+msgstr "PSK 握手失败 ssl_err="
+
+#: src/transport/TlsChannel.cpp:276
+msgid ""
+" (device tunnel listener rejected the PSK; check pair-verify key derivation)"
+msgstr "（设备隧道监听器拒绝 PSK；请检查 pair-verify 密钥派生）"
+
+#: src/transport/Tunnel.cpp:34
+msgid "Tunnel TLS write failed"
+msgstr "隧道 TLS 写失败"
+
+#: src/transport/Tunnel.cpp:48
+msgid "Tunnel TLS read failed"
+msgstr "隧道 TLS 读失败"
+
+#: src/transport/Tunnel.cpp:112
+msgid "Tunnel handshake response has incorrect magic"
+msgstr "隧道握手回复的 magic 不对"
+
+#: src/transport/Tunnel.cpp:124
+msgid "Tunnel handshake response is not valid JSON"
+msgstr "隧道握手回复不是合法 JSON"
+
+#: src/transport/Tunnel.cpp:140
+msgid "Tunnel handshake response missing required fields"
+msgstr "隧道握手回复缺少必要字段"
+
+#: src/transport/Tunnel.cpp:158 src/transport/Tunnel.cpp:167
+msgid "Tunnel not connected"
+msgstr "隧道未连接"
+
+#: src/transport/Tunnel.cpp:175
+msgid "Tunnel packet is not IPv6: version nibble="
+msgstr "隧道内不是 IPv6 包: version nibble="
+
+#: src/transport/Usbmux.cpp:135
+msgid "send failed: "
+msgstr "send 失败: "
+
+#: src/transport/Usbmux.cpp:139
+msgid "Peer closed write direction"
+msgstr "对端关闭了写方向"
+
+#: src/transport/Usbmux.cpp:161
+msgid "Read timed out (no bytes before deadline)"
+msgstr "读超时（对端在时限内没给字节）"
+
+#: src/transport/Usbmux.cpp:164
+msgid "recv failed: "
+msgstr "recv 失败: "
+
+#: src/transport/Usbmux.cpp:168
+msgid "Peer closed (received only "
+msgstr "对端关闭（只读到 "
+
+#: src/transport/Usbmux.cpp:181
+msgid "Failed to set read timeout: "
+msgstr "设读超时失败: "
+
+#: src/transport/Usbmux.cpp:194
+msgid "Socket closed"
+msgstr "socket 已关闭"
+
+#: src/transport/Usbmux.cpp:208
+msgid "Wait timed out"
+msgstr "等待超时"
+
+#: src/transport/Usbmux.cpp:213
+msgid "poll failed: "
+msgstr "poll 失败: "
+
+#: src/transport/Usbmux.cpp:254
+msgid "socket failed: "
+msgstr "socket 失败: "
+
+#: src/transport/Usbmux.cpp:309
+msgid "Invalid mux frame length: "
+msgstr "mux 帧长度异常: "
+
+#: src/transport/Usbmux.cpp:322
+msgid "mux response is not a valid plist"
+msgstr "mux 回复不是合法 plist"
+
+#: src/transport/Usbmux.cpp:336
+msgid "ListDevices response missing DeviceList"
+msgstr "ListDevices 回复里没有 DeviceList"
+
+#: src/transport/Usbmux.cpp:358
+msgid "Connect failed, usbmuxd returned Number="
+msgstr "Connect 失败，usbmuxd 返回 Number="
+
+#: src/transport/Usbmux.cpp:379
+msgid "ReadPairRecord response missing PairRecordData (response "
+msgstr "ReadPairRecord 没有返回 PairRecordData（回复 "
+
+#: src/transport/Usbmux.cpp:380
+msgid "); device may not trust this computer yet"
+msgstr "）；设备可能尚未信任本机"
+
+#: src/util/Base64.cpp:13 src/util/Base64.cpp:51
+msgid "Base64 input too large"
+msgstr "base64 输入过大"
+
+#: src/util/Base64.cpp:45
+msgid "Invalid base64 character or padding"
+msgstr "base64 字符或 padding 非法"
+
+#: src/util/Base64.cpp:59
+msgid "Base64 decode failed"
+msgstr "base64 解码失败"
+
+#: src/wifi/Crypto.cpp:45
+msgid "Failed to create private key (invalid length or unsupported platform)"
+msgstr "构造私钥失败（长度或平台不支持）"
+
+#: src/wifi/Crypto.cpp:45
+msgid "Failed to create public key (invalid length or unsupported platform)"
+msgstr "构造公钥失败（长度或平台不支持）"
+
+#: src/wifi/Crypto.cpp:59
+msgid "ChaCha20-Poly1305 requires a 32-byte key and 12-byte nonce"
+msgstr "ChaCha20-Poly1305 要 32 字节密钥 + 12 字节 nonce"
+
+#: src/wifi/Crypto.cpp:63
+msgid "Ciphertext shorter than Poly1305 tag"
+msgstr "密文比 Poly1305 标签还短"
+
+#: src/wifi/Crypto.cpp:68
+msgid "Failed to allocate EVP_CIPHER_CTX"
+msgstr "分配 EVP_CIPHER_CTX 失败"
+
+#: src/wifi/Crypto.cpp:76
+msgid "ChaCha20-Poly1305 initialization failed; check OpenSSL cipher support"
+msgstr "ChaCha20-Poly1305 初始化失败；请检查 OpenSSL 算法支持"
+
+#: src/wifi/Crypto.cpp:85
+msgid "ChaCha20-Poly1305 update failed"
+msgstr "ChaCha20-Poly1305 更新失败"
+
+#: src/wifi/Crypto.cpp:92
+msgid "Failed to set Poly1305 tag"
+msgstr "设 Poly1305 标签失败"
+
+#: src/wifi/Crypto.cpp:96
+msgid ""
+"Poly1305 authentication failed; check key derivation and frame boundaries"
+msgstr "Poly1305 认证失败；请检查密钥派生和帧边界"
+
+#: src/wifi/Crypto.cpp:103
+msgid "ChaCha20-Poly1305 finalization failed"
+msgstr "ChaCha20-Poly1305 收尾失败"
+
+#: src/wifi/Crypto.cpp:109
+msgid "Failed to get Poly1305 tag"
+msgstr "取 Poly1305 标签失败"
+
+#: src/wifi/Crypto.cpp:121
+msgid "Failed to initialize X25519 key generation"
+msgstr "初始化 X25519 密钥生成失败"
+
+#: src/wifi/Crypto.cpp:126
+msgid "Failed to generate X25519 key"
+msgstr "生成 X25519 密钥失败"
+
+#: src/wifi/Crypto.cpp:134
+msgid "Failed to get X25519 public key"
+msgstr "取 X25519 公钥失败"
+
+#: src/wifi/Crypto.cpp:140
+msgid "Failed to get X25519 private key"
+msgstr "取 X25519 私钥失败"
+
+#: src/wifi/Crypto.cpp:149
+msgid "Failed to obtain cryptographic random bytes"
+msgstr "无法取得密码学随机字节"
+
+#: src/wifi/Crypto.cpp:169
+msgid "Failed to get Ed25519 public key"
+msgstr "取 Ed25519 公钥失败"
+
+#: src/wifi/Crypto.cpp:177
+msgid "Peer X25519 public key must be 32 bytes"
+msgstr "对端 X25519 公钥长度不是 32"
+
+#: src/wifi/Crypto.cpp:195 src/wifi/Crypto.cpp:200
+msgid "X25519 shared secret computation failed"
+msgstr "X25519 共享密钥计算失败"
+
+#: src/wifi/Crypto.cpp:206
+msgid "X25519 shared secret is all zero (low-order peer public key)"
+msgstr "X25519 共享密钥全零（对端公钥是低阶点）"
+
+#: src/wifi/Crypto.cpp:214
+msgid "Ed25519 private key seed must be 32 bytes"
+msgstr "Ed25519 私钥种子长度不是 32"
+
+#: src/wifi/Crypto.cpp:223
+msgid "Failed to initialize Ed25519 signing"
+msgstr "初始化 Ed25519 签名失败"
+
+#: src/wifi/Crypto.cpp:228
+msgid "Failed to get Ed25519 signature length"
+msgstr "取 Ed25519 签名长度失败"
+
+#: src/wifi/Crypto.cpp:233
+msgid "Ed25519 signing failed"
+msgstr "Ed25519 签名失败"
+
 #: src/wifi/Crypto.cpp:248
 msgid "HKDF-SHA512 input or output exceeds supported limits"
 msgstr "HKDF-SHA512 输入或输出超过支持的限制"
@@ -2863,10 +2484,389 @@ msgstr "HKDF-SHA512 初始化失败"
 msgid "HKDF-SHA512 derivation failed"
 msgstr "HKDF-SHA512 密钥派生失败"
 
-#: src/remote/RemoteXpc.cpp:425
-msgid "Failed to replenish connection receive window: "
-msgstr "连接接收窗口补充失败："
+#: src/wifi/Opack.cpp:90
+msgid "OPACK encoder does not support negative integers"
+msgstr "OPACK 编码器不支持负整数"
 
-#: src/remote/RemoteXpc.cpp:434
-msgid "Failed to replenish stream receive window: "
-msgstr "流接收窗口补充失败："
+#: src/wifi/Opack.cpp:151
+msgid "OPACK encode: unknown value type"
+msgstr "OPACK 编码：不认识的值类型"
+
+#: src/wifi/Opack.cpp:182
+msgid "OPACK decode: unknown length form"
+msgstr "OPACK 解码：未知长度形式"
+
+#: src/wifi/Opack.cpp:186
+msgid "OPACK decode: payload exceeds buffer"
+msgstr "OPACK 解码：载荷越过缓冲尾"
+
+#: src/wifi/Opack.cpp:196
+msgid "OPACK decode: nesting too deep"
+msgstr "OPACK 解码：嵌套过深"
+
+#: src/wifi/Opack.cpp:201
+msgid "OPACK decode: missing type byte"
+msgstr "OPACK 解码：缺少类型字节"
+
+#: src/wifi/Opack.cpp:205
+msgid "OPACK decode: terminator in value position"
+msgstr "OPACK 解码：值位置出现终止符"
+
+#: src/wifi/Opack.cpp:258
+msgid "OPACK decode: terminator in fixed-length array"
+msgstr "OPACK 解码：定长数组中出现终止符"
+
+#: src/wifi/Opack.cpp:280
+msgid "OPACK decode: terminator in fixed-length dictionary"
+msgstr "OPACK 解码：定长字典中出现终止符"
+
+#: src/wifi/Opack.cpp:295
+msgid "OPACK decode: unknown type byte 0x"
+msgstr "OPACK 解码：不认识的类型字节 0x"
+
+#: src/wifi/Opack.cpp:327
+msgid " trailing bytes"
+msgstr " 字节"
+
+#: src/wifi/Opack.cpp:327
+msgid "OPACK decode: "
+msgstr "OPACK 解码后剩余 "
+
+#: src/wifi/PairRecord.cpp:37
+msgid "Hex length must be even"
+msgstr "hex 长度不是偶数"
+
+#: src/wifi/PairRecord.cpp:57
+msgid "Invalid hex character"
+msgstr "hex 里有非法字符"
+
+#: src/wifi/PairRecord.cpp:92
+msgid "Cannot open temporary file "
+msgstr "无法打开临时文件 "
+
+#: src/wifi/PairRecord.cpp:97
+msgid "Failed to set record file permissions"
+msgstr "设置记录文件权限失败"
+
+#: src/wifi/PairRecord.cpp:105
+msgid "Incomplete record file write"
+msgstr "记录文件写入不完整"
+
+#: src/wifi/PairRecord.cpp:110
+msgid "Rename failed"
+msgstr "重命名失败"
+
+#: src/wifi/PairRecord.cpp:120
+msgid "Cannot open "
+msgstr "无法打开 "
+
+#: src/wifi/PairRecord.cpp:127
+msgid "Pairing record file too large"
+msgstr "配对记录文件过大"
+
+#: src/wifi/PairRecord.cpp:172
+msgid "Invalid scrctl pairing record header"
+msgstr "scrctl 配对记录头无效"
+
+#: src/wifi/PairRecord.cpp:179
+msgid "Record line is not key=value"
+msgstr "记录里有一行不是 key=value"
+
+#: src/wifi/PairRecord.cpp:190
+msgid " requires "
+msgstr " 要 "
+
+#: src/wifi/PairRecord.cpp:190
+msgid "Incorrect field length: "
+msgstr "字段长度不对："
+
+#: src/wifi/PairRecord.cpp:191
+msgid " bytes; got "
+msgstr " 字节，实际 "
+
+#: src/wifi/PairRecord.cpp:222
+msgid "Record missing host_private_key"
+msgstr "记录里没有 host_private_key"
+
+#: src/wifi/PairRecord.cpp:238
+msgid "Failed to create directory "
+msgstr "建目录失败 "
+
+#: src/wifi/PairRecord.cpp:285
+msgid "Reading directory "
+msgstr "读目录 "
+
+#: src/wifi/PairSetup.cpp:45
+msgid "MD5 unavailable; check OpenSSL algorithm providers"
+msgstr "MD5 不可用；请检查 OpenSSL 算法 provider"
+
+#: src/wifi/PairSetup.cpp:69
+msgid "Handshake response missing response._1.handshake._0"
+msgstr "handshake 回信里没有 response._1.handshake._0"
+
+#: src/wifi/PairSetup.cpp:81
+msgid " TLV decode incomplete: "
+msgstr " 的 TLV 没解干净: "
+
+#: src/wifi/PairSetup.cpp:85
+msgid " returned error code 0x"
+msgstr " 带错误码 0x"
+
+#: src/wifi/PairSetup.cpp:103
+msgid ""
+"Control channel does not allow pair-setup "
+"(deviceOptions.allowsPairSetup=false). Tested iOS 27 devices require the "
+"RemoteXPC entry point (wifi_probe --pair-setup-xpc)"
+msgstr ""
+"此控制通道不允许 pair-setup（deviceOptions.allowsPairSetup=false）。已测试 "
+"iOS 27 设备需使用 RemoteXPC 入口（wifi_probe --pair-setup-xpc）"
+
+#: src/wifi/PairSetup.cpp:147
+msgid "Host identifier missing; provide one if hostname lookup is unavailable"
+msgstr "缺少 host identifier；主机名查询不可用时请显式提供"
+
+#: src/wifi/PairSetup.cpp:217
+msgid "Verify M2 missing 32-byte public key"
+msgstr "verify 的 M2 里没有 32 字节公钥"
+
+#: src/wifi/PairSetup.cpp:257
+msgid "verify-M4 TLV decode incomplete: "
+msgstr "verify-M4 的 TLV 没解干净: "
+
+#: src/wifi/PairSetup.cpp:264
+msgid ""
+"Device accepted this identifier; already paired, pair-setup is unnecessary"
+msgstr "设备已接受此 identifier，已配对，无需 pair-setup"
+
+#: src/wifi/PairSetup.cpp:269
+msgid "Verify completed without accepting this key; sending upgrade M1"
+msgstr "验证完成但未接受此密钥，发送 upgrade M1"
+
+#: src/wifi/PairSetup.cpp:287
+msgid "Handshake (attemptPairVerify=false) completed; sending M1"
+msgstr "handshake（attemptPairVerify=false）完成，发送 M1"
+
+#: src/wifi/PairSetup.cpp:305
+msgid "M2 missing PUBLIC_KEY or SALT"
+msgstr "M2 里缺 PUBLIC_KEY 或 SALT"
+
+#: src/wifi/PairSetup.cpp:330
+msgid "M4 missing PROOF"
+msgstr "M4 里没有 PROOF"
+
+#: src/wifi/PairSetup.cpp:336
+msgid "Device SRP proof mismatch; pairing aborted. Check PIN and peer identity"
+msgstr "设备 SRP 证明不匹配，已中止配对；请检查 PIN 和对端身份"
+
+#: src/wifi/PairSetup.cpp:340
+msgid "SRP mutual verification passed; registering host key on device (M5)"
+msgstr "SRP 双向验证通过，正在注册主机密钥（M5）"
+
+#: src/wifi/PairSetup.cpp:429
+msgid "Cannot decrypt M6: "
+msgstr "无法解密 M6："
+
+#: src/wifi/PairSetup.cpp:482
+msgid "); pairing itself succeeded"
+msgstr "），配对本身已成功"
+
+#: src/wifi/PairSetup.cpp:482
+msgid "createRemoteUnlockKey failed ("
+msgstr "createRemoteUnlockKey 失败（"
+
+#: src/wifi/PairVerify.cpp:12
+msgid "Pairing record incomplete; cannot sign"
+msgstr "配对记录不完整，无法签名"
+
+#: src/wifi/PairVerify.cpp:66 src/wifi/PairVerify.cpp:128
+msgid ""
+"Device does not recognize this pairing record (not paired or pairing removed)"
+msgstr "设备不认识这条配对记录（没配过，或者在设备上被删了）"
+
+#: src/wifi/PairVerify.cpp:73
+msgid "PV-Msg02 missing 32-byte public key"
+msgstr "PV-Msg02 里没有 32 字节的公钥"
+
+#: src/wifi/RemotePairing.cpp:35
+msgid "createListener response missing port (actual fields:"
+msgstr "createListener 回信里没有 port（实际字段:"
+
+#: src/wifi/RemotePairing.cpp:40
+msgid "createListener returned an invalid port: "
+msgstr "createListener 返回无效端口："
+
+#: src/wifi/Rppairing.cpp:27
+msgid "Frame exceeds u16 length field"
+msgstr "帧太长，u16 长度字段放不下"
+
+#: src/wifi/Rppairing.cpp:45
+msgid "Frame header is not RPPairing; check port and stream alignment"
+msgstr "帧头不是 RPPairing；请检查端口和流对齐"
+
+#: src/wifi/Rppairing.cpp:85
+msgid "Envelope missing message field"
+msgstr "信封里没有 message 字段"
+
+#: src/wifi/Rppairing.cpp:91
+msgid "plain missing _0"
+msgstr "plain 里没有 _0"
+
+#: src/wifi/Rppairing.cpp:98
+msgid "Envelope is neither plain nor streamEncrypted"
+msgstr "信封既不是 plain 也不是 streamEncrypted"
+
+#: src/wifi/Rppairing.cpp:103
+msgid "streamEncrypted._0 is not a string"
+msgstr "streamEncrypted 的 _0 不是字符串"
+
+#: src/wifi/Rppairing.cpp:107
+msgid "Encrypted frame received before main key and nonce were ready"
+msgstr "主密钥和 nonce 尚未准备好时收到加密帧"
+
+#: src/wifi/Rppairing.cpp:126
+msgid "Decrypted message is not a response"
+msgstr "解密出来的不是 response"
+
+#: src/wifi/Rppairing.cpp:131
+msgid "response missing _1"
+msgstr "response 里没有 _1"
+
+#: src/wifi/Rppairing.cpp:140 src/wifi/Rppairing.cpp:199
+msgid "(no description)"
+msgstr "(没有描述)"
+
+#: src/wifi/Rppairing.cpp:140 src/wifi/Rppairing.cpp:199
+msgid "Device rejected request: "
+msgstr "设备拒绝: "
+
+#: src/wifi/Rppairing.cpp:187
+msgid "Expected event during pairing"
+msgstr "配对过程中设备回的不是 event"
+
+#: src/wifi/Rppairing.cpp:192
+msgid "event missing _0"
+msgstr "event 里没有 _0"
+
+#: src/wifi/Rppairing.cpp:204
+msgid "Device requested user consent twice consecutively"
+msgstr "设备连续两次请求用户确认"
+
+#: src/wifi/Rppairing.cpp:209
+msgid "Device is waiting for Trust confirmation on its screen"
+msgstr "设备正在等待屏幕上的信任确认"
+
+#: src/wifi/Rppairing.cpp:217
+msgid "event missing pairingData._0.data; actual fields: "
+msgstr "event 里没有 pairingData._0.data，实际字段："
+
+#: src/wifi/Rppairing.cpp:230
+msgid "Main key not installed; cannot send encrypted frame"
+msgstr "尚未安装主密钥，无法发送加密帧"
+
+#: src/wifi/Rppairing.h:30
+msgid "This stream does not support waiting for readability"
+msgstr "这条流不支持等可读"
+
+#: src/wifi/Srp.cpp:128
+msgid "SRP B is a multiple of N; rejected"
+msgstr "SRP 的 B 是 N 的倍数，拒收"
+
+#: src/wifi/Tlv.cpp:30
+msgid "TLV header truncated"
+msgstr "TLV 头被截断"
+
+#: src/wifi/Tlv.cpp:39
+msgid "TLV length exceeds buffer"
+msgstr "TLV 长度超出缓冲区"
+
+#: src/xpc/XpcValue.cpp:187
+msgid "u32 read out of bounds"
+msgstr "读 u32 越界"
+
+#: src/xpc/XpcValue.cpp:197
+msgid "u64 read out of bounds"
+msgstr "读 u64 越界"
+
+#: src/xpc/XpcValue.cpp:209
+msgid "Fixed-length byte read out of bounds"
+msgstr "读定长字节越界"
+
+#: src/xpc/XpcValue.cpp:232
+msgid "Key has no NUL terminator in this segment"
+msgstr "键在本段内没有 NUL 终结符"
+
+#: src/xpc/XpcValue.cpp:245
+msgid "Length prefix exceeds remaining bytes"
+msgstr "长度前缀超出了剩余字节"
+
+#: src/xpc/XpcValue.cpp:267
+msgid "XPC nesting too deep"
+msgstr "XPC 嵌套过深"
+
+#: src/xpc/XpcValue.cpp:327
+msgid "Invalid string length"
+msgstr "字符串长度不合理"
+
+#: src/xpc/XpcValue.cpp:348
+msgid " bytes, limit "
+msgstr " 字节，上限 "
+
+#: src/xpc/XpcValue.cpp:348
+msgid "Invalid data length: declared "
+msgstr "数据段长度不合理: 声明 "
+
+#: src/xpc/XpcValue.cpp:393
+msgid "Container length cannot hold count field"
+msgstr "容器长度前缀连 count 字段都装不下"
+
+#: src/xpc/XpcValue.cpp:412
+msgid "Entry count does not match container size"
+msgstr "条目数与容器大小不符"
+
+#: src/xpc/XpcValue.cpp:431
+msgid "Container entry decode failed"
+msgstr "容器条目解码失败"
+
+#: src/xpc/XpcValue.cpp:438
+msgid "Unsupported XPC type marker 0x"
+msgstr "不支持的 XPC 类型标记 0x"
+
+#: src/xpc/XpcValue.cpp:590
+msgid "Buffer too large"
+msgstr "缓冲区过大"
+
+#: src/xpc/XpcValue.cpp:596
+msgid "Decode failed"
+msgstr "解码失败"
+
+#: src/xpc/XpcValue.cpp:630
+msgid "Envelope shorter than 24 bytes"
+msgstr "信封不足 24 字节"
+
+#: src/xpc/XpcValue.cpp:636
+msgid "Wrapper magic mismatch: 0x"
+msgstr "wrapper magic 不符：0x"
+
+#: src/xpc/XpcValue.cpp:644
+msgid "Invalid message length: "
+msgstr "消息长度不合理："
+
+#: src/xpc/XpcValue.cpp:663
+msgid "Payload magic mismatch: 0x"
+msgstr "payload magic 不符：0x"
+
+#: src/xpc/XpcValue.cpp:668
+msgid "Cannot read protocol version"
+msgstr "读不到协议版本"
+
+#: src/xpc/XpcValue.cpp:672
+msgid "Unsupported XPC protocol version: 0x"
+msgstr "XPC 协议版本不支持：0x"
+
+#: src/xpc/XpcValue.cpp:677
+msgid "Payload decode failed"
+msgstr "载荷解码失败"
+
+#: src/xpc/XpcValue.cpp:718
+msgid ", received "
+msgstr ", 已到"
