@@ -269,3 +269,22 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
 - 六个输入或状态判据修复前失败，修复后通过；OpenSSL 3 的临时上下文验证摘要不可用时明确失败并可在恢复后重试。
 - 原 A、K、M1、M2 参考向量逐字节一致。wifi_test 151 条判据、ASan 通过；完整离线测试 24/24。
 - 这次没有重新建立真机配对；此前真机 Wi-Fi 使用已有配对记录的 PairVerify，不能作为新 SRP pair-setup 路径的验证证据。
+
+
+## 第二十一轮：Windows ARM64 适配和回归
+
+- 将本机 Socket 从 Usbmux 分离，集中封装 Winsock / POSIX 的句柄、错误、等待和关闭差异；
+  隧道内的 TCP / UDP 继续使用 lwIP。Windows usbmux 连接 AMDS 的本地 TCP 服务。
+- 阻塞接收取消补充 CancelIoEx，保留句柄所有权到线程退出；shutdown 单独调用有超时失败样本，
+  修复后 Windows 传输 / PSK TLS 测试连续 10 次通过。OpenSSL int 句柄接口先检查表示范围。
+- Windows 配对文件从创建时设置当前用户 DACL，并采用随机临时文件和同目录替换；
+  新建叶子目录设置私有权限，离线检查文件覆盖、DACL 保护和当前用户 SID。
+- 处理 SDL 普通 main、Windows CRT 信号处理器调用后的重新注册、UTF-8 测试输出及
+  Windows 宏与 lwIP 接口名称冲突。
+- Windows ARM64 完整构建和离线回归 24/24，macOS 同一批修改回归 24/24。
+- 真机 Wi-Fi 无窗口 20 秒输出 315 帧；独立安装产物 SDL 窗口 25 秒输出 229 帧、
+  降级期间 18 张截图且无失败，均恢复视频并正常退出。使用已有 PairVerify 记录。
+- 新增 Windows ARM64 CI，收集 DLL、翻译、版本和依赖许可记录；移动安装目录并清空
+  工具链 PATH 的启动检查通过。配置尚未推送，无远端 CI 通过结论。
+- 原生 USB 因 VM 缺 AMDS 未验证；音频、输入控制、新 SRP 配对、真实断网和长期运行仍待验证。
+  详细环境及产物依赖说明见 [Windows 记录](WINDOWS.md)。

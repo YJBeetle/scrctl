@@ -18,7 +18,7 @@ Annex-B HEVC，不包含音轨。
 | --- | --- |
 | macOS | 有真机连接、镜像、输入和音频记录；本轮验证结果见重构记录 |
 | Linux | CI 包含构建与离线测试，尚缺 Linux 真机端到端验证；当前无音频后端 |
-| Windows | 尚未支持；需要替换 POSIX 传输并建立平台验证 |
+| Windows | ARM64 构建与离线测试、Wi-Fi 镜像及截图切换已验证；原生 USB 和音频待验证 |
 
 音频当前使用 macOS AudioToolbox 解码设备的 AAC-ELD 流。已测试的 FFmpeg 原生
 AAC 后端未能正确解码该流，不能据此推定其他库也不支持；
@@ -29,7 +29,8 @@ AAC 后端未能正确解码该流，不能据此推定其他库也不支持；
 [协议调研记录](docs/coredevice.md) 保留原始观察与实验过程；
 [重构记录](docs/REFACTOR.md) 说明当前实现及验证边界；
 [路线图](docs/ROADMAP.md) 列出剩余工作。
-GitHub Actions 的 macOS、Ubuntu 和 ASan / UBSan 作业执行离线测试，真机测试单独进行。
+GitHub Actions 配置了 macOS、Ubuntu、Windows ARM64 和 ASan / UBSan 离线作业，真机测试单独进行。
+Windows ARM64 作业另保存安装产物；本轮新增配置尚未取得远端 CI 结果。
 
 ## 实现结构
 
@@ -104,6 +105,8 @@ FFmpeg 软件解码是默认的视频后端，`--hw-decode` 选择平台硬件�
 `-DSCRCTL_LIBAV=OFF` 可关闭软件解码。当前 VideoToolbox 适配使用 2 字节 NAL 长度
 前缀，不能处理超过 65535 字节的 NAL；已有真机记录包含超过这一上限的帧，因此
 通常应保留软件后端。非 Apple 平台目前只有软件视频后端。
+
+Windows ARM64 的构建、DLL 安装、AMDS 要求与验证范围见 [Windows 说明](docs/WINDOWS.md)。
 
 ## 首次连接设备
 

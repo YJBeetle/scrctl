@@ -175,3 +175,19 @@ The build tools and runtime have distinct licenses; the gettext tools are build
 requirements and are not bundled in scrctl. A binary package that also bundles
 libintl must include its applicable license and meet its distribution requirements.
 Project translation files retain the scrctl project license.
+
+
+## Windows ARM64 development artifacts
+
+The MSYS2 CLANGARM64 FFmpeg package used by the current development build enables
+GPL and version3 components (GPL-3.0-or-later). It is not an LGPL-only FFmpeg build.
+The CI artifact records the installed package versions and FFmpeg configuration
+and includes the toolchain's dependency license files. These records are build
+provenance; they do not replace corresponding source and redistribution requirements.
+See docs/WINDOWS.md for the current verification and release-packaging scope.
+
+Package definitions and source retrieval instructions:
+https://github.com/msys2/MINGW-packages
+
+FFmpeg licensing and distribution guidance:
+https://ffmpeg.org/legal.html
