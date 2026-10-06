@@ -256,9 +256,18 @@ if(SCRCTL_NGHTTP2_PROBE)
     target_compile_options(nghttp2_probe PRIVATE -Wall -Wextra)
 endif()
 
+option(SCRCTL_LWIP_PROBE "构建 lwIP 隧道适配验证探针" OFF)
+if(SCRCTL_LWIP_PROBE)
+    include(cmake/LwipProbe.cmake)
+endif()
+
 # ---------------------------------------------------------------- tests -----
 if(SCRCTL_BUILD_TESTS)
     enable_testing()
+    if(SCRCTL_LWIP_PROBE)
+        add_test(NAME lwip_compat COMMAND lwip_probe)
+        set_tests_properties(lwip_compat PROPERTIES TIMEOUT 15)
+    endif()
     if(SCRCTL_NGHTTP2_PROBE)
         add_test(NAME nghttp2_compat COMMAND nghttp2_probe)
         set_tests_properties(nghttp2_compat PROPERTIES TIMEOUT 10)

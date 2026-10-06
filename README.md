@@ -86,6 +86,7 @@ CMake 优先找系统包，缺失时下载固定版本并校验 SHA256；首次�
 第三方许可证位于对应依赖源码中，分发时应保留其许可声明。
 
 应用模块的职责与后续替换边界见 [重构说明](docs/REFACTOR.md)。
+可选的 lwIP 独立验证探针默认关闭，构建方式与判据见 [lwIP 验证记录](docs/LWIP_COMPATIBILITY.md)。
 
 ffmpeg 是**默认解码后端**，`-DSCRCTL_LIBAV=OFF` 可以关掉，但关掉之后会退回
 VideoToolbox，而它只吃 2 字节的 NAL 长度前缀（上限 65535）——真机主屏的关键帧实测

@@ -1,0 +1,25 @@
+#pragma once
+
+#include <arpa/inet.h>
+#include <stdint.h>
+#include <stdlib.h>
+
+#ifdef BYTE_ORDER
+#undef BYTE_ORDER
+#endif
+#define LWIP_DONT_PROVIDE_BYTEORDER_FUNCTIONS
+
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define BYTE_ORDER BIG_ENDIAN
+#else
+#define BYTE_ORDER LITTLE_ENDIAN
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+uint32_t scrctl_lwip_random(void);
+#ifdef __cplusplus
+}
+#endif
+#define LWIP_RAND() scrctl_lwip_random()
