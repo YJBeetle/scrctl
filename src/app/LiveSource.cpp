@@ -15,11 +15,10 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
                        const std::string &record_path, bool hw_decode, bool watch_display,
                        bool want_audio, int audio_buffer_ms, const std::string &video_source,
                        const std::string &test_degrade, std::string &err) {
-    // 规格写错就在碰设备之前失败：这条旗标是用来打判据的，静默忽略一个写错的规格
-    // 等于让人对着一个从没生效的开关读日志。
+    // 连接设备前校验降级时刻表。非法参数应明确失败，避免测试实际未启用。
     if (!test_degrade.empty() &&
         !scrctl::app::parse_degrade_marks(test_degrade, degrade_marks_, err)) {
-        err = "--test-degrade 规格不对：" + err;
+        err = "--test-degrade 参数无效：" + err;
         return false;
     }
     auto dev = open_device(serial, wifi, err);
@@ -28,10 +27,8 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     }
     device_ = std::make_unique<scrctl::remote::Device>(std::move(*dev));
 
-    // 目录里一条 com.apple.coredevice.* 都没有时（没挂 DDI 的设备就是这个形状），
-    // 问几何、挂订阅、起流三步**必然**全失败，而整段目录诊断只需要打一次——起流那步
-    // 是致命的、一定会打。实测一台没挂 DDI 的 iPad 上同一段诊断连着打了三遍，
-    // 刷屏到没人读，所以前两步在这种情形下闭嘴。
+    // 目录没有 com.apple.coredevice.* 服务时，显示查询、订阅和媒体建立均不可用。
+    // 媒体建立会输出完整目录诊断，此处避免显示查询和订阅重复输出同一错误。
     bool coredevice_family_empty = true;
     for (const auto &s : device_->rsd().services()) {
         if (s.name.rfind("com.apple.coredevice", 0) == 0) {
@@ -44,17 +41,10 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     options.record_path = record_path;
     options.use_hardware = hw_decode;
 
-    // 显示几何先问设备，再起流。
-    //
-    // 为什么要问：编码帧的尺寸是"可见区 + HEVC 的 CU 对齐填充"，而这一圈填充多大
-    // 协议里没有。此前我们按机型硬编码一档（1136x2464 -> 1125x2436），表外的机型
-    // 就把整幅编码帧当可见区——后果是右/下一条垃圾边，而**触摸分母跟着错**，
-    // 边缘点不准。`displayinfoupdates` 给的是设备的权威值。
-    //
-    // 为什么排在起流之前：这一问只要一条 deviceinfo 连接，与媒体会话无关，却要一个
-    // 来回；放到起流之后就是让窗口多黑屏一个来回的时间。
-    //
-    // 问不到不致命：`resolve_crop` 会退回那张表，并把"是兜底"一起打出来。
+    // 起流前查询显示几何。编码尺寸包含 HEVC 对齐填充，设备报告的可见区
+    // 可用于正确裁剪和触摸映射。机型表仅覆盖已测设备，无法通用于其他尺寸。
+    // 查询使用独立 deviceinfo 连接；提前执行可减少首帧显示后的额外等待。
+    // 失败时 resolve_crop 使用机型表，并标明尺寸来源。
     {
         std::string derr;
         const auto info = scrctl::remote::fetch_display_info(*device_, derr);
@@ -71,39 +61,33 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             display_name_ = d->name;
             degrees_ = scrctl::app::orientation_degrees(d->orientation);
         } else if (!coredevice_family_empty) {
-            std::fprintf(stderr, "向设备问显示几何失败: %s（退回按机型硬编码的裁剪表）\n",
+            std::fprintf(stderr, "查询显示尺寸失败: %s（使用机型裁剪表）\n",
                          derr.empty() ? "推送里没有可用的尺寸" : derr.c_str());
         }
     }
 
-    // 起流前那一问只够定下"窗口打开时该转多少度"。设备之后转屏我们一无所知，
-    // 所以还要有人一直挂在订阅上——它是推模型，不挂着就再也没有第二条消息。
-    //
-    // 失败只打一行不返回 false：没有它，画面仍然按起流前那一档转正，只是不会
-    // 跟着转屏走。为一个增强功能把镜像整个停掉是不划算的。
+    // 初次查询只确定启动时的朝向；后续变化由常驻显示订阅推送。
+    // 订阅失败仍可镜像，但朝向保持初次查询结果，无法自动跟随旋转。
     if (watch_display) {
         std::string werr;
         watcher_ = scrctl::remote::DisplayWatcher::start(*device_, display_id_, werr, false);
         if (watcher_ == nullptr && !coredevice_family_empty) {
-            std::fprintf(stderr, "常驻显示订阅起不来: %s（转屏不会跟着转）\n", werr.c_str());
+            std::fprintf(stderr, "订阅显示变化失败: %s（无法自动跟随旋转）\n", werr.c_str());
         }
     }
 
-    // --video-source=screenshot 是**强制**：连媒体流都不去起。原先这个值只在"起流
-    // 失败"那条支路里被读，于是流一起成功它就被跳过——而帮助文本承诺的是强制（审查 P2）。
+    // --video-source=screenshot 强制使用截图轮询，不尝试建立媒体流。
     const bool force_screenshot = video_source == "screenshot";
     if (!force_screenshot) {
         pump_ = scrctl::media::FramePump::start(*device_, options, err);
         if (pump_ != nullptr) {
-            // 媒体那本账的尺在泵建好这一刻起表：第一段 --stats 的分母就是真实经过的
-            // 时间，而不是 `settle_window` 里那个 1.0 秒的兜底（审查 P2）。
+            // 创建媒体泵时建立统计时间基线，首次速率使用真实经过的时间。
             last_stream_ms_ = SDL_GetTicks64();
         }
     }
     if (pump_ == nullptr) {
-        // 兜底门：媒体流被设备按版本拒（iOS 27 以下，code 9021，设备原话里带
-        // "requires iOS"）时改走截图轮询。自动降级只在**这一种**失败上发生——别的失败
-        // （比如另一客户端占着流）自动降到 2 fps 会把真问题盖住；想强制就是上面那条。
+        // 设备因系统版本拒绝媒体流（9021 / requires iOS）时自动改用截图。
+        // 其他错误保留原失败结果，例如会话被占用；用户也可显式选择截图模式。
         const bool version_gate = err.find("requires iOS") != std::string::npos;
         if (version_gate || force_screenshot) {
             const std::string stream_err = err;
@@ -112,11 +96,10 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
                 if (!stream_err.empty()) {
                     std::printf("媒体流不可用：%s\n", stream_err.c_str());
                 }
-                std::printf("改用截图轮询兜底：实测一次截图约 0.5 秒，画面约 2 fps——能看能操作，"
-                            "不是能看视频；触摸/按键注入走同一条 HID 路，不受影响\n");
+                std::printf("已改用截图轮询，刷新率取决于截图耗时；输入控制仍可用\n");
                 err.clear();
             } else if (force_screenshot) {
-                err = "截图兜底也起不来: " + serr;
+                err = "启动截图轮询失败: " + serr;
                 return false;
             }
         }
@@ -128,13 +111,12 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     if (screenshot_.source != nullptr) {
         uint64_t s = 0;
         if (!screenshot_.source->latest(first, s, 5000)) {
-            err = "兜底路 5 秒内没拿到第一张截图";
+            err = "5 秒内未取得首张截图";
             screenshot_.source.reset();
             return false;
         }
-        // 使用局部序号读首帧，让主循环仍能取得这张图。
-        // 截图的像素尺寸就是可见区尺寸（没有 HEVC 的 CU 填充），而且它已按界面方向
-        // 摆正。iOS 18 上 deviceinfo 服务不在目录里，问几何那一问必然空手，这里补上。
+        // 用局部序号读取首张截图，主循环仍可取得这张图。截图已裁到可见区并按
+        // 界面方向摆正，可在 deviceinfo 不可用时提供显示尺寸，例如 iOS 18 设备。
         if (display_w_ == 0) {
             display_w_ = static_cast<int>(first.width);
             display_h_ = static_cast<int>(first.height);
@@ -143,21 +125,20 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             degrees_ = 0;
         }
     } else if (!pump_->latest(first, 5000)) {
-        err = "5 秒内没解出第一帧";
+        err = "5 秒内未解出首帧";
         return false;
     }
     if (screenshot_.source != nullptr) {
-        std::printf("兜底镜像已建立：%s / iOS %s，截图 %ux%u（约 2 fps）\n",
+        std::printf("截图镜像已建立：%s / iOS %s，尺寸 %ux%u\n",
                     device_->property("ProductType").c_str(),
                     device_->property("OSVersion").c_str(), first.width, first.height);
     } else {
-        std::printf("流已建立：%s / iOS %s，收流端口=%u PT=%u，首帧 %ux%u\n",
+        std::printf("视频流已建立：%s / iOS %s，收流端口=%u PT=%u，首帧 %ux%u\n",
                     device_->property("ProductType").c_str(),
                     device_->property("OSVersion").c_str(), pump_->receiver_port(),
                     pump_->payload_type(), first.width, first.height);
     }
-    // 打在这里而不是打在 `resolve_crop` 里，是因为控制单元那条路根本没有窗口：
-    // "几何到底是设备报的还是那张兜底表"必须是**任何**跑法都能一眼看到的读数。
+    // 此处报告几何来源，无窗口客户端也能看到设备尺寸及旋转结果。
     if (display_w_ > 0) {
         std::printf(
             "显示几何：设备报可见区 %dx%d（displayId=%llu %s），界面旋转顺时针 %d°，码流 %ux%u\n",
@@ -166,20 +147,16 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     }
     if (!record_path.empty()) {
         if (screenshot_.source != nullptr) {
-            std::printf("兜底路不录 Annex-B（没有码流可录），--record 这次忽略\n");
+            std::printf("截图模式无法录制 Annex-B，已忽略 --record\n");
         } else {
             std::printf("录制到 %s\n", record_path.c_str());
         }
     }
 
-    // 音频腿排在视频腿之后：它要一个 RPC 来回（实测 80~100ms），而窗口的第一帧不该
-    // 为声音等这一下。苹果是反过来先起音频的，但那条路为什么不断已经查到别处了
-    // （是我们的 UDP 拼装错了，docs §13），顺序在这件事上没有作用。
-    //
-    // 起不来只打一行、不改返回值：`--no-audio` 之外的失败（设备拒了、非 Apple 平台
-    // 没有后端）都不该让整个镜像退出。
+    // 在取得视频首帧后建立音频，避免首帧额外等待一次音频 RPC（实测约
+    // 80–100 ms）。音频失败只输出错误，视频仍继续。音频与视频使用独立会话。
     if (want_audio && screenshot_.source != nullptr) {
-        std::printf("兜底路没有音频腿：设备系统输出那一路和媒体流同属被版本拒的一族，不再去撞\n");
+        std::printf("截图模式不启动音频流\n");
     }
     if (want_audio && screenshot_.source == nullptr) {
         if (!scrctl::kHaveAudioDecoder) {
@@ -190,42 +167,40 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             std::string aerr;
             audio_ = scrctl::media::AudioPump::start(*device_, ao, aerr);
             if (audio_ == nullptr) {
-                std::fprintf(stderr, "音频腿起不来: %s（画面照常，只是没有声音）\n", aerr.c_str());
+                std::fprintf(stderr, "启动音频流失败: %s（继续显示画面）\n", aerr.c_str());
             } else {
-                // 音频那本账的尺也在这里起表。它在运行中降级那一段**照收照解**（独立
-                // 会话、独立线程，与画面从哪来无关），所以切回实时流后它的分母同样
-                // 必须是整段兜底时长，而不是媒体分支那把尺剩下的约 1 秒（审查 P2）。
+                // 音频统计使用独立时间基线。切到截图期间音频仍在独立线程接收和解码，
+                // 不能用视频统计窗口计算这段音频增量。
                 last_audio_ms_ = SDL_GetTicks64();
-                std::printf("音频腿已建立：收流端口=%u PT=%u 后端=%s\n", audio_->receiver_port(),
+                std::printf("音频流已建立：收流端口=%u PT=%u 后端=%s\n", audio_->receiver_port(),
                             audio_->payload_type(), audio_->backend_name().c_str());
             }
         }
     }
     if (!degrade_marks_.empty()) {
-        // 起点取"起流完成这一刻"：这条旗标要复现的是**运行中**降级，计时不该把建隧道/
-        // 起流那几秒算进去（那段时间本来就没有画面可降）。
+        // 降级时刻表从视频启动完成时计时，排除配对、隧道和起流耗时。
         degrade_t0_ = SDL_GetTicks64();
         std::printf("--test-degrade：从现在起");
         for (std::size_t i = 0; i < degrade_marks_.size(); ++i) {
             std::printf(" %.1f 秒%s", static_cast<double>(degrade_marks_[i]) / 1000.0,
                         i % 2 == 0 ? "强制降级" : "放开");
         }
-        std::printf("（只顶 video_dead 一个入参，状态机本身没改）\n");
+        std::printf("（测试模式）\n");
     }
     return true;
 }
 
 bool LiveSource::start_playback(std::string &err) {
     if (audio_ == nullptr) {
-        err = "没有音频腿可放（--no-audio、起流失败，或这个构建没有音频后端）";
+        err = "没有可播放的音频流（已禁用、启动失败或构建不支持）";
         return false;
     }
     return audio_out_.open(*audio_, err);
 }
 
 bool LiveSource::control(double x, double y, bool down, std::string &err) {
-    // 手一动就是"接下来画面一定会变"的信号。设备在画面静止时会把流结束掉，而泵
-    // 最快也要等满静默窗口才发现——不催这一次，手感就是"点下去愣一下才动"。
+    // 输入操作通常会改变画面，因此主动唤醒视频恢复。否则设备已停止静止
+    // 画面的流时，需要等静默检测窗口结束才能恢复，增加输入后的显示延迟。
     if (pump_ != nullptr) {
         pump_->wake();
     }
@@ -274,8 +249,8 @@ void LiveSource::display_size(int &width, int &height) const {
 
 int LiveSource::orientation_degrees() const {
     if (screenshot_.source != nullptr) {
-        // 截图服务给的是设备合成好的正立图（docs §24），再按朝向转就转歪。起流就降级
-        // 的那条路靠 degrees_=0 兜住，运行中切过来也得生效，所以判据挂在 screenshot_.source 上。
+        // 截图已经按设备界面方向合成，不再应用实时码流的旋转。
+        // 启动截图和运行中切换到截图都使用同一条件。
         return 0;
     }
     if (watcher_ != nullptr) {
@@ -312,17 +287,17 @@ void LiveSource::update_picture_source() {
         std::string err;
         // 运行中切换异步取首张，窗口继续显示最后一帧；启动时则同步取得尺寸。
         if (start_screenshot(/*capture_first=*/false, err)) {
-            std::printf("媒体流当前解不出画面，改走截图轮询兜底（约 2 fps）；"
-                        "泵在后台按退避继续试，解出来会切回来\n");
+            std::printf("实时视频暂不可用，已切换到截图轮询；"
+                        "后台继续尝试恢复视频，成功后自动切回\n");
         } else {
             screenshot_.failed_at = now;
-            std::fprintf(stderr, "想降级到截图兜底但它起不来: %s（%llu 秒后再试）\n", err.c_str(),
+            std::fprintf(stderr, "切换到截图失败: %s（%llu 秒后重试）\n", err.c_str(),
                          static_cast<unsigned long long>(scrctl::app::kShotRetryMs / 1000));
         }
         break;
     }
     case scrctl::app::SourcePick::kToStream:
-        std::printf("媒体流又能解出画面了，切回实时流\n");
+        std::printf("实时视频已恢复，已切回视频流\n");
         screenshot_.source->request_stop();
         retired_.push_back(std::move(screenshot_.source));
         break;
@@ -356,7 +331,7 @@ bool LiveSource::finished() const {
 std::string LiveSource::end_reason() const {
     const std::string why =
         device_ != nullptr && device_->stack() != nullptr ? device_->stack()->pump_error() : "";
-    return "设备断开了（隧道已死：" + why + "），走正常退出路径";
+    return "设备连接已断开（" + why + "），正在关闭会话";
 }
 
 void LiveSource::print_stats() {
@@ -378,19 +353,16 @@ void LiveSource::print_stats() {
         last_tcp_recv_ = c.recv_bytes;
     }
     if (screenshot_.source != nullptr) {
-        // 兜底路只有一把尺：截图张数。打速率不打累计（§20 那条教训：没有分母的
-        // 数不是读数），失败数单独给——它是"设备开始拒截图"的唯一信号。
+        // 截图统计报告本次速率、累计张数、数据量和失败数。使用独立时间窗口，
+        // 失败数可用于观察设备是否开始拒绝截图。
         const auto st = screenshot_.source->stats();
         const uint64_t now = SDL_GetTicks64();
-        // 这一本账自己的尺。以前它与下面媒体那本共用 `last_stats_ms_`，而两本的
-        // 计数基线各更新各的：切回实时流后第一段 --stats 会把兜底期间的增量除以
-        // 约 1 秒（审查 P2）。
+        // 截图和媒体统计分别维护时钟及计数基线，防止切回实时流时将整个截图
+        // 期间的增量除以单次打印间隔。
         const double secs = scrctl::app::settle_window(now, screenshot_.stats_ms);
-        // 换源会让这个计数从零重数（每次降级都新建一个源）。装上新的源时已经把
-        // `screenshot_.frames_base` 归零，这里再挡一道：真机上打出过
-        // `画面 18156244167036960768.00/s`（uint64 做差下溢）。
+        // 新截图源从零计数；安装源时重置基线，计算差值时再防止无符号下溢。
         const uint64_t shot_frames = scrctl::app::counter_delta(st.frames, screenshot_.frames_base);
-        std::printf("  兜底截图: 画面 %5.2f/s 累计 %llu 张 / %llu KB 失败 %llu\n",
+        std::printf("  截图：%5.2f 张/s，累计 %llu 张 / %llu KiB，失败 %llu 次\n",
                     static_cast<double>(shot_frames) / secs,
                     static_cast<unsigned long long>(st.frames),
                     static_cast<unsigned long long>(st.bytes / 1024),
@@ -406,12 +378,11 @@ void LiveSource::print_stats() {
     const auto rate = [&](uint64_t now_value, uint64_t before) {
         return static_cast<double>(now_value - before) / secs;
     };
-    // 设备的 SR 每 `RTCPSendInterval` 秒才来一个（实测空闲时会拖到 4 秒以上），
-    // 所以它的增量**不能**除以打印窗口，否则一次增量被摊成一秒的速率，数会虚高
-    // 好几倍。除以"上一次 SR 变化到现在"的真实间隔，并且把这个间隔一起打出来。
+    // SR 更新间隔可能超过一秒，空闲时实测超过四秒。设备速率按两次 SR
+    // 变化之间的真实时间计算，并报告该间隔，不能直接使用日志打印周期。
     double dev_rate = 0;
     uint64_t dev_span_ms = 0;
-    // 重起会话会让设备侧的累计数归零，做差会下溢成一个天文数字。
+    // 新会话的设备累计计数从零开始，计算差值前处理计数回退。
     const bool dev_reset = st.dev_sent_packets < last_dev_packets_;
     if (dev_reset) {
         last_dev_packets_ = st.dev_sent_packets;
@@ -422,33 +393,28 @@ void LiveSource::print_stats() {
         dev_rate = static_cast<double>(st.dev_sent_packets - last_dev_packets_) /
                    std::max(0.001, dev_span_ms / 1000.0);
     } else {
-        // 这一档没有新的 SR，沿用上一个 SR 算出来的速率——分母也就还是它的分母。
+        // 没有新 SR 时保留上次设备速率及其采样间隔。
         dev_rate = last_dev_rate_;
         dev_span_ms = last_dev_span_ms_;
     }
-    // 本会话收到的包数。设备 SR 里的累计数是**每条会话从零重数**的，而我们的
-    // packets 全程连着涨，所以只有减掉基线两者才在同一条数轴上——以前直接打
-    // 全程累计，重起过一次之后读数长成"累计 设备 143 我 5866"，像丢了五千包。
+    // 设备 SR 按会话计数，本地 packets 按进程累计。减去会话基线后再比较，
+    // 避免将旧会话的数据误算为当前会话丢包。
     const uint64_t mine_session =
         st.packets > st.session_packets_base ? st.packets - st.session_packets_base : 0;
-    std::printf("  流: 设备发了 %6.0f/s 我收到 %6.0f/s | AU %5.1f/s 解码 %5.1f/s\n", dev_rate,
+    std::printf("  视频：设备发送 %6.0f 包/s，本地接收 %6.0f 包/s，组帧 %5.1f/s，解码 %5.1f/s\n", dev_rate,
                 rate(st.packets, last_packets_), rate(st.aus, last_aus_),
                 rate(st.decoded, last_decoded_));
-    // 两个"每秒"的分母不是一把尺：SR 大约每秒才来一个，它的增量只能除以"上一个
-    // SR 到现在"，而我们的速率除以打印窗口（实测这个窗口在 0.6~1.3 秒之间飘）。
-    // 所以这两个数**相减没有意义**——早先那行 `差 +283 / -283` 就是把它们硬减出来
-    // 的，一虚一实读成"在大量丢包"，而真正的丢包读数在下面那行 `序号缺口` 上，
-    // 全程是 0。这里把两个分母都打出来，谁看谁会别再犯。
+    // 设备速率按 SR 更新间隔计算，本地速率按打印间隔计算，两者时间窗口
+    // 不同，不能直接相减判断丢包。输出两个窗口，并单独报告 RTP 序号缺口。
     if (dev_span_ms == 0) {
-        std::printf("      分母：设备那档还没有 SR 可除（第一条 SR 未到），我 %.1fs\n", secs);
+        std::printf("      采样窗口：设备 SR 尚未到达，本地 %.1f s\n", secs);
     } else {
-        std::printf("      分母：设备 %.1fs（SR 每 ~1s 一个） 我 %.1fs（两档相减无意义）\n",
+        std::printf("      采样窗口：设备 %.1f s，本地 %.1f s（窗口不同，速率不能直接相减）\n",
                     dev_span_ms / 1000.0, secs);
     }
-    // 这一行的两个数是唯一在同一条数轴上的读数（都按会话起点归零），所以它是
-    // "设备到底发了多少 vs 我们收到多少"的权威比。AU/解码不在这个轴上：它们
-    // 全程连着涨，没有会话基线，所以老实标成"全程"。
-    std::printf("      本会话累计 设备 %llu 我 %llu｜全程 AU %llu 解码 %llu\n",
+    // 设备发送与本地接收累计都从当前会话起点计数；AU 和解码计数跨会话
+    // 累计，因此分别标明会话和全程范围。
+    std::printf("      当前会话：设备发送 %llu 包，本地接收 %llu 包；全程组帧 %llu，解码 %llu\n",
                 static_cast<unsigned long long>(st.dev_sent_packets),
                 static_cast<unsigned long long>(mine_session),
                 static_cast<unsigned long long>(st.aus),
@@ -458,47 +424,39 @@ void LiveSource::print_stats() {
                 st.ms_decode / std::max<uint64_t>(1, st.decode_calls),
                 st.ms_publish / std::max<uint64_t>(1, st.decode_calls),
                 static_cast<unsigned long long>(st.decode_calls));
-    // 计数器不是一套基线，混在一行里就会读出"重起之后非视频载荷从 19 变成 0，
-    // 是不是把 SR 弄丢了"这种假问题：前三个跟着拆包器每会话归零（拆包器换会话就
-    // 重建），后四个全程累加。分开标。
-    std::printf("      本会话 非视频载荷 %llu 序号缺口 %llu 分片作废 %llu\n",
+    // 拆包器计数随会话重建而清零；泵计数跨会话累加，输出中分别标明范围。
+    std::printf("      当前会话：非视频包 %llu，序号缺口 %llu，丢弃分片 %llu\n",
                 static_cast<unsigned long long>(st.other_payload),
                 static_cast<unsigned long long>(st.gaps),
                 static_cast<unsigned long long>(st.dropped_fragments));
-    std::printf("      全程 未出帧 %llu 等关键帧丢 %llu 重起 %llu 超大NAL丢 %llu\n",
+    std::printf("      全程：未输出帧 %llu，等待关键帧丢弃 %llu，重启 %llu，过大 NAL 丢弃 %llu\n",
                 static_cast<unsigned long long>(st.no_output),
                 static_cast<unsigned long long>(st.dropped_awaiting_keyframe),
                 static_cast<unsigned long long>(st.restarts),
                 static_cast<unsigned long long>(st.dropped_oversized));
-    // 泵自己按数据报开头分的两类，跨会话连着涨。这两个数是"画面在不在变"的读数：
-    // 视频那一档停下来不动而 SR 照每秒一个，就是屏幕静止（流还活着）；两档都停，
-    // 才是设备把流结束掉了。
-    // 后面那一档是**我们往外发**的续命 RR：设备的会话计时器只在收到它的时候复位，
-    // 所以"流为什么断了"先看这三个数的哪一档停了。
-    std::printf("      全程 视频数据报 %llu SR 心跳 %llu 发出 RR %llu PLI %llu（视频档停=画面静止，"
-                "SR 也停=流死了，RR 不涨=我们没在续命）\n",
+    // 视频数据报和 SR 接收计数跨会话累加。视频停止但 SR 增长可能只是画面
+    // 静止；两者都停止时需要检查连接或会话。RR 是本地发出的保活反馈，
+    // 发送成功不等同于设备已经收到。
+    std::printf("      全程：视频包 %llu，SR %llu，发送 RR %llu，PLI %llu\n",
                 static_cast<unsigned long long>(st.video_packets),
                 static_cast<unsigned long long>(st.sr_packets),
                 static_cast<unsigned long long>(st.rtcp_sent),
                 static_cast<unsigned long long>(st.pli_sent));
     if (audio_ != nullptr) {
         const auto as = audio_->stats();
-        // 音频是**第三本账**，也得有自己的尺：兜底那段时间里音频腿照收照解（它是
-        // 独立会话、独立线程），共用媒体那把尺的话，切回来这一段会把整段兜底期间
-        // 的增量除以约 1 秒。分母的规矩与上面一致——速率除以自己这本账的窗口，
-        // 累计数标"全程"。音频腿的分母天生比视频稳：设备在没有声音的时候**照发**包
-        // （实测 100 包/秒、20 秒一秒不少），所以这一行的"包"是平的，一旦它掉到 0
-        // 就是流死了。
+        // 音频使用独立统计窗口；截图模式期间也在持续收包和解码。
+        // 不能把音频增量除以视频分支的计时窗口。音频无声时仍可收到静音包，
+        // 持续收包率降到零可作为排查连接或会话的线索。
         const double audio_secs = scrctl::app::settle_window(now, last_audio_ms_);
         const auto arate = [&](uint64_t now_value, uint64_t before) {
             return static_cast<double>(now_value - before) / audio_secs;
         };
-        std::printf("  音频: 包 %6.0f/s 解出 %6.0f/s 交付 %6.0f 帧/s（出口=%s）\n",
+        std::printf("  音频：接收 %6.0f 包/s，解码 %6.0f 包/s，交付 %6.0f 帧/s（输出=%s）\n",
                     arate(as.packets, last_audio_packets_), arate(as.decoded, last_audio_decoded_),
                     arate(audio_out_.delivered(), last_audio_delivered_),
                     audio_out_.dev_open() ? SDL_GetCurrentAudioDriver() : "未开");
-        std::printf("      全程 解败 %llu 真丢 %llu 迟到 %llu 丢旧 %llu 调速 %llu 补静音 %llu "
-                    "RR %llu/%llu 重起 %llu 缓冲 %zu 帧｜分母 %.1fs\n",
+        std::printf("      全程：解码失败 %llu，丢包 %llu，迟到 %llu，丢旧样本 %llu，调整样本 %llu，静音填充 %llu "
+                    "RR 成功/失败 %llu/%llu，重启 %llu，缓冲 %zu 帧，窗口 %.1f s\n",
                     static_cast<unsigned long long>(as.decode_failed),
                     static_cast<unsigned long long>(as.seq_lost),
                     static_cast<unsigned long long>(as.out_of_order),

@@ -11,10 +11,8 @@
 
 namespace scrctl::app {
 
-/// 已录制的 Annex-B 文件。
-///
-/// 解析器是同步的——一次性 feed 整个文件会在任何一帧画出来之前就把上千帧全解进
-/// 内存（每帧 11MB）。所以分块喂，并且解码结果攒在一个有上限的队列里。
+/// Annex-B 文件画面源。解析器同步执行，分块读入并限制解码队列，
+/// 避免在首帧显示前解码整个文件。高分辨率 BGRA 帧可能各占约 11 MiB。
 class FileSource final : public FrameSource {
   public:
     explicit FileSource(std::string path) : path_(std::move(path)) {}
@@ -25,7 +23,7 @@ class FileSource final : public FrameSource {
     [[nodiscard]] bool paces_itself() const override { return true; }
 
   private:
-    /// 读一块、喂给解析器、让回调往队列里放帧。队列满了就停手，下次再喂。
+    /// 读入一块并交给解析器；回调将帧放入队列。队列满后暂停，下次再继续。
     bool pump_bytes(std::string &err);
 
     bool open_file(std::string &err);
@@ -33,7 +31,7 @@ class FileSource final : public FrameSource {
     void on_au(std::vector<scrctl::Nal> &&au);
 
     static constexpr std::size_t kChunk = 48 * 1024;
-    /// 队列上限。一帧 11MB，攒太多只是把内存吃掉而画面并不会更连贯。
+    /// 解码帧队列上限，控制高分辨率回放的内存占用。
     static constexpr std::size_t kMaxQueued = 8;
 
     std::string path_;

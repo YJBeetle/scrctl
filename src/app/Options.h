@@ -8,47 +8,42 @@
 namespace scrctl::app {
 
 struct Options {
-    std::string path;   ///< 空 = 走真机实时流
+    std::string path;   ///< 空表示使用设备实时画面
     std::string serial; ///< scrcpy 的 --serial：指定哪台设备
-    /// `--wifi=<局域网地址>`：走无线那条路（pair-verify + TLS-PSK 隧道），而不是 USB。
-    /// 设备还是要**插着或者曾经插过**——配对记录得先在这台机器上存在。
+    /// --wifi 指定局域网地址，使用远程配对验证和 TLS-PSK 隧道。
+    /// 本机需要该设备的远程配对记录，无需在无线使用时保持 USB 连接。
     std::string wifi;
-    std::string record; ///< 实时流顺手把 Annex-B 录到文件
+    std::string record; ///< 录制实时 Annex-B 码流
     bool list_devices = false;
-    bool no_control = false; ///< scrcpy 的 --no-control：只看不动
+    bool no_control = false; ///< --no-control：关闭输入控制
     std::string title = "scrctl";
     bool stats = false;
-    /// --video-source=stream|screenshot。默认 stream：媒体流被设备按版本拒时自动降到
-    /// screenshot（见 LiveSource::start 的兜底门）；显式给 screenshot 是强制走兜底。
+    /// 画面来源：stream 默认实时流，系统版本拒绝时可自动切到截图；
+    /// screenshot 强制使用截图轮询。
     std::string video_source = "stream";
     bool crop_set = false;
     int crop_w = 0, crop_h = 0, crop_x = 0, crop_y = 0;
     double scale = 1.0;       ///< 窗口相对裁剪尺寸的缩放
-    bool scale_given = false; ///< 显式给过 --scale 就别再自动缩进屏幕
-    bool debug_input = false; ///< 把每次鼠标事件的原始坐标与算出的归一化值都打出来
-    /// 把隧道内 TCP 的逐段"序号不连续"日志打开。默认关：链路差的那几分钟里它刷屏
-    /// （实测 8 秒 5 行），而聚合读数（收到的字节、丢弃占比）已经在 --stats 里。
+    bool scale_given = false; ///< 显式缩放时禁用自动适应屏幕
+    bool debug_input = false; ///< 输出鼠标原始坐标及设备归一化坐标
+    /// --stats 中额外显示隧道校验和异常和 ICMPv6 诊断计数。
     bool debug_net = false;
     int exit_after = 0; ///< 渲染多少帧后退出（0=不限）
     int verify_at = 0;  ///< 渲染到第 N 帧时回读窗口内容
     std::string verify_path;
-    /// 注入一条直线后退出：`--test-touch x0,y0,x1,y1`。
-    /// 窗口与鼠标不在场时也要能验证输入通路，理由同 --verify：日志说"注入
-    /// 调用返回成功"证明不了设备上真的收到了触摸。
+    /// --test-touch x0,y0,x1,y1 注入直线后退出，可用于无窗口验证。
+    /// API 返回成功不证明触摸已作用于设备，仍需检查设备画面。
     std::vector<double> test_touch; ///< 空或四个 [0, 1] 内的有限坐标，由 CLI11 校验
-    /// 起流后按一次硬件按键（home/lock/volup/voldn/mute），然后照常镜像。
-    /// 按键效果是瞬时的，所以它要能和 --verify 组合：按完等第 N 帧回读窗口。
+    /// 启动后注入硬件键，再继续镜像；可用 --verify 检查瞬时效果。
     std::string test_button;
     uint16_t test_button_code = 0; ///< 参数层将按键名称映射成 HID usage
-    /// 起流后往设备敲一段 ASCII（要有文本框正获得焦点）。
+    /// 启动后注入 ASCII 文本（要有文本框正获得焦点）。
     std::string test_type;
-    /// `--test-degrade 4,8,12`：从起流那一刻算起，到点交替"强制判媒体流解不出画面 /
-    /// 放开"。运行中降级这一格在真机上打不响（要画面复杂到超出解码后端上限），而
-    /// 切换/序号/回收那几条修复全在这一格上——没有开关就只能一直交离线判据。
+    /// --test-degrade 指定启动完成后的切换秒数，交替强制判定视频不可用和
+    /// 解除强制。复用生产状态机，供真机验证画面切换、序号和回收。
     std::string test_degrade;
-    /// scrcpy 的 --start-app=name：起流之后把某个 App 拉到前台。名字里可以带两个
-    /// 前缀，语义照 scrcpy：`+` = 先杀掉在跑的实例再冷启动，`?` = 按 App 名字前缀
-    /// 匹配（大小写不敏感）而不是按 bundle id 精确匹配。
+    /// 启动后将应用打开到前台。? 按名称前缀匹配（忽略大小写），
+    /// + 先终止原实例；否则按 bundle ID 精确指定。
     std::string start_app;
     bool list_apps = false; ///< --list-apps：列出设备上装的 App 后退出
     std::string copy_text;  ///< --copy TEXT：写进设备剪贴板后退出
@@ -58,12 +53,12 @@ struct Options {
     /// `currentOrientation` 走。
     int orientation = -1;
     int win_w = 0, win_h = 0; ///< --window-width/height：显式窗口尺寸，0=自动
-    /// 用平台硬件解码后端（VideoToolbox），而不是默认的软件解码。
-    /// 见 FramePump::Options::use_hardware——默认软解的原因是硬解吃不下超过 65535 字节的帧。
+    /// 使用平台硬件解码后端。当前 VideoToolbox 适配的 2 字节 NAL 长度
+    /// 限制为 65535 字节，默认软件解码可处理更大的关键帧。
     bool hw_decode = false;
-    /// scrcpy 的 --no-audio：连音频腿都不起（不占设备上那条会话、不解码）。
+    /// --no-audio 禁止建立音频会话和解码音频。
     bool no_audio = false;
-    /// --- 下面这批是窗口与运行控制的 scrcpy 同名项，逐个都是"照抄名字"级别的活 ---
+    /// 窗口与运行控制选项。
     bool always_on_top = false; ///< --always-on-top
     bool borderless = false;    ///< --window-borderless
     bool fullscreen = false;    ///< -f / --fullscreen（桌面全屏）
@@ -75,11 +70,9 @@ struct Options {
     bool disable_screensaver = false; ///< --disable-screensaver
     int time_limit = 0;               ///< --time-limit=秒，到点正常退出（会停流）
     bool show_version = false;        ///< --version
-    /// scrcpy 的 --no-audio-playback：收流与解码照跑，只是不在电脑上出声。
-    /// 录制或排障要"有音频数据但安静"时用它——本机夜里跑真机回归也靠它。
+    /// --no-audio-playback 继续接收和解码音频，禁用本机播放。
     bool no_audio_playback = false;
-    /// scrcpy 的 --audio-buffer=ms（默认同为 50）。它同时是两件事的那一个数：
-    /// 开口放之前先攒多久，以及缓冲想维持的水位（高出它就开始悄悄排）。
+    /// --audio-buffer 指定首次预缓冲和目标缓冲水位，单位毫秒，默认 50。
     int audio_buffer_ms = 50;
 };
 

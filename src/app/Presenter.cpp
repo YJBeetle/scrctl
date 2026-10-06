@@ -30,19 +30,18 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
             desk.w = win_w_fallback;
             desk.h = win_h_fallback;
         }
-        // 留一条标题栏的余量，别让窗口刚好顶满屏幕。
+        // 为标题栏预留空间，避免窗口边缘超出屏幕。
         scrctl::app::fit_window(view_w_, view_h_, desk.w, desk.h - 60, scale, scale_given, win_w_,
                                 win_h_);
         if (!scale_given && win_w_ < view_w_) {
-            std::printf("屏幕只有 %dx%d 点，窗口缩到 %dx%d（--scale 可覆盖）\n", desk.w, desk.h,
+            std::printf("屏幕 %dx%d 点，窗口自动缩放到 %dx%d（可用 --scale 指定比例）\n", desk.w, desk.h,
                         win_w_, win_h_);
         }
     }
 
     Uint32 win_flags = SDL_WINDOW_ALLOW_HIGHDPI;
-    // 全屏与无边框是**建的时候**给的 flag，不是建完再改：先建带边框的窗口再切
-    // 桌面全屏，SDL 会把窗口尺寸留在旧的约束里，转屏重建时就成了"全屏但画面
-    // 只占中间一块"。
+    // 创建窗口时传入全屏与无边框标志，避免先创建普通窗口再切全屏时保留旧尺寸
+    // 约束，导致旋转后的画面不能铺满窗口。
     if (!spec.fullscreen) {
         win_flags |= SDL_WINDOW_RESIZABLE;
     }
@@ -54,43 +53,40 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
     }
     window_ = SDL_CreateWindow(title.c_str(), spec.x, spec.y, win_w_, win_h_, win_flags);
     if (window_ == nullptr) {
-        std::fprintf(stderr, "建窗口失败: %s\n", SDL_GetError());
+        std::fprintf(stderr, "创建窗口失败: %s\n", SDL_GetError());
         return false;
     }
     if (spec.always_on_top) {
         SDL_SetWindowAlwaysOnTop(window_, SDL_TRUE);
     }
-    // SDL2 的 Metal 后端不支持 SDL_RenderReadPixels——需要回读验证时
-    // 直接建软件渲染器，否则 Present 后读回会无声 abort。
+    // 需要回读时使用软件渲染器；当前 SDL2 Metal 路径不支持可靠的 RenderReadPixels。
     const Uint32 flags = want_readback ? SDL_RENDERER_SOFTWARE : SDL_RENDERER_ACCELERATED;
     renderer_ = SDL_CreateRenderer(window_, -1, flags);
     if (renderer_ == nullptr && flags != SDL_RENDERER_SOFTWARE) {
         renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
     }
     if (renderer_ == nullptr) {
-        std::fprintf(stderr, "建渲染器失败: %s\n", SDL_GetError());
+        std::fprintf(stderr, "创建渲染器失败: %s\n", SDL_GetError());
         return false;
     }
     SDL_RendererInfo info;
     if (SDL_GetRendererInfo(renderer_, &info) == 0) {
         std::printf("渲染驱动: %s\n", info.name);
     }
-    // 不设 logical size 的话，渲染器坐标就是**像素**尺寸，而 ALLOW_HIGHDPI 下
-    // 像素是窗口的两倍——按窗口点数画过去，内容就只占左上四分之一。设了它，
-    // SDL 自己处理 Retina 缩放与窗口拉伸后的等比留边。
+    // 设置 logical size 后由 SDL 处理 Retina 比例和窗口缩放；否则以窗口点数
+    // 绘制到高 DPI 像素面，会只覆盖部分区域。
     //
-    // 这里要用**视口**尺寸（转 90/270 时宽高对调），不能用裁剪框尺寸：logical size
-    // 一设，鼠标事件的坐标就落进这个空间，用它当分母的触摸换算才对得上画面。
+    // logical size 使用旋转后的视口尺寸（90/270 度交换宽高），鼠标事件也进入
+    // 同一逻辑空间，确保触摸逆变换使用正确的尺寸。
     SDL_RenderSetLogicalSize(renderer_, view_w_, view_h_);
     int out_w = 0, out_h = 0;
     SDL_GetRendererOutputSize(renderer_, &out_w, &out_h);
-    // 纹理必须是**源帧尺寸**——整帧上传进按裁剪尺寸建的纹理会因尺寸不符
-    // 而失败。裁剪与缩放统一交给 RenderCopy 的 src/dst 矩形表达。
-    // BGRA 内存布局对应 little-endian 的 ARGB8888。
+    // 纹理采用完整源帧尺寸，裁剪和缩放通过 RenderCopy 的 src/dst 矩形处理。
+    // BGRA 内存对应小端 ARGB8888。
     texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
                                  frame_w, frame_h);
     if (texture_ == nullptr) {
-        std::fprintf(stderr, "建纹理失败: %s\n", SDL_GetError());
+        std::fprintf(stderr, "创建纹理失败: %s\n", SDL_GetError());
         return false;
     }
     SDL_SetTextureScaleMode(texture_, SDL_ScaleModeBest);
@@ -102,20 +98,16 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
 }
 
 void Presenter::draw(const scrctl::Frame &f, const char *readback_path) {
-    // `SDL_RenderClear` 清的是整块目标（不受 logical size 那块等比留边限制），
-    // 所以背景色直接就把两条边涂上了。这一点是量出来的：本来以为要像回读那样
-    // 先把 logical size 摘掉，去掉之后回读像素证明边上仍然是背景色。
+    // SDL_RenderClear 清除整个目标面，包括等比缩放后的留边区域。
     SDL_SetRenderDrawColor(renderer_, bg_[0], bg_[1], bg_[2], 255);
     SDL_RenderClear(renderer_);
     if (SDL_UpdateTexture(texture_, nullptr, f.pixels.data(), static_cast<int>(f.row_pitch)) != 0) {
         std::fprintf(stderr, "上传纹理失败: %s\n", SDL_GetError());
     }
-    // 设了 logical size 之后渲染器坐标就是逻辑坐标，画满整个逻辑区域即可；
-    // Retina 缩放和窗口拉伸后的等比留边由 SDL 负责。旋转在 draw_rotated 里做，
-    // 那条路径与离线自检共用同一个函数。
+    // 渲染使用逻辑坐标，由 SDL 处理 Retina 缩放和留边。旋转由 draw_rotated
+    // 完成，该函数同时用于离线回读测试。
     scrctl::app::draw_rotated(renderer_, texture_, src_, degrees_);
-    // 必须在 Present 之前读：Present 之后后缓冲已交换，SDL_RenderReadPixels
-    // 会读到失效内容并段错误。
+    // 在 Present 之前回读后缓冲；交换缓冲后不能依赖其内容仍有效。
     if (readback_path != nullptr) {
         readback(readback_path);
     }
@@ -125,29 +117,23 @@ void Presenter::draw(const scrctl::Frame &f, const char *readback_path) {
 bool Presenter::readback(const std::string &path) {
     int out_w = 0, out_h = 0;
     if (SDL_GetRendererOutputSize(renderer_, &out_w, &out_h) != 0 || out_w <= 0 || out_h <= 0) {
-        std::fprintf(stderr, "问绘制面尺寸失败: %s\n", SDL_GetError());
+        std::fprintf(stderr, "查询绘制面尺寸失败: %s\n", SDL_GetError());
         return false;
     }
     SDL_Surface *s = SDL_CreateRGBSurfaceWithFormat(0, out_w, out_h, 32, SDL_PIXELFORMAT_ARGB8888);
     if (s == nullptr) {
-        std::fprintf(stderr, "回读建面失败: %s\n", SDL_GetError());
+        std::fprintf(stderr, "创建回读缓冲失败: %s\n", SDL_GetError());
         return false;
     }
     if (SDL_LockSurface(s) != 0) {
-        std::fprintf(stderr, "回读加锁失败: %s\n", SDL_GetError());
+        std::fprintf(stderr, "锁定回读缓冲失败: %s\n", SDL_GetError());
         SDL_FreeSurface(s);
         return false;
     }
-    // 读之前必须把 logical size 摘掉。挂着它的时候 `SDL_RenderReadPixels` 的矩形
-    // 是按**逻辑**坐标解释的：(0,0,out_w,out_h) 不再是整块输出，而是从内容区左上角
-    // 起的另一块设备矩形——窗口比例与画面比例不一致时（有等比留边）读回来的就是
-    // 一个偏移过的局部，边上那些像素根本不在读到的范围里（微测：内容区之外的
-    // 1x1 读直接失败，内容区之内读到的是错位的东西）。
-    //
-    // 这个 bug 只在窗口比例与画面比例不同时才显形，而默认窗口是按画面比例算的，
-    // 所以之前所有 `--verify` 的结论都恰好没被它影响。
+    // 回读前暂时移除 logical size，使用完整输出面的像素坐标。保留逻辑尺寸
+    // 时，SDL 会把读区按内容视口转换，窗口有留边时会读到偏移的局部区域。
     SDL_RenderSetLogicalSize(renderer_, 0, 0);
-    // 显式给矩形：SDL2 的 software 驱动在 rect=NULL 时会段错误（实测）。
+    // 显式指定完整像素矩形；当前 SDL2 software 驱动在 rect=NULL 时曾发生段错误。
     const SDL_Rect full{0, 0, out_w, out_h};
     const int rc =
         SDL_RenderReadPixels(renderer_, &full, SDL_PIXELFORMAT_ARGB8888, s->pixels, s->pitch);
@@ -164,7 +150,7 @@ bool Presenter::readback(const std::string &path) {
         std::fprintf(stderr, "存图失败: %s\n", SDL_GetError());
         return false;
     }
-    std::printf("已回读窗口内容 -> %s (%dx%d 像素)\n", path.c_str(), out_w, out_h);
+    std::printf("窗口回读已保存到 %s (%dx%d 像素)\n", path.c_str(), out_w, out_h);
     return true;
 }
 
@@ -181,8 +167,8 @@ void Presenter::report_input(int raw_x, int raw_y, double fx, double fy, const c
 bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) {
     SDL_Event e;
     bool quit = false;
-    // 一轮里可能堆了好几个 motion：只保留最后一个位置。鼠标 125Hz 往上时
-    // 逐个发报告没有意义，设备侧要的是轨迹形状不是事件个数。
+    // 合并同一轮的鼠标移动事件，仅发送最后一个位置，减少高采样率鼠标带来的
+    // 重复 HID 报告。按下和抬起仍保留各自事件。
     bool pending_move = false;
     double px = 0, py = 0;
     while (SDL_PollEvent(&e)) {

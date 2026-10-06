@@ -31,8 +31,8 @@ bool FileSource::pump_bytes(std::string &err) {
         return false;
     }
     if (pos_ >= buffer_.size()) {
-        // 收尾必须 flush：AU 的边界靠"下一个图像的起始 slice"判定，最后一个
-        // AU 没有下一个，不 flush 就永远等不到它。
+        // 文件末尾需要 flush。AU 边界由下一幅图像的首个 slice 确定，最后一个 AU
+        // 没有后续图像，必须显式提交。
         if (!flushed_) {
             flushed_ = true;
             parser_->flush();
@@ -41,7 +41,7 @@ bool FileSource::pump_bytes(std::string &err) {
         return false;
     }
     if (frames_.size() >= kMaxQueued) {
-        return true; // 背压：解码结果攒够了，先让调用方把它们画掉
+        return true; // 解码帧队列达到上限时停止读入，等待调用方消费。
     }
     const std::size_t n = std::min(kChunk, buffer_.size() - pos_);
     parser_->feed(buffer_.data() + pos_, n);
@@ -52,7 +52,7 @@ bool FileSource::pump_bytes(std::string &err) {
 bool FileSource::open_file(std::string &err) {
     std::ifstream in(path_, std::ios::binary);
     if (!in) {
-        err = "打不开 " + path_;
+        err = "无法打开文件 " + path_;
         return false;
     }
     buffer_.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
@@ -61,9 +61,7 @@ bool FileSource::open_file(std::string &err) {
 
     decoder_ = scrctl::create_platform_decoder();
     if (decoder_ == nullptr) {
-        // 没有后端时这里必须断掉而不是往下走：`on_au` 里第一件事就是
-        // `decoder_->configure(...)`，而文件回放这条路上没人替它兜底
-        // （实时流那条在 FramePump 里查了同一件事）。
+        // 确认解码器存在后再解析文件；on_au 会调用 decoder_->configure。
         err = scrctl::kNoDecoderMessage;
         return false;
     }

@@ -16,77 +16,56 @@
 
 namespace scrctl::app {
 
-/// 真机实时流。收包、拆 AU、解码、以及"画面坏了就重起会话"全在 FramePump 里，
-/// 这里只管起流、取帧、以及把窗口的输入投回设备。
+/// 设备画面源，负责会话建立、画面来源切换和输入转发。
+/// 实时流的收包、组帧、解码及恢复由 FramePump 管理。
 class LiveSource final : public FrameSource {
   public:
     ~LiveSource() override;
 
-    /// `watch_display`：挂一条常驻订阅跟着转屏改朝向。不起窗口就别挂——那条
-    /// 订阅要独占一个连接、还有一个每 250ms 醒一次的线程，而没有窗口就没人
-    /// 消费朝向，纯开销。
-    ///
-    /// `want_audio`：起不起音频腿。它是**另一条设备侧会话**，起不来或者这个构建
-    /// 根本没有音频后端都不致命——没有声音的镜像仍然是可用的镜像，所以这里只打一行。
-    /// `audio_buffer_ms` = `--audio-buffer`：缓冲想维持的水位。
+    /// watch_display 启用显示变化订阅以跟随旋转；无窗口时可关闭，避免独占连接
+    /// 及订阅线程。want_audio 决定是否建立独立音频会话；失败时视频继续。
+    /// audio_buffer_ms 是音频预缓冲与目标水位对应的时长。
     bool start(const std::string &serial, const std::string &wifi, const std::string &record_path,
                bool hw_decode, bool watch_display, bool want_audio, int audio_buffer_ms,
                const std::string &video_source, const std::string &test_degrade, std::string &err);
 
-    /// 打开声卡。要和 `start()` 分开的唯一原因：`start()` 跑在 `SDL_Init` 之前
-    /// （窗口还没建就得先有源），而 SDL 的音频子系统在那之后才有。
+    /// 打开音频输出。start() 在 SDL 初始化前建立画面源；播放必须等 SDL 音频
+    /// 子系统初始化完成，因此单独提供该入口。
     bool start_playback(std::string &err);
 
-    /// 起流前向设备要来的可见区尺寸（问不到是 0/0，见 `resolve_crop` 的顺序）。
+    /// 启动时查询的可见区尺寸；未知为 0/0，裁剪来源顺序见 resolve_crop。
     void display_size(int &width, int &height) const override;
 
-    /// 当前该顺时针转多少度。
-    ///
-    /// 优先问常驻订阅（`watcher_`），拿不到才退回起流前问到的那一档。顺序不能反：
-    /// 常驻订阅是唯一会跟着转屏动的来源，而那一档是窗口打开那一刻的快照。
-    ///
-    /// 只有朝向是"活的"。可见区尺寸仍然只在起流前问一次——实测转屏时设备报的
-    /// `currentMode.size` 根本不变（docs §16.1），而中途改尺寸要重建裁剪框、
-    /// 触摸分母与整条几何日志，那些路径现在一条都没验过。
+    /// 返回当前顺时针转正角度。优先使用 watcher_ 最新推送，否则使用启动快照。
+    /// 目前仅动态更新朝向，尺寸在启动时确定；实测旋转不改变 currentMode.size，
+    /// 运行中变更尺寸还需同时更新裁剪与触摸映射，目前未实现。
     [[nodiscard]] int orientation_degrees() const override;
 
     bool next(scrctl::Frame &out, int timeout_ms) override;
 
-    /// 设备走了就**别再重试**，走正常退出路径（停流、关会话），与 --time-limit 同一条。
-    ///
-    /// 这是把两件事分开：截图/取帧失败一次是常事（RPC 偶发不通、屏幕睡了），下一轮退避
-    /// 后会自愈；而隧道死了永远不会自愈。改之前两者在代码里是同一个失败，于是拔线之后
-    /// 实测一路退避重试到 --time-limit（60 秒里 193 次失败、0 张新图），窗口模式下用户
-    /// 看到的就是"画面停住、没有一句解释"（docs §28）。
-    ///
-    /// 判据用栈自己的 `pump_error()`：它只在泵线程因**读失败**退出时置位（超时不算），
-    /// 是个结构性事实。**故意不匹配错误文本**——文本会随实现变，而"泵已经停了"不会。
+    /// 隧道终止后结束画面源，触发会话清理；暂时截图失败仍按退避重试。
+    /// 依据 Stack::pump_error() 判断传输失败，不匹配具体错误文本。普通读超时
+    /// 不会停止隧道。该会话不负责重新建立已终止的设备连接。
     [[nodiscard]] bool finished() const override;
     [[nodiscard]] std::string end_reason() const override;
 
     [[nodiscard]] bool has_audio() const { return audio_ != nullptr; }
 
-    /// 给"起流之后还要对设备做点别的"那些项用（--start-app）。它故意返回引用而不是
-    /// 让每个功能自己存一份：一个会话只有一个 Device，多副本只会多一处要同步的寿命。
+    /// 返回会话使用的 Device 引用，供 --start-app 等设备操作复用，避免重复所有权。
     [[nodiscard]] scrctl::remote::Device &device() { return *device_; }
 
-    /// 把窗口里的一次触摸投到设备上。
-    ///
-    /// HID 服务**第一次用到时才连**：连接要一个来回，没必要把它算进起流路径；
-    /// 而且设备不提供该服务（DDI 版本差异）时镜像应当照常工作，而不是整个退出。
-    /// 失败过一次就不再重试，免得每帧都去撞一遍。
+    /// 转发触摸。HID 在首次使用时连接，避免增加首帧延迟；服务不可用不影响
+    /// 镜像。连接失败后停止本次会话的输入重试，避免每帧重复建立连接。
     bool control(double x, double y, bool down, std::string &err);
 
-    /// 往设备敲一段 ASCII（复用触摸那条连接，键盘是同一个服务下的另一个面）。
+    /// 注入 ASCII 文本，复用触摸服务的 HID 连接。
     bool type_text(const std::string &text, int hold_ms, std::string &err);
 
-    /// 按一个硬件按键（indigo 服务，惰性连）。按键的效果多半是瞬时的，所以
-    /// 它得能和 `--verify` 组合使用：先按键，再等第 N 帧回读窗口内容。
+    /// 按硬件键，首次使用时连接 indigo。可与 --verify 组合，在注入后回读画面
+    /// 验证短时效果，例如音量 HUD。
     bool button(uint16_t usage_page, uint16_t usage_code, std::string &err);
 
-    /// **必须打速率，不能打累计数。** 第一版这里打的是累计包数，结果"包 1778"
-    /// 被当成每秒读数读了 16 秒，直接把结论带偏到"设备只编 12 帧"上——而它真正的
-    /// 意思是这一段里我们一共只收到 110 包/秒。一个没有分母的数不是读数。
+    /// 统计同时标明速率的采样窗口和累计计数范围，避免把累计值误读为每秒速率。
     void print_stats() override;
 
   private:
@@ -95,48 +74,39 @@ class LiveSource final : public FrameSource {
 
     std::unique_ptr<scrctl::remote::Device> device_;
     std::unique_ptr<scrctl::media::FramePump> pump_;
-    /// 音频腿与声卡出口。它们都引用 `Device&` / `AudioPump`，所以**必须声明在
-    /// device_ 之后**（成员反序析构：泵要先停、线程要先 join，才能拆 Device）。
+    /// 音频泵引用 Device，声卡回调引用 AudioPump。按声明逆序析构，必须在
+    /// Device 之后声明，并先关闭声卡、停止音频线程，再销毁设备。
     std::unique_ptr<scrctl::media::AudioPump> audio_;
     AudioOut audio_out_;
     uint64_t last_packets_ = 0;
     uint64_t last_dev_packets_ = 0;
     uint64_t last_dev_change_ms_ = 0;
     double last_dev_rate_ = 0;
-    /// 上一个 SR 增量是除以多长的间隔算出来的。打印时要用它，不然读者会把这个
-    /// "每秒"当成和"我收到"同一个分母，然后去减两个不同分母的数。
+    /// 上次设备速率计算使用的 SR 更新间隔，输出时与本地采样窗口分别标明。
     uint64_t last_dev_span_ms_ = 0;
     uint64_t last_aus_ = 0;
     uint64_t last_decoded_ = 0;
     uint64_t last_audio_packets_ = 0;
     uint64_t last_audio_decoded_ = 0;
     uint64_t last_audio_delivered_ = 0;
-    /// **一本账一把尺**（审查 P2）。以前这三本共用一个 `last_stats_ms_`，而计数基线
-    /// 各自更新：截图分支每秒推尺，媒体泵与音频的基线却只在媒体分支里动。兜底那 30 秒
-    /// 里两条腿都还在计数，切回实时流后第一段 --stats 就把整段增量除以约 1 秒，速率
-    /// 虚高几十倍——而打印出来的分母写着 1.0s，看起来完全自洽。
-    /// 三把尺都在**各自的源建好时**起表（见 start() 与 next() 里的赋值点），所以第一次
-    /// 结算的分母是真实经过的时间，不是 `settle_window` 里那个 1.0 的兜底。
+    /// 视频和音频分别维护计数与时间基线，截图另有独立状态。切换画面源时，
+    /// 后台媒体和音频仍累计数据，不能用截图的打印时钟计算它们的增量。
+    /// 各源建立时初始化时钟，首次统计使用真实经过的时间。
     uint64_t last_stream_ms_ = 0;
     uint64_t last_audio_ms_ = 0;
-    /// 隧道内 TCP 那一行自己的尺（与画面从哪来无关，且只在真丢过东西时才打）。
+    /// 隧道 TCP 的统计时钟，不随画面来源切换。
     uint64_t last_tcp_ms_ = 0;
     uint64_t last_tcp_recv_ = 0;
-    /// 那一行打过没有：第一段一定打一次，好让"丢弃 0"与"账没接上"分得清。
-    /// 起流之前向设备要来的**可见区**尺寸（0/0 = 没问到）。见 `display_size()`。
+    /// 设备可见区尺寸，未知为 0/0。
     int display_w_ = 0;
     int display_h_ = 0;
-    /// 同一问带回来的界面旋转（顺时针度数）。0 也是有效值（竖屏），所以它不像尺寸
-    /// 那样用"零"表示没问到——没问到就是 0，正立竖屏也是 0，两者行为本来就该一样。
+    /// 启动查询得到的顺时针转正角度；未知时使用 0，与竖屏行为一致。
     int degrees_ = 0;
-    /// 尺寸是从哪块屏拿的，只为把日志那行说全（多屏设备上这不是废话：主屏与
-    /// 无线屏的尺寸实测就不一样）。
+    /// 几何信息所属显示屏，用于区分主屏和外部显示屏的尺寸来源。
     uint64_t display_id_ = 0;
     std::string display_name_;
 
-    /// 常驻的显示几何订阅。它持有 `Device&`，所以**必须声明在 device_ 之后**
-    /// （成员按声明反序析构，它得比 Device 先走）。起不来不致命：朝向就退回
-    /// 起流前那一档，代价是"转屏不跟着转"。
+    /// 显示订阅持有 Device 引用，需先于 Device 析构。订阅失败后沿用启动朝向。
     std::unique_ptr<scrctl::remote::DisplayWatcher> watcher_;
 
     std::unique_ptr<scrctl::hid::Service> hid_;
@@ -152,15 +122,12 @@ class LiveSource final : public FrameSource {
         uint64_t frames_base = 0;
         std::optional<uint64_t> failed_at;
     } screenshot_;
-    /// 切回实时流时退下来的截图源：`request_stop()` 已叫过，销毁（= join）由 next() 每帧
-    /// 跑一趟 `app::reap_finished` 逐步做，worker 还没退的就留到下一帧。渲染线程上直接
-    /// join 一个可能卡在截图 RPC 里的线程会把窗口冻到 RPC 上限（审查 P3），而一路留到
-    /// teardown 又会按切换次数堆内存——每个都揣着一整张 BGRA 画面（审查 P2，第四轮）。
-    /// 声明在 device_ 之后，所以先于 device_ 析构（截图源持有 Device&）。
+    /// 切回实时流后，request_stop 的截图源暂存在此。next() 仅回收 worker 已
+    /// 退出的源，以免渲染线程阻塞在截图 RPC 的 join 上，也避免每次切换留下
+    /// 一份 BGRA 帧直到会话退出。此容器必须先于 Device 析构。
     std::vector<std::unique_ptr<scrctl::media::ScreenshotSource>> retired_;
 
-    /// `--test-degrade` 的时刻表（毫秒，相对 `degrade_t0_`）与起点。空表 = 这条旗标没给，
-    /// `next()` 里那次判断恒为假，产品路径一点不受影响。
+    /// 降级时刻表，单位为相对 degrade_t0_ 的毫秒；为空时不强制切换。
     std::vector<uint64_t> degrade_marks_;
     uint64_t degrade_t0_ = 0;
 };

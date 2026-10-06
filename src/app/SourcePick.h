@@ -9,12 +9,8 @@
 
 namespace scrctl::app {
 
-/// 取每一帧之前，画面该从哪条路来。
-///
-/// 为什么把它抽成纯函数：运行中降级是一本四格状态账（起流就降级 / 跑着降级 / 泵回升 /
-/// 截图源起失败过），第一版写在 `LiveSource::next()` 里时把"起流就降级"那一格判成了
-/// "回升"——那一格泵根本不存在（`pump_ == nullptr`），而它在 iOS 18 上是**常态**，错了
-/// 就是兜底路一帧都出不来。四格状态机值得一个能离线跑全组合的判据，而不是等真机凑现场。
+/// 在取帧前选择实时流或截图。纯函数覆盖启动即截图、运行中降级、视频恢复
+/// 和截图启动失败等状态，便于离线遍历全部组合。无媒体泵时不能误判为恢复。
 enum class SourcePick {
     kStayStream,  ///< 继续等媒体泵（含"两条路都没有"，调用方自己判空）
     kStayShot,    ///< 继续用截图源
@@ -22,11 +18,8 @@ enum class SourcePick {
     kToStream,    ///< 泵回升了：调用方负责释放截图源
 };
 
-/// 截图源起失败之后过多久再试一次。
-///
-/// 一次失败不该判永久（审查 P2）：截图 RPC 可能只是暂时不通，而媒体后端仍解不出画面，
-/// 判永久就等于本次会话一路停在旧画面上。30 秒与 FramePump 降级期的重试同节奏——
-/// 每帧都撞会把渲染线程泡在建连接的来回里，60 秒又让"爬回来"慢得看不出在救。
+/// 截图启动失败后的重试间隔。暂时的 RPC 失败不应永久停留在旧画面；
+/// 使用 30 秒退避，避免每帧建立连接，也与视频降级期间的重试节奏一致。
 inline constexpr uint64_t kShotRetryMs = 30000;
 
 /// `has_pump` 媒体泵存在（起流成功过）；`video_dead` 泵自报当前解不出画面
@@ -36,8 +29,7 @@ inline constexpr uint64_t kShotRetryMs = 30000;
 inline SourcePick pick_picture_source(bool has_pump, bool video_dead, bool has_shot,
                                       uint64_t ms_since_shot_fail) {
     if (has_shot) {
-        // 起流就降级的那一格泵不存在：`!video_dead` 在那里是"没有泵"而不是"泵回升"，
-        // 必须留在截图路上。这一格就是第一版写错的地方。
+        // 启动时已使用截图且不存在媒体泵，应继续截图，不能将 !video_dead 当作恢复。
         return (has_pump && !video_dead) ? SourcePick::kToStream : SourcePick::kStayShot;
     }
     if (has_pump && video_dead && ms_since_shot_fail >= kShotRetryMs) {
@@ -46,13 +38,9 @@ inline SourcePick pick_picture_source(bool has_pump, bool video_dead, bool has_s
     return SourcePick::kStayStream;
 }
 
-/// `--test-degrade` 的时刻表：把 "4,8,12" 这种逗号分隔的**秒**换成相对起点的毫秒。
-///
-/// 为什么产品里会有一个测试开关：上面那本状态账里"跑着跑着解不出画面"这一格，在真机上
-/// **打不响**——要画面复杂到编码器交出超过解码后端上限的帧，或者连续三次重起都拿不到
-/// 关键帧。而连着三轮审查的修复（切换、序号、回收）全在这一格上，没有触发器就只能一直
-/// 交"离线判据 + 代码论证"。所以给一个时刻表，让**同一段状态机**在真机上跑起来：它不改
-/// 状态机本身，只是把 `video_dead` 那一个入参顶成真。
+/// --test-degrade 将逗号分隔的秒数转换为相对启动时刻的毫秒。
+/// 用于在真机强制触发运行中降级，验证生产状态机的切换、序号和回收路径。
+/// 开关仅覆盖 video_dead 输入，不改变状态机规则。
 inline bool degrade_forced(uint64_t now_ms, const std::vector<uint64_t> &marks) {
     std::size_t passed = 0;
     for (const uint64_t m : marks) {
@@ -65,8 +53,7 @@ inline bool degrade_forced(uint64_t now_ms, const std::vector<uint64_t> &marks) 
     return passed % 2 == 1;
 }
 
-/// 解析 `--test-degrade` 的规格。格式错就返回 false 并把原因写进 `err`——这条旗标的
-/// 用途是打判据，静默忽略一个写错的规格等于让人对着一个从没生效的开关读日志。
+/// 解析降级时刻表，格式错误时返回 false 并填写 err，避免无效开关被静默忽略。
 inline bool parse_degrade_marks(std::string_view spec, std::vector<uint64_t> &out,
                                 std::string &err) {
     out.clear();
@@ -76,15 +63,11 @@ inline bool parse_degrade_marks(std::string_view spec, std::vector<uint64_t> &ou
         char *end = nullptr;
         const double secs = std::strtod(p, &end);
         if (end == p) {
-            err = std::string("有一段不是数字：\"") + p + "\"";
+            err = std::string("存在无效数字：\"") + p + "\"";
             return false;
         }
-        // 非有限数与装不下的数都要当场拒（审查 P2）。`strtod` 认 "nan"/"inf"，也认
-        // "1e400"（溢出成 inf），而下面那道负数关拦不住 nan——它与任何数比较都是
-        // false。从 NaN 或超出目标类型的浮点值转整数是**未定义行为**，UBSan 实测报
-        // `nan is outside the range of representable values of type 'unsigned long long'`。
-        // 这条旗标的用途是打判据，所以一个静默变成垃圾数的时刻表比直接报错更糟：它会
-        // 让人对着一个从没按预期生效的开关读日志。
+        // 拒绝非有限值和超出转换范围的值。strtod 可接受 nan / inf，NaN 的比较
+        // 无法被普通负数判断捕获；从非有限或越界浮点值转换整数是未定义行为。
         if (!std::isfinite(secs)) {
             err = std::string("时刻不是有限数：\"") + std::string(p, static_cast<std::size_t>(end - p)) + "\"";
             return false;
@@ -93,16 +76,16 @@ inline bool parse_degrade_marks(std::string_view spec, std::vector<uint64_t> &ou
             err = "时刻不能是负数";
             return false;
         }
-        // 只有"乘完还装得下"的转换才是有定义的。这里**不设人为上限**：1e9 秒这种装得下
-        // 的大数照收，它只是永远到不了那一刻，而多设一个上限就多一条要解释的规矩。
+        // 确认秒数换算为毫秒后可由 uint64_t 表示；不另加人为时间上限。
+        // 下面的阈值向上取整到 2^64。
         constexpr double kMaxMs = static_cast<double>(UINT64_MAX);  // 向上取整到 2^64
         if (secs * 1000.0 >= kMaxMs) {
-            err = std::string("时刻太大，换算成毫秒装不进 uint64：\"") + std::string(p, static_cast<std::size_t>(end - p)) + "\"";
+            err = std::string("时刻超过 uint64 毫秒范围：\"") + std::string(p, static_cast<std::size_t>(end - p)) + "\"";
             return false;
         }
         const auto ms = static_cast<uint64_t>(secs * 1000.0);
         if (!out.empty() && ms < out.back()) {
-            err = "时刻要按升序给（这一段比前一个早）";
+            err = "时刻必须按升序排列";
             return false;
         }
         out.push_back(ms);
@@ -110,18 +93,18 @@ inline bool parse_degrade_marks(std::string_view spec, std::vector<uint64_t> &ou
         if (*p == ',') {
             ++p;
             if (*p == '\0') {
-                err = "尾巴上多了个逗号";
+                err = "末尾不能包含逗号";
                 return false;
             }
             continue;
         }
         if (*p != '\0') {
-            err = std::string("有认不出的字符：\"") + p + "\"";
+            err = std::string("存在无效字符：\"") + p + "\"";
             return false;
         }
     }
     if (out.empty()) {
-        err = "时刻表是空的（至少要给一个时刻）";
+        err = "时刻表至少需要一个时刻";
         return false;
     }
     return true;
