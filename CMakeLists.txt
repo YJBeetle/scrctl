@@ -19,6 +19,10 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
+if(WIN32)
+    add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX SDL_MAIN_HANDLED)
+endif()
+
 include(cmake/Dependencies.cmake)
 include(cmake/Lwip.cmake)
 include(cmake/Translations.cmake)
@@ -123,6 +127,8 @@ add_library(scrctl_core STATIC
         src/rt/RtpHevc.cpp
         src/rt/RtpSeq.cpp
         src/rt/Rtcp.cpp
+        src/transport/Socket.cpp
+        src/transport/SocketPlatform.cpp
         src/transport/Usbmux.cpp
         src/transport/TcpConnect.cpp
         src/transport/TlsChannel.cpp
@@ -154,6 +160,10 @@ target_include_directories(scrctl_core PUBLIC src)
 target_link_libraries(scrctl_core PUBLIC ScrctlAppleFrameworks OpenSSL::SSL OpenSSL::Crypto nlohmann_json::nlohmann_json)
 target_link_libraries(scrctl_core PRIVATE pugixml::pugixml scrctl_lwip)
 target_link_libraries(scrctl_core PRIVATE Intl::Intl)
+if(WIN32)
+    target_sources(scrctl_core PRIVATE src/wifi/PairRecordWindows.cpp)
+    target_link_libraries(scrctl_core PUBLIC ws2_32 PRIVATE advapi32)
+endif()
 target_compile_definitions(scrctl_core PRIVATE
         SCRCTL_BUILD_LOCALEDIR="${CMAKE_BINARY_DIR}/locale"
         SCRCTL_RELATIVE_LOCALEDIR="${SCRCTL_RELATIVE_LOCALEDIR}"
@@ -347,11 +357,15 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(net_test PRIVATE scrctl_core)
     add_test(NAME net COMMAND net_test)
 
-    # SIGPIPE 那一路离线就能判：socketpair 关掉一端再写，防护缺失时测试进程会被信号
-    # 打死（ctest 报 crashed），比在真机上拔线猜"为什么无声退出"便宜得多。
-    add_executable(transport_test tests/transport_test.cpp)
+    # POSIX 验证 SIGPIPE 防护；Windows 验证原生句柄、I/O 取消和 PSK TLS。
+    if(WIN32)
+        add_executable(transport_test tests/transport_windows_test.cpp)
+    else()
+        add_executable(transport_test tests/transport_test.cpp)
+    endif()
     target_link_libraries(transport_test PRIVATE scrctl_core)
     add_test(NAME transport COMMAND transport_test)
+    set_tests_properties(transport PROPERTIES TIMEOUT 15)
 
     add_executable(tcp_connect_test tests/tcp_connect_test.cpp)
     target_link_libraries(tcp_connect_test PRIVATE scrctl_core)
@@ -414,7 +428,11 @@ if(SCRCTL_BUILD_TESTS)
     endif()
 endif()
 
-install(TARGETS scrctl RUNTIME DESTINATION bin)
+if(WIN32)
+    include(cmake/WindowsRuntime.cmake)
+else()
+    install(TARGETS scrctl RUNTIME DESTINATION bin)
+endif()
 install(FILES THIRD_PARTY_NOTICES.md DESTINATION share/doc/scrctl)
 
 add_executable(feature_schema_probe tools/feature_schema_probe.cpp)

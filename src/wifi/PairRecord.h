@@ -37,11 +37,12 @@ struct PairRecord {
 std::string format_record(const PairRecord &record);
 std::optional<PairRecord> parse_record(std::string_view text, std::string &err);
 
-/// 落盘/读取。文件权限 0600、目录 0700——这是一把能让对方在设备上打字的手柄。
+/// 记录包含私钥。POSIX 文件 0600、新建叶子目录 0700；Windows 使用当前用户的受保护 DACL。
 bool save_record(const std::string &path, const PairRecord &record, std::string &err);
 std::optional<PairRecord> load_record(const std::string &path, std::string &err);
 
-/// 默认目录：`$XDG_DATA_HOME/scrctl` 或 `~/.local/share/scrctl`。
+/// 默认目录：优先 $XDG_DATA_HOME；Windows 使用 %LOCALAPPDATA%/scrctl，
+/// 其他平台使用 ~/.local/share/scrctl。
 std::string default_record_dir();
 /// `<dir>/remote-<UDID 末段>.pair`。UDID 里有连字符，路径里统一换成下划线。
 std::string record_path(const std::string &dir, const std::string &udid);

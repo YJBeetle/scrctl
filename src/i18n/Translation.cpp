@@ -12,7 +12,9 @@
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>
 #elif defined(_WIN32)
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #endif
 

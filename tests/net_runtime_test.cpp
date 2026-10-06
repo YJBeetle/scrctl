@@ -51,7 +51,7 @@ struct Server {
       require(listener, "listener allocation");
       ip_addr_t ip{};
       ipaddr_aton(stack.local_text().c_str(), &ip);
-      tcp_bind_netif(listener, stack.interface());
+      tcp_bind_netif(listener, stack.network_interface());
       require(tcp_bind(listener, &ip, 12345) == ERR_OK, "listen bind");
       listener = tcp_listen(listener);
       require(listener, "listen");

@@ -4,8 +4,12 @@
 #include <algorithm>
 #include <filesystem>
 
+#ifdef _WIN32
+#include "wifi/PairRecordWindows.h"
+#else
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 #include <cerrno>
 #include <cstdio>
@@ -86,7 +90,12 @@ std::string sanitize(const std::string &udid) {
 }
 
 bool write_file(const std::string &path, std::string_view text, std::string &err) {
-    const std::string tmp = path + ".tmp";
+    const auto nonce = random_bytes(8, err);
+    if (!nonce) return false;
+    const std::string tmp = path + ".tmp." + hex(*nonce);
+#ifdef _WIN32
+    return write_private_record(tmp, path, text, err);
+#else
     std::FILE *f = std::fopen(tmp.c_str(), "wb");
     if (f == nullptr) {
         err = SCRCTL_TR("Cannot open temporary file ") + tmp;
@@ -100,8 +109,8 @@ bool write_file(const std::string &path, std::string_view text, std::string &err
         return false;
     }
     const size_t written = std::fwrite(text.data(), 1, text.size(), f);
-    std::fclose(f);
-    if (written != text.size()) {
+    const int closed = std::fclose(f);
+    if (written != text.size() || closed != 0) {
         err = SCRCTL_TR("Incomplete record file write");
         ::remove(tmp.c_str());
         return false;
@@ -112,6 +121,7 @@ bool write_file(const std::string &path, std::string_view text, std::string &err
         return false;
     }
     return true;
+#endif
 }
 
 std::optional<std::string> read_file(const std::string &path, std::string &err) {
@@ -226,11 +236,10 @@ std::optional<PairRecord> parse_record(std::string_view text, std::string &err) 
 }
 
 bool save_record(const std::string &path, const PairRecord &record, std::string &err) {
-    const size_t slash = path.find_last_of('/');
-    if (slash != std::string::npos && slash > 0) {
-        const std::string dir = path.substr(0, slash);
-        // 逐层建：新机器上 ~/.local/share 可能根本不存在，而设备那头已经点过「信任」——
-        // 这一步失败意味着整趟配对白跑（记录没落盘，下次还得再点一次 29 秒的弹窗）。
+    const auto parent = std::filesystem::path(path).parent_path();
+    const std::string dir = parent.string();
+    if (!dir.empty()) {
+        // 创建缺失的父目录；记录保存失败会让下次连接仍需重新配对。
         std::error_code ec;
         const bool existed = std::filesystem::is_directory(dir, ec);
         std::filesystem::create_directories(dir, ec);
@@ -239,9 +248,16 @@ bool save_record(const std::string &path, const PairRecord &record, std::string 
             return false;
         }
         if (!existed) {
-            // 记录目录里是一把能让对方在设备上打字的手柄，叶子这一层维持 0700 的承诺
-            // （见头文件）。中间层（~/.local、~/.local/share）是共享路径，**不能**动权限。
+            // 只限制新建的叶子目录。共享父目录及已有目录的权限由用户管理。
+#ifdef _WIN32
+            if (!protect_record_directory(dir, err)) return false;
+#else
             std::filesystem::permissions(dir, std::filesystem::perms::owner_all, ec);
+            if (ec) {
+                err = std::string(SCRCTL_TR("Failed to set record file permissions")) + ": " + ec.message();
+                return false;
+            }
+#endif
         }
     }
     return write_file(path, format_record(record), err);
@@ -260,6 +276,10 @@ std::string default_record_dir() {
     if (xdg != nullptr && *xdg != '\0') {
         return std::string(xdg) + "/scrctl";
     }
+#ifdef _WIN32
+    if (const char *local = std::getenv("LOCALAPPDATA"); local && *local)
+        return (std::filesystem::path(local) / "scrctl").string();
+#endif
     const char *home = std::getenv("HOME");
     return std::string(home != nullptr ? home : ".") + "/.local/share/scrctl";
 }

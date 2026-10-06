@@ -11,7 +11,7 @@ base = {k: v for k, v in os.environ.items() if k not in
 
 def run(args, variables=None):
     return subprocess.run([binary, *args], env={**base, **(variables or {})},
-                          capture_output=True, text=True, timeout=10)
+                          capture_output=True, text=True, encoding="utf-8", timeout=10)
 
 def help_is(chinese, variables=None, args=None):
     result = run(args or ['--help'], variables)

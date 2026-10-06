@@ -7,7 +7,15 @@ namespace {
 // atomic_flag 保证无锁，可在信号处理器内使用，也允许信号由其他线程接收。
 std::atomic_flag g_stop_requested = ATOMIC_FLAG_INIT;
 
-void on_stop_signal(int) { g_stop_requested.test_and_set(std::memory_order_relaxed); }
+void on_stop_signal(int signal) {
+    g_stop_requested.test_and_set(std::memory_order_relaxed);
+#ifdef _WIN32
+    // Windows CRT 在调用后恢复默认动作；退出清理期间再次收到信号仍只请求停止。
+    std::signal(signal, on_stop_signal);
+#else
+    (void)signal;
+#endif
+}
 } // namespace
 
 bool SdlRuntime::initialize(Uint32 flags) {
@@ -20,6 +28,8 @@ bool SdlRuntime::initialize(Uint32 flags) {
     previous_int_ = std::signal(SIGINT, on_stop_signal);
     previous_term_ = std::signal(SIGTERM, on_stop_signal);
     attempted_ = true;
+    // 使用普通 main，不依赖 SDL 的平台入口包装器。
+    SDL_SetMainReady();
     const bool initialized = SDL_Init(flags) == 0;
     // 必须在 SDL 后重新安装，否则退出请求可能被 SDL 吞掉。
     std::signal(SIGINT, on_stop_signal);

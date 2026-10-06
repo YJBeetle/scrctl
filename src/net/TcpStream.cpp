@@ -93,7 +93,7 @@ bool TcpStream::connect(uint16_t port, std::string &err) {
   auto s = impl_;
   err.clear();
   const auto code = LwipRuntime::instance().call([&]() -> err_t {
-    auto *nic = s->stack.interface();
+    auto *nic = s->stack.network_interface();
     if (!nic || !port || s->started)
       return ERR_ARG;
     s->started = true;

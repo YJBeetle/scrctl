@@ -5,6 +5,7 @@
 #include <openssl/pem.h>
 #include <openssl/x509.h>
 
+#include <climits>
 #include <csignal>
 #include <cstring>
 #include <mutex>
@@ -202,7 +203,9 @@ bool TlsChannel::handshake(Socket &sock, const PemIdentity &id, std::string &err
     }
     // 设备证书没有 SAN/IP，所以只验链可信、不做主机名校验
     // （OpenSSL 默认即如此，无需显式关闭）。
-    if (SSL_set_fd(ssl_, sock.fd()) != 1) {
+    // OpenSSL 的 socket BIO 接口使用 int；拒绝无法无损表示的本机句柄。
+    if (sock.fd() > static_cast<NativeSocket>(INT_MAX) ||
+        SSL_set_fd(ssl_, static_cast<int>(sock.fd())) != 1) {
         return err = SCRCTL_TR("SSL_set_fd failed"), false;
     }
     if (SSL_connect(ssl_) != 1) {
@@ -248,7 +251,9 @@ bool TlsChannel::handshake_psk(Socket &sock, const std::vector<uint8_t> &psk, st
     if (SSL_set_ex_data(ssl_, psk_ex_index(), &psk_) != 1) {
         return err = SCRCTL_TR("Failed to attach PSK to TLS channel"), false;
     }
-    if (SSL_set_fd(ssl_, sock.fd()) != 1) {
+    // OpenSSL 的 socket BIO 接口使用 int；拒绝无法无损表示的本机句柄。
+    if (sock.fd() > static_cast<NativeSocket>(INT_MAX) ||
+        SSL_set_fd(ssl_, static_cast<int>(sock.fd())) != 1) {
         return err = SCRCTL_TR("SSL_set_fd failed"), false;
     }
     if (SSL_connect(ssl_) != 1) {

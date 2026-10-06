@@ -314,6 +314,7 @@ bool letterbox_and_readback() {
 int main() {
     // 必须在 SDL_Init 之前设：dummy 驱动不需要显示器，CI 与 SSH 会话里也能跑。
     SDL_SetHint(SDL_HINT_VIDEODRIVER, "dummy");
+    SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         std::fprintf(stderr, "SDL_Init 失败: %s\n", SDL_GetError());
         return 1;

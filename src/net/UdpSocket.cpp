@@ -79,7 +79,7 @@ bool UdpSocket::bind(std::string &err) {
   auto s = impl_;
   err.clear();
   const auto result = LwipRuntime::instance().call([s]() -> err_t {
-    auto *nic = s->stack.interface();
+    auto *nic = s->stack.network_interface();
     if (!nic || !s->port || s->pcb)
       return ERR_ARG;
     s->pcb = udp_new_ip_type(IPADDR_TYPE_V6);
@@ -109,7 +109,7 @@ bool UdpSocket::send(const std::vector<uint8_t> &payload, uint16_t port,
   auto s = impl_;
   err.clear();
   const auto result = LwipRuntime::instance().call([&]() -> err_t {
-    auto *nic = s->stack.interface();
+    auto *nic = s->stack.network_interface();
     if (!nic || !s->pcb || !port)
       return ERR_CONN;
     if (payload.size() > nic->mtu - 48u)

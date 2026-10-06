@@ -2,7 +2,12 @@
 #include "net/Stack.h"
 
 #include "net/LwipRuntime.h"
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
 #include <arpa/inet.h>
+#endif
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
@@ -110,7 +115,7 @@ Stack::Stack(transport::PacketIo &tunnel, std::string local, std::string peer)
       inet_pton(AF_INET6, peer_text_.c_str(), peer_addr_.data()) == 1;
 }
 Stack::~Stack() { stop_pump(); }
-netif *Stack::interface() {
+netif *Stack::network_interface() {
   return impl_->registered && pumping_ && !stopping_ ? &impl_->nic : nullptr;
 }
 void Stack::attach_endpoint(const void *key,

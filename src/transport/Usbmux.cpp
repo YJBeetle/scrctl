@@ -1,12 +1,11 @@
 #include "i18n/Translation.h"
 #include "Usbmux.h"
 
-#include <arpa/inet.h>
-#include <poll.h>
-#include <sys/socket.h>
-#include <sys/time.h>
+#include "transport/TcpConnect.h"
+#ifndef _WIN32
 #include <sys/un.h>
 #include <unistd.h>
+#endif
 
 #include <cerrno>
 #include <cstring>
@@ -60,195 +59,27 @@ DeviceRecord parse_record(const plist::Value &rec) {
     return d;
 }
 
-/// 按 fd 关掉 SIGPIPE（有这个选项的平台）。不设的话，对端 RST/半关闭之后**一次写就
-/// 把整个进程带走**——默认动作是杀进程，不是返回 EPIPE。局域网里设备睡觉、路由器重启
-/// 都会给 RST；USB 这条也一样，拔线时 usbmuxd 未必总是干净地 FIN。
-///
-/// 为什么挂在 Socket 上而不是逐个建连点：同一个 fd 之后可能被交给 OpenSSL 的 socket
-/// BIO（`SSL_set_fd` 用它自己的 write()），那条路拿不到我们 `send` 上的 MSG_NOSIGNAL，
-/// 只有 fd 上的选项盖得住。曾经只在 TcpConnect 里设过，结果 usbmux 交出去的那条
-/// AF_UNIX 隧道（lockdown→TLS 用的正是它）一直是裸的（审查 P1）。
-void disable_sigpipe(int fd) {
-#ifdef SO_NOSIGPIPE
-    const int one = 1;
-    ::setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
-#else
-    (void)fd;
-#endif
-}
-
-}  // namespace
-
-// ------------------------------------------------------------ Socket ------
-
-Socket::Socket(int fd) : fd_(fd) {
-    if (fd_ >= 0) {
-        disable_sigpipe(fd_);
-    }
-}
-
-Socket::Socket(Socket &&other) noexcept : fd_(other.fd_) { other.fd_ = -1; }
-
-Socket &Socket::operator=(Socket &&other) noexcept {
-    if (this != &other) {
-        close();
-        fd_ = other.fd_;
-        other.fd_ = -1;
-    }
-    return *this;
-}
-
-Socket::~Socket() { close(); }
-
-void Socket::reset(int fd) {
-    close();
-    fd_ = fd;
-    if (fd_ >= 0) {
-        disable_sigpipe(fd_);
-    }
-}
-
-void Socket::close() {
-    if (fd_ >= 0) {
-        ::close(fd_);
-        fd_ = -1;
-    }
-}
-
-#if defined(MSG_NOSIGNAL)
-// Linux 没有 SO_NOSIGPIPE 可以按 fd 关，只能按次给 send 带上 MSG_NOSIGNAL。这一层盖的
-// 是我们自己的写；OpenSSL 的 socket BIO 绕过它，那边靠 TlsChannel 里的进程级 SIG_IGN。
-constexpr int kNoSigPipe = MSG_NOSIGNAL;
-#else
-constexpr int kNoSigPipe = 0;
-#endif
-
-bool Socket::write_all(const void *data, size_t len, std::string &err) {
-    const auto *p = static_cast<const uint8_t *>(data);
-    size_t left = len;
-    while (left > 0) {
-        const ssize_t n = ::send(fd_, p, left, kNoSigPipe);
-        if (n < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            err = std::string(SCRCTL_TR("send failed: ")) + std::strerror(errno);
-            return false;
-        }
-        if (n == 0) {
-            err = SCRCTL_TR("Peer closed write direction");
-            return false;
-        }
-        p += static_cast<size_t>(n);
-        left -= static_cast<size_t>(n);
-    }
-    return true;
-}
-
-bool Socket::read_exact(void *data, size_t len, std::string &err) {
-    if (len == 0) {
-        return true;
-    }
-    auto *p = static_cast<uint8_t *>(data);
-    size_t got = 0;
-    while (got < len) {
-        const ssize_t n = ::recv(fd_, p + got, len - got, 0);
-        if (n < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                err = SCRCTL_TR("Read timed out (no bytes before deadline)");
-                return false;
-            }
-            err = std::string(SCRCTL_TR("recv failed: ")) + std::strerror(errno);
-            return false;
-        }
-        if (n == 0) {
-            err = SCRCTL_TR("Peer closed (received only ") + std::to_string(got) + "/" + std::to_string(len) + SCRCTL_TR(")");
-            return false;
-        }
-        got += static_cast<size_t>(n);
-    }
-    return true;
-}
-
-bool Socket::set_read_timeout(int ms, std::string &err) {
-    timeval tv{};
-    tv.tv_sec = ms / 1000;
-    tv.tv_usec = (ms % 1000) * 1000;
-    if (::setsockopt(fd_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) != 0) {
-        err = std::string(SCRCTL_TR("Failed to set read timeout: ")) + std::strerror(errno);
-        return false;
-    }
-    return true;
-}
-
-void Socket::interrupt() {
-    if (fd_ >= 0) ::shutdown(fd_, SHUT_RDWR);
-}
-
-bool Socket::wait_readable(int ms, std::string &err, bool *timed_out) {
-    if (timed_out) *timed_out = false;
-    if (fd_ < 0) {
-        err = SCRCTL_TR("Socket closed");
-        return false;
-    }
-    pollfd pfd{fd_, POLLIN, 0};
-    for (;;) {
-        const int n = ::poll(&pfd, 1, ms);
-        if (n > 0) {
-            return true;
-        }
-        if (n == 0) {
-            if (timed_out) {
-                *timed_out = true;
-                err.clear();
-            } else {
-                err = SCRCTL_TR("Wait timed out");
-            }
-            return false;
-        }
-        if (errno != EINTR) {
-            err = std::string(SCRCTL_TR("poll failed: ")) + std::strerror(errno);
-            return false;
-        }
-    }
-}
-
-bool Socket::read_len_prefixed_be(std::vector<uint8_t> &out, std::string &err) {
-    uint8_t hdr[4];
-    if (!read_exact(hdr, 4, err)) {
-        return false;
-    }
-    const uint32_t len = uint32_t(hdr[0]) << 24 | uint32_t(hdr[1]) << 16 | uint32_t(hdr[2]) << 8 |
-                         hdr[3];
-    if (len < 4 || len > (32u << 20)) {
-        err = SCRCTL_TR("Invalid lockdown frame length: ") + std::to_string(len);
-        return false;
-    }
-    out.resize(len);
-    return read_exact(out.data(), len, err);
-}
-
-bool Socket::write_len_prefixed_be(std::string_view payload, std::string &err) {
-    uint8_t hdr[4];
-    const uint32_t n = static_cast<uint32_t>(payload.size());
-    hdr[0] = static_cast<uint8_t>(n >> 24);
-    hdr[1] = static_cast<uint8_t>(n >> 16);
-    hdr[2] = static_cast<uint8_t>(n >> 8);
-    hdr[3] = static_cast<uint8_t>(n);
-    if (!write_all(hdr, 4, err)) {
-        return false;
-    }
-    return write_all(payload.data(), payload.size(), err);
-}
+} // namespace
 
 // ------------------------------------------------------------ Usbmux ------
 
-std::string Usbmux::socket_path() { return "/var/run/usbmuxd"; }
+std::string Usbmux::socket_path() {
+#ifdef _WIN32
+    return "127.0.0.1:27015";
+#else
+    return "/var/run/usbmuxd";
+#endif
+}
 
 std::optional<Usbmux> Usbmux::open(std::string &err) {
+#ifdef _WIN32
+    // Apple Mobile Device Service 在 Windows 提供本地 TCP usbmux 服务。
+    auto socket = connect_tcp("127.0.0.1", 27015, 3000, err);
+    if (!socket) return std::nullopt;
+    Usbmux mux;
+    mux.sock_ = std::move(*socket);
+    return mux;
+#else
     const int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
     if (fd < 0) {
         err = std::string(SCRCTL_TR("socket failed: ")) + std::strerror(errno);
@@ -265,6 +96,7 @@ std::optional<Usbmux> Usbmux::open(std::string &err) {
     Usbmux mux;
     mux.sock_.reset(fd);
     return mux;
+#endif
 }
 
 Usbmux::Usbmux(Usbmux &&other) noexcept : sock_(std::move(other.sock_)), tag_(other.tag_) {

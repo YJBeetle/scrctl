@@ -13,7 +13,13 @@
 namespace {
 int failures = 0;
 volatile std::sig_atomic_t caller_signal = 0;
-void caller_handler(int signal) { caller_signal = signal; }
+void caller_handler(int signal) {
+    caller_signal = signal;
+#ifdef _WIN32
+    // Windows CRT 的 signal 处理器只生效一次；测试调用者显式保留自己的处理器。
+    std::signal(signal, caller_handler);
+#endif
+}
 
 void check(bool ok, const char *message) {
     if (!ok) {
@@ -37,6 +43,7 @@ int main() {
     {
         scrctl::app::SdlRuntime runtime;
         check(runtime.initialize(SDL_INIT_TIMER), "initialize timer");
+        std::raise(SIGTERM);
         std::raise(SIGTERM);
         check(runtime.stop_requested() && caller_signal == 0,
               "signal requests orderly exit while runtime is active");

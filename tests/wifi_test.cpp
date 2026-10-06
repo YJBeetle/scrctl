@@ -17,6 +17,11 @@
 #include <openssl/evp.h>
 #include <openssl/err.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <aclapi.h>
+#endif
+
 #include "remote/PairingChannel.h"
 #include "wifi/Crypto.h"
 #include "wifi/Opack.h"
@@ -863,6 +868,39 @@ const scrctl::json::Value &jat(const scrctl::json::Value &value, std::string_vie
 /// 为什么这三条值得单独立判据：类型发错的症状与"设备不喜欢我们的字段"完全一样
 /// （连接当场 invalidated），而 iOS 27 只在这条载体上收 pair-setup（docs §25.8），
 /// 所以这里错了，真机上看到的又是那十条已否证假设的样子。
+#ifdef _WIN32
+bool private_record_acl(const std::filesystem::path &path) {
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    PACL acl = nullptr;
+    auto wide = path.wstring();
+    if (GetNamedSecurityInfoW(wide.data(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION,
+                             nullptr, nullptr, &acl, nullptr, &descriptor) != ERROR_SUCCESS)
+        return false;
+    SECURITY_DESCRIPTOR_CONTROL control = 0;
+    DWORD revision = 0;
+    bool ok = GetSecurityDescriptorControl(descriptor, &control, &revision) &&
+              (control & SE_DACL_PROTECTED) && acl && acl->AceCount == 1;
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) ok = false;
+    DWORD size = 0;
+    if (token) GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+    std::vector<unsigned char> buffer(size);
+    if (!size || !GetTokenInformation(token, TokenUser, buffer.data(), size, &size)) ok = false;
+    if (token) CloseHandle(token);
+    void *ace = nullptr;
+    ok = ok && GetAce(acl, 0, &ace);
+    if (ok) {
+        const auto *allowed = static_cast<ACCESS_ALLOWED_ACE *>(ace);
+        ok = allowed->Header.AceType == ACCESS_ALLOWED_ACE_TYPE &&
+             !(allowed->Header.AceFlags & INHERITED_ACE) &&
+             EqualSid(const_cast<DWORD *>(&allowed->SidStart),
+                      reinterpret_cast<TOKEN_USER *>(buffer.data())->User.Sid);
+    }
+    LocalFree(descriptor);
+    return ok;
+}
+#endif
+
 void test_record_listing() {
     // `--wifi` 不给 -s 时靠这个挑记录，所以"哪些算记录、哪些不算"要有判据：
     // 前缀/后缀不对的、以及空 UDID 那个 `remote-.pair`，都不能被当成一条记录。
@@ -902,7 +940,14 @@ void test_record_listing() {
         const auto back = scrctl::wifi::load_record(deep_path, err);
         check(back.has_value() && back->host_private_key == rec.host_private_key,
               "逐层建出来的目录里记录要能读回原样");
-#ifndef _WIN32
+        rec.host_private_key = Bytes(32, 0x33);
+        check(scrctl::wifi::save_record(deep_path, rec, err), "已有记录可原子替换");
+        const auto updated = scrctl::wifi::load_record(deep_path, err);
+        check(updated && updated->host_private_key == rec.host_private_key, "替换后读取新记录");
+#ifdef _WIN32
+        check(private_record_acl(deep_path), "记录文件只授权当前用户且不继承宽松 ACL");
+        check(private_record_acl(deep), "新建叶子目录只授权当前用户");
+#else
         // 叶子 0700 是头文件里的承诺；中间层（~/.local、~/.local/share 那类）是共享
         // 路径，权限必须与系统默认一致——收紧会弄坏别的程序，放宽会漏手柄。
         const auto perms = std::filesystem::status(deep).permissions();

@@ -46,7 +46,7 @@ public:
   std::string icmp_last() const;
 
   // 以下接口只在 lwIP 核心线程调用，供内部端点适配与集成测试使用。
-  netif *interface();
+  netif *network_interface();
   void attach_endpoint(const void *key,
                        std::function<void(const std::string &)> fail);
   void detach_endpoint(const void *key);

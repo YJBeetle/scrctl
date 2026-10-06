@@ -3,7 +3,12 @@
 // 这块值得单独钉：IPv6 下 TCP/UDP 的校验和要带伪头，算错的表现是**对方静默
 // 丢弃**——不报错、不回 RST，只是永远握不上手。没有对照向量的话，这种错只能
 // 靠接上真机去猜，而真机上的排查成本是每次几分钟。
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
 #include <arpa/inet.h>
+#endif
 #include <algorithm>
 #include <cstdio>
 #include <cstdint>
