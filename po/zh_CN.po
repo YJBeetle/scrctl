@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 16:39+0800\n"
+"POT-Creation-Date: 2026-10-07 16:52+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -1529,7 +1529,7 @@ msgstr "（服务不可用；请检查开发者模式及 Xcode 的 DDI 挂载）
 msgid " (check DDI mounting and Developer Mode)"
 msgstr "（请检查 DDI 挂载及开发者模式）"
 
-#: src/remote/Device.cpp:77
+#: src/remote/Device.cpp:93
 msgid ""
 "No USB device found (usbmux list is empty). Check the data cable and USB "
 "connection, then reconnect the device. Untrusted devices normally appear in "
@@ -1538,123 +1538,123 @@ msgstr ""
 "未发现 USB 设备（usbmux 列表为空）。请检查数据线与 USB 连接，再重新连接设备。"
 "未信任的设备通常也会出现在此列表中。"
 
-#: src/remote/Device.cpp:87
+#: src/remote/Device.cpp:103
 msgid "; select one: "
 msgstr "；请选择设备："
 
-#: src/remote/Device.cpp:87
+#: src/remote/Device.cpp:103
 msgid "Connected devices: "
 msgstr "已连接设备数："
 
-#: src/remote/Device.cpp:103
+#: src/remote/Device.cpp:119
 msgid "; connected devices: "
 msgstr "；当前连接设备："
 
-#: src/remote/Device.cpp:103
+#: src/remote/Device.cpp:119
 msgid "No connected device matches "
 msgstr "没有已连接设备匹配 "
 
-#: src/remote/Device.cpp:107
+#: src/remote/Device.cpp:123
 msgid " (total "
 msgstr "（共 "
 
-#: src/remote/Device.cpp:107
+#: src/remote/Device.cpp:123
 msgid "). Check the selected UDID and USB connection."
 msgstr " 台）。请检查所选 UDID 与 USB 连接。"
 
-#: src/remote/Device.cpp:117
+#: src/remote/Device.cpp:133
 msgid "lockdown pairing session"
 msgstr "lockdown 配对 session"
 
-#: src/remote/Device.cpp:120
+#: src/remote/Device.cpp:136
 msgid "Failed to establish lockdown session: "
 msgstr "lockdown 会话建立失败: "
 
-#: src/remote/Device.cpp:123
+#: src/remote/Device.cpp:139
 msgid "Start CoreDeviceProxy"
 msgstr "启动 CoreDeviceProxy"
 
-#: src/remote/Device.cpp:126 src/remote/Rsd.cpp:152 src/remote/Rsd.cpp:355
+#: src/remote/Device.cpp:142 src/remote/Rsd.cpp:152 src/remote/Rsd.cpp:355
 #: src/transport/Usbmux.cpp:92 src/wifi/PairRecord.cpp:308
 msgid " failed: "
 msgstr " 失败: "
 
-#: src/remote/Device.cpp:126
+#: src/remote/Device.cpp:142
 msgid "Start "
 msgstr "启动 "
 
-#: src/remote/Device.cpp:129
+#: src/remote/Device.cpp:145
 msgid "CDTunnel handshake"
 msgstr "CDTunnel 握手"
 
-#: src/remote/Device.cpp:134 src/remote/Device.cpp:225
+#: src/remote/Device.cpp:150 src/remote/Device.cpp:241
 msgid "Failed to establish packet tunnel: "
 msgstr "包隧道建立失败: "
 
-#: src/remote/Device.cpp:141
+#: src/remote/Device.cpp:157
 msgid "Cannot construct a stable peer identity from pairing HostID"
 msgstr "无法根据配对记录的 HostID 生成稳定的连接身份"
 
-#: src/remote/Device.cpp:147 src/remote/Device.cpp:157
+#: src/remote/Device.cpp:163 src/remote/Device.cpp:173
 msgid "Connect to RSD inside tunnel and read directory"
 msgstr "连接隧道内 RSD 并读取目录"
 
-#: src/remote/Device.cpp:163
+#: src/remote/Device.cpp:179
 msgid "Tunnel returned an invalid IPv6 address"
 msgstr "隧道给的地址不是合法 IPv6"
 
-#: src/remote/Device.cpp:174
+#: src/remote/Device.cpp:190
 msgid "Ready"
 msgstr "就绪"
 
-#: src/remote/Device.cpp:186
+#: src/remote/Device.cpp:202
 msgid "LAN pair-verify"
 msgstr "局域网配对验证"
 
-#: src/remote/Device.cpp:189
+#: src/remote/Device.cpp:205
 msgid "Cannot connect to device RemotePairing port "
 msgstr "连不上设备的 RemotePairing 端口 "
 
-#: src/remote/Device.cpp:190
+#: src/remote/Device.cpp:206
 msgid ""
 " (check that the device is reachable on this network and has been paired)"
 msgstr "（请检查设备在当前网络是否可达，以及是否已配对）"
 
-#: src/remote/Device.cpp:199
+#: src/remote/Device.cpp:215
 msgid "Device rejected pairing record: "
 msgstr "设备不认这条配对记录："
 
-#: src/remote/Device.cpp:200
+#: src/remote/Device.cpp:216
 msgid " is not paired with this device, or its pairing was removed"
 msgstr " 在这台设备上没配过，或者已经在设备上被删掉了"
 
-#: src/remote/Device.cpp:202
+#: src/remote/Device.cpp:218
 msgid "pair-verify failed: "
 msgstr "配对验证失败："
 
-#: src/remote/Device.cpp:207
+#: src/remote/Device.cpp:223
 msgid "Request device tunnel port"
 msgstr "请求设备隧道端口"
 
-#: src/remote/Device.cpp:215
+#: src/remote/Device.cpp:231
 msgid "TLS-PSK and CDTunnel handshake"
 msgstr "TLS-PSK + CDTunnel 握手"
 
-#: src/remote/Device.cpp:218
+#: src/remote/Device.cpp:234
 msgid "Cannot connect to tunnel port "
 msgstr "连不上隧道端口 "
 
-#: src/remote/Device.cpp:232
+#: src/remote/Device.cpp:248
 msgid ""
 "Pairing host identifier is not a valid UUID; cannot construct a stable peer "
 "identity"
 msgstr "配对记录 host identifier 不是有效 UUID，无法构造稳定的 peer 身份"
 
-#: src/remote/Device.cpp:252
+#: src/remote/Device.cpp:268
 msgid "Session not established"
 msgstr "会话没有建立"
 
-#: src/remote/Device.cpp:264
+#: src/remote/Device.cpp:280
 msgid " does not advertise feature "
 msgstr " 没有声明 feature "
 
@@ -2556,7 +2556,7 @@ msgstr "handshake 回信里没有 response._1.handshake._0"
 
 #: src/wifi/PairSetup.cpp:84 src/wifi/PairSetup.cpp:445
 msgid " TLV decode incomplete: "
-msgstr " 的 TLV 没解干净: "
+msgstr " 的 TLV 数据不完整： "
 
 #: src/wifi/PairSetup.cpp:91
 msgid " returned error code 0x"

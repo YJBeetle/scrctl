@@ -47,7 +47,23 @@ std::string mask(std::string_view value, std::size_t keep) {
 }
 
 Device::Device(Device &&) noexcept = default;
-Device &Device::operator=(Device &&) noexcept = default;
+Device &Device::operator=(Device &&other) noexcept {
+    if (this == &other) {
+        return *this;
+    }
+    // 先按借用关系释放旧会话；逐成员默认赋值会在旧 RSD 释放前销毁其 Stack。
+    rsd_.reset();
+    stack_.reset();
+    tunnel_.reset();
+    lockdown_.reset();
+    udid_ = std::move(other.udid_);
+    connection_type_ = std::move(other.connection_type_);
+    lockdown_ = std::move(other.lockdown_);
+    tunnel_ = std::move(other.tunnel_);
+    stack_ = std::move(other.stack_);
+    rsd_ = std::move(other.rsd_);
+    return *this;
+}
 Device::~Device() = default;
 
 std::vector<transport::DeviceRecord> Device::list(std::string &err) {

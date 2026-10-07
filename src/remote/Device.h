@@ -26,6 +26,7 @@ class Device {
 public:
     Device() = default;
     Device(Device &&) noexcept;
+    /// 覆盖旧会话前，调用方必须已停止并销毁借用它的服务连接、媒体源和订阅者。
     Device &operator=(Device &&) noexcept;
     Device(const Device &) = delete;
     Device &operator=(const Device &) = delete;

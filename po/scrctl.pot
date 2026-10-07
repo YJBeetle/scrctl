@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 16:39+0800\n"
+"POT-Creation-Date: 2026-10-07 16:52+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1496,130 +1496,130 @@ msgstr ""
 msgid " (check DDI mounting and Developer Mode)"
 msgstr ""
 
-#: src/remote/Device.cpp:77
+#: src/remote/Device.cpp:93
 msgid ""
 "No USB device found (usbmux list is empty). Check the data cable and USB "
 "connection, then reconnect the device. Untrusted devices normally appear in "
 "this list too."
 msgstr ""
 
-#: src/remote/Device.cpp:87
+#: src/remote/Device.cpp:103
 msgid "; select one: "
 msgstr ""
 
-#: src/remote/Device.cpp:87
+#: src/remote/Device.cpp:103
 msgid "Connected devices: "
 msgstr ""
 
-#: src/remote/Device.cpp:103
+#: src/remote/Device.cpp:119
 msgid "; connected devices: "
 msgstr ""
 
-#: src/remote/Device.cpp:103
+#: src/remote/Device.cpp:119
 msgid "No connected device matches "
 msgstr ""
 
-#: src/remote/Device.cpp:107
+#: src/remote/Device.cpp:123
 msgid " (total "
 msgstr ""
 
-#: src/remote/Device.cpp:107
+#: src/remote/Device.cpp:123
 msgid "). Check the selected UDID and USB connection."
 msgstr ""
 
-#: src/remote/Device.cpp:117
+#: src/remote/Device.cpp:133
 msgid "lockdown pairing session"
 msgstr ""
 
-#: src/remote/Device.cpp:120
+#: src/remote/Device.cpp:136
 msgid "Failed to establish lockdown session: "
 msgstr ""
 
-#: src/remote/Device.cpp:123
+#: src/remote/Device.cpp:139
 msgid "Start CoreDeviceProxy"
 msgstr ""
 
-#: src/remote/Device.cpp:126 src/remote/Rsd.cpp:152 src/remote/Rsd.cpp:355
+#: src/remote/Device.cpp:142 src/remote/Rsd.cpp:152 src/remote/Rsd.cpp:355
 #: src/transport/Usbmux.cpp:92 src/wifi/PairRecord.cpp:308
 msgid " failed: "
 msgstr ""
 
-#: src/remote/Device.cpp:126
+#: src/remote/Device.cpp:142
 msgid "Start "
 msgstr ""
 
-#: src/remote/Device.cpp:129
+#: src/remote/Device.cpp:145
 msgid "CDTunnel handshake"
 msgstr ""
 
-#: src/remote/Device.cpp:134 src/remote/Device.cpp:225
+#: src/remote/Device.cpp:150 src/remote/Device.cpp:241
 msgid "Failed to establish packet tunnel: "
 msgstr ""
 
-#: src/remote/Device.cpp:141
+#: src/remote/Device.cpp:157
 msgid "Cannot construct a stable peer identity from pairing HostID"
 msgstr ""
 
-#: src/remote/Device.cpp:147 src/remote/Device.cpp:157
+#: src/remote/Device.cpp:163 src/remote/Device.cpp:173
 msgid "Connect to RSD inside tunnel and read directory"
 msgstr ""
 
-#: src/remote/Device.cpp:163
+#: src/remote/Device.cpp:179
 msgid "Tunnel returned an invalid IPv6 address"
 msgstr ""
 
-#: src/remote/Device.cpp:174
+#: src/remote/Device.cpp:190
 msgid "Ready"
 msgstr ""
 
-#: src/remote/Device.cpp:186
+#: src/remote/Device.cpp:202
 msgid "LAN pair-verify"
 msgstr ""
 
-#: src/remote/Device.cpp:189
+#: src/remote/Device.cpp:205
 msgid "Cannot connect to device RemotePairing port "
 msgstr ""
 
-#: src/remote/Device.cpp:190
+#: src/remote/Device.cpp:206
 msgid ""
 " (check that the device is reachable on this network and has been paired)"
 msgstr ""
 
-#: src/remote/Device.cpp:199
+#: src/remote/Device.cpp:215
 msgid "Device rejected pairing record: "
 msgstr ""
 
-#: src/remote/Device.cpp:200
+#: src/remote/Device.cpp:216
 msgid " is not paired with this device, or its pairing was removed"
 msgstr ""
 
-#: src/remote/Device.cpp:202
+#: src/remote/Device.cpp:218
 msgid "pair-verify failed: "
 msgstr ""
 
-#: src/remote/Device.cpp:207
+#: src/remote/Device.cpp:223
 msgid "Request device tunnel port"
 msgstr ""
 
-#: src/remote/Device.cpp:215
+#: src/remote/Device.cpp:231
 msgid "TLS-PSK and CDTunnel handshake"
 msgstr ""
 
-#: src/remote/Device.cpp:218
+#: src/remote/Device.cpp:234
 msgid "Cannot connect to tunnel port "
 msgstr ""
 
-#: src/remote/Device.cpp:232
+#: src/remote/Device.cpp:248
 msgid ""
 "Pairing host identifier is not a valid UUID; cannot construct a stable peer "
 "identity"
 msgstr ""
 
-#: src/remote/Device.cpp:252
+#: src/remote/Device.cpp:268
 msgid "Session not established"
 msgstr ""
 
-#: src/remote/Device.cpp:264
+#: src/remote/Device.cpp:280
 msgid " does not advertise feature "
 msgstr ""
 
