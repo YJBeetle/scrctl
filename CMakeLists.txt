@@ -349,7 +349,7 @@ if(SCRCTL_BUILD_TESTS)
     # 转屏渲染要真的画一遍才知道 SDL 的角度方向对不对，所以这个测试要链 SDL。
     # 它自己把视频驱动设成 dummy，因此无显示器（CI、SSH）也能跑。
     add_executable(render_test tests/render_test.cpp)
-    target_link_libraries(render_test PRIVATE scrctl_core Scrctl::SDL2)
+    target_link_libraries(render_test PRIVATE scrctl_app)
     add_test(NAME render COMMAND render_test)
 
     add_executable(net_runtime_test tests/net_runtime_test.cpp)

@@ -1,5 +1,6 @@
 #include "app/Cli.h"
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -38,6 +39,18 @@ int main() {
     check(parse({"scrctl"}, defaults) == ParseResult::Run && !defaults.win_x &&
               defaults.scale == 1 && !defaults.scale_given && defaults.audio_buffer_ms == 50,
           "default options");
+    Options width_only;
+    check(parse({"scrctl", "--window-width", "240"}, width_only) == ParseResult::Run &&
+              width_only.win_w == 240 && width_only.win_h == 0,
+          "window width can be provided independently");
+    Options height_only;
+    check(parse({"scrctl", "--window-height", "480"}, height_only) == ParseResult::Run &&
+              height_only.win_w == 0 && height_only.win_h == 480,
+          "window height can be provided independently");
+    Options automatic_size;
+    check(parse({"scrctl", "--window-width", "0", "--window-height", "0"}, automatic_size) ==
+              ParseResult::Run && automatic_size.win_w == 0 && automatic_size.win_h == 0,
+          "zero window dimensions preserve automatic sizing");
     Options empty;
     check(parse({"scrctl", "--title", ""}, empty) == ParseResult::Run && empty.title.empty(),
           "explicit empty string argument");
@@ -72,6 +85,10 @@ int main() {
         {"--test-button", "invalid-button"},
         {"--window-width"},
         {"--window-width", "abc"},
+        {"--window-width", "-1"},
+        {"--window-height", "-1"},
+        {"--window-width", std::to_string(static_cast<long long>(std::numeric_limits<int>::max()) + 1)},
+        {"--window-height", std::to_string(static_cast<long long>(std::numeric_limits<int>::max()) + 1)},
         {"--time-limit", "3junk"},
         {"--exit-after", "-1"},
         {"--scale", "nan"},

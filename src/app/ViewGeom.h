@@ -1,6 +1,9 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <limits>
 #include <string_view>
 
 namespace scrctl::app {
@@ -91,23 +94,53 @@ inline void viewport_size(const Crop &c, int degrees, int &width, int &height) {
     }
 }
 
-/// 按 scale 计算窗口尺寸。默认比例超过屏幕时等比缩小；
-/// 用户显式指定 --scale 时保留其比例。手机显示通常高于电脑可用屏幕区域。
-inline void fit_window(int crop_w, int crop_h, int avail_w, int avail_h, double scale,
-                       bool scale_given, int &win_w, int &win_h) {
-    win_w = static_cast<int>(crop_w * scale);
-    win_h = static_cast<int>(crop_h * scale);
-    if (!scale_given && crop_w > 0 && crop_h > 0 && avail_w > 0 && avail_h > 0) {
-        const double fit = std::min(1.0, std::min(static_cast<double>(avail_w) / win_w,
-                                                  static_cast<double>(avail_h) / win_h));
-        if (fit < 1.0) {
-            win_w = static_cast<int>(crop_w * fit);
-            win_h = static_cast<int>(crop_h * fit);
-        }
+/// 计算窗口点数；view_w/h 必须使用裁剪并旋转后的视口尺寸。
+/// 两维均为 0 时按 scale 计算，默认比例再限制到可用屏幕；显式 --scale 不缩小。
+/// 指定一维时保留该维，另一维按视口比例取整；指定两维时保留窗口尺寸，由 SDL 留边。
+/// 结果最小为 1 点。无法用 int 表示时返回 false，不发布部分结果。
+inline bool fit_window(int view_w, int view_h, int avail_w, int avail_h, double scale,
+                       bool scale_given, int &win_w, int &win_h, int want_w = 0, int want_h = 0) {
+    if (want_w < 0 || want_h < 0) {
+        return false;
     }
-    // 所有分支都保证窗口尺寸大于零，避免 SDL 创建失败。
-    win_w = std::max(1, win_w);
-    win_h = std::max(1, win_h);
+    const int vw = std::max(1, view_w);
+    const int vh = std::max(1, view_h);
+    int width = want_w, height = want_h;
+    if (want_w > 0 || want_h > 0) {
+        if (want_h == 0) {
+            // 两个正 int 的乘积可放入 int64_t；先扩宽再乘，避免中间结果溢出。
+            const int64_t derived = std::max<int64_t>(1, int64_t(want_w) * vh / vw);
+            if (derived > std::numeric_limits<int>::max()) {
+                return false;
+            }
+            height = static_cast<int>(derived);
+        } else if (want_w == 0) {
+            const int64_t derived = std::max<int64_t>(1, int64_t(want_h) * vw / vh);
+            if (derived > std::numeric_limits<int>::max()) {
+                return false;
+            }
+            width = static_cast<int>(derived);
+        }
+    } else {
+        if (!std::isfinite(scale) || scale <= 0) {
+            return false;
+        }
+        double fit = scale;
+        if (!scale_given && avail_w > 0 && avail_h > 0) {
+            fit = std::min(fit, std::min(static_cast<double>(avail_w) / vw,
+                                         static_cast<double>(avail_h) / vh));
+        }
+        const double scaled_w = vw * fit, scaled_h = vh * fit;
+        if (scaled_w > std::numeric_limits<int>::max() ||
+            scaled_h > std::numeric_limits<int>::max()) {
+            return false;
+        }
+        width = std::max(1, static_cast<int>(scaled_w));
+        height = std::max(1, static_cast<int>(scaled_h));
+    }
+    win_w = width;
+    win_h = height;
+    return true;
 }
 
 }  // namespace scrctl::app

@@ -4,6 +4,7 @@
 #include "app/RenderPanel.h"
 #include <algorithm>
 #include <cstdio>
+#include <limits>
 
 namespace scrctl::app {
 
@@ -22,22 +23,23 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
     src_ = crop;
     degrees_ = degrees;
     scrctl::app::viewport_size(crop, degrees_, view_w_, view_h_);
-    if (want_w > 0 && want_h > 0) {
-        win_w_ = want_w;
-        win_h_ = want_h;
-    } else {
-        SDL_Rect desk{};
-        if (SDL_GetDisplayBounds(0, &desk) != 0 || desk.w <= 0) {
+    SDL_Rect desk{};
+    if (want_w == 0 && want_h == 0) {
+        if (SDL_GetDisplayBounds(0, &desk) != 0 || desk.w <= 0 || desk.h <= 0) {
             desk.w = win_w_fallback;
             desk.h = win_h_fallback;
         }
-        // 为标题栏预留空间，避免窗口边缘超出屏幕。
-        scrctl::app::fit_window(view_w_, view_h_, desk.w, desk.h - 60, scale, scale_given, win_w_,
-                                win_h_);
-        if (!scale_given && win_w_ < view_w_) {
-            std::printf(SCRCTL_TR("Screen %dx%d points; window scaled to %dx%d (override with --scale)\n"), desk.w, desk.h,
-                        win_w_, win_h_);
-        }
+    }
+    // 为标题栏预留空间；指定单维或双维尺寸时由 fit_window 保留用户的选择。
+    if (!scrctl::app::fit_window(view_w_, view_h_, desk.w, desk.h - 60, scale, scale_given,
+                                 win_w_, win_h_, want_w, want_h)) {
+        std::fprintf(stderr, SCRCTL_TR(
+            "Window dimensions are too large; reduce --scale or the requested window size\n"));
+        return false;
+    }
+    if (want_w == 0 && want_h == 0 && !scale_given && win_w_ < view_w_) {
+        std::printf(SCRCTL_TR("Screen %dx%d points; window scaled to %dx%d (override with --scale)\n"), desk.w, desk.h,
+                    win_w_, win_h_);
     }
 
     Uint32 win_flags = SDL_WINDOW_ALLOW_HIGHDPI;
@@ -79,18 +81,17 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
     //
     // logical size 使用旋转后的视口尺寸（90/270 度交换宽高），鼠标事件也进入
     // 同一逻辑空间，确保触摸逆变换使用正确的尺寸。
-    SDL_RenderSetLogicalSize(renderer_, view_w_, view_h_);
+    if (SDL_RenderSetLogicalSize(renderer_, view_w_, view_h_) != 0) {
+        std::fprintf(stderr, SCRCTL_TR("Failed to configure viewport: %s\n"), SDL_GetError());
+        return false;
+    }
     int out_w = 0, out_h = 0;
     SDL_GetRendererOutputSize(renderer_, &out_w, &out_h);
     // 纹理采用完整源帧尺寸，裁剪和缩放通过 RenderCopy 的 src/dst 矩形处理。
     // BGRA 内存对应小端 ARGB8888。
-    texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
-                                 frame_w, frame_h);
-    if (texture_ == nullptr) {
-        std::fprintf(stderr, SCRCTL_TR("Failed to create texture: %s\n"), SDL_GetError());
+    if (!ensure_texture(frame_w, frame_h)) {
         return false;
     }
-    SDL_SetTextureScaleMode(texture_, SDL_ScaleModeBest);
     std::printf(SCRCTL_TR(
         "Window %dx%d points / drawable %dx%d pixels / viewport %dx%d (source %dx%d, "
         "crop %dx%d+%d+%d, clockwise rotation %d degrees)\n"),
@@ -99,21 +100,82 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
     return true;
 }
 
-void Presenter::draw(const scrctl::Frame &f, const char *readback_path) {
+bool Presenter::draw(const scrctl::Frame &f, const char *readback_path) {
+    return draw(f, src_, readback_path);
+}
+
+bool Presenter::ensure_texture(int width, int height) {
+    if (texture_ != nullptr && texture_w_ == width && texture_h_ == height) {
+        return true;
+    }
+    SDL_Texture *candidate = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888,
+                                               SDL_TEXTUREACCESS_STREAMING, width, height);
+    if (candidate == nullptr) {
+        std::fprintf(stderr, SCRCTL_TR("Failed to create texture: %s\n"), SDL_GetError());
+        return false;
+    }
+    SDL_SetTextureScaleMode(candidate, SDL_ScaleModeBest);
+    SDL_DestroyTexture(texture_);
+    texture_ = candidate;
+    texture_w_ = width;
+    texture_h_ = height;
+    return true;
+}
+
+bool Presenter::draw(const scrctl::Frame &f, const Crop &crop, const char *readback_path) {
+    // 上传整帧时 SDL 按纹理的宽高读取像素。截图不含 HEVC 对齐填充，因此不能
+    // 将其较短的行跨度及缓冲用于首次视频帧的较大纹理。
+    const uint64_t row_bytes = uint64_t(f.width) * 4;
+    if (f.width == 0 || f.height == 0 || f.width > std::numeric_limits<int>::max() ||
+        f.height > std::numeric_limits<int>::max() || f.bytes_per_pixel != 4 ||
+        f.row_pitch < row_bytes || f.row_pitch > std::numeric_limits<int>::max()) {
+        std::fprintf(stderr, SCRCTL_TR("Cannot render frame: invalid dimensions or pixel buffer\n"));
+        return false;
+    }
+    // 此时宽高及 pitch 都已限制为正 int，下面的乘加不会超出 uint64_t。
+    const uint64_t needed = uint64_t(f.height - 1) * f.row_pitch + row_bytes;
+    if (f.pixels.size() < needed || crop.x < 0 || crop.y < 0 || crop.w <= 0 || crop.h <= 0 ||
+        uint64_t(crop.x) + crop.w > f.width || uint64_t(crop.y) + crop.h > f.height ||
+        crop.display_w <= 0 || crop.display_h <= 0) {
+        std::fprintf(stderr, SCRCTL_TR("Cannot render frame: invalid dimensions or pixel buffer\n"));
+        return false;
+    }
+    if (!ensure_texture(static_cast<int>(f.width), static_cast<int>(f.height))) {
+        return false;
+    }
+    src_ = crop;
+    int view_w = 0, view_h = 0;
+    viewport_size(src_, degrees_, view_w, view_h);
+    if (view_w != view_w_ || view_h != view_h_) {
+        if (SDL_RenderSetLogicalSize(renderer_, view_w, view_h) != 0) {
+            std::fprintf(stderr, SCRCTL_TR("Failed to configure viewport: %s\n"), SDL_GetError());
+            return false;
+        }
+        view_w_ = view_w;
+        view_h_ = view_h;
+    }
     // SDL_RenderClear 清除整个目标面，包括等比缩放后的留边区域。
-    SDL_SetRenderDrawColor(renderer_, bg_[0], bg_[1], bg_[2], 255);
-    SDL_RenderClear(renderer_);
+    if (SDL_SetRenderDrawColor(renderer_, bg_[0], bg_[1], bg_[2], 255) != 0 ||
+        SDL_RenderClear(renderer_) != 0) {
+        std::fprintf(stderr, SCRCTL_TR("Failed to render frame: %s\n"), SDL_GetError());
+        return false;
+    }
     if (SDL_UpdateTexture(texture_, nullptr, f.pixels.data(), static_cast<int>(f.row_pitch)) != 0) {
         std::fprintf(stderr, SCRCTL_TR("Failed to upload texture: %s\n"), SDL_GetError());
+        return false;
     }
     // 渲染使用逻辑坐标，由 SDL 处理 Retina 缩放和留边。旋转由 draw_rotated
     // 完成，该函数同时用于离线回读测试。
-    scrctl::app::draw_rotated(renderer_, texture_, src_, degrees_);
+    if (!scrctl::app::draw_rotated(renderer_, texture_, src_, degrees_)) {
+        std::fprintf(stderr, SCRCTL_TR("Failed to render frame: %s\n"), SDL_GetError());
+        return false;
+    }
     // 在 Present 之前回读后缓冲；交换缓冲后不能依赖其内容仍有效。
-    if (readback_path != nullptr) {
-        readback(readback_path);
+    if (readback_path != nullptr && !readback(readback_path)) {
+        return false;
     }
     SDL_RenderPresent(renderer_);
+    return true;
 }
 
 bool Presenter::readback(const std::string &path) {
@@ -134,15 +196,26 @@ bool Presenter::readback(const std::string &path) {
     }
     // 回读前暂时移除 logical size，使用完整输出面的像素坐标。保留逻辑尺寸
     // 时，SDL 会把读区按内容视口转换，窗口有留边时会读到偏移的局部区域。
-    SDL_RenderSetLogicalSize(renderer_, 0, 0);
+    if (SDL_RenderSetLogicalSize(renderer_, 0, 0) != 0) {
+        std::fprintf(stderr, SCRCTL_TR("Failed to configure viewport: %s\n"), SDL_GetError());
+        SDL_UnlockSurface(s);
+        SDL_FreeSurface(s);
+        return false;
+    }
     // 显式指定完整像素矩形；当前 SDL2 software 驱动在 rect=NULL 时曾发生段错误。
     const SDL_Rect full{0, 0, out_w, out_h};
     const int rc =
         SDL_RenderReadPixels(renderer_, &full, SDL_PIXELFORMAT_ARGB8888, s->pixels, s->pitch);
-    SDL_RenderSetLogicalSize(renderer_, view_w_, view_h_);
+    const std::string read_error = rc != 0 ? SDL_GetError() : "";
+    const int restore = SDL_RenderSetLogicalSize(renderer_, view_w_, view_h_);
     SDL_UnlockSurface(s);
     if (rc != 0) {
-        std::fprintf(stderr, SCRCTL_TR("Readback failed: %s\n"), SDL_GetError());
+        std::fprintf(stderr, SCRCTL_TR("Readback failed: %s\n"), read_error.c_str());
+        SDL_FreeSurface(s);
+        return false;
+    }
+    if (restore != 0) {
+        std::fprintf(stderr, SCRCTL_TR("Failed to configure viewport: %s\n"), SDL_GetError());
         SDL_FreeSurface(s);
         return false;
     }

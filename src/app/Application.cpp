@@ -19,10 +19,11 @@
 namespace scrctl::app {
 
 namespace {
-/// 取得首帧后确定裁剪区域。优先使用设备报告的可见区尺寸；无法获取时，
+/// 按当前帧确定裁剪区域。优先使用设备报告的可见区尺寸；无法获取时，
 /// 使用 media::display_crop 的机型表。编码帧可能包含 HEVC 对齐填充，
 /// 直接按编码尺寸裁剪会影响画面边缘和触摸坐标。
-Crop resolve_crop(const Options &o, const scrctl::Frame &f, const FrameSource &source) {
+Crop resolve_crop(const Options &o, const scrctl::Frame &f, const FrameSource &source,
+                  bool report_geometry) {
     int display_w = 0, display_h = 0;
     source.display_size(display_w, display_h);
     const bool from_device = display_w > 0 && display_h > 0;
@@ -32,7 +33,7 @@ Crop resolve_crop(const Options &o, const scrctl::Frame &f, const FrameSource &s
         display_w = fallback.w;
         display_h = fallback.h;
     }
-    if (!from_device && !o.crop_set &&
+    if (report_geometry && !from_device && !o.crop_set &&
         (static_cast<int>(f.width) != display_w || static_cast<int>(f.height) != display_h)) {
         std::printf(SCRCTL_TR("Visible area %ux%u -> %dx%d (device did not report dimensions; using model table)\n"), f.width,
                     f.height, display_w, display_h);
@@ -253,6 +254,7 @@ int run(int argc, char **argv) {
         // size 不会同步更新绘制面，可能使画面缩到一角；重建可统一窗口与渲染尺寸。
         // 此操作只发生在旋转时，可能短暂闪烁。
         const int degrees = o.orientation >= 0 ? o.orientation : source->orientation_degrees();
+        const Crop crop = resolve_crop(o, f, *source, degrees != applied_degrees);
         if (degrees != applied_degrees) {
             applied_degrees = degrees;
             presenter.reset();
@@ -270,7 +272,7 @@ int run(int argc, char **argv) {
             spec.want_readback = o.verify_at > 0;
             presenter->set_background(o.bg[0], o.bg[1], o.bg[2]);
             if (!presenter->open(static_cast<int>(f.width), static_cast<int>(f.height),
-                                 resolve_crop(o, f, *source), degrees, o.scale, o.scale_given,
+                                 crop, degrees, o.scale, o.scale_given,
                                  spec)) {
                 return 1;
             }
@@ -282,7 +284,9 @@ int run(int argc, char **argv) {
         }
 
         const bool do_verify = o.verify_at > 0 && rendered + 1 == o.verify_at;
-        presenter->draw(f, do_verify ? o.verify_path.c_str() : nullptr);
+        if (!presenter->draw(f, crop, do_verify ? o.verify_path.c_str() : nullptr)) {
+            return 1;
+        }
         ++rendered;
 
         // 文件回放按标称帧率计时；实时流按设备帧到达的节奏显示。
@@ -301,6 +305,12 @@ int run(int argc, char **argv) {
         quit = presenter->pump(on_touch);
     }
 
+    if (o.verify_at > 0 && rendered < o.verify_at) {
+        std::fprintf(stderr,
+                     SCRCTL_TR("Window readback was not reached (requested frame %d, rendered %d)\n"),
+                     o.verify_at, rendered);
+        return 1;
+    }
     std::printf(SCRCTL_TR("Finished: rendered %d frames\n"), rendered);
     return 0;
 }

@@ -30,7 +30,10 @@ class Presenter {
     bool open(int frame_w, int frame_h, const Crop &crop, int degrees, double scale,
               bool scale_given, const WindowSpec &spec);
 
-    void draw(const scrctl::Frame &f, const char *readback_path = nullptr);
+    /// 返回 true 表示已完成绘制；指定回读路径时，也要求图像保存成功。
+    bool draw(const scrctl::Frame &f, const char *readback_path = nullptr);
+    /// 画面来源或尺寸改变时更新裁剪、逻辑视口和纹理，保留窗口位置及拖动状态。
+    bool draw(const scrctl::Frame &f, const Crop &crop, const char *readback_path = nullptr);
 
     /// 将窗口实际显示内容回读保存，用于检查裁剪、缩放和纹理尺寸。
     /// 使用渲染器的输出像素尺寸，不能用窗口逻辑点数，否则高 DPI 下只读取局部。
@@ -55,11 +58,13 @@ class Presenter {
     /// 此处只需逆旋转、加裁剪偏移并除以整屏尺寸，不能再次换算点数与像素。
     /// 运行期保留越界核对，便于发现不同 SDL 版本的行为变化。
     void to_display(int raw_x, int raw_y, double &fx, double &fy) const;
+    bool ensure_texture(int width, int height);
 
     uint8_t bg_[3] = {0, 0, 0};
     SDL_Window *window_ = nullptr;
     SDL_Renderer *renderer_ = nullptr;
     SDL_Texture *texture_ = nullptr;
+    int texture_w_ = 0, texture_h_ = 0;
     Crop src_{};
     /// 顺时针转正角度，以及由它决定的视口尺寸（90/270 时宽高对调）。
     int degrees_ = 0;

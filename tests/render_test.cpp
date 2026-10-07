@@ -11,9 +11,16 @@
 // 谁也推不回原因。
 #include <SDL.h>
 
+#include <array>
+#include <chrono>
 #include <cstdio>
+#include <cstring>
+#include <filesystem>
+#include <limits>
+#include <memory>
 #include <vector>
 
+#include "app/Presenter.h"
 #include "app/RenderPanel.h"
 
 namespace {
@@ -309,6 +316,155 @@ bool letterbox_and_readback() {
     return pass;
 }
 
+struct ReadbackDirectory {
+    std::filesystem::path path;
+
+    bool open() {
+        std::error_code error;
+        const auto base = std::filesystem::temp_directory_path(error);
+        if (error) return false;
+        const auto id = std::chrono::steady_clock::now().time_since_epoch().count();
+        const auto candidate = base / ("scrctl-render-test-" + std::to_string(id));
+        if (!std::filesystem::create_directory(candidate, error)) return false;
+        path = candidate;
+        return true;
+    }
+
+    ~ReadbackDirectory() {
+        if (!path.empty()) {
+            std::error_code error;
+            std::filesystem::remove_all(path, error);
+        }
+    }
+};
+
+using Palette = std::array<Rgb, 4>;
+
+scrctl::Frame colored_frame(int width, int height, const scrctl::app::Crop &crop,
+                            const Palette &colors, int row_padding) {
+    scrctl::Frame frame;
+    frame.width = width;
+    frame.height = height;
+    frame.row_pitch = width * 4 + row_padding;
+    // 最后一行不需要尾部 padding；这个合法边界也必须可以上传。
+    frame.pixels.resize(static_cast<std::size_t>(height - 1) * frame.row_pitch + width * 4);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            Rgb color{255, 0, 255};  // 编码填充区，不能出现在裁剪后的画面内。
+            if (x < crop.w && y < crop.h) {
+                color = kBackground;
+                const bool left = x < crop.w / 4;
+                const bool right = x >= crop.w - crop.w / 4;
+                const bool top = y < crop.h / 4;
+                const bool bottom = y >= crop.h - crop.h / 4;
+                if (left && top) color = colors[0];
+                else if (right && top) color = colors[1];
+                else if (right && bottom) color = colors[2];
+                else if (left && bottom) color = colors[3];
+            }
+            const auto offset = static_cast<std::size_t>(y) * frame.row_pitch + x * 4;
+            frame.pixels[offset] = color.b;
+            frame.pixels[offset + 1] = color.g;
+            frame.pixels[offset + 2] = color.r;
+            frame.pixels[offset + 3] = 255;
+        }
+    }
+    return frame;
+}
+
+void check_presenter_readback(const std::string &path, const Palette &colors,
+                               int width, int height, const char *stage) {
+    using Surface = std::unique_ptr<SDL_Surface, decltype(&SDL_FreeSurface)>;
+    Surface loaded(SDL_LoadBMP(path.c_str()), SDL_FreeSurface);
+    check(loaded != nullptr, "Presenter 回读文件可作为 BMP 加载");
+    if (!loaded) return;
+    check(loaded->w == width && loaded->h == height, "尺寸切换保留窗口的输出尺寸");
+    if (loaded->w != width || loaded->h != height) return;
+    Surface pixels(SDL_ConvertSurfaceFormat(loaded.get(), SDL_PIXELFORMAT_ARGB8888, 0),
+                   SDL_FreeSurface);
+    check(pixels != nullptr, "Presenter 回读像素可转换为 ARGB8888");
+    if (!pixels) return;
+    if (SDL_LockSurface(pixels.get()) != 0) {
+        check(false, "Presenter 回读像素可锁定");
+        return;
+    }
+    const Point samples[4] = {{width / 8, height / 8}, {width - width / 8, height / 8},
+                              {width - width / 8, height - height / 8},
+                              {width / 8, height - height / 8}};
+    for (int corner = 0; corner < 4; ++corner) {
+        const auto *address = static_cast<const Uint8 *>(pixels->pixels) +
+            samples[corner].y * pixels->pitch + samples[corner].x * 4;
+        Uint32 packed = 0;
+        std::memcpy(&packed, address, sizeof packed);
+        const Rgb actual{static_cast<Uint8>((packed >> 16) & 255),
+                         static_cast<Uint8>((packed >> 8) & 255),
+                         static_cast<Uint8>(packed & 255)};
+        char note[128];
+        std::snprintf(note, sizeof note, "%s 第 %d 个角显示当前帧颜色", stage, corner + 1);
+        check(close(actual, colors[corner]), note);
+        if (!close(actual, colors[corner])) {
+            std::printf("     实际 rgb(%u,%u,%u)\n", actual.r, actual.g, actual.b);
+        }
+    }
+    SDL_UnlockSurface(pixels.get());
+}
+
+void presenter_source_size_changes() {
+    ReadbackDirectory output;
+    check(output.open(), "创建 Presenter 回读临时目录");
+    if (output.path.empty()) return;
+
+    // 视频包含编码填充，截图较小；视口比例相同，逻辑尺寸与纹理尺寸都需要更新。
+    const scrctl::app::Crop video_crop{0, 0, 90, 135, 90, 135};
+    const scrctl::app::Crop screenshot_crop{0, 0, 60, 90, 60, 90};
+    const Palette first_colors{kTopLeft, kTopRight, kBottomRight, kBottomLeft};
+    const Palette screenshot_colors{kBottomLeft, kBottomRight, kTopRight, kTopLeft};
+    const Palette restored_colors{kBottomRight, kTopLeft, kBottomLeft, kTopRight};
+    const auto video = colored_frame(96, 144, video_crop, first_colors, 16);
+    const auto screenshot = colored_frame(60, 90, screenshot_crop, screenshot_colors, 0);
+    const auto restored = colored_frame(96, 144, video_crop, restored_colors, 32);
+
+    scrctl::app::Presenter presenter;
+    scrctl::app::WindowSpec spec;
+    spec.title = "Presenter offline regression";
+    spec.want_w = 90;
+    spec.want_h = 135;
+    spec.want_readback = true;
+    const bool opened = presenter.open(video.width, video.height, video_crop, 0, 1, false, spec);
+    check(opened, "使用实际 Presenter 创建软件渲染器");
+    if (!opened) return;
+
+    const auto draw_and_check = [&](const scrctl::Frame &frame, const scrctl::app::Crop &crop,
+                                    const Palette &colors, const char *name) {
+        const auto path = (output.path / (std::string(name) + ".bmp")).string();
+        check(presenter.draw(frame, crop, path.c_str()), name);
+        check_presenter_readback(path, colors, spec.want_w, spec.want_h, name);
+    };
+    draw_and_check(video, video_crop, first_colors, "video");
+    draw_and_check(screenshot, screenshot_crop, screenshot_colors, "screenshot");
+    draw_and_check(restored, video_crop, restored_colors, "video-restored");
+
+    auto invalid = restored;
+    invalid.pixels.pop_back();
+    check(!presenter.draw(invalid, video_crop), "拒绝缺少最后一个像素字节的缓冲");
+    invalid = restored;
+    invalid.row_pitch = invalid.width * 4 - 1;
+    check(!presenter.draw(invalid, video_crop), "拒绝小于整行像素宽度的 pitch");
+    invalid.row_pitch = uint32_t(std::numeric_limits<int>::max()) + 1;
+    check(!presenter.draw(invalid, video_crop), "拒绝 SDL 无法表示的 pitch");
+    auto invalid_crop = video_crop;
+    invalid_crop.w = restored.width + 1;
+    check(!presenter.draw(restored, invalid_crop), "拒绝超出像素缓冲范围的裁剪");
+    invalid_crop = video_crop;
+    invalid_crop.x = -1;
+    check(!presenter.draw(restored, invalid_crop), "拒绝负数裁剪起点");
+    const auto missing_parent = (output.path / "missing" / "frame.bmp").string();
+    check(!presenter.draw(restored, video_crop, missing_parent.c_str()),
+          "回读路径的父目录不存在时绘制返回失败");
+    check(!std::filesystem::exists(missing_parent), "失败的回读没有生成输出文件");
+    draw_and_check(video, video_crop, first_colors, "video-after-errors");
+}
+
 }  // namespace
 
 int main() {
@@ -354,6 +510,7 @@ int main() {
     }
 
     check(letterbox_and_readback(), "等比留边的边上涂的是 --background-color，且回读覆盖整块输出");
+    presenter_source_size_changes();
 
     SDL_Quit();
     if (failures != 0) {

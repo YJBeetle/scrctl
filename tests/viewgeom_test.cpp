@@ -5,6 +5,7 @@
 // 而不是编出来的理想值。
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <string>
 
 #include "app/ViewGeom.h"
@@ -107,6 +108,83 @@ void test_fit_window() {
 
     fit_window(1125, 2436, 1680, 990, 0.5, true, w, h);
     check(w == 562 && h == 1218, "--scale 0.5 照收，不擅自改");
+}
+
+void test_requested_window_size() {
+    std::printf("\n== 显式窗口尺寸 ==\n");
+    int w = 0, h = 0;
+    check(fit_window(1125, 2436, 1680, 990, 1.0, false, w, h, 240, 0) &&
+              w == 240 && h == 519,
+          "仅指定宽度时保留 240，按视口比例推导高度");
+    check(fit_window(1125, 2436, 1680, 990, 1.0, false, w, h, 0, 480) &&
+              w == 221 && h == 480,
+          "仅指定高度时保留 480，按视口比例推导宽度");
+
+    const Crop part{100, 200, 400, 300, 1125, 2436};
+    for (int degrees : {0, 90, 180, 270}) {
+        int vw = 0, vh = 0;
+        scrctl::app::viewport_size(part, degrees, vw, vh);
+        const bool swapped = degrees == 90 || degrees == 270;
+        check(fit_window(vw, vh, 10, 10, 0.5, true, w, h, 80, 0) &&
+                  w == 80 && h == (swapped ? 106 : 60),
+              "裁剪 + 旋转 " + std::to_string(degrees) + "：仅宽度优先于 scale 与屏幕适配");
+        check(fit_window(vw, vh, 10, 10, 0.5, true, w, h, 0, 90) &&
+                  w == (swapped ? 67 : 120) && h == 90,
+              "裁剪 + 旋转 " + std::to_string(degrees) + "：仅高度按当前视口比例推导");
+        check(fit_window(vw, vh, 10, 10, 0.5, true, w, h, 320, 240) &&
+                  w == 320 && h == 240,
+              "双维 320x240 不随旋转或 scale 改变，内容留边由渲染器处理");
+    }
+
+    check(fit_window(1125, 2436, 1680, 990, 1.0, false, w, h, 0, 0) &&
+              w == 457 && h == 990,
+          "两维 0 使用默认屏幕适配");
+    check(fit_window(1125, 2436, 1680, 990, 0.5, true, w, h, 0, 0) &&
+              w == 562 && h == 1218,
+          "两维 0 保留显式 scale，即使高度超过屏幕");
+}
+
+void test_window_size_limits() {
+    std::printf("\n== 窗口尺寸边界 ==\n");
+    const int maximum = std::numeric_limits<int>::max();
+    int w = 0, h = 0;
+    check(fit_window(maximum, maximum, 0, 0, 1.0, false, w, h, maximum, 0) &&
+              w == maximum && h == maximum,
+          "单维推导在 int 最大值上不产生乘法溢出");
+    check(fit_window(1, 1, 0, 0, 1.0, false, w, h, maximum, maximum) &&
+              w == maximum && h == maximum,
+          "双维保留 int 可表示的最大值");
+    check(fit_window(maximum, 1, 0, 0, 1.0, false, w, h, 1, 0) && w == 1 && h == 1,
+          "推导不足 1 点时保留最小正尺寸");
+    check(fit_window(0, 0, 0, 0, 1.0, false, w, h) && w == 1 && h == 1,
+          "全零视口仍得到 1x1 退化兜底");
+    check(fit_window(0, 0, 0, 0, 1.0, false, w, h, 42, 0) && w == 42 && h == 42,
+          "单维配合零视口不会除零");
+    check(fit_window(1125, 2436, 1680, 990, std::numeric_limits<double>::max(), false, w, h) &&
+              w == 457 && h == 990,
+          "默认适配先限制比例，避免巨大的有限 scale 产生溢出");
+    check(fit_window(1125, 2436, 0, 0, std::numeric_limits<double>::min(), true, w, h) &&
+              w == 1 && h == 1,
+          "极小正 scale 仍得到正窗口尺寸");
+
+    const auto rejected = [&](int vw, int vh, double scale, int requested_w, int requested_h,
+                              const char *name) {
+        w = 17;
+        h = 23;
+        check(!fit_window(vw, vh, 0, 0, scale, true, w, h, requested_w, requested_h) &&
+                  w == 17 && h == 23,
+              name);
+    };
+    rejected(1, maximum, 1.0, 2, 0, "拒绝高度推导溢出，不夹取或改动已有结果");
+    rejected(maximum, 1, 1.0, 0, 2, "拒绝宽度推导溢出，不夹取或改动已有结果");
+    rejected(2, 1, static_cast<double>(maximum), 0, 0, "拒绝显式 scale 超过 int 尺寸范围");
+    rejected(2, 1, std::numeric_limits<double>::max(), 0, 0, "拒绝 scale 乘积溢出为无穷");
+    rejected(1, 1, std::numeric_limits<double>::infinity(), 0, 0, "拒绝无穷 scale");
+    rejected(1, 1, std::numeric_limits<double>::quiet_NaN(), 0, 0, "拒绝 NaN scale");
+    rejected(1, 1, 0, 0, 0, "拒绝零 scale");
+    rejected(1, 1, -1, 0, 0, "拒绝负 scale");
+    rejected(1, 1, 1.0, -1, 0, "拒绝负宽度");
+    rejected(1, 1, 1.0, 0, -1, "拒绝负高度");
 }
 
 /// `--crop` 只改"看哪一块"，不改触摸的分母。
@@ -224,6 +302,8 @@ int main() {
     test_viewport_rotation();
     test_degenerate();
     test_fit_window();
+    test_requested_window_size();
+    test_window_size_limits();
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;
 }

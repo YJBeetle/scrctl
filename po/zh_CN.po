@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 16:52+0800\n"
+"POT-Creation-Date: 2026-10-08 02:03+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -12,103 +12,108 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: src/app/Application.cpp:37
+#: src/app/Application.cpp:38
 #, c-format
 msgid ""
 "Visible area %ux%u -> %dx%d (device did not report dimensions; using model "
 "table)\n"
 msgstr "可见区 %ux%u -> %dx%d（设备未报告尺寸，使用机型表）\n"
 
-#: src/app/Application.cpp:73
+#: src/app/Application.cpp:74
 #, c-format
 msgid "Failed to start video: %s\n"
 msgstr "启动视频失败: %s\n"
 
-#: src/app/Application.cpp:79
+#: src/app/Application.cpp:80
 #, c-format
 msgid "Device is in a call. End the call and try again.\n"
 msgstr "设备正在通话，请结束通话后重试。\n"
 
-#: src/app/Application.cpp:93
+#: src/app/Application.cpp:94
 #, c-format
 msgid "File playback cannot launch a device app; ignoring --start-app\n"
 msgstr "文件回放模式无法启动设备应用，已忽略 --start-app\n"
 
-#: src/app/Application.cpp:116
+#: src/app/Application.cpp:117
 #, c-format
 msgid "SDL initialization failed: %s\n"
 msgstr "SDL 初始化失败: %s\n"
 
-#: src/app/Application.cpp:125
+#: src/app/Application.cpp:126
 #, c-format
 msgid "Failed to open audio output: %s (receiving and decoding continue)\n"
 msgstr "打开音频输出失败: %s（继续接收和解码音频）\n"
 
-#: src/app/Application.cpp:128
+#: src/app/Application.cpp:129
 #, c-format
 msgid "Local audio playback disabled; receiving and decoding continue\n"
 msgstr "已禁用本机音频播放，继续接收和解码音频\n"
 
-#: src/app/Application.cpp:149
+#: src/app/Application.cpp:150
 msgid "failed"
 msgstr "失败"
 
-#: src/app/Application.cpp:149
+#: src/app/Application.cpp:150
 msgid "injected"
 msgstr "已注入"
 
-#: src/app/Application.cpp:158
+#: src/app/Application.cpp:159
 #, c-format
 msgid "--test-button %s: pressed\n"
 msgstr "--test-button %s: 已按下\n"
 
-#: src/app/Application.cpp:160
+#: src/app/Application.cpp:161
 #, c-format
 msgid "--test-button %s failed: %s\n"
 msgstr "--test-button %s 失败: %s\n"
 
-#: src/app/Application.cpp:169
+#: src/app/Application.cpp:170
 #, c-format
 msgid "--test-type %s: injected\n"
 msgstr "--test-type %s: 已注入\n"
 
-#: src/app/Application.cpp:171
+#: src/app/Application.cpp:172
 #, c-format
 msgid "--test-type failed: %s\n"
 msgstr "--test-type 失败: %s\n"
 
-#: src/app/Application.cpp:196
+#: src/app/Application.cpp:197
 #, c-format
 msgid "Input injection failed (further attempts disabled): %s\n"
 msgstr "注入输入失败（已停止尝试）: %s\n"
 
-#: src/app/Application.cpp:207
+#: src/app/Application.cpp:208
 #, c-format
 msgid "Reached --time-limit %d seconds\n"
 msgstr "达到 --time-limit %d 秒\n"
 
-#: src/app/Application.cpp:211
+#: src/app/Application.cpp:212
 #, c-format
 msgid "Received exit signal; closing device session\n"
 msgstr "收到退出信号，正在关闭设备会话\n"
 
-#: src/app/Application.cpp:221
+#: src/app/Application.cpp:222
 #, c-format
 msgid ""
 "  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
 msgstr "  渲染：累计 %d 帧，本次 %d 帧 / %.1f fps，全程平均 %.1f fps\n"
 
-#: src/app/Application.cpp:246 src/app/Application.cpp:298
+#: src/app/Application.cpp:247 src/app/Application.cpp:302
 #, c-format
 msgid "Reached --exit-after %d\n"
 msgstr "达到 --exit-after %d\n"
 
-#: src/app/Application.cpp:280
+#: src/app/Application.cpp:282
 #, c-format
 msgid "Display orientation changed to %d degrees clockwise; window recreated\n"
 msgstr "显示方向已改为顺时针 %d°，窗口已重建\n"
 
-#: src/app/Application.cpp:304
+#: src/app/Application.cpp:310
+#, c-format
+msgid "Window readback was not reached (requested frame %d, rendered %d)\n"
+msgstr "未执行窗口回读：要求第 %d 帧，实际显示了 %d 帧\n"
+
+#: src/app/Application.cpp:314
 #, c-format
 msgid "Finished: rendered %d frames\n"
 msgstr "完成：渲染 %d 帧\n"
@@ -722,32 +727,40 @@ msgstr ""
 "%llu，静音填充 %llu RR 成功/失败 %llu/%llu，重启 %llu，缓冲 %zu 帧，窗口 "
 "%.1f s\n"
 
-#: src/app/Presenter.cpp:38
+#: src/app/Presenter.cpp:37
+#, c-format
+msgid ""
+"Window dimensions are too large; reduce --scale or the requested window "
+"size\n"
+msgstr "窗口尺寸过大；请减小 --scale 或指定的窗口宽高\n"
+
+#: src/app/Presenter.cpp:41
 #, c-format
 msgid "Screen %dx%d points; window scaled to %dx%d (override with --scale)\n"
 msgstr "屏幕 %dx%d 点，窗口自动缩放到 %dx%d（可用 --scale 指定比例）\n"
 
-#: src/app/Presenter.cpp:57
+#: src/app/Presenter.cpp:59
 #, c-format
 msgid "Failed to create window: %s\n"
 msgstr "创建窗口失败: %s\n"
 
-#: src/app/Presenter.cpp:70
+#: src/app/Presenter.cpp:72
 #, c-format
 msgid "Failed to create renderer: %s\n"
 msgstr "创建渲染器失败: %s\n"
 
-#: src/app/Presenter.cpp:75
+#: src/app/Presenter.cpp:77
 #, c-format
 msgid "Render driver: %s\n"
 msgstr "渲染驱动: %s\n"
 
-#: src/app/Presenter.cpp:90
+#: src/app/Presenter.cpp:85 src/app/Presenter.cpp:151 src/app/Presenter.cpp:200
+#: src/app/Presenter.cpp:218
 #, c-format
-msgid "Failed to create texture: %s\n"
-msgstr "创建纹理失败: %s\n"
+msgid "Failed to configure viewport: %s\n"
+msgstr "无法设置显示区域：%s\n"
 
-#: src/app/Presenter.cpp:95
+#: src/app/Presenter.cpp:96
 #, c-format
 msgid ""
 "Window %dx%d points / drawable %dx%d pixels / viewport %dx%d (source %dx%d, "
@@ -756,42 +769,57 @@ msgstr ""
 "窗口 %dx%d 点 / 绘制面 %dx%d 像素 / 视口 %dx%d（源帧 %dx%d，裁剪 %dx%d+%d+"
 "%d，转正顺时针 %d°）\n"
 
-#: src/app/Presenter.cpp:107
+#: src/app/Presenter.cpp:114
+#, c-format
+msgid "Failed to create texture: %s\n"
+msgstr "创建纹理失败: %s\n"
+
+#: src/app/Presenter.cpp:132 src/app/Presenter.cpp:140
+#, c-format
+msgid "Cannot render frame: invalid dimensions or pixel buffer\n"
+msgstr "无法显示这一帧：图像尺寸或像素缓冲无效\n"
+
+#: src/app/Presenter.cpp:160 src/app/Presenter.cpp:170
+#, c-format
+msgid "Failed to render frame: %s\n"
+msgstr "无法绘制这一帧：%s\n"
+
+#: src/app/Presenter.cpp:164
 #, c-format
 msgid "Failed to upload texture: %s\n"
 msgstr "上传纹理失败: %s\n"
 
-#: src/app/Presenter.cpp:122
+#: src/app/Presenter.cpp:184
 #, c-format
 msgid "Failed to query drawable dimensions: %s\n"
 msgstr "查询绘制面尺寸失败: %s\n"
 
-#: src/app/Presenter.cpp:127
+#: src/app/Presenter.cpp:189
 #, c-format
 msgid "Failed to create readback buffer: %s\n"
 msgstr "创建回读缓冲失败: %s\n"
 
-#: src/app/Presenter.cpp:131
+#: src/app/Presenter.cpp:193
 #, c-format
 msgid "Failed to lock readback buffer: %s\n"
 msgstr "锁定回读缓冲失败: %s\n"
 
-#: src/app/Presenter.cpp:145
+#: src/app/Presenter.cpp:213
 #, c-format
 msgid "Readback failed: %s\n"
 msgstr "回读失败: %s\n"
 
-#: src/app/Presenter.cpp:152
+#: src/app/Presenter.cpp:225
 #, c-format
 msgid "Failed to save image: %s\n"
 msgstr "存图失败: %s\n"
 
-#: src/app/Presenter.cpp:155
+#: src/app/Presenter.cpp:228
 #, c-format
 msgid "Window readback saved to %s (%dx%d pixels)\n"
 msgstr "窗口回读已保存到 %s (%dx%d 像素)\n"
 
-#: src/app/Presenter.cpp:165
+#: src/app/Presenter.cpp:238
 #, c-format
 msgid ""
 "[input] %s raw(%d,%d) viewport %d x%d (rotation %d degrees) / window %d "
@@ -800,11 +828,11 @@ msgstr ""
 "[input] %s 原始(%d,%d) 视口%d x%d（转%d°）/ 窗口%d x%d / 绘制面%d x%d -> "
 "(%.3f, %.3f)\n"
 
-#: src/app/Presenter.cpp:192
+#: src/app/Presenter.cpp:265
 msgid "down"
 msgstr "按下"
 
-#: src/app/Presenter.cpp:201
+#: src/app/Presenter.cpp:274
 msgid "move"
 msgstr "移动"
 
@@ -910,7 +938,7 @@ msgid ""
 msgstr ""
 "NAL 尺寸 %zu 超过 2 字节长度前缀上限，已丢弃该帧。该码流需要软件解码后端。\n"
 
-#: src/hid/Hid.cpp:97 src/hid/Hid.cpp:244
+#: src/hid/Hid.cpp:97 src/hid/Hid.cpp:245
 msgid "RSD directory missing "
 msgstr "RSD 目录里没有 "
 
@@ -918,7 +946,7 @@ msgstr "RSD 目录里没有 "
 msgid "connectedServices response missing connectedServices: "
 msgstr "connectedServices 的回信里没有 connectedServices: "
 
-#: src/hid/Hid.cpp:176
+#: src/hid/Hid.cpp:177
 msgid "Stroke requires at least one point"
 msgstr "stroke 至少要一个点"
 

@@ -71,6 +71,13 @@ int main() {
     check(run({"scrctl", "--play", path.string(), "--no-window", "--no-audio"}) == 0,
           "headless playback does not require video initialization");
     check(SDL_WasInit(0) == 0, "normal application return cleans SDL");
+    SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);
+    const auto readback_path = path.parent_path() / (path.stem().string() + ".bmp");
+    check(run({"scrctl", "--play", path.string(), "--no-audio", "--verify", "1",
+               readback_path.string()}) == 1,
+          "empty playback reports that requested readback frame was not reached");
+    check(!std::filesystem::exists(readback_path), "unreached readback does not create an image");
+    check(SDL_WasInit(0) == 0, "unreached readback cleans SDL");
     caller_signal = 0;
     std::raise(SIGTERM);
     check(caller_signal == SIGTERM, "application restores caller signal handler");

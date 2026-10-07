@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 16:52+0800\n"
+"POT-Creation-Date: 2026-10-08 02:03+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,103 +17,108 @@ msgstr ""
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: src/app/Application.cpp:37
+#: src/app/Application.cpp:38
 #, c-format
 msgid ""
 "Visible area %ux%u -> %dx%d (device did not report dimensions; using model "
 "table)\n"
 msgstr ""
 
-#: src/app/Application.cpp:73
+#: src/app/Application.cpp:74
 #, c-format
 msgid "Failed to start video: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:79
+#: src/app/Application.cpp:80
 #, c-format
 msgid "Device is in a call. End the call and try again.\n"
 msgstr ""
 
-#: src/app/Application.cpp:93
+#: src/app/Application.cpp:94
 #, c-format
 msgid "File playback cannot launch a device app; ignoring --start-app\n"
 msgstr ""
 
-#: src/app/Application.cpp:116
+#: src/app/Application.cpp:117
 #, c-format
 msgid "SDL initialization failed: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:125
+#: src/app/Application.cpp:126
 #, c-format
 msgid "Failed to open audio output: %s (receiving and decoding continue)\n"
 msgstr ""
 
-#: src/app/Application.cpp:128
+#: src/app/Application.cpp:129
 #, c-format
 msgid "Local audio playback disabled; receiving and decoding continue\n"
 msgstr ""
 
-#: src/app/Application.cpp:149
+#: src/app/Application.cpp:150
 msgid "failed"
 msgstr ""
 
-#: src/app/Application.cpp:149
+#: src/app/Application.cpp:150
 msgid "injected"
 msgstr ""
 
-#: src/app/Application.cpp:158
+#: src/app/Application.cpp:159
 #, c-format
 msgid "--test-button %s: pressed\n"
 msgstr ""
 
-#: src/app/Application.cpp:160
+#: src/app/Application.cpp:161
 #, c-format
 msgid "--test-button %s failed: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:169
+#: src/app/Application.cpp:170
 #, c-format
 msgid "--test-type %s: injected\n"
 msgstr ""
 
-#: src/app/Application.cpp:171
+#: src/app/Application.cpp:172
 #, c-format
 msgid "--test-type failed: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:196
+#: src/app/Application.cpp:197
 #, c-format
 msgid "Input injection failed (further attempts disabled): %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:207
+#: src/app/Application.cpp:208
 #, c-format
 msgid "Reached --time-limit %d seconds\n"
 msgstr ""
 
-#: src/app/Application.cpp:211
+#: src/app/Application.cpp:212
 #, c-format
 msgid "Received exit signal; closing device session\n"
 msgstr ""
 
-#: src/app/Application.cpp:221
+#: src/app/Application.cpp:222
 #, c-format
 msgid ""
 "  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
 msgstr ""
 
-#: src/app/Application.cpp:246 src/app/Application.cpp:298
+#: src/app/Application.cpp:247 src/app/Application.cpp:302
 #, c-format
 msgid "Reached --exit-after %d\n"
 msgstr ""
 
-#: src/app/Application.cpp:280
+#: src/app/Application.cpp:282
 #, c-format
 msgid "Display orientation changed to %d degrees clockwise; window recreated\n"
 msgstr ""
 
-#: src/app/Application.cpp:304
+#: src/app/Application.cpp:310
+#, c-format
+msgid "Window readback was not reached (requested frame %d, rendered %d)\n"
+msgstr ""
+
+#: src/app/Application.cpp:314
 #, c-format
 msgid "Finished: rendered %d frames\n"
 msgstr ""
@@ -708,85 +713,108 @@ msgid ""
 "%llu, restarts %llu, buffered %zu frames, interval %.1f s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:38
+#: src/app/Presenter.cpp:37
+#, c-format
+msgid ""
+"Window dimensions are too large; reduce --scale or the requested window "
+"size\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:41
 #, c-format
 msgid "Screen %dx%d points; window scaled to %dx%d (override with --scale)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:57
+#: src/app/Presenter.cpp:59
 #, c-format
 msgid "Failed to create window: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:70
+#: src/app/Presenter.cpp:72
 #, c-format
 msgid "Failed to create renderer: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:75
+#: src/app/Presenter.cpp:77
 #, c-format
 msgid "Render driver: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:90
+#: src/app/Presenter.cpp:85 src/app/Presenter.cpp:151 src/app/Presenter.cpp:200
+#: src/app/Presenter.cpp:218
 #, c-format
-msgid "Failed to create texture: %s\n"
+msgid "Failed to configure viewport: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:95
+#: src/app/Presenter.cpp:96
 #, c-format
 msgid ""
 "Window %dx%d points / drawable %dx%d pixels / viewport %dx%d (source %dx%d, "
 "crop %dx%d+%d+%d, clockwise rotation %d degrees)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:107
+#: src/app/Presenter.cpp:114
+#, c-format
+msgid "Failed to create texture: %s\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:132 src/app/Presenter.cpp:140
+#, c-format
+msgid "Cannot render frame: invalid dimensions or pixel buffer\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:160 src/app/Presenter.cpp:170
+#, c-format
+msgid "Failed to render frame: %s\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:164
 #, c-format
 msgid "Failed to upload texture: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:122
+#: src/app/Presenter.cpp:184
 #, c-format
 msgid "Failed to query drawable dimensions: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:127
+#: src/app/Presenter.cpp:189
 #, c-format
 msgid "Failed to create readback buffer: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:131
+#: src/app/Presenter.cpp:193
 #, c-format
 msgid "Failed to lock readback buffer: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:145
+#: src/app/Presenter.cpp:213
 #, c-format
 msgid "Readback failed: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:152
+#: src/app/Presenter.cpp:225
 #, c-format
 msgid "Failed to save image: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:155
+#: src/app/Presenter.cpp:228
 #, c-format
 msgid "Window readback saved to %s (%dx%d pixels)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:165
+#: src/app/Presenter.cpp:238
 #, c-format
 msgid ""
 "[input] %s raw(%d,%d) viewport %d x%d (rotation %d degrees) / window %d "
 "x%d / drawable %d x%d -> (%.3f, %.3f)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:192
+#: src/app/Presenter.cpp:265
 msgid "down"
 msgstr ""
 
-#: src/app/Presenter.cpp:201
+#: src/app/Presenter.cpp:274
 msgid "move"
 msgstr ""
 
@@ -886,7 +914,7 @@ msgid ""
 "requires software decoding.\n"
 msgstr ""
 
-#: src/hid/Hid.cpp:97 src/hid/Hid.cpp:244
+#: src/hid/Hid.cpp:97 src/hid/Hid.cpp:245
 msgid "RSD directory missing "
 msgstr ""
 
@@ -894,7 +922,7 @@ msgstr ""
 msgid "connectedServices response missing connectedServices: "
 msgstr ""
 
-#: src/hid/Hid.cpp:176
+#: src/hid/Hid.cpp:177
 msgid "Stroke requires at least one point"
 msgstr ""
 
