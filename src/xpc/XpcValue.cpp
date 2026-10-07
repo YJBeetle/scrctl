@@ -9,7 +9,7 @@
 namespace scrctl::xpc {
 namespace {
 
-/// 递归深度上限。设备回的东西是不可信输入，字典套字典的炸弹必须先挡住。
+/// 编解码的递归层级从 0 计，超过 64 时拒绝继续处理。
 constexpr int kMaxDepth = 64;
 /// 字符串和数据的长度字段沿用头文件中的共享输入上限。
 /// 32 MiB 是当前应用的资源策略，可容纳已验证的多 MiB 内联截图；
@@ -35,7 +35,7 @@ std::string hex(uint32_t v) {
 }
 
 std::string i64_to_string(int64_t v) {
-    // 先按无符号取负，避开 INT64_MIN 取溢不出来。
+    // 用无符号运算取绝对值，避免对 INT64_MIN 直接取负造成溢出。
     const bool neg = v < 0;
     const uint64_t mag = neg ? (~static_cast<uint64_t>(v) + 1) : static_cast<uint64_t>(v);
     std::string s = u64_to_string(mag);
@@ -60,14 +60,13 @@ void put_u64(std::vector<uint8_t> &out, uint64_t v) {
     }
 }
 
-/// 补零到 4 字节边界。`start` 是被对齐那一段的起始下标——Apple 的对齐是相对每段
-/// 自己的开头，不是相对整个消息，这一点在嵌套容器里会有可观察的差别。
+/// 相对本段起点 start 补零到 4 字节边界；嵌套段分别计算对齐。
 void align4(std::vector<uint8_t> &out, std::size_t start) {
     const std::size_t used = out.size() - start;
     out.insert(out.end(), (4 - used % 4) % 4, 0);
 }
 
-/// 写一个「裸」NUL 结尾字符串：没有长度前缀，只有字典的键用。
+/// 字典键编码为 NUL 结尾字符串并补齐到 4 字节边界，不带长度前缀。
 void put_cstr(std::vector<uint8_t> &out, const std::string &s) {
     const std::size_t start = out.size();
     out.insert(out.end(), s.begin(), s.end());
@@ -100,7 +99,7 @@ bool encode_into(std::vector<uint8_t> &out, const Value &v, int depth) {
             return true;
         }
         case Type::String: {
-            // 长度含终结 NUL，这是 XPC 字符串和 XPC 数据最容易搞混的地方。
+            // 字符串长度包含末尾 NUL；Data 的长度只包含实际字节。
             const std::size_t start = out.size();
             put_u32(out, static_cast<uint32_t>(v.string.size() + 1));
             out.insert(out.end(), v.string.begin(), v.string.end());
@@ -130,8 +129,8 @@ bool encode_into(std::vector<uint8_t> &out, const Value &v, int depth) {
         }
         case Type::Array:
         case Type::Dict: {
-            // 长度前缀记的是「count 字段 + 全部条目」，所以先把内容编到临时缓冲
-            // 里量一下，再拼到外层。
+            // 容器长度包含 count 字段和全部条目，不含类型标记及长度字段本身。
+            // 先编码内容以确定该长度，再写入外层缓冲区。
             std::vector<uint8_t> content;
             put_u32(content, static_cast<uint32_t>(v.type == Type::Array ? v.array.size()
                                                                          : v.dict.size()));
@@ -204,18 +203,15 @@ public:
         return true;
     }
 
-    /// 从 `start` 起算补零到 4 字节边界。
-    ///
-    /// 必须夹在段末之内：段恰好在非 4 字节边界结束时，"补齐"会把游标推到段外，
-    /// 于是 remaining() 变成 size_t 下溢出来的天文数字，后面每一次读取都拿着它
-    /// 当"还有这么多字节"去越界读。
+    /// 按相对 start 的 4 字节对齐跳过填充，最多前进到当前段末。
+    /// 填充不足时停在段末，避免游标越界以及 remaining() 的无符号下溢。
     void align_from(const uint8_t *start) {
         const auto used = static_cast<std::size_t>(p_ - start);
         const std::size_t pad = (4 - used % 4) % 4;
         p_ += std::min(pad, remaining());
     }
 
-    /// NUL 结尾串 + 补零。没有长度前缀，只能扫到 NUL，所以必须限制在段内。
+    /// 在当前段内读取 NUL 结尾的字典键，并跳过对齐填充；段内无 NUL 时失败。
     bool cstr(std::string &out) {
         const uint8_t *start = p_;
         const uint8_t *nul = static_cast<const uint8_t *>(std::memchr(p_, 0, remaining()));
@@ -228,9 +224,8 @@ public:
         return true;
     }
 
-    /// 开一个只覆盖接下来 n 字节的子读取器，并**立刻**把外层游标推到段末。
-    /// 外层无条件前进是故意的：忘记推进容器游标会让同一层的下一个条目读到容器
-    /// 内容中间去，而这种错误在「容器正好是最后一个条目」时完全看不出来。
+    /// 将接下来的 n 字节交给子读取器，并把外层游标推进到子段末。
+    /// 子段不能超过当前剩余字节；后续同层对象从子段之后继续读取。
     bool enter(std::size_t n, Reader &out) {
         if (remaining() < n) {
             return fail(SCRCTL_TR("Length prefix exceeds remaining bytes"));
@@ -335,7 +330,7 @@ bool decode_into(Reader &r, Value &out, int depth) {
                 return false;
             }
             if (len > kMaxLen) {
-                // 把两个数都打出来：只说"不合理"的话，下一步还得再跑一遍才知道差多少。
+                // 错误同时记录声明长度与当前限制，便于判断超限幅度。
                 r.set_err(SCRCTL_TR("Invalid data length: declared ") + std::to_string(len) + SCRCTL_TR(" bytes, limit ") +
                           std::to_string(kMaxLen));
                 return false;
@@ -384,8 +379,8 @@ bool decode_into(Reader &r, Value &out, int depth) {
                 r.set_err(SCRCTL_TR("Container length cannot hold count field"));
                 return false;
             }
-            // 段边界收紧到 total，条目里再出现「本段内找不到 NUL」就是真畸形。
-            // enter 会把外层游标一并推到段末，容器后面还有兄弟条目时靠这个前进。
+            // 仅在 total 指定的子段内解析条目，不能读取后续同层对象的字节。
+            // enter 同时推进外层游标到子段末。
             Reader body(r.here(), r.here());
             if (!r.enter(total, body)) {
                 return false;
@@ -395,9 +390,8 @@ bool decode_into(Reader &r, Value &out, int depth) {
                 r.set_err(body.err());
                 return false;
             }
-            // 数组条目最少 4 字节（只有类型标记的 null），字典条目最少 8 字节
-            // （1 字节键补到 4 + 4 字节值）。拿这个下限先拦掉吹牛的 count，
-            // 免得为一个伪造的数字 resize 出巨量内存。
+            // 数组条目至少 4 字节（Null 的类型标记）；字典条目至少 8 字节
+            // （NUL 键补齐到 4 字节，加 4 字节值）。分配条目之前先据此检查 count。
             const std::size_t min_entry = tag == static_cast<uint32_t>(Type::Array) ? 4 : 8;
             if (static_cast<std::size_t>(count) > body.remaining() / min_entry) {
                 body.set_err(SCRCTL_TR("Entry count does not match container size"));
@@ -606,8 +600,7 @@ std::vector<uint8_t> encode_message(uint32_t flags, uint64_t message_id, const V
     std::vector<uint8_t> out;
     put_u32(out, kWrapperMagic);
     put_u32(out, flags);
-    // 长度只记载荷本身，不含紧随其后的 8 字节消息号——看着别扭，但说明 Apple
-    // 原意是「消息体长度」，而消息号属于信封。
+    // 长度只包含载荷，不含信封中的 8 字节 message_id。
     put_u64(out, static_cast<uint64_t>(payload.size()));
     put_u64(out, message_id);
     out.insert(out.end(), payload.begin(), payload.end());

@@ -6,6 +6,7 @@
 namespace scrctl::wifi {
 namespace {
 
+// 不定长数组以一个终止符结束，字典编码以两个终止符结束。
 constexpr uint8_t kTerminator = 0x03;
 
 void put_u8(Bytes &out, uint8_t v) { out.push_back(v); }
@@ -154,6 +155,7 @@ bool encode_one(const OpackValue &v, Bytes &out, std::string &err) {
 
 bool decode_one(const Bytes &in, size_t &pos, OpackValue &out, std::string &err, int depth);
 
+// 字符串与字节串的长度字段使用大端，短形态直接从类型标记取长度。
 bool decode_payload(const Bytes &in, size_t &pos, uint8_t type, Bytes &payload, std::string &err) {
     uint64_t len = 0;
     if (type == 0x61 || type == 0x91) {
@@ -192,6 +194,7 @@ bool decode_payload(const Bytes &in, size_t &pos, uint8_t type, Bytes &payload, 
 }
 
 bool decode_one(const Bytes &in, size_t &pos, OpackValue &out, std::string &err, int depth) {
+    // 当前适配的递归输入限制，层级从根对象的 0 开始。
     if (depth > 16) {
         err = SCRCTL_TR("OPACK decode: nesting too deep");
         return false;
@@ -211,7 +214,7 @@ bool decode_one(const Bytes &in, size_t &pos, OpackValue &out, std::string &err,
         out.boolean = type == 0x01;
         return true;
     }
-    if (type == 0x06) {  // 时间戳：8 字节小端 double，我们用不到，跳过载荷
+    if (type == 0x06) {  // 时间戳形态：读取并跳过 8 字节小端载荷，不生成时间戳值
         uint64_t skip = 0;
         return read_le(in, pos, 8, skip);
     }
@@ -280,7 +283,7 @@ bool decode_one(const Bytes &in, size_t &pos, OpackValue &out, std::string &err,
                     err = SCRCTL_TR("OPACK decode: terminator in fixed-length dictionary");
                     return false;
                 }
-                pos += 2;  // 键值各一个终止符
+                pos += 2;  // 当前适配按键和值各一个终止符推进
                 return true;
             }
             OpackValue k;

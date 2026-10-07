@@ -17,10 +17,8 @@ inline constexpr std::size_t kMaxBuffer = 32u << 20;
 
 /// Apple XPC 的二进制对象图，RemoteXPC 的载荷格式。
 ///
-/// 为什么不引第三方：可用的开源实现（libxpc）是 GPL/LGPL 且面向 Mach 平台，
-/// Linux/Windows 上根本没有；而 RemoteXPC 走的是 XPC 的一个子集——所有描述符
-/// 都内联在缓冲区里，不存在 out-of-line 的 fd / shared memory 传送，所以完整
-/// 的 libxpc 能力我们用不上，反倒是自己写能把边界检查写死。
+/// 当前适配支持下面列出的对象类型，以及 RemoteXPC 的消息信封。
+/// FileTransfer 只在对象图中编码传输号和长度，文件字节由通道层另行接收。
 ///
 /// 线上格式（全小端）：每个对象 = u32 类型标记 + 该类型的载荷。所有对象的总
 /// 长度都是 4 的倍数，字符串与数据后面补零到 4 字节边界，字典的键是「裸的」
@@ -37,8 +35,8 @@ enum class Type : uint32_t {
     Uuid = 0x0000A000,
     Array = 0x0000E000,
     Dict = 0x0000F000,
-    /// 大载荷不进消息本体：字典里放一个 FileTransfer 说明大小，真正的字节由设备
-    /// 在另一条 HTTP/2 流上推。截图也可能直接返回内联 Data，不能据返回值用途判断类型。
+    /// 文件附件以 FileTransfer 声明长度，实际字节在另一条 HTTP/2 流上传输。
+    /// 截图也可能直接返回内联 Data，不能仅凭用途判断载荷类型。
     FileTransfer = 0x0001A000,
 };
 
@@ -46,17 +44,15 @@ struct Value;
 
 using Array = std::vector<Value>;
 
-/// 字典条目。先声明、等 Value 定义完再补全，否则「条目里含值、值里含条目」这个
-/// 环解不开。vector 从 C++17 起允许不完整元素类型，所以 Value 里只出现
-/// vector<Entry> 就够了。
+/// 字典条目先声明、在 Value 之后定义，以支持两者相互包含。
+/// std::vector 允许此处使用尚未完整定义的 Entry 元素类型。
 struct Entry;
 using Dict = std::vector<Entry>;
 
 struct Value {
     Type type = Type::Null;
 
-    // 标量按实际用到的字段铺开，而不是塞一个 union：类型标记本身就是判别式，
-    // 多占几十字节换掉生命周期与对齐的麻烦，值这个价。
+    // type 决定当前值使用哪个字段；其余字段保持默认值。
     bool boolean = false;
     int64_t int64 = 0;
     uint64_t uint64 = 0;  ///< UInt64 与 Date 共用；Date 是自 epoch 起的纳秒。
@@ -66,12 +62,9 @@ struct Value {
     Array array;
     Dict dict;
 
-    /// 仅 FileTransfer：设备声明的字节数（线上字典里的 "s"）、它的 msg id，
-    /// 以及随后从那条推送流上读回来的实际字节。
-    ///
-    /// data 由通道层填充，不属于线上编码的一部分——所以解出来的 FileTransfer
-    /// 在被"取货"之前 data 是空的，直接 encode 会丢内容，这是有意的：文件字节
-    /// 从来不在消息里。
+    /// 仅用于 FileTransfer：file_size 是元数据字典中 "s" 声明的字节数，
+    /// transfer_id 是传输号。实际文件字节存入 data，由通道层接收后填充。
+    /// 编解码 FileTransfer 只处理元数据，不读取或写入 data。
     uint64_t file_size = 0;
     uint64_t transfer_id = 0;
 
@@ -79,21 +72,17 @@ struct Value {
     [[nodiscard]] bool is_array() const { return type == Type::Array; }
     [[nodiscard]] bool is_string() const { return type == Type::String; }
 
-    /// 找不到键返回 nullptr；重复键时取第一个。适合「先判存在再取」的场合。
+    /// 找不到键返回 nullptr；重复键时取第一个，可用于判断键是否存在。
     [[nodiscard]] const Value *find(std::string_view key) const;
-    /// 找不到键返回一个共享的 Null 值引用，因此可以放心链式取值。
-    ///
-    /// 目录这类外部数据里，某个条目少一个键是常态而不是异常；每处都写判空迟早会
-    /// 漏一个（真漏过：解析 RSD 目录时对没有 Entitlement 的条目解引用了空指针，
-    /// 表现为随机段错误）。要判存在性请用 find。
+    /// 找不到键返回共享的 Null 值引用，便于读取可选字段并使用默认值。
+    /// 需要区分缺失键和显式 Null 值时使用 find。
     [[nodiscard]] const Value &at(std::string_view key) const;
     [[nodiscard]] std::string as_string_or(std::string_view fallback = {}) const;
     [[nodiscard]] int64_t as_int_or(int64_t fallback = 0) const;
     [[nodiscard]] bool as_bool_or(bool fallback = false) const;
 };
 
-/// 条目保持插入顺序：RSD 不关心顺序，但我们要能做字节级往返自检，只有有序容器
-/// 才能把「解码 -> 编码 -> 比对」这条路走通。
+/// 条目保持插入顺序，编码时沿用该顺序，便于字节级往返比较。
 struct Entry {
     std::string key;
     Value value;
@@ -108,21 +97,22 @@ Value make_double(double v);
 Value make_date(uint64_t ns_since_epoch);
 Value make_string(std::string v);
 Value make_data(std::vector<uint8_t> v);
-/// 只接受 16 字节；长度不符时解出来的对象编码会失败，而不是悄悄写出畸形数据。
+/// 构造 Uuid 值；编码要求 data 恰好为 16 字节，否则编码失败。
 Value make_uuid(std::span<const uint8_t> v);
 Value make_file_transfer(uint64_t size, uint64_t transfer_id = 0);
 Value make_array();
 Value make_dict();
 
 void array_push(Value &arr, Value item);
-/// 追加或原地替换；XPC 字典允许重复键，但语义上我们只想要后写覆盖。
+/// 键存在时原地替换第一个条目，否则追加；后续同名条目保持不变。
 void dict_set(Value &dict, std::string key, Value item);
 
 // ------------------------------------------------------------ 对象编解码 ------
-/// 把一个对象连同类型标记序列化成一段字节。深度超限（疑似畸形输入）时返回空。
+/// 把对象及其类型标记序列化。递归深度超过 64、Uuid 长度不符或类型不支持时返回空。
 [[nodiscard]] std::vector<uint8_t> encode(const Value &v);
 
-/// 从缓冲区开头解出一个对象。失败返回 nullopt 并给出原因。
+/// 从缓冲区开头解出一个对象，不要求对象用尽整个缓冲区。
+/// 输入超过 kMaxBuffer、递归深度超过 64 或解析失败时返回 nullopt 并给出原因。
 [[nodiscard]] std::optional<Value> decode(std::span<const uint8_t> buf, std::string &err);
 
 // ---------------------------------------------------------- 消息（wrapper） ---
@@ -130,13 +120,12 @@ inline constexpr uint32_t kWrapperMagic = 0x29B00B92;
 inline constexpr uint32_t kPayloadMagic = 0x42133742;
 inline constexpr uint32_t kProtocolVersion = 5;
 
-/// wrapper 的 flags 位。名字照 Apple 的 XPC_ACTIVITY_* / 抓包结论。
+/// 当前 RemoteXPC 适配使用的信封标志，可以组合设置。
 inline constexpr uint32_t kFlagAlwaysSet = 0x00000001;
 inline constexpr uint32_t kFlagPing = 0x00000002;
 inline constexpr uint32_t kFlagDataPresent = 0x00000100;
-/// 主通道终止帧上带的一位。Apple 没给它名字，抓包里那一帧的 flags 就是
-/// 0x0201 = ALWAYS_SET | 这一位。（先前我把它错当成 kFlagIsReply，差了两个
-/// 数量级，设备随即把回信通道 RST 掉并报 FRAME_SIZE_ERROR。）
+/// 当前主通道握手的终止消息使用此标志，组合值为 0x0201（含 ALWAYS_SET）。
+/// 该标志与回信标志 kFlagIsReply 独立。
 inline constexpr uint32_t kFlagTermChannel = 0x00000200;
 inline constexpr uint32_t kFlagWantingReply = 0x00010000;
 inline constexpr uint32_t kFlagIsReply = 0x00020000;
@@ -149,14 +138,12 @@ inline constexpr uint32_t kFlagInitHandshake = 0x00400000;
 /// ```text
 ///  0  u32  wrapper magic 0x29B00B92
 ///  4  u32  flags
-///  8  u64  载荷长度 L        ← 不含下面两个字段，所以整条消息 = 24 + L
+///  8  u64  载荷长度 L        ← 不含 24 字节信封，整条消息 = 24 + L
 /// 16  u64  message_id
 /// 24       载荷：u32 magic 0x42133742 + u32 版本 5 + 一个 XPC 对象
 /// ```
 ///
-/// 长度记的是「载荷」而非「信封之后的全部」，也就是说 message_id 属于信封。
-/// 第一次实现时把长度和消息号的位置记反了，两条都读成对方——因为只有长度恰好
-/// 等于消息号时才会碰巧跑通，而那种情况不存在，所以只要拿一条真消息就能发现。
+/// message_id 属于信封，不计入载荷长度。载荷非空时包含 magic、版本和一个 XPC 对象。
 struct Message {
     uint32_t flags = kFlagAlwaysSet;
     uint64_t message_id = 0;
@@ -164,28 +151,22 @@ struct Message {
     Value body;
 };
 
-/// body 为空时编成「长度=0、无载荷」（心跳 / 终止帧要的就是这个）。
+/// body 为 nullptr 时编码为长度 0、无载荷的消息，用于心跳和握手终止。
 [[nodiscard]] std::vector<uint8_t> encode_message(uint32_t flags, uint64_t message_id,
                                                   const Value *body);
 
 enum class Status { Ok, NeedMore, Malformed };
 
-/// 从缓冲区开头解出一条完整消息。`consumed` 只在 Ok 时为真，等于这条消息占用的
-/// 字节数——可能小于 buf.size()，因为一个 DATA 帧里可能粘了多条消息。
-///
-/// NeedMore 与 Malformed 必须分开：前者是「继续收」，后者是「链路已经错位，
-/// 再收只会更错」。把两者混成一个 optional 的话，半条消息就会被当成协议错误，
-/// 连接被白白拆掉。
+/// 从缓冲区开头解出一条消息。Ok 时 consumed 是本条消息的字节数，其余状态为 0。
+/// 一个 DATA 帧可能包含多条消息，因此 consumed 可以小于 buf.size()。
+/// NeedMore 表示需要继续接收；Malformed 表示长度超限、格式或版本不受支持等解析错误。
 [[nodiscard]] Status decode_message(std::span<const uint8_t> buf, Message &out, std::size_t &consumed,
                                      std::string &err);
 
 // ----------------------------------------------------------------- 调试 ------
-/// 单行可读表示，用于探针打印设备回的服务目录。字符串截断到 120 字节。
-///
-/// `budget` 是**每个容器**允许的长度：到点就补 `, ...` 收尾。默认 400 适合服务目录
-/// 那种"一眼扫过"的场合；要把一条推送的字段逐个读出来时它会把关键部分切掉（显示信息
-/// 就是：`displays[]` 里每个显示器十几个键、还嵌着 `currentMode`），那种地方传
-/// `SIZE_MAX`。
+/// 单行可读表示，用于诊断输出。字符串最多显示前 120 字节。
+/// budget 分别应用于每个容器；追加条目后超过预算时以 `, ...` 结束，
+/// 因此不是输出长度的严格上限。传 SIZE_MAX 可取消容器预算，字符串仍按上述规则截断。
 [[nodiscard]] std::string describe(const Value &v, std::size_t budget = 400);
 
 }  // namespace scrctl::xpc

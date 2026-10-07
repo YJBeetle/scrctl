@@ -9,13 +9,18 @@
 
 namespace scrctl::wifi {
 
-/// Apple 的 OPACK 二进制对象格式：pair-setup 的 M5/M6 用它在 TLV 的 INFO 里塞
-/// 设备信息字典（altIRK / mac / name 那一堆）。这里只实现用得着的那个子集：
-/// bool / 小整数 / 字符串 / 字节串 / 数组 / 字典（含 15 项以上的终止符形态）。
+/// 当前配对流程使用的 OPACK 对象适配。pair-setup 的 M5/M6 通过 TLV INFO
+/// 传递设备信息字典，例如 altIRK、mac、name。
+/// 支持 bool、整数、字符串、字节串、数组和字典；并非完整 OPACK 类型集合。
 ///
-/// 字节序是这套格式里最容易错的一半：**整数载荷是小端**（0x30/0x32/0x33），
-/// 而字符串与字节串的**长度前缀是大端**（0x61/0x62/0x91/0x92）。离线自检拿参考
-/// 实现的编码器当 oracle 逐字节对过（tests/wifi_test.cpp）。
+/// bool 使用 0x01/0x02，0～39 的整数直接编码在 0x08～0x2F 中；整数载荷
+/// 使用小端，0x30/0x32/0x33 分别带 1/4/8 字节。编码器只接受非负整数。
+/// 字符串的短长度标记是 0x40～0x60，字节串是 0x70～0x90；更长载荷的
+/// 长度字段使用大端，字符串 0x61～0x64、字节串 0x91～0x94 分别带 1/2/4/8 字节。
+/// 编码器最长写出 4 字节长度，解码器也接受 8 字节长度形态。
+/// 数组 0xD0～0xDE、字典 0xE0～0xEE 在标记中声明项数；15 项及以上编码为
+/// 0xDF/0xEF 的终止符形态，数组结尾写一个 0x03，字典结尾写两个。
+/// tests/wifi_test.cpp 包含参考编码字节的离线兼容性用例。
 struct OpackValue {
     enum class Kind { kBool, kInt, kBytes, kString, kList, kDict } kind = Kind::kBool;
     bool boolean = false;
@@ -23,7 +28,7 @@ struct OpackValue {
     Bytes bytes;
     std::string str;
     std::vector<OpackValue> list;
-    std::vector<std::pair<OpackValue, OpackValue>> dict;  ///< 保序：设备会按顺序读
+    std::vector<std::pair<OpackValue, OpackValue>> dict;  ///< 保留插入顺序，编码时沿用该顺序
 
     static OpackValue of_bytes(Bytes b) {
         OpackValue v;
@@ -41,7 +46,9 @@ struct OpackValue {
     [[nodiscard]] const OpackValue *find(std::string_view key) const;
 };
 
+/// 将编码追加到 out；失败可能留下部分输出，调用方负责清空或丢弃。
 bool opack_encode(const OpackValue &value, Bytes &out, std::string &err);
+/// 解码一个完整对象，拒绝尾随字节；递归层级从 0 计，超过 16 时失败。
 bool opack_decode(const Bytes &in, OpackValue &out, std::string &err);
 
 }  // namespace scrctl::wifi
