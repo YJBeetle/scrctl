@@ -6,30 +6,33 @@
 
 namespace scrctl::media {
 
-/// CoreDevice 媒体协商的 offer。
+/// CoreDevice 媒体协商 offer 的本地参数。
 ///
-/// 外层使用 XML plist，两个 Data 字段分别包含 zlib 压缩的媒体参数和 endpoint protobuf。
+/// 外层使用 XML plist。MediaBlob 的 Data 包含 zlib 压缩的媒体参数 protobuf；
+/// RemoteEndpointInfo 的 Data 直接包含主机信息 protobuf，不经 zlib 压缩。
 /// protobuf 字段号和取值来自可用会话的观测；未确认含义的参数保留观测值。
 /// 修改参数时需分别验证协商回复、实际码流和恢复行为，不能仅以 RPC 成功判断兼容性。
 /// 字段与码流记录见 [CoreDevice §11](../../docs/coredevice.md#11-屏幕视频流的线上细节实测iphone-144--ios-270--usb)，
 /// XML 的验证范围见 [BPLIST_COMPATIBILITY](../../docs/BPLIST_COMPATIBILITY.md#当前结论)。
 struct Offer {
-    /// 本条流的客户端 SSRC：视频放在 VideoSettings.f1，音频放在 f3.f1。
+    /// 本条流声明的客户端 SSRC：视频放在 VideoSettings.f1，音频放在媒体参数的 f3.f1。
     /// 字段名中的 session 为历史命名。已测设备将该值原样回显为 answer 的 RemoteSSRC；
     /// 发送 RTCP 时，以本次 answer 的 RemoteSSRC 作为客户端发送者 SSRC。
     /// 视频和音频分别使用自己的 SSRC，不与 ClientSessionID UUID 混用。
     uint32_t session_id = 0;
-    /// avcMediaStreamOptionCallID，本次协商调用的追踪号。
+    /// avcMediaStreamOptionCallID，本次协商调用的文本追踪号，与 SSRC 和 ClientSessionID 分开。
     std::string call_id;
 
     /// 选择音频或视频 offer。当前构造器中，音频使用 negotiator mode 6、设置消息 f3；
     /// 视频使用 mode 5、设置消息 f5（VideoSettings）。音频设置包含 f1=SSRC、f4=24191，
-    /// f4 的具体含义尚未确认。两种 offer 复用当前观测到的能力和码率参数，CallID 各自生成。
+    /// f4 的具体含义尚未确认。两种 offer 共享媒体参数容器中的默认字段和码率表，
+    /// 编码器能力条目位于视频设置中。StreamSession::start() 为每次协商生成 CallID。
     /// 编码形状与音视频并行验证见 [CoreDevice §17、§17.2](../../docs/coredevice.md#17-音频腿的编码鉴定实测iphone144--ios-270--usb)。
     /// 共享 ClientSessionID 不是当前实现维持视频会话的前提；每条流仍需发送自己的 RTCP。
     bool is_audio = false;
 
-    /// 申报的主机型号、系统版本和构建号。默认值对应已验证的主机身份组合。
+    /// 申报的主机型号、系统版本和构建号。默认值来自已有成功会话使用的身份组合，
+    /// 不表示当前进程会读取本机信息或确认这些值与实际主机一致。
     /// 参考实现曾观察到更换型号后编码参数和停顿频率变化，因此更改这些值需要重新验证；
     /// 不能据此推断所有设备都使用相同的参数选择规则。
     std::string host_model = "Mac15,9";
@@ -57,8 +60,8 @@ struct Offer {
     bool ltrp_enabled = false;
 
     /// 码率阶梯变体，供 tools/bitrate_probe 对照；产品路径保持 0。
-    /// 0 = 保留原表；1 = 删除 f2=6000000 的档；2 = 将该档改为 60000000；
-    /// 3 = 仅保留 >=20M 的档。
+    /// 0 = 保留原表；1 = 删除 f2=6000000 的记录；2 = 将该值改为 60000000；
+    /// 3 = 删除 1000 <= f2 < 20000000 的记录，仍保留 f2=0、299 等其他参数记录。
     /// 已测设备中，提高该档未提高 answer 的 TXMaxBitrate；删除后码率或帧率下降。
     /// 同轮分辨率参数对照也未改变编码尺寸，因此目前保留原表，不将它作为通用码率旋钮。
     /// 码率、分辨率和主机能力对照见 [CoreDevice §11](../../docs/coredevice.md#11-屏幕视频流的线上细节实测iphone-144--ios-270--usb)。
@@ -67,7 +70,7 @@ struct Offer {
     int rate_variant = 0;
 };
 
-/// 生成 XML plist，以 XPC Data 放入 startmediastream 的 negotiatorOffer。
+/// 将以上参数序列化为 XML plist，供 startmediastream 的 negotiatorOffer 使用 XPC Data 携带。
 /// 两个 Data 字段在 XML 中使用 Base64；压缩媒体参数和 endpoint protobuf 的内容不变。
 /// 视频、音频与生产路径对照见 [BPLIST_COMPATIBILITY 的真机对照](../../docs/BPLIST_COMPATIBILITY.md#真机对照)。
 /// 该结果限定于文档所列设备、系统与请求，不表示其他 CoreDevice feature 都接受 XML。

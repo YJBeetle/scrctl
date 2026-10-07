@@ -14,16 +14,16 @@ using namespace scrctl;
 constexpr int64_t kAccessNetworkType = 1;
 constexpr int64_t kTransportProtocolType = 2;
 
-/// options 里每个值都被包一层带类型名的字典（{"int": …} / {"string": …} /
-/// {"uuid": …}）。设备按这个标签决定怎么读，漏一层就是"参数缺失"。
+/// 将 options 参数放入带类型标签的字典：{"int": …}、{"string": …} 或
+/// {"uuid": …}。该包装来自已验证的 CoreDevice 请求形状，不能省略这一层。
 xpc::Value typed(const char *tag, xpc::Value inner) {
     auto d = xpc::make_dict();
     xpc::dict_set(d, tag, std::move(inner));
     return d;
 }
 
-/// 一次起流一个的会话号。设备侧是 Swift Codable，声明成 UUID 的字段就必须给
-/// 真正的 XPC UUID 对象（16 字节），给 UUID 文本会被直接拒。
+/// 为本次请求生成 16 字节 ClientSessionID。已测设备的 UUID 类型检查要求 XPC UUID
+/// 对象，不能用 UUID 文本代替；该标识与媒体 offer 中的 u32 SSRC 分别处理。
 std::array<uint8_t, 16> random_uuid_bytes() {
     std::array<uint8_t, 16> out{};
     for (auto &byte : out) {
@@ -32,8 +32,8 @@ std::array<uint8_t, 16> random_uuid_bytes() {
     return out;
 }
 
-/// 收流端口。`thread_local` 的理由与 `net/TcpStream.cpp` 里那两个同源：视频腿与音频腿
-/// 现在会在各自的 worker 线程里重起会话，同时走到这里。
+/// 从 49152..65151 选择接收端口。音视频工作线程可能同时重新建立会话，使用
+/// thread_local 避免共享伪随机数发生器；实际可用性仍由随后 bind() 的结果决定。
 uint16_t pick_port() {
     static thread_local std::mt19937 rng { std::random_device {} () };
     return static_cast<uint16_t>(49152 + rng() % 16000);
@@ -58,24 +58,22 @@ xpc::Value build_start_request(const std::string &receiver_ip, uint16_t receiver
                   typed("int", xpc::make_int64(kAccessNetworkType)));
     xpc::dict_set(options, "AVCMediaStreamNegotiatorTransportProtocolType",
                   typed("int", xpc::make_int64(kTransportProtocolType)));
-    // 这两位是视频专用的：苹果那份抓包里，音频腿的 options 只有 AccessNetworkType /
-    // TransportProtocolType / ClientSessionID 三个键，而视频腿多了这两个。带上它们设备
-    // 会把这条流按"某个显示号的视频"处理，音频腿要的 `source: {audioSystemOutput: {}}`
-    // 就拿不到了。
+    // 已验证的音频请求仅包含 AccessNetworkType / TransportProtocolType /
+    // ClientSessionID；视频请求另含显示器选择参数。音频请求省略下面两个键，
+    // 对应已测 answer 中的 source: {audioSystemOutput: {}}。
     if (!audio) {
         xpc::dict_set(options, "CoreDeviceVideoDisplayMode",
                       typed("string", xpc::make_string("DisplayByID")));
         xpc::dict_set(options, "VideoStreamForDisplayID",
                       typed("int", xpc::make_int64(display_id)));
     }
-    // 会话号：一次起流一个，设备用它关联这条会话。
-    // 必须是真正的 XPC UUID 对象（16 字节），不能是 UUID 文本——设备侧是
-    // Swift Codable，类型对不上直接拒："Expected to decode UUID but found a
-    // OS_xpc_string instead"（code 4864）。
+    // ClientSessionID 必须编码为 16 字节 XPC UUID；已测 Swift Codable 类型错误为
+    // "Expected to decode UUID but found a OS_xpc_string instead"（code 4864）。
     //
-    // `shared_client_session_uuid` 非空时用它：苹果是**先起音频再起视频、两条腿共用同一个
-    // ClientSessionID**（抓包里两次 start 的都是 6afeae6c-…），所以"这个会话有几条腿"是
-    // 靠这一个 UUID 关联的。留空 = 本腿自己生成一个（单腿客户端的旧行为）。
+    // shared_client_session_uuid 非空时原样使用，否则生成本次请求的标识。
+    // DeviceHub 样本先起音频再起视频，两次请求共用 ClientSessionID；本项目已验证
+    // 独立 UUID 也能并行起流，产品采用独立标识，避免状态查询把另一条流视为本条存活。
+    // 共用 UUID 时，probe() 只能确认至少一条匹配会话存在，见 docs/coredevice.md §17.2。
     std::vector<uint8_t> session_id = shared_client_session_uuid;
     if (session_id.empty()) {
         const auto fresh = random_uuid_bytes();
@@ -88,16 +86,15 @@ xpc::Value build_start_request(const std::string &receiver_ip, uint16_t receiver
     xpc::dict_set(d, "receiverIP", xpc::make_string(receiver_ip));
     xpc::dict_set(d, "receiverPort", xpc::make_uint64(receiver_port));
     xpc::dict_set(d, "senderIP", xpc::make_string(sender_ip));
-    // 这个键在 CoreDevice 的 feature 层是**必填**的：不发就直接被拒
-    // （`code 4865 / Expected to find key timeout.`，两臂实测）。
-    //
-    // 曾经在这里写过"苹果不发这个键、所以它不到期"，那是**错的**：抓它的请求原文，
-    // `timeout` 明明白白是 20。当时误读的来源是把设备会话表的回显当成了请求原文。
+    // 已测 CoreDevice feature 在省略 timeout 时返回
+    // `code 4865 / Expected to find key timeout.`。DeviceHub 请求样本也包含 timeout=20；
+    // 设备会话表未回显某个键，不能用于推断原始请求省略了它。
     if (timeout_seconds.has_value()) {
         xpc::dict_set(d, "timeout", xpc::make_uint64(*timeout_seconds));
     }
     xpc::dict_set(d, "type", xpc::make_string(audio ? "audio" : "video"));
-    // 苹果有、我们没有的唯一一个键（抓包对齐出来的）。空 vector = 不发。
+    // DeviceHub 请求样本包含 sessionEventChannel。本构造器允许提供该 UUID，
+    // 空 vector 时省略；通道注册过程和对端语义尚未确认，不能仅凭此字段判断续期。
     if (!event_channel_uuid.empty()) {
         xpc::dict_set(d, "sessionEventChannel",
                       xpc::make_uuid(std::span<const uint8_t>(event_channel_uuid)));
@@ -111,16 +108,15 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
                                                    remote::ServiceConnection *on_conn) {
     const auto info = device.rsd().service("com.apple.coredevice.displayservice");
     if (!info) {
-        // 这句必须把**目录里实际有什么**一起打出来：外部反馈里那台 iPad mini(iOS 18) 就
-        // 停在这里，而我们只说"缺 displayservice（DDI 是否已挂载？）"，远程就分不开
-        // "没挂 DDI"与"这版系统的 DeviceKit 压根没这条服务"——两种改法完全不同。
+        // 错误中同时列出实际 RSD 目录，便于区分 DDI 状态与设备/系统服务差异。
+        // iPad mini / iOS 18 的外部反馈曾缺少 displayservice，不能仅据缺失名称断定原因。
         err = scrctl::remote::Rsd::missing_service_message(
             "com.apple.coredevice.displayservice", device.rsd().services());
         return nullptr;
     }
 
-    // 先绑端口再起流：设备一返回 answer 就开始推 RTP，晚绑会丢掉带 VPS/SPS/PPS
-    // 和首个关键帧的开头几个包。
+    // 已测设备在起流回复后立即发送 RTP；提前绑定接收端口，避免丢失视频参数集
+    // VPS/SPS/PPS 与首个关键帧。音频请求同样先准备接收端口。
     const uint16_t port = request.receiver_port != 0 ? request.receiver_port : pick_port();
     auto socket = std::make_unique<net::UdpSocket>(device.rsd().stack(), port);
     if (!socket->bind(err)) {
@@ -132,11 +128,11 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
     offer.is_audio = request.audio;
     offer.session_id = static_cast<uint32_t>(std::random_device{}());
     offer.call_id = remote::random_uuid_text();
-    // `raw_offer` 非空时**整个跳过**我们自己的构造器，原样发这份字节。为什么要这个口子：
-    // 逐字段"对齐到苹果"是有损的——对齐的人只会挑自己想到要对的字段。把苹果当场发出去的那
-    // 482 字节原封不动发一遍，才是"请求侧差异"这个变量的**上界**：如果连这个都不改变租期，
-    // 那差异就一定不在 offer 里，可以直接把整条 offer 假设关掉。
-    // 注意它带着苹果那次的 SSRC/CallID，所以这一臂**不要**再发 RTCP（SSRC 对不上人）。
+    // raw_offer 非空时原样发送，跳过本地 XML offer 构造。该入口用于完整样本重放和
+    // binary/XML 对照，不只比较已识别的字段；历史 DeviceHub 视频样本为 482 字节。
+    // 样本内的 SSRC/CallID 保持原值，与上面新生成的 Offer 字段无关。后续 RTCP 应
+    // 使用本次 answer 的 LocalSSRC/RemoteSSRC，不能采用未进入 raw_offer 的本地身份。
+    // 样本重放本身不能排除反馈送达或其他请求参数的影响，验证范围见 Request::raw_offer。
     std::vector<uint8_t> blob =
         request.raw_offer.empty() ? build_negotiator_offer(offer) : request.raw_offer;
 
@@ -150,8 +146,8 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
                                      request.audio, request.client_session_uuid);
     xpc::Value output;
     if (on_conn != nullptr) {
-        // 在调用方持有的那条连接上起流。注意 invoke 的返回值有三态，这里只关心
-        // "设备有没有按我们的请求建会话"，所以非 Ok 一律算失败并把 err 交出去。
+        // 借用调用方持有的连接，不转移所有权。invoke() 的非 Ok 结果均表示起流失败；
+        // 保留其错误信息，只有缺少诊断的传输错误才在此补充说明。
         const auto r = on_conn->invoke("com.apple.coredevice.feature.startmediastream",
                                        "com.apple.coredevice.action.mediastreamstart", input,
                                        output, 30000, err);
@@ -170,29 +166,29 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
 
     Started started;
     started.answer = std::move(output);
-    // 会话号就在请求体的 typed 包装里，从 input 读回来即可，不必让
-    // build_start_request 多带一个出参。
+    // 从实际请求的类型包装中读取 ClientSessionID，保证记录的是本次发送的 UUID，
+    // 包括调用方提供共享标识与本地新生成标识两种情况。
     started.session_uuid =
         input.at("options").at("avcMediaStreamOptionClientSessionID").at("uuid").data;
 
-    // answer 里设备侧的发送端口在 connection.sender.port，payload type 在
-    // connection.streamConfig.RxPayloadType。
+    // answer 的 connection.sender.port 是设备媒体发送端口，
+    // connection.streamConfig.RxPayloadType 是本次协商的媒体载荷类型。
     const auto *connection = started.answer.find("connection");
     if (connection != nullptr) {
-        // 这条流的 PT 是协商出来的，不是常量 100。RTCP 与视频共用一个 UDP 端口，
-        // 拆包器只能靠 PT 区分二者，所以这个值必须交给它。取低 7 位，因为 RTP 头里
-        // 的 payload type 字段就只有 7 位。
+        // 媒体 PT 使用协商结果；缺失时沿用默认 100。RTP 的该字段只有七位，因此
+        // 取低七位。音视频的接收端仍需先识别裸 RTCP，再按媒体 PT 处理 RTP。
         if (const auto *sc = connection->find("streamConfig"); sc != nullptr) {
             started.payload_type =
                 static_cast<uint8_t>(sc->at("RxPayloadType").as_int_or(100) & 0x7F);
-            // 两个 SSRC 是回 RTCP 的两张"名字"：Local 指设备自己那条流（报告块里指认的
-            // 那一位），Remote 是它给我们这一端分配的（我们当发送者填的那一位）。
+            // 名称采用设备视角：LocalSSRC 是设备媒体源，客户端 RTCP 报告块引用它；
+            // RemoteSSRC 是客户端反馈的发送者身份。已测设备回显 offer 中声明的 SSRC，
+            // 不代表总会另行生成新值；反馈使用本次 answer 中的两个值。
             started.local_ssrc = static_cast<uint32_t>(sc->at("LocalSSRC").as_int_or(0));
             started.remote_ssrc = static_cast<uint32_t>(sc->at("RemoteSSRC").as_int_or(0));
         }
         if (const auto *sender = connection->find("sender"); sender != nullptr) {
-            // 端口在这套协议里有时是整数、有时是字符串（RSD 目录里就是字符串），
-            // 两种都接下来：按整数读会拿到 0，然后永远收不到包。
+            // 对端端口兼容整数与字符串表示。RSD 目录已有字符串端口；仅按整数读取
+            // 这类值会落到默认 0，无法作为后续源端口检查或反馈目的端口的依据。
             if (const auto *p = sender->find("port"); p != nullptr) {
                 if (p->is_string()) {
                     started.sender_port = static_cast<uint16_t>(std::stoi(p->string));
@@ -223,7 +219,8 @@ bool StreamSession::send_rtp(const std::vector<uint8_t> &payload, uint16_t peer_
 }
 
 bool StreamSession::stop(remote::Device &device, std::string &err, bool verbose) const {
-    // feature() 每次调用都新开一条连接，正是这里要的：不能复用起流那条。
+    // feature() 为本次调用新建连接。已测设备复用起流连接发送 stop 曾出现服务异常，
+    // 因此 stop 不使用原连接；stopAll 会停止设备上的所有媒体会话。
     auto input = xpc::make_dict();
     xpc::dict_set(input, "stopAll", xpc::make_bool(true));
     xpc::Value output;
@@ -254,7 +251,7 @@ StreamSession::ServerState StreamSession::probe(remote::Device &device,
     if (output.type == xpc::Type::Null) {
         return ServerState::Unknown;
     }
-    // 实测回复形状：{sessions: [{connection: {options:
+    // 已测状态回复形状：{sessions: [{connection: {options:
     // {avcMediaStreamOptionClientSessionID: {uuid: ...}}, streamConfig: {...}}}],
     // running: false, runDurationSeconds: 0}。
     const auto *sessions = output.find("sessions");
@@ -263,8 +260,8 @@ StreamSession::ServerState StreamSession::probe(remote::Device &device,
         return ServerState::Unknown;
     }
     for (const auto &s : sessions->array) {
-        // 一层层用 find 走，少一层就是 nullptr：这条会话条目里没有 uuid 不代表
-        // 整个回复不可信，但也不能拿别的会话的 uuid 当我们自己的。
+        // 逐层检查匹配路径；缺少连接或 ClientSessionID 的条目不参与匹配。
+        // 某条记录缺字段不使整个列表失效，也不能据其他 UUID 判断当前会话存活。
         const auto *options = s.find("connection");
         if (options == nullptr) {
             continue;
