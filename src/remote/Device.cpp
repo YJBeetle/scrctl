@@ -12,11 +12,10 @@
 namespace scrctl::remote {
 namespace {
 
-/// 起隧道的入口服务。iOS 17+ 的 USB 主路径就是它，非 root 可达。
+/// USB 路径通过 lockdown 启动的包隧道入口服务。
 constexpr const char *kCoreDeviceProxy = "com.apple.internal.devicecompute.CoreDeviceProxy";
 
-/// 分阶段进展。这条链上有好几处能静默阻塞（usbmuxd 那条读没有超时），所以
-/// 「走到哪了」必须是可见的，否则卡住时只剩一片空白。
+/// verbose 模式报告建立会话的当前阶段，便于定位等待发生在哪一层。
 void stage(bool verbose, const char *what) {
     if (verbose) {
         std::fprintf(stderr, SCRCTL_TR("  [stage] %s\n"), what);
@@ -27,8 +26,7 @@ void stage(bool verbose, const char *what) {
 
 std::string proxy_failure_hint(const std::string_view lockdown_error) {
     const std::string e(lockdown_error);
-    // 锁屏：iOS 只在解锁状态下允许起开发者服务。这一条必须排在最前面——它长得像
-    // "权限不够"，而正确答案是"把屏幕解开"，不是去查 DDI。
+    // 先匹配明确的锁屏和信任错误，再补充服务能力或通用连接提示。
     if (e.find("PasswordProtected") != std::string::npos) {
         return SCRCTL_TR(" (device is locked; unlock it and keep the screen awake before retrying)");
     }
@@ -74,8 +72,7 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
         return std::nullopt;
     }
     if (devices.empty()) {
-        // 这句原先只说"没有在连设备"，而最常见的原因根本不在软件层：今天我自己就撞过
-        // 一回——线是只供电不传数据的，设备在旁边充了一晚上，我们这边列表是空的。
+        // usbmux 列表为空时提示检查数据线和 USB 连接；配对在后续阶段处理。
         err = SCRCTL_TR(
             "No USB device found (usbmux list is empty). Check the data cable and USB "
             "connection, then reconnect the device. Untrusted devices normally appear in "
@@ -83,8 +80,7 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
         return std::nullopt;
     }
 
-    // 选择逻辑照 scrcpy 的肌肉记忆：不指定就唯一设备自动选中，多台则要明说。
-    // 报错时把候选连尾号一起给出，用户能直接对着 USB 上的设备认。
+    // 未指定 UDID 时只接受唯一设备；选择失败时附带脱敏的候选标识。
     const transport::DeviceRecord *chosen = nullptr;
     if (udid.empty()) {
         if (devices.size() > 1) {
@@ -103,9 +99,7 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
             }
         }
         if (chosen == nullptr) {
-            // 这一句原先写的是"注意信任与锁屏状态"，那是**错的指向**：没点信任、锁着屏的
-            // 设备照样会出现在这个列表里（信任是在后面 lockdown 那一步才要的东西）。
-            // 报了 UDID 却没匹配上，绝大多数就是"插的不是这台"或"这台掉线了"。
+            // UDID 未匹配属于设备选择阶段，此时尚未建立 lockdown 配对会话。
             err = SCRCTL_TR("No connected device matches ") + std::string(mask(udid)) + SCRCTL_TR("; connected devices: ");
             for (const auto &d : devices) {
                 err += " " + mask(d.udid);
@@ -140,9 +134,8 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
         err = SCRCTL_TR("Failed to establish packet tunnel: ") + err;
         return std::nullopt;
     }
-    // RSD 身份必须跨进程和重启稳定。本轮 Windows AMDS 记录的 HostID 是
-    // 27 字符的不透明标识，不能直接当 UUID 解析；仍从原配对身份确定性生成。
-    // 已是 UUID 的 HostID 保持原值，避免改变已有 macOS / Linux 会话的身份。
+    // 从配对 HostID 确定性生成稳定 RSD 身份；已有 UUID 保持原值，
+    // 非 UUID 标识经同一规则转换，不能为每次连接随机分配 peer UUID。
     auto uuid = peer_uuid_from_host_id(dev->lockdown_->host_id());
     if (!uuid) {
         err = SCRCTL_TR("Cannot construct a stable peer identity from pairing HostID");
@@ -170,7 +163,7 @@ bool Device::finish_session(transport::PacketTunnel &&tunnel, PeerIdentity ident
         err = SCRCTL_TR("Tunnel returned an invalid IPv6 address");
         return false;
     }
-    // 泵线程必须在任何连接之前起来：端点只从自己的队列取数据，没人替它们读隧道。
+    // 隧道线程必须先于 TCP/RSD 连接启动，负责将收到的 IPv6 包交给协议栈。
     if (!stack_->start_pump(err)) {
         return false;
     }
@@ -216,7 +209,7 @@ std::optional<Device> Device::establish_wifi(const std::string &address,
     if (!listener) {
         return std::nullopt;
     }
-    // 控制通道到此为止：隧道是**另一条** TCP 连接，端口是刚才要来的那个。
+    // 已取得隧道监听端口，关闭配对控制通道；隧道使用独立 TCP 连接。
     control->close();
 
     stage(verbose, SCRCTL_TR("TLS-PSK and CDTunnel handshake"));
@@ -233,8 +226,7 @@ std::optional<Device> Device::establish_wifi(const std::string &address,
         return std::nullopt;
     }
 
-    // peer UUID 用我们自己注册时的 host identifier。和 USB 那条一样的规矩：这个值
-    // 必须跨进程、跨重启稳定，否则设备每次都要把这台机器重新 attach 一遍。
+    // 使用配对记录中持久化的 host identifier，保持多次会话的 RSD 身份一致。
     const auto uuid = parse_uuid_text(record.host_identifier);
     if (!uuid) {
         err = SCRCTL_TR("Pairing host identifier is not a valid UUID; cannot construct a stable peer identity");

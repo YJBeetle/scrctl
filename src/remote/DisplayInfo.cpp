@@ -16,15 +16,7 @@ namespace {
 constexpr std::string_view kService = "com.apple.coredevice.deviceinfo";
 constexpr std::string_view kFeature = "com.apple.coredevice.feature.displayinfoupdates";
 
-/// 取一个整数，Int64 / UInt64 / **Double** 三种都认。
-///
-/// 为什么必须认 Double：这条推送里凡是几何的数字全是浮点——实测
-/// `currentMode.size` 是 `[Double, Double]`（CoreGraphics 的 CGFloat 就是 double），
-/// 而 `displayId` 是 UInt64、`preferredUIScale` 是 Int64。第一版只认两种整数，
-/// 结果 `size` 一个都取不到，产品路径上的表现是"问设备问到了个 0x0，退回兜底表"，
-/// 而 `describe` 打出来 `1125` 与 `1125.0` 长得一模一样，看日志根本发现不了。
-/// 类型要问机器（display_info_probe 会把每个叶子的 XPC 类型打出来），不能看
-/// 打印的样子猜。
+/// 接受 Int64、UInt64 和 Double 数值；显示几何推送可能用 Double 表示像素尺寸。
 bool as_int(const xpc::Value *v, long long &out) {
     if (v == nullptr) {
         return false;
@@ -37,8 +29,7 @@ bool as_int(const xpc::Value *v, long long &out) {
             out = static_cast<long long>(v->uint64);
             return true;
         case xpc::Type::Double:
-            // 尺寸这类值本来就是整数值，只是用 CGFloat 装。四舍五入而不是截断：
-            // 编码链路里 1124.9999 这种表示误差是可能出现的。
+            // Double 按最近整数转换，避免直接截断几何值的小数部分。
             out = static_cast<long long>(v->real >= 0 ? v->real + 0.5 : v->real - 0.5);
             return true;
         default:
@@ -58,7 +49,7 @@ std::string as_string(const xpc::Value *v) {
     return v != nullptr && v->type == xpc::Type::String ? v->string : std::string();
 }
 
-/// 读 `[w, h]` 这一对。尺寸、bounds、frame 都是这个形状，而且**元素是 Double**。
+/// 读取数组的前两个数值作为 [w, h]，支持整数和 Double。
 bool as_pair(const xpc::Value *v, int &w, int &h) {
     if (v == nullptr || v->type != xpc::Type::Array || v->array.size() < 2) {
         return false;
@@ -72,10 +63,7 @@ bool as_pair(const xpc::Value *v, int &w, int &h) {
     return true;
 }
 
-/// 流式 feature 的消息体：参数裹在 actualInput 下，外加一个客户端自己生成的
-/// sideChannel UUID（设备拿它认这条订阅归谁）。形状与 streamapplist 那条一致。
-///
-/// 每次订阅都要一个新的 UUID：重订时拿同一个号，设备侧那两条订阅就分不清彼此。
+/// 包装 actualInput 和 streamProxy.sideChannel；每次订阅生成新的 16 字节 UUID。
 [[nodiscard]] xpc::Value stream_input() {
     std::vector<uint8_t> side(16);
     for (auto &b : side) {
@@ -119,7 +107,7 @@ std::optional<DisplayInfo> parse_display_info(const xpc::Value &element, std::st
     for (const auto &raw : list->array) {
         const auto *id = raw.find("displayId");
         if (id == nullptr) {
-            continue;  // 没有 id 的那条我们无从对应，跳过而不是整包判死
+            continue;  // 无 displayId 的条目无法选择，跳过该条目。
         }
         long long raw_id = 0;
         if (!as_int(id, raw_id) || raw_id < 0) {
@@ -131,11 +119,10 @@ std::optional<DisplayInfo> parse_display_info(const xpc::Value &element, std::st
         as_bool(raw.find("external"), d.external);
         d.name = as_string(raw.find("name"));
         if (d.name.empty()) {
-            // 无线屏那几条同时给了 deviceName 与 name，主屏只给了 name。
+            // name 缺失时使用 deviceName。
             d.name = as_string(raw.find("deviceName"));
         }
-        // 可见区尺寸在**当前模式**里，不在显示器这一层：`nativeSize` 是面板物理像素
-        // （这台设备 1080x2340），`currentMode.size` 才是画面真正占的那一块（1125x2436）。
+        // 当前模式尺寸取自 currentMode.size，缺失时保留默认尺寸供使用方判断。
         const auto *mode = raw.find("currentMode");
         int w = 0, h = 0;
         if (mode != nullptr && as_pair(mode->find("size"), w, h)) {
@@ -168,7 +155,7 @@ std::optional<DisplayInfo> fetch_display_info(Device &device, std::string &err, 
         kFeature, "", input,
         [&](const xpc::Value &element) {
             out = parse_display_info(element, parse_err);
-            return out == std::nullopt;  // 解出来就收工；解不出来接着等下一条
+            return out == std::nullopt;  // 取得可解析推送后结束本地消费。
         },
         6000, err);
     if (out != std::nullopt) {
@@ -183,18 +170,15 @@ std::optional<DisplayInfo> fetch_display_info(Device &device, std::string &err, 
 }
 
 
-// ------------------------------------------------------- 常驻订阅 ----
+// 常驻显示订阅。
 
 namespace {
 
-/// 单轮等待上限。它同时就是**退出延迟**：循环只在两轮之间看一眼停止标志，
-/// 所以 Ctrl-C 最多等这么久。再长就会让人觉得窗口卡住了。
+/// 单次 next_batch 等待上限；重连还需建立连接并发送订阅，因此不是整体退出时限。
 constexpr int kPollMs = 250;
-/// 重订之间的间隔。设这么短是因为转屏引起的订阅作废要立刻补上，否则画面会
-/// 停在旧朝向好几秒。
+/// 订阅结束或失败后的重连间隔，等待期间分段检查停止标志。
 constexpr int kReconnectGapMs = 500;
-/// 连着多少次订不上就认了。设备拔走之后 `connect` 会一直失败，不收手就是
-/// 一个每半秒撞一次门的死循环。
+/// 连续重订失败时的停止阈值，避免失去设备后无限重连。
 constexpr int kMaxFailedResubscribes = 8;
 
 }  // namespace
@@ -205,8 +189,7 @@ DisplayWatcher::DisplayWatcher(Device &device, uint64_t display_id, bool verbose
 std::unique_ptr<DisplayWatcher> DisplayWatcher::start(Device &device, uint64_t display_id,
                                                       std::string &err, bool verbose) {
     auto watcher = std::unique_ptr<DisplayWatcher>(new DisplayWatcher(device, display_id, verbose));
-    // 先订上再放线程：订不上就是订不上，这时候返回 nullptr 让调用方退回"起流前
-    // 问一次"那一档，比派一个线程去后台反复撞一扇门好。
+    // 首次连接和订阅完成后才启动 worker；此时连接尚未由其它线程访问。
     if (!watcher->resubscribe(err)) {
         return nullptr;
     }
@@ -216,6 +199,7 @@ std::unique_ptr<DisplayWatcher> DisplayWatcher::start(Device &device, uint64_t d
 }
 
 DisplayWatcher::~DisplayWatcher() {
+    // 仅设置停止标志，等待 worker 完成当前收消息或重连操作后，再析构连接。
     stop_.store(true);
     if (worker_.joinable()) {
         worker_.join();
@@ -230,9 +214,9 @@ DisplayWatcher::State DisplayWatcher::latest() const {
 const Display *DisplayWatcher::pick(const DisplayInfo &info) const {
     const Display *d = info.find(display_id_);
     if (d == nullptr) {
-        d = info.primary();  // id 对不上退回主屏：外接屏的 id 是设备分配的，不保证连续
+        d = info.primary();  // 请求 id 未出现在当前推送时退回主屏。
     }
-    // "找到了"不等于"能用"：那几块 Wireless-N 在册但尺寸全零。
+    // 目录中可能有尚无有效模式的显示屏，非正尺寸不能用于布局。
     if (d != nullptr && (d->width <= 0 || d->height <= 0)) {
         return nullptr;
     }
@@ -255,16 +239,17 @@ void DisplayWatcher::publish(const xpc::Value &element) {
     std::string err;
     const auto info = parse_display_info(element, err);
     if (info == std::nullopt) {
-        return;  // 解不动的这一条跳过：常驻订阅没有"失败就退出"的余地
+        return;  // 不可解析的推送不替换已有快照。
     }
     const Display *d = pick(*info);
     if (d == nullptr) {
         return;
     }
+    // 网络读取和解析均在锁外完成，仅在此比较和发布完整几何快照。
     std::lock_guard<std::mutex> lock(mu_);
     if (d->orientation == latest_.orientation && d->width == latest_.width &&
         d->height == latest_.height) {
-        return;  // 设备把同一条重发了一遍，不算变化
+        return;  // 重复几何不产生新的 seq。
     }
     latest_.orientation = d->orientation;
     latest_.width = d->width;
@@ -286,12 +271,11 @@ void DisplayWatcher::loop() {
             continue;
         }
         if (event == ServiceConnection::StreamEvent::Idle) {
-            continue;  // 常态：设备只在状态真的变了才推
+            continue;  // 本轮没有推送，保留订阅和最后一次有效状态。
         }
-        // Finished / DeviceError / Broken —— 这条订阅已经作废，换一条连接重订。
+        // Finished、DeviceError 或 Broken 后释放旧连接，按重连策略重新订阅。
         conn_.reset();
-        // 退避分片睡。整段睡下去的话，退出最多要慢一整个 gap，而这段等待期间
-        // 用户看到的是"按了 Ctrl-C 没反应"。
+        // 将退避拆成 20 ms 片段，停止请求无需等完整个重连间隔。
         for (int slept = 0; slept < kReconnectGapMs && !stop_.load(); slept += 20) {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
@@ -303,8 +287,7 @@ void DisplayWatcher::loop() {
             continue;
         }
         if (++failures >= kMaxFailedResubscribes) {
-            // 连着八次订不上，多半是设备已经走了。留下 alive()=false 让调用方知道
-            // 这个增强没了，而不是假装还在跟踪——也别再每半秒撞一次门。
+            // 达到停止阈值后清除运行标记，保留已发布的显示快照。
             alive_.store(false);
             return;
         }
