@@ -3,6 +3,7 @@
 #include "net/Stack.h"
 #include "net/TcpStream.h"
 #include "net/UdpSocket.h"
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <future>
@@ -101,6 +102,54 @@ template <typename Fn> void until(Fn condition) {
     require(std::chrono::steady_clock::now() < until, "test deadline");
     std::this_thread::sleep_for(10ms);
   }
+}
+void icmp_quotes() {
+  // 经 MemoryTunnel 注入完整 IPv6/ICMPv6 包，验证生产隧道线程的诊断。
+  // 引用空载荷 UDP 时，ICMPv6 头 8 + IPv6 头 40 + UDP 头 8 已足够读取端口。
+  MemoryTunnel tunnel;
+  Stack stack(tunnel, "fd00:4::1", "fd00:4::2");
+  std::string err;
+  require(stack.start_pump(err), "ICMP diagnostic stack start");
+  const auto diagnose = [&](size_t payload_size, size_t quote_size) {
+    std::vector<uint8_t> udp(8 + payload_size, 0);
+    udp[0] = 0xcf;
+    udp[1] = 0x08; // 源端口 53000。
+    udp[2] = 0x30;
+    udp[3] = 0x39; // 目的端口 12345。
+    udp[5] = static_cast<uint8_t>(udp.size());
+    const auto udp_sum = l4_checksum(stack.local_addr().data(),
+                                    stack.peer_addr().data(), udp.data(),
+                                    udp.size(), 17);
+    udp[6] = static_cast<uint8_t>(udp_sum >> 8);
+    udp[7] = static_cast<uint8_t>(udp_sum);
+    const auto original = stack.wrap(udp, 17);
+    require(quote_size <= original.size(), "ICMP quote fixture length");
+    std::vector<uint8_t> icmp(8, 0);
+    icmp[0] = 1;
+    icmp[1] = 4; // ICMPv6 目的端口不可达，随后引用触发报文。
+    icmp.insert(icmp.end(), original.begin(), original.begin() + quote_size);
+    const auto sum = l4_checksum(stack.peer_addr().data(),
+                                stack.local_addr().data(), icmp.data(),
+                                icmp.size(), 58);
+    icmp[2] = static_cast<uint8_t>(sum >> 8);
+    icmp[3] = static_cast<uint8_t>(sum);
+    auto incoming = stack.wrap(icmp, 58);
+    std::copy(stack.peer_addr().begin(), stack.peer_addr().end(), incoming.begin() + 8);
+    std::copy(stack.local_addr().begin(), stack.local_addr().end(), incoming.begin() + 24);
+    const auto before = stack.icmp_seen();
+    tunnel.inject(std::move(incoming));
+    until([&] { return stack.icmp_seen() > before; });
+    return stack.icmp_last();
+  };
+  require(diagnose(0, 48).find("53000->12345") != std::string::npos,
+          "minimal complete UDP quote reports ports");
+  require(diagnose(8, 56).find("53000->12345") != std::string::npos,
+          "UDP quote with payload reports ports");
+  // UDP 头缺少一个字节或内层 IPv6 头未完整时，不越界读取、不拼出端口。
+  require(diagnose(0, 47).find("53000->12345") == std::string::npos,
+          "truncated UDP header does not report ports");
+  require(diagnose(0, 39).find("53000->12345") == std::string::npos,
+          "truncated IPv6 header does not report ports");
 }
 void exercise() {
   MemoryTunnel a, b;
@@ -255,6 +304,7 @@ void close_and_cancel() {
 } // namespace
 int main() {
   try {
+    icmp_quotes();
     exercise();
     pending_connect();
     close_and_cancel();

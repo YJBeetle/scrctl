@@ -378,7 +378,7 @@ void Stack::observe_icmpv6(const uint8_t *icmp, std::size_t len) {
     inet_ntop(AF_INET6, inner + 8, src, sizeof(src));
     inet_ntop(AF_INET6, inner + 24, dst, sizeof(dst));
     line += SCRCTL_TR(" inner nh=") + std::to_string(inner_nh) + " " + src + " -> " + dst;
-    if (inner_nh == 17 && rest >= 48 + 8) {
+    if (inner_nh == 17 && rest >= 40 + 8) {
       const uint16_t sp = get16(inner + 40);
       const uint16_t dp = get16(inner + 42);
       line += SCRCTL_TR(" ports ") + std::to_string(sp) + "->" + std::to_string(dp);
