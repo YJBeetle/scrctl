@@ -302,3 +302,21 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
   macOS ASan / UBSan 通过。该用例验证回调生命周期，不等同于真实设备上的 TLS 重协商。
 - 最新 Windows 安装产物再次通过独立启动检查；使用系统 PATH、默认 auto 中文，
   真机 Wi-Fi 运行 20 秒输出 316 帧，强制截图降级后恢复视频，截图失败为 0，正常退出。
+
+## 第二十三轮：Windows USB 真机与配对身份
+
+- winget 安装 Microsoft Store Apple Devices ARM64，补装微软目录的 Apple USBDevice
+  552.0.0.0 ARM64 签名驱动。重启登录后，AppleMobileDeviceProcess 开始监听 `27015`。
+- 真机暴露旧假设：Apple Windows 配对记录的 HostID 为 27 字符标识，lockdown 和
+  CDTunnel 已成功，但直接按 UUID 解析会拒绝后续 RSD 连接。
+- USB 身份生成保留已有 UUID；其他非空 HostID 按固定 URL 命名空间及
+  `scrctl:usbmux:HostID:` 前缀生成 UUIDv5，使用 OpenSSL EVP SHA-1。仅作身份映射，
+  不用于认证，原始 HostID 和配对记录不变。Wi-Fi 的 UUID 校验不变。
+- 独立 Python UUIDv5 向量、已有 UUID 字节不变、重复生成稳定及空值拒绝通过；
+  macOS 与 Windows ARM64 完整构建及离线回归均为 24/24。
+- 使用安装产物及系统 PATH，无 Wi-Fi 参数，USB 无窗口 20 秒输出 881 帧、13 张截图；
+  SDL / Direct3D 窗口 30 秒输出 498 帧、26 张截图，60 秒正常窗口输出 426 帧、34 张截图。
+  实际窗口回读确认手机画面；均从强制截图降级恢复视频，截图失败为 0，正常退出。
+- 沿用已有设备信任和 DDI。NCM 网络接口仍有驱动错误，Apple Devices 界面仍未发现设备；
+  这两项没有阻断已测 scrctl usbmux 隧道路径，但未验证热点 / 直接 NCM 联网及该应用全部功能。
+  安装方法和排查步骤见 [Windows 说明](WINDOWS.md)。

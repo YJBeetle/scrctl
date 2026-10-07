@@ -54,9 +54,73 @@ $env:LANG = 'zh_CN.UTF-8'
 也设置当前用户权限，不修改共享父目录或已有目录的权限。配对记录包含密钥，不要提交到仓库。
 当前产品没有新建远程配对的命令，见路线图。
 
-USB 适配连接 Apple Mobile Device Service 提供的 `127.0.0.1:27015` usbmux 服务。
-仅在设备管理器看到 iPhone，不能证明该服务及开发者通道可用；还需要 Apple 的对应服务、
-设备信任、开发者模式及匹配的 DDI。本轮 VM 没有该服务，因此原生 USB 路径尚未实测。
+### USB：安装 Apple 设备组件
+
+scrctl 使用 Apple 提供的 `127.0.0.1:27015` usbmux 通道。Windows 11 ARM64 上，本轮
+通过 Microsoft Store 的 **Apple Devices（Apple 设备）** 安装后台组件，再补装 Apple
+的 ARM64 USB 驱动，完成了真机 USB 镜像和截图恢复。Apple 也将该应用列为 Windows
+设备管理入口，见 [官方说明](https://support.apple.com/en-us/118290)。
+
+1. 使用 winget 安装 ARM64 版：
+
+   ```powershell
+   winget install --id 9NP83LWLPZ9K --exact --source msstore --architecture arm64
+   ```
+
+   本轮安装版本为 `AppleInc.AppleDevices 1.1540.24088.0`，包架构为 Arm64。
+   首次打开时完成应用的许可与欢迎流程。商店网络失败时检查代理：当前用户代理和
+   WinHTTP 代理可能不同；VM 中的 `localhost` 指向 VM 自身。临时修改后恢复原设置。
+
+2. 将手机接入 Windows。Parallels 中选择“设备 → USB → Apple iPhone”。
+   手机解锁，出现“信任此电脑”时确认。USB 直通会中断宿主机对同一设备的访问。
+
+3. 检查 Apple USB 驱动。只看到“便携设备 → Apple iPhone”时，可能仍使用微软的
+   通用 MTP 驱动。本轮 Apple Devices 安装后没有自动装好此驱动，手工补装成功。
+
+   优先通过 Windows Update / 设备管理器更新。需要手工安装时，从
+   [微软官方更新目录](https://www.catalog.update.microsoft.com/ScopedViewInline.aspx?updateid=33ca8d73-5ef6-45d2-94be-1198e7a74ddc)
+   下载 **Apple USBDevice 552.0.0.0，ARM64** 的 CAB，保留原始 INF、CAT、SYS 和 DLL。
+   在管理员 PowerShell 中解包并安装，例如：
+
+   ```powershell
+   New-Item -ItemType Directory -Path C:\AppleUsbDriver -Force
+   expand.exe "$env:USERPROFILE\Downloads\apple-usb-arm64.cab" -F:* C:\AppleUsbDriver
+   pnputil.exe /add-driver C:\AppleUsbDriver\AppleUsb.inf /install
+   ```
+
+   `apple-usb-arm64.cab` 是这里使用的下载文件名，可按实际文件名修改。本轮所用包的
+   INF 声明 `NTARM64` 并匹配 iPhone 的硬件 ID；CAT 通过 Microsoft Windows Hardware
+   Compatibility Publisher 签名校验。安装后可见 `Apple Mobile Device USB Composite
+   Device` 与 `Apple Mobile Device USB Device`。选择适合系统架构的官方包，保留签名校验。
+
+4. 重启 Windows 并登录。本轮仅重新连接 USB 后，后台仍未完整启动；重启后
+   `AppleMobileDeviceLauncher.exe` 和 `AppleMobileDeviceProcess.exe` 正常运行，后者
+   监听 `27015`。此 Store 安装路径没有名为 Apple Mobile Device Service 的传统服务项。
+   检查实际监听与设备列表：
+
+   ```powershell
+   Get-NetTCPConnection -State Listen -LocalPort 27015
+   ./dist-win/bin/scrctl.exe --list-devices
+   ./dist-win/bin/scrctl.exe --no-audio --stats
+   ```
+
+镜像还需要手机开启开发者模式，并挂载与系统版本匹配的个性化 DDI，见
+[README 的设备准备](../README.md#首次连接设备)。本轮沿用已有设备信任及已挂载的 DDI，
+没有验证从未配对、未挂载 DDI 的 Windows 环境开始完成全部准备步骤。
+
+### USB 排查与当前限制
+
+- `27015` 连接被拒绝：先检查后台进程及监听。设备管理器里的 iPhone 条目不能单独
+  证明 usbmux 已可用。
+- 能列设备但 `ReadPairRecord` 失败：检查手机解锁、信任状态及当前 Windows 用户。
+  不要在问题报告中附上配对记录，里面含有私钥。
+- `StartService` 返回锁屏或服务不可用：按错误检查手机解锁、开发者模式和 DDI。
+- 本轮 Windows 配对记录的 HostID 为 27 字符的不透明标识。修复后的 scrctl 会从它
+  生成稳定的 UUIDv5；原本为 UUID 的 HostID 保持原值，lockdown 使用的原始记录不变。
+- 两组 NCM 网络接口仍有黄色叹号；本轮 USB 镜像通过 CoreDeviceProxy 与 lwIP 隧道，
+  在这些接口未正常工作的情况下也通过了测试。该结果不覆盖手机热点或直接 NCM 联网。
+- Apple Devices 的界面在本轮仍未显示手机，其设备发现问题尚未解决。后台 usbmux、
+  lockdown 和开发者隧道已由 scrctl 真机测试确认可用，不能将此描述为该应用所有功能正常。
 
 ## 本轮结果
 
@@ -70,9 +134,16 @@ USB 适配连接 Apple Mobile Device Service 提供的 `127.0.0.1:27015` usbmux 
 - 移动后的安装产物在系统 PATH 下运行 SDL 窗口 25 秒，输出 229 帧；
   强制降级期间取得 18 张截图，随后恢复视频，截图失败为 0，正常退出。
 - 安装启动检查覆盖 DLL、随包中文目录和默认 auto 选择。
+- 补装 Apple ARM64 USB 驱动并重启后，scrctl 通过 `127.0.0.1:27015` 列出 USB 设备。
+  无窗口运行 20 秒输出 881 帧，降级阶段取得 13 张截图，恢复视频并正常退出。
+- USB SDL / Direct3D 窗口运行 30 秒输出 498 帧，降级期间 26 张截图；另一次 60 秒
+  正常窗口运行输出 426 帧、34 张截图，实际回读确认显示手机内容。两轮均恢复视频、
+  截图失败为 0；帧数随画面活动变化，不用这些不同场景比较吞吐。
+- HostID 修复后，macOS 与 Windows ARM64 完整离线回归均为 24/24，包括独立 Python
+  UUIDv5 向量、已有 UUID 保持不变及同一不透明 HostID 重读后身份稳定的判据。
 
 这些是有限时长回归，不代表真实断网、物理拔插、多设备或长期运行已验证。
-Windows 原生 USB、音频、输入控制和新建配对仍需分别验证。
+Windows 音频、输入控制、新建配对及 DDI 的完整初始安装流程仍需分别验证。
 
 ## CI 产物
 

@@ -18,7 +18,7 @@ Annex-B HEVC，不包含音轨。
 | --- | --- |
 | macOS | 有真机连接、镜像、输入和音频记录；本轮验证结果见重构记录 |
 | Linux | CI 包含构建与离线测试，尚缺 Linux 真机端到端验证；当前无音频后端 |
-| Windows | ARM64 构建与离线测试、Wi-Fi 镜像及截图切换已验证；原生 USB 和音频待验证 |
+| Windows | ARM64 构建与离线测试、USB / Wi-Fi 镜像及截图切换已验证；音频、输入和初始配对准备待验证，见 [安装说明](docs/WINDOWS.md) |
 
 音频当前使用 macOS AudioToolbox 解码设备的 AAC-ELD 流。已测试的 FFmpeg 原生
 AAC 后端未能正确解码该流，不能据此推定其他库也不支持；
