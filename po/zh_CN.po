@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 05:11+0800\n"
+"POT-Creation-Date: 2026-10-08 05:31+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -158,7 +158,9 @@ msgstr ""
 "鼠标左键映射为触摸；方向不支持 flip，录制保留原始码流。\n"
 "无线需要先配对；--help / --version 不连接设备。"
 
-#: src/app/Cli.cpp:23 tools/screenshot_probe.cpp:52 tools/wifi_probe.cpp:642
+#: src/app/Cli.cpp:23 tools/audio_pump_probe.cpp:85
+#: tools/screenshot_probe.cpp:52 tools/stall_probe.cpp:59
+#: tools/wifi_probe.cpp:642
 msgid "Show help"
 msgstr "显示帮助"
 
@@ -166,7 +168,7 @@ msgstr "显示帮助"
 msgid "Play an Annex-B HEVC file"
 msgstr "回放 Annex-B HEVC 文件"
 
-#: src/app/Cli.cpp:25 tools/screenshot_probe.cpp:58
+#: src/app/Cli.cpp:25 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
 msgid "Device UDID"
 msgstr "设备 UDID"
 
@@ -3019,6 +3021,180 @@ msgstr "载荷解码失败"
 msgid ", received "
 msgstr "，已收到"
 
+#: tools/audio_pump_probe.cpp:44
+#, c-format
+msgid ""
+"+%3llus packets=%llu decoded=%llu decode_failed=%llu other_payload=%llu "
+"sequence_gaps=%llu missing_packets=%llu late_or_duplicate=%llu RR_sent/"
+"failed=%llu/%llu dropped_frames=%llu steered_frames=%llu restarts=%llu "
+"buffered=%zu_frames idle=%llus window_peak=%zu\n"
+msgstr ""
+"+%3llus 包=%llu 解码成功=%llu 解码失败=%llu 其他载荷=%llu 序号缺口=%llu 未补"
+"齐包=%llu 迟到或重复=%llu RR成功/失败=%llu/%llu 丢弃帧=%llu 水位调节跳过帧"
+"=%llu 重起=%llu 缓冲=%zu帧 无进展=%llus 本段峰值=%zu\n"
+
+#: tools/audio_pump_probe.cpp:79
+msgid "Inspect audio streaming, recovery and buffer levels"
+msgstr "观察音频流、恢复过程和缓冲水位"
+
+#: tools/audio_pump_probe.cpp:81
+msgid ""
+"PCM is read only to measure sample peaks; no local audio playback or window "
+"is opened. --mute lowers the phone volume with 25 VolumeDown presses, then "
+"sends 25 VolumeUp presses when the test ends; it does not restore the "
+"original volume or silence the mirrored stream. --help does not connect to a "
+"device."
+msgstr ""
+"PCM 只用于统计采样峰值，不在本机播放音频或打开窗口。--mute 会发送 25 次 "
+"VolumeDown 降低手机音量，测试结束后发送 25 次 VolumeUp；这不能恢复原来的音"
+"量，也不会让镜像音频静音。--help 不连接设备。"
+
+#: tools/audio_pump_probe.cpp:87
+msgid "Observation duration in seconds (positive integer; default: 30)"
+msgstr "观察时长，单位秒（正整数，默认：30）"
+
+#: tools/audio_pump_probe.cpp:89
+msgid "Start a video stream alongside audio"
+msgstr "在音频流之外同时启动视频流"
+
+#: tools/audio_pump_probe.cpp:90
+msgid "Print connection and media details"
+msgstr "输出连接和媒体详情"
+
+#: tools/audio_pump_probe.cpp:91
+msgid "Lower the phone speaker volume during the test"
+msgstr "测试期间降低手机扬声器音量"
+
+#: tools/audio_pump_probe.cpp:93
+msgid ""
+"Stop all device media streams at N seconds (-1 disables; 0 starts "
+"immediately)"
+msgstr "在第 N 秒停止设备上的全部媒体流（-1 不启用，0 在开始时触发）"
+
+#: tools/audio_pump_probe.cpp:96
+msgid ""
+"Start another video stream at N seconds without stopping streams (-1 "
+"disables)"
+msgstr "在第 N 秒追加视频流，不先停止已有会话（-1 不启用）"
+
+#: tools/audio_pump_probe.cpp:98
+msgid "Read 480 audio frames every 10 ms"
+msgstr "每 10 ms 读取 480 个音频帧"
+
+#: tools/audio_pump_probe.cpp:100
+msgid ""
+"Delay PCM consumption by N seconds in --realtime mode (nonnegative; default: "
+"0)"
+msgstr "在 --realtime 模式下延迟 N 秒开始消费 PCM（非负整数，默认：0）"
+
+#: tools/audio_pump_probe.cpp:105
+msgid "Device identifier (optional; last value is used)"
+msgstr "设备标识（可选，多次提供时使用最后一个）"
+
+#: tools/audio_pump_probe.cpp:117 tools/rr_keepalive_probe.cpp:462
+#: tools/screenshot_probe.cpp:69 tools/stall_probe.cpp:88
+#: tools/wifi_probe.cpp:742
+#, c-format
+msgid "Invalid arguments: %s\n"
+msgstr "参数无效：%s\n"
+
+#: tools/audio_pump_probe.cpp:125 tools/rr_keepalive_probe.cpp:554
+#: tools/screenshot_probe.cpp:77 tools/stall_probe.cpp:133
+#, c-format
+msgid "Failed to establish device session: %s\n"
+msgstr "建立设备会话失败：%s\n"
+
+#: tools/audio_pump_probe.cpp:133
+#, c-format
+msgid "Failed to start audio stream: %s\n"
+msgstr "启动音频流失败：%s\n"
+
+#: tools/audio_pump_probe.cpp:136
+#, c-format
+msgid ""
+"Audio stream started with its own session: port=%u payload_type=%u "
+"decoder=%s\n"
+msgstr "音频流已使用独立会话启动：端口=%u 载荷类型=%u 解码器=%s\n"
+
+#: tools/audio_pump_probe.cpp:144
+#, c-format
+msgid "Failed to start video stream; continuing audio test: %s\n"
+msgstr "启动视频流失败，继续音频测试：%s\n"
+
+#: tools/audio_pump_probe.cpp:146
+#, c-format
+msgid "Video stream started alongside audio\n"
+msgstr "视频流已启动，与音频同时运行\n"
+
+#: tools/audio_pump_probe.cpp:157
+#, c-format
+msgid "Cannot open button service; skipping phone volume adjustment: %s\n"
+msgstr "无法打开按键服务，跳过手机音量调整：%s\n"
+
+#: tools/audio_pump_probe.cpp:163
+#, c-format
+msgid "Sent 25 VolumeDown presses; observing audio for %d seconds\n"
+msgstr "已发送 25 次 VolumeDown，接下来观察 %d 秒音频\n"
+
+#: tools/audio_pump_probe.cpp:226
+#, c-format
+msgid "At %d seconds, requested stopAll: %s\n"
+msgstr "第 %d 秒请求 stopAll：%s\n"
+
+#: tools/audio_pump_probe.cpp:227
+msgid "accepted"
+msgstr "已接受"
+
+#: tools/audio_pump_probe.cpp:235
+#, c-format
+msgid ""
+"At %d seconds, requested an additional video session without a stop request: "
+"%s\n"
+msgstr "第 %d 秒请求追加视频会话，未发送停止请求：%s\n"
+
+#: tools/audio_pump_probe.cpp:237
+msgid "started, receive port="
+msgstr "已启动，接收端口="
+
+#: tools/audio_pump_probe.cpp:249
+#, c-format
+msgid "  Additional video session: %llu packets in the first 3 seconds\n"
+msgstr "  追加的视频会话：前三秒收到 %llu 个包\n"
+
+#: tools/audio_pump_probe.cpp:280
+#, c-format
+msgid ""
+"Audio packets resumed %llu ms after stopAll; idle interval=%llu ms; "
+"restarts=%llu\n"
+msgstr "stopAll 后经过 %llu ms 音频重新收包；无进展间隔=%llu ms；重起=%llu\n"
+
+#: tools/audio_pump_probe.cpp:298
+#, c-format
+msgid ""
+"        Video: packets=%llu access_units=%llu decoded=%llu "
+"other_payload=%llu restarts=%llu\n"
+msgstr ""
+"        视频：包=%llu 访问单元=%llu 解码成功=%llu 其他载荷=%llu 重起=%llu\n"
+
+#: tools/audio_pump_probe.cpp:314
+#, c-format
+msgid "Sent 25 VolumeUp presses after the test\n"
+msgstr "测试结束，已发送 25 次 VolumeUp\n"
+
+#: tools/audio_pump_probe.cpp:317
+#, c-format
+msgid "Longest interval without audio progress: %llu ms\n"
+msgstr "音频最长无进展间隔：%llu ms\n"
+
+#: tools/audio_pump_probe.cpp:319
+#, c-format
+msgid ""
+"Total: packets=%llu decoded=%llu decode_failed=%llu peak=%zu "
+"final_window_peak=%zu (16-bit PCM) restarts=%llu\n"
+msgstr ""
+"合计：包=%llu 解码成功=%llu 解码失败=%llu 峰值=%zu 末段峰值=%zu（16 位 PCM）"
+"重起=%llu\n"
+
 #: tools/rr_keepalive_probe.cpp:121 tools/rr_keepalive_probe.cpp:122
 #: tools/rr_keepalive_probe.cpp:1004 tools/rr_keepalive_probe.cpp:1005
 #: tools/rr_keepalive_probe.cpp:1010
@@ -3069,7 +3245,7 @@ msgstr "存在"
 msgid " keyframe requests=%llu first at +%llums subsequent IDR "
 msgstr " 关键帧请求=%llu 首次在 +%llums 随后 IDR "
 
-#: tools/rr_keepalive_probe.cpp:263
+#: tools/rr_keepalive_probe.cpp:263 tools/stall_probe.cpp:298
 msgid "not observed"
 msgstr "未观察到"
 
@@ -3243,12 +3419,6 @@ msgstr ""
 "rctl、rctlrr、pli、fir。附加 +fb 和/或 +ltrp 可启用对应 offer 标志。\n"
 "未指定 --help 或 --dump-packets 时，本探针将连接 USB 设备。"
 
-#: tools/rr_keepalive_probe.cpp:462 tools/screenshot_probe.cpp:69
-#: tools/wifi_probe.cpp:742
-#, c-format
-msgid "Invalid arguments: %s\n"
-msgstr "参数无效：%s\n"
-
 #: tools/rr_keepalive_probe.cpp:474
 msgid "timeout key omitted"
 msgstr "未发送 timeout 键"
@@ -3290,11 +3460,6 @@ msgstr "无法打开 offer 文件 %s\n"
 #, c-format
 msgid "Using %s as raw negotiatorOffer (%zu bytes; offer builder bypassed)\n"
 msgstr "使用 %s 作为原始 negotiatorOffer（%zu 字节；跳过 offer 构造器）\n"
-
-#: tools/rr_keepalive_probe.cpp:554 tools/screenshot_probe.cpp:77
-#, c-format
-msgid "Failed to establish device session: %s\n"
-msgstr "建立设备会话失败：%s\n"
 
 #: tools/rr_keepalive_probe.cpp:564
 #, c-format
@@ -3756,6 +3921,314 @@ msgstr "保存 %s 失败：%s\n"
 #, c-format
 msgid "Saved to %s\n"
 msgstr "已保存到 %s\n"
+
+#: tools/stall_probe.cpp:56
+msgid "Test video recovery with packet loss and decode failures"
+msgstr "注入丢包和解码失败，检查视频恢复行为"
+
+#: tools/stall_probe.cpp:58
+msgid ""
+"Injects faults into a real device stream. --help does not connect to a "
+"device."
+msgstr "向真机视频流注入故障。--help 不连接设备。"
+
+#: tools/stall_probe.cpp:60
+msgid "LAN address; requires an existing pairing record"
+msgstr "局域网地址；需要已有配对记录"
+
+#: tools/stall_probe.cpp:62
+msgid "Verbose protocol logging"
+msgstr "输出详细协议日志"
+
+#: tools/stall_probe.cpp:63
+msgid "Keyframe wait limit in milliseconds"
+msgstr "等待关键帧的上限，单位为毫秒"
+
+#: tools/stall_probe.cpp:65
+msgid "Drop this video packet; 0 disables"
+msgstr "丢弃第几个视频包；0 表示关闭"
+
+#: tools/stall_probe.cpp:67
+msgid "Ignore later video packets; 0 disables"
+msgstr "从第几个视频包之后开始忽略视频；0 表示关闭"
+
+#: tools/stall_probe.cpp:69
+msgid "Fail this many recovery keyframes"
+msgstr "让指定数量的恢复关键帧解码失败"
+
+#: tools/stall_probe.cpp:71
+msgid "Fail keyframes including startup"
+msgstr "让包括启动帧在内的指定数量关键帧解码失败"
+
+#: tools/stall_probe.cpp:73
+msgid "Observation duration in milliseconds"
+msgstr "观测时长，单位为毫秒"
+
+#: tools/stall_probe.cpp:77
+msgid ""
+"Keep requesting keyframes after injected failures to test repeated no-output "
+"recovery"
+msgstr "注入失败后仍请求关键帧，检查连续无解码输出时的恢复行为"
+
+#: tools/stall_probe.cpp:93
+#, c-format
+msgid ""
+"--keep-pli requires --fail-decode and is incompatible with --fail-every-"
+"keyframe\n"
+msgstr "--keep-pli 需要 --fail-decode，且不能与 --fail-every-keyframe 同用\n"
+
+#: tools/stall_probe.cpp:104
+#, c-format
+msgid ""
+"--ignore-video-after(%d) must exceed --drop-at-packet(%d) + 40 so later "
+"packets can reveal the sequence gap\n"
+msgstr ""
+"--ignore-video-after(%d) 必须大于 --drop-at-packet(%d) + 40，以便接收后续视频"
+"包并识别序号缺口\n"
+
+#: tools/stall_probe.cpp:114
+#, c-format
+msgid ""
+"--drop-at-packet(%d) must be 0 or at least 200 to avoid dropping part of the "
+"startup IDR\n"
+msgstr "--drop-at-packet(%d) 必须为 0 或至少 200，以免丢弃启动 IDR 的分片\n"
+
+#: tools/stall_probe.cpp:124
+#, c-format
+msgid ""
+"--fail-every-keyframe(%d) must be 0 or at least 4 to test fallback after "
+"three restarts\n"
+msgstr ""
+"--fail-every-keyframe(%d) 必须为 0 或至少 4，才能检查三次重建后的降级行为\n"
+
+#: tools/stall_probe.cpp:160
+#, c-format
+msgid "Failed to start video stream: %s\n"
+msgstr "无法启动视频流：%s\n"
+
+#: tools/stall_probe.cpp:165
+#, c-format
+msgid ""
+"Test: fail the next %d keyframes including startup; no packet loss or "
+"silence restart; observe fallback and recovery\n"
+msgstr ""
+"测试配置：让包括启动帧在内的后续 %d 个关键帧解码失败；不丢包，关闭包静默重"
+"建，观察降级与恢复\n"
+
+#: tools/stall_probe.cpp:170
+#, c-format
+msgid ""
+"Test: drop video packet %d, ignore video after packet %d, suppress PLI and "
+"disable silence restart; keyframe wait limit %d ms\n"
+msgstr ""
+"测试配置：丢弃第 %d 个视频包，第 %d 个之后忽略视频，禁止 PLI 并关闭包静默重"
+"建；等待关键帧的上限为 %d ms\n"
+
+#: tools/stall_probe.cpp:175
+#, c-format
+msgid ""
+"Test: drop packet %d, fail %d recovery keyframes, continue PLI; restart "
+"deadline %d ms\n"
+msgstr ""
+"测试配置：丢弃第 %d 个视频包，让 %d 个恢复关键帧解码失败并持续发送 PLI；重建"
+"期限为 %d ms\n"
+
+#: tools/stall_probe.cpp:180
+#, c-format
+msgid ""
+"Test: drop packet %d, disable silence restart, wait up to %d ms for "
+"recovery; fail %d recovery keyframes and suppress PLI after the first "
+"failure\n"
+msgstr ""
+"测试配置：丢弃第 %d 个视频包，关闭包静默重建，最多等待 %d ms 恢复；让 %d 个恢"
+"复关键帧解码失败，并在首次失败后禁止 PLI\n"
+
+#: tools/stall_probe.cpp:187
+#, c-format
+msgid "PLI remains enabled while recovery keyframes repeatedly fail decoding\n"
+msgstr "恢复关键帧连续解码失败期间仍发送 PLI\n"
+
+#: tools/stall_probe.cpp:210
+#, c-format
+msgid "  +%-6llu ms  Waiting for keyframe: PLI suppressed %llu times\n"
+msgstr "  +%-6llu ms  正在等待关键帧，已抑制 PLI %llu 次\n"
+
+#: tools/stall_probe.cpp:217
+#, c-format
+msgid "  +%-6llu ms  Keyframe wait triggered restart (stall_restarts=%llu)\n"
+msgstr "  +%-6llu ms  等待关键帧超时，已重建会话（stall_restarts=%llu）\n"
+
+#: tools/stall_probe.cpp:227
+#, c-format
+msgid "  +%-6llu ms  Video entered fallback (restarts=%llu decoded=%llu)\n"
+msgstr "  +%-6llu ms  视频已降级（重建次数=%llu 已解码帧数=%llu）\n"
+
+#: tools/stall_probe.cpp:232
+#, c-format
+msgid ""
+"  +%-6llu ms  Video recovered from fallback (restarts=%llu decoded=%llu)\n"
+msgstr "  +%-6llu ms  视频已从降级状态恢复（重建次数=%llu 已解码帧数=%llu）\n"
+
+#: tools/stall_probe.cpp:245
+#, c-format
+msgid ""
+"  +%-6llu ms  Decode failure injected; baseline: dropped AU=%llu "
+"decoded=%llu suppressed PLI=%llu\n"
+msgstr ""
+"  +%-6llu ms  已注入解码失败；基线：丢弃 AU=%llu 已解码帧数=%llu 抑制 "
+"PLI=%llu\n"
+
+#: tools/stall_probe.cpp:257
+#, c-format
+msgid ""
+"  +%-6llu ms  Failure observation ended (%llu ms): dropped AU +%llu, decoded "
+"frames +%llu\n"
+msgstr ""
+"  +%-6llu ms  失败后的观测窗口已结束（%llu ms）：丢弃 AU +%llu，解码帧数 +"
+"%llu\n"
+
+#: tools/stall_probe.cpp:266
+#, c-format
+msgid "  +%-6llu ms  Sender reports received=%llu\n"
+msgstr "  +%-6llu ms  已收到发送端报告=%llu\n"
+
+#: tools/stall_probe.cpp:274
+#, c-format
+msgid ""
+"\n"
+"Summary: packets=%llu (video=%llu SR=%llu) gaps=%llu PLI=%llu "
+"(suppressed=%llu) AU=%llu dropped=%llu decoded=%llu injected failures=%llu "
+"stall restarts=%llu total restarts=%llu\n"
+msgstr ""
+"\n"
+"统计：包数=%llu（视频=%llu SR=%llu）序号缺口=%llu PLI=%llu（抑制=%llu）"
+"AU=%llu 丢弃=%llu 已解码=%llu 注入失败=%llu 等待超时重建=%llu 总重建=%llu\n"
+
+#: tools/stall_probe.cpp:293
+#, c-format
+msgid ""
+"Startup failure test: fallback at +%llu ms (restarts=%llu decoded=%llu), "
+"recovery=%s, final decoded frames=%llu\n"
+msgstr ""
+"启动失败测试：降级发生于 +%llu ms（重建=%llu 已解码=%llu），恢复=%s，结束时已"
+"解码帧数=%llu\n"
+
+#: tools/stall_probe.cpp:302
+#, c-format
+msgid "FAIL: video did not enter fallback after reaching the restart limit\n"
+msgstr "失败：达到重建上限后，视频未进入降级状态\n"
+
+#: tools/stall_probe.cpp:307
+#, c-format
+msgid ""
+"INCONCLUSIVE: no recovery after fallback during the %s ms observation; "
+"fallback retries are 60 seconds apart, so --watch must allow enough time\n"
+msgstr ""
+"无法判断：视频降级后，在 %s ms 的观测期内未恢复；降级重试间隔为 60 秒，--"
+"watch 需留出足够时间\n"
+
+#: tools/stall_probe.cpp:313
+#, c-format
+msgid ""
+"Recovery observed: fallback at +%llu ms after %llu restarts; video recovered "
+"at +%llu ms (%llu ms after fallback); final decoded frames=%llu total "
+"restarts=%llu\n"
+msgstr ""
+"已观察到恢复：第 +%llu ms 进入降级，此时重建 %llu 次；视频在 +%llu ms 恢复"
+"（降级后 %llu ms）；结束时已解码帧数=%llu 总重建=%llu\n"
+
+#: tools/stall_probe.cpp:324
+#, c-format
+msgid ""
+"INCONCLUSIVE: no recovery keyframe received for decode failure injection; "
+"check whether packet %d belongs to the startup IDR\n"
+msgstr ""
+"无法判断：未收到可注入解码失败的恢复关键帧；请检查第 %d 个包是否属于启动 "
+"IDR\n"
+
+#: tools/stall_probe.cpp:330
+#, c-format
+msgid ""
+"After injected failure (%llu ms): dropped AU +%llu, decoded frames +%llu, "
+"suppressed PLI +%llu\n"
+msgstr "注入失败后（%llu ms）：丢弃 AU +%llu，解码帧数 +%llu，抑制 PLI +%llu\n"
+
+#: tools/stall_probe.cpp:340
+#, c-format
+msgid ""
+"FAIL: within %llu ms after injected keyframe failure, %llu frames were "
+"published; recovery state was cleared before successful keyframe decoding\n"
+msgstr ""
+"失败：关键帧被注入失败后的 %llu ms 内，仍发布了 %llu 帧；恢复状态在关键帧成功"
+"解码前已被清除\n"
+
+#: tools/stall_probe.cpp:348
+#, c-format
+msgid ""
+"INCONCLUSIVE: neither dropped AU nor decoded frames increased during the "
+"observation window; no video progress to compare\n"
+msgstr ""
+"无法判断：观测窗口内，丢弃 AU 和解码帧数都未增加，无法比较视频处理进度\n"
+
+#: tools/stall_probe.cpp:353
+#, c-format
+msgid "FAIL: recovery state held (%llu AU dropped), but restart %s\n"
+msgstr "失败：恢复状态保持正常（丢弃 %llu 个 AU），但会话重建%s\n"
+
+#: tools/stall_probe.cpp:355
+msgid "was not observed"
+msgstr "未发生"
+
+#: tools/stall_probe.cpp:356
+msgid "occurred only before the injected failure"
+msgstr "仅发生在注入失败之前"
+
+#: tools/stall_probe.cpp:361
+#, c-format
+msgid ""
+"FAIL: repeated failed keyframes delayed restart by %llu ms (limit %d ms plus "
+"1000 ms tolerance)\n"
+msgstr ""
+"失败：关键帧连续失败使重建延迟 %llu ms（上限为 %d ms，另允许 1000 ms 误差）\n"
+
+#: tools/stall_probe.cpp:367
+#, c-format
+msgid ""
+"Recovery state held: failure at +%-llu ms, %llu ms window with %llu AU "
+"dropped and no published frames; restart at +%-llu ms (%llu ms after "
+"failure, limit %d ms); decoded frames after restart=%llu\n"
+msgstr ""
+"恢复状态保持正常：第 +%-llu ms 注入失败，随后 %llu ms 内丢弃 %llu 个 AU、未发"
+"布帧；第 +%-llu ms 重建会话（失败后 %llu ms，上限 %d ms）；重建后已解码帧数"
+"=%llu\n"
+
+#: tools/stall_probe.cpp:378
+#, c-format
+msgid ""
+"INCONCLUSIVE: packet loss was not injected; fewer than %d video packets may "
+"have arrived\n"
+msgstr "无法判断：未注入丢包，可能收到的视频包不足 %d 个\n"
+
+#: tools/stall_probe.cpp:384
+#, c-format
+msgid ""
+"INCONCLUSIVE: keyframe waiting was not observed; restart conditions were not "
+"reached\n"
+msgstr "无法判断：未观察到等待关键帧的状态，未达到重建触发条件\n"
+
+#: tools/stall_probe.cpp:388
+#, c-format
+msgid "FAIL: no restart observed within %d ms after packet loss\n"
+msgstr "失败：丢包后 %d ms 内未观察到会话重建\n"
+
+#: tools/stall_probe.cpp:393
+#, c-format
+msgid ""
+"Restart observed: %llu ms after packet loss, %llu ms after keyframe waiting "
+"began (limit %d ms); decoded frames after restart=%llu\n"
+msgstr ""
+"已观察到重建：丢包后 %llu ms，开始等待关键帧后 %llu ms（上限 %d ms）；重建后"
+"已解码帧数=%llu\n"
 
 #: tools/wifi_probe.cpp:72
 msgid "Foreign pairing record is not a valid plist"

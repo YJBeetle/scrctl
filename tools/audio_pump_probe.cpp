@@ -1,58 +1,16 @@
-// 探针：音频腿接进产品之前，先把四个只能问设备的问题一次问清楚。
+// 观察独立音频会话的收包、解码、RTCP 续期和缓冲水位。PCM 只用于统计峰值，
+// 不打开播放设备或窗口。可同时启动视频，或在指定时刻停止/追加媒体会话。
 //
-// 这四个问题每一个都会决定 `AudioPump` 里的一段逻辑，而猜的代价是"声音时不时卡一下"
-// 这种在现场才发现、又最难查的症状：
-//   ① 音频腿**自己不**跟视频腿共用 ClientSessionID 能不能起流？（产品故意分开：
-//      共用的话 `probe()` 就退化成"至少一条腿活着"，视频那条判活的尺会被音频掩护掉）
-//   ② 设备在**没有声音**的时候还发不发音频包？—— 视频腿的答案是"一个视频包都不发，
-//      但 RTCP SR 照发"（docs §13），如果音频同构，那"多久没包算死"的阈值就必须留得
-//      比任何静默段落都长，只能靠 probe 判死。
-//   ③ 每秒一个 RR 能不能把音频这条会话也续过 20 秒？（视频腿已实测能，但那是另一条
-//      会话、另一套 SSRC，不能代推）
-//   ④ 音频腿与视频腿同时存在时，两边各收到多少包、谁有没有被顶掉。
+// --mute 只降低手机扬声器音量，不能让镜像音频变为静音；镜像流可能取自音量
+// 调节之前。判断内容是否静音应结合 PCM 峰值，不能仅凭收包数量。
+// --kill-at 停止设备上的所有媒体会话；--revideo-at 不先停止已有会话，直接起视频。
+// 不同会话对彼此的影响需要设备实测，历史结果见 docs/coredevice.md §17.2。
 //
-// 判据 ③ 只要"跑过 20 秒而重起=0"就成立（对照组视频腿早就做过：不发 RTCP 精确
-// 19.97 秒死），所以这里不再单独留一个不发 RTCP 的臂。
-//
-// ②这一问要一段"承载的声音确实是零"的观测。`--mute` 是按硬件音量减把**手机自己的
-// 喇叭**关掉（25 次，测完按回）——但它**管不着这条流**：实测音量按到 0 之后解出来的
-// 帧峰值仍然是 12780/22097 这个量级，`audioSystemOutput` 是音量之前的抽头（和
-// AirPlay 一样，docs §17.2 ②）。所以这一臂造不出"镜像里的静音"，它只能让手机自己不响；
-// 真正的全零来自内容自己静下去（应用切在两集之间）。
-//
-// 留着它的理由就剩两条：夜里跑实验不吵人，以及把"音量键影响不到镜像"这件事钉在一个
-// 可执行的探针上。
-//
-// 一次踩坑要记着：这一臂差点拿"有声音时在发 100 包/秒"当成"没声音时也在发"——
-// 前者是测出来的，后者压根没测过。所以每一段的**峰值**也要打出来，它才是
-// "此刻到底有没有声音"的读数；只有包数会被静音帧继续发这件事骗过去。
-//
-// 还有一问不在那四条里，是接进产品之后才冒出来的：**视频腿重起会连带把音频会话带走**。
-// `stopmediastream` 只有 `{stopAll: true}` 这一种形状，它停的是设备上所有会话，而
-// `FramePump::restart()` 每次重起都要发它一下。所以"画面坏了一次重起"这件事的代价
-// 不该只有一画面卡顿，还得看声音掉多久——`--kill-at 秒` 就是照那个形状发一次 stopAll，
-// 然后量从发出到音频重新有包之间隔了多久。
-//
-// 但那条实验只量了"发 stopAll 会连带什么"，它不回答**该不该**发。看着像不该：第二条
-// `startmediastream` 本来就会把第一条顶掉（docs §13，`tools/two_session_probe`），所以
-// 那一下 stop 对自己的目的没有增量。`--revideo-at N` 就是去验这个推断的：第 N 秒
-// **一个 stop 都不发、直接起第二条视频会话**，看音频这条腿掉不掉包。
-//
-// **推断被否了**（两臂各跑一遍，判据是最后那行"音频最长包静默"）：
-//   只有音频腿在场 + 起一条视频  → 两条都活 18 秒，音频最长静默 268ms、零重起；
-//   音频与视频都在场 + 再起第二条视频 → 音频断（400ms 静默后被判死重起），
-//                                     旧那条视频也断（FramePump 自己记了一次重起）。
-// 所以"视频腿重起会连带杀音频"与发不发 stopAll 无关，是设备侧的会话表本身就这样。
-// stopAll 那一条留着只是让它更早更确定。结论与对策写在 docs §17.2 ⑤。
-//
-// `--realtime` 是给"水位导向"这一条单独造的尺：默认那档取数远远慢于实时（200ms 才取
-// 960 帧），环永远是顶满的，于是"缓冲"这一位量的到底是消费方还是导向逻辑说不清。
-// 这一档改成每 10ms 取 480 帧——生产与消费的标称速率**相等**（都是 48000 帧/秒），
-// 所以缓冲水位的任何变化都只可能来自导向本身。判据：开局攒下的那一截（实测 4000~5000
-// 帧）应该在十几秒内降到目标水位（默认 50ms = 2400 帧）然后待住不动。
-//
-// 用法：audio_pump_probe [--seconds 30] [--with-video] [--mute] [--kill-at 8]
-//                       [--revideo-at N] [--realtime] [-v] [UDID]
+// --realtime 按 48 kHz 的标称速率消费 PCM；--late-open 可延迟消费，用于观察
+// 开始消费后积压是否回到目标水位。默认模式消费较慢，适合观察环满后的旧帧丢弃。
+// 所有参数及音量调整的行为见 --help；帮助和参数错误在设备连接之前返回。
+#include <CLI/CLI.hpp>
+#include <limits>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -63,6 +21,8 @@
 #include <vector>
 
 #include "hid/Hid.h"
+#include "i18n/CliLanguage.h"
+#include "i18n/Translation.h"
 #include "xpc/XpcValue.h"
 #include "media/AudioPump.h"
 #include "media/FramePump.h"
@@ -77,11 +37,37 @@ uint64_t now_ms() {
             .count());
 }
 
+void print_audio_window(const scrctl::media::AudioPump::Stats &stats,
+                        uint64_t elapsed_seconds, std::size_t buffered_frames,
+                        uint64_t idle_seconds, std::size_t &window_peak) {
+    std::printf(SCRCTL_TR(
+        "+%3llus packets=%llu decoded=%llu decode_failed=%llu other_payload=%llu "
+        "sequence_gaps=%llu missing_packets=%llu late_or_duplicate=%llu RR_sent/failed=%llu/%llu "
+        "dropped_frames=%llu steered_frames=%llu restarts=%llu buffered=%zu_frames idle=%llus "
+        "window_peak=%zu\n"),
+        static_cast<unsigned long long>(elapsed_seconds),
+        static_cast<unsigned long long>(stats.packets),
+        static_cast<unsigned long long>(stats.decoded),
+        static_cast<unsigned long long>(stats.decode_failed),
+        static_cast<unsigned long long>(stats.other_payload),
+        static_cast<unsigned long long>(stats.seq_gaps),
+        static_cast<unsigned long long>(stats.seq_lost),
+        static_cast<unsigned long long>(stats.out_of_order),
+        static_cast<unsigned long long>(stats.rtcp_sent),
+        static_cast<unsigned long long>(stats.rtcp_failed),
+        static_cast<unsigned long long>(stats.dropped_stale),
+        static_cast<unsigned long long>(stats.steered),
+        static_cast<unsigned long long>(stats.restarts), buffered_frames,
+        static_cast<unsigned long long>(idle_seconds), window_peak);
+    // 先输出这一窗口的峰值，再清零开始下一窗口；末段峰值由结束统计另行输出。
+    window_peak = 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
-    std::string_view udid;
+    std::vector<std::string> udids;
     int seconds = 30;
     bool with_video = false;
     bool verbose = false;
@@ -90,57 +76,64 @@ int main(int argc, char **argv) {
     int revideo_at = -1;
     bool realtime = false;
     int late_open = 0;
-    for (int i = 1; i < argc; ++i) {
-        const std::string a = argv[i];
-        if (a == "-v" || a == "--verbose") {
-            verbose = true;
-        } else if (a == "--with-video") {
-            with_video = true;
-        } else if (a == "--mute") {
-            mute = true;
-        } else if ((a == "--kill-at") && i + 1 < argc) {
-            kill_at = std::atoi(argv[++i]);
-        } else if ((a == "--revideo-at") && i + 1 < argc) {
-            revideo_at = std::atoi(argv[++i]);
-        } else if (a == "--realtime") {
-            realtime = true;
-        } else if (a == "--late-open" && i + 1 < argc) {
-            late_open = std::atoi(argv[++i]);
-        } else if ((a == "--seconds" || a == "-s") && i + 1 < argc) {
-            seconds = std::atoi(argv[++i]);
-        } else if (a == "-h" || a == "--help") {
-            std::printf(
-                "用法: %s [--seconds 30] [--with-video] [--mute] [--kill-at 8] [-v] [UDID]\n"
-                "  只跑音频腿看 ①②③；带 --with-video 看 ④；带 --mute 先把设备静音再看"
-                "  包还来不来（测完按回音量）；--realtime 按实时速率取数（量水位）；"
-                "--kill-at N 在第 N 秒发一次 stopAll，"
-                "量音频掉多久。全程不开窗口、本机不出声"
-                "（PCM 只取出来算峰值，不接任何音频设备）。\n",
-                argv[0]);
-            return 0;
-        } else if (a.starts_with("-")) {
-            std::fprintf(stderr, "未知选项 %s\n", a.c_str());
-            return 2;
-        } else {
-            udid = a;
-        }
+    CLI::App app{SCRCTL_N_("Inspect audio streaming, recovery and buffer levels")};
+    app.footer(SCRCTL_N_(
+        "PCM is read only to measure sample peaks; no local audio playback or window is opened. "
+        "--mute lowers the phone volume with 25 VolumeDown presses, then sends 25 VolumeUp "
+        "presses when the test ends; it does not restore the original volume or silence the "
+        "mirrored stream. --help does not connect to a device."));
+    app.set_help_flag("-h,--help", SCRCTL_N_("Show help"));
+    auto *seconds_option = app.add_option("-s,--seconds", seconds,
+        SCRCTL_N_("Observation duration in seconds (positive integer; default: 30)"))
+        ->check(CLI::Range(1, std::numeric_limits<int>::max()));
+    app.add_flag("--with-video", with_video, SCRCTL_N_("Start a video stream alongside audio"));
+    app.add_flag("-v,--verbose", verbose, SCRCTL_N_("Print connection and media details"));
+    app.add_flag("--mute", mute, SCRCTL_N_("Lower the phone speaker volume during the test"));
+    auto *kill_option = app.add_option("--kill-at", kill_at,
+        SCRCTL_N_("Stop all device media streams at N seconds (-1 disables; 0 starts immediately)"))
+        ->check(CLI::Range(-1, std::numeric_limits<int>::max()));
+    auto *video_option = app.add_option("--revideo-at", revideo_at,
+        SCRCTL_N_("Start another video stream at N seconds without stopping streams (-1 disables)"))
+        ->check(CLI::Range(-1, std::numeric_limits<int>::max()));
+    app.add_flag("--realtime", realtime, SCRCTL_N_("Read 480 audio frames every 10 ms"));
+    auto *late_option = app.add_option("--late-open", late_open,
+        SCRCTL_N_("Delay PCM consumption by N seconds in --realtime mode (nonnegative; default: 0)"))
+        ->check(CLI::Range(0, std::numeric_limits<int>::max()));
+    // 保留原入口重复标量取最后一个值、多个位置 UDID 取最后一个的行为。
+    for (auto *option : {seconds_option, kill_option, video_option, late_option})
+        option->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
+    app.add_option("UDID", udids, SCRCTL_N_("Device identifier (optional; last value is used)"))
+        ->expected(-1);
+    scrctl::i18n::CliLanguage language(app);
+    try {
+        app.parse(argc, argv);
+        if (!language.select()) return 2;
+    } catch (const CLI::CallForHelp &) {
+        if (!language.select()) return 2;
+        std::printf("%s", language.help().c_str());
+        return 0;
+    } catch (const CLI::ParseError &error) {
+        if (language.select())
+            std::fprintf(stderr, SCRCTL_TR("Invalid arguments: %s\n"), error.what());
+        return 2;
     }
+    const std::string_view udid = udids.empty() ? std::string_view{} : udids.back();
 
     std::string err;
     auto device = scrctl::remote::Device::establish(udid, err, verbose);
     if (!device) {
-        std::fprintf(stderr, "建立会话失败: %s\n", err.c_str());
+        std::fprintf(stderr, SCRCTL_TR("Failed to establish device session: %s\n"), err.c_str());
         return 1;
     }
 
-    // ①：Options 留默认（client_session_uuid 为空）就是"本腿自己一个会话号"。
+    // 默认音频选项不提供会话 UUID，音频与视频使用独立的会话标识。
     scrctl::media::AudioPump::Options ao;
     auto audio = scrctl::media::AudioPump::start(*device, ao, err, verbose);
     if (audio == nullptr) {
-        std::fprintf(stderr, "① 音频腿起流失败: %s\n", err.c_str());
+        std::fprintf(stderr, SCRCTL_TR("Failed to start audio stream: %s\n"), err.c_str());
         return 1;
     }
-    std::printf("① 音频腿已起（独立 ClientSessionID）：收流端口=%u PT=%u 后端=%s\n",
+    std::printf(SCRCTL_TR("Audio stream started with its own session: port=%u payload_type=%u decoder=%s\n"),
                 audio->receiver_port(), audio->payload_type(), audio->backend_name().c_str());
 
     std::unique_ptr<scrctl::media::FramePump> video;
@@ -148,36 +141,33 @@ int main(int argc, char **argv) {
         scrctl::media::FramePump::Options vo;
         video = scrctl::media::FramePump::start(*device, vo, err, verbose);
         if (video == nullptr) {
-            std::fprintf(stderr, "④ 视频腿起流失败（音频腿照跑）: %s\n", err.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to start video stream; continuing audio test: %s\n"), err.c_str());
         } else {
-            std::printf("④ 视频腿同时已起\n");
+            std::printf(SCRCTL_TR("Video stream started alongside audio\n"));
         }
     }
 
-    // ②：把设备按到静音再量。用硬件音量键而不是"暂停播放"，是因为播放器的控制面
-    // 会自己收起、而且它的进度条只认拖动不认轻点（§16.1 踩过），音量键没有这些歧义。
+    // 音量键只调整手机扬声器，镜像 PCM 仍可能有声音。测试结束会发送同等数量
+    // 的音量加按键；这会提高音量，不能精确恢复测试前的音量。
     std::unique_ptr<scrctl::hid::Buttons> buttons;
     if (mute) {
         std::string berr;
         buttons = scrctl::hid::Buttons::open(*device, berr, verbose);
         if (buttons == nullptr) {
-            std::fprintf(stderr, "② 打不开按键服务: %s（这一臂测不成）\n", berr.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Cannot open button service; skipping phone volume adjustment: %s\n"), berr.c_str());
         } else {
             for (int i = 0; i < 25; ++i) {
                 buttons->press(scrctl::hid::button::kUsagePageConsumer,
                                scrctl::hid::button::kVolumeDown, 30, berr);
             }
-            std::printf("② 已把设备音量按到零（25 次音量减），测 %d 秒里包还来不来\n",
+            std::printf(SCRCTL_TR("Sent 25 VolumeDown presses; observing audio for %d seconds\n"),
                         seconds);
         }
     }
 
     const uint64_t t0 = now_ms();
-    // `--late-open N`：先把消费方按住 N 秒再开始按实时取。这一档模拟的是产品里真实
-    // 存在的那段空档（音频腿在起流路径里就起了，声卡要等 SDL_Init 与第一帧之后才开），
-    // 它会在环里留下 100~300ms 的存量——而生产与消费的标称速率相等，**存量不会自己
-    // 排掉**，那就是永久性的音画不同步。水位导向要修的就是这个，所以判据是：
-    // 按住 N 秒之后，缓冲能不能在几秒内从顶（24000）回到目标（默认 2400）。
+    // 延迟消费模拟音频流已经启动、播放设备尚未打开时产生的积压。
+    // 当收流和消费速率相等时，积压不能自行消失；观察水位调节是否将其降至目标。
     const uint64_t drain_from_ms = now_ms() + static_cast<uint64_t>(late_open) * 1000;
     auto next_drain = std::chrono::steady_clock::now();
 
@@ -186,19 +176,17 @@ int main(int argc, char **argv) {
     uint64_t last_print_ms = t0;
     std::size_t peak = 0;
     std::size_t window_peak = 0;
-    // 缓冲按**采样**数，而 `read()` 要的是**帧**数（一帧 = channels 个采样）。
-    // 这两个单位混过一次：探针把 scratch.size()（960 个采样）当 960 帧传进去，
-    // read() 就往 1920 字节的缓冲里写了 3840 字节——ASan 报在 read 里，而真正
-    // 崩的是几百毫秒后另一个线程的一次 malloc。
+    // scratch 按采样点分配，read() 接收音频帧数；立体声每帧含两个采样点。
+    // 两种单位不能混用，否则 read() 会写出缓冲边界。
     std::vector<int16_t> scratch(480 * 2);
     const std::size_t scratch_frames = scratch.size() / 2;
 
-    // stopAll 之后要量的三个时刻：发出的那一刻、包停住的那一刻（就是 last_change_ms
-    // 停住不动的那个值）、以及包重新动起来的这一刻。
+    // 记录停止请求、观测到静默、收包恢复三个阶段，避免把停止后仍在路上的包
+    // 当作恢复。以下进展时间还会随解码失败、重起及 RTCP 失败计数变化而推进。
     bool killed = false;
     uint64_t kill_ms = 0;
     uint64_t back_ms = 0;
-    uint64_t packets_at_kill = 0;  ///< 静默坐实那一刻的包数，恢复的基线
+    uint64_t packets_at_kill = 0;  ///< 确认静默后的包数，作为恢复判断基线
     bool saw_dead = false;
     std::unique_ptr<scrctl::media::StreamSession> second_video;
     uint64_t second_video_packets = 0;
@@ -209,12 +197,9 @@ int main(int argc, char **argv) {
     while ((now_ms() - t0) / 1000 < static_cast<uint64_t>(seconds)) {
         const bool draining = !realtime || now_ms() >= drain_from_ms;
         if (realtime && draining) {
-            // 必须按**绝对时刻**追节拍：`sleep_for(10ms)` 每次实际睡到 13~15ms，
-            // 于是这个消费者只有标称速率的七成——环顶满、全程走"丢最旧"那条路，
-            // 水位导向被盖住，测出来的"水位不动"是探针自己的消费速率问题不是导向的。
+            // 使用绝对节拍，避免 sleep_for 的调度延迟持续降低消费速率。
             next_drain += std::chrono::milliseconds(10);
-            // 落后超过 100ms（比如被打印或调度卡住）就重新对齐：连补几十个节拍只会
-            // 把这一轮要取的帧数一次性要光，反而把环掏空。
+            // 落后超过 100 ms 时重新对齐，避免连续补取将音频环耗空。
             if (std::chrono::steady_clock::now() - next_drain > std::chrono::milliseconds(100)) {
                 next_drain = std::chrono::steady_clock::now();
             }
@@ -224,8 +209,7 @@ int main(int argc, char **argv) {
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
-        // 照 `FramePump::restart()` 那个形状发一次 stopAll：它停的是设备上**所有**会话，
-        // 所以这一发之后音频腿也死了。要量的就是音频自己多久才发现、发现了多久才恢复。
+        // stopAll 会停止设备上的全部媒体会话，观察 AudioPump 的检测和恢复过程。
         if (kill_at >= 0 && static_cast<int>((now_ms() - t0) / 1000) >= kill_at &&
             !killed) {
             killed = true;
@@ -239,18 +223,18 @@ int main(int argc, char **argv) {
                                             "com.apple.coredevice.feature.stopmediastream",
                                             "com.apple.coredevice.action.mediastreamstop", input,
                                             output, err, verbose, 10000);
-            std::printf("!! 第 %d 秒发出 stopAll（模拟视频腿重起）：%s\n", kill_at,
-                        ok ? "设备已收" : err.c_str());
+            std::printf(SCRCTL_TR("At %d seconds, requested stopAll: %s\n"), kill_at,
+                        ok ? SCRCTL_TR("accepted") : err.c_str());
         }
-        // 直接起第二条视频会话，**不**先停第一条：设备会自己把旧的顶掉。
+        // 直接追加视频会话，不发送停止请求；是否影响原会话由设备实测判断。
         if (revideo_at >= 0 && static_cast<int>((now_ms() - t0) / 1000) >= revideo_at &&
             second_video == nullptr) {
             scrctl::media::StreamSession::Request vr;
             std::string verr;
             second_video = scrctl::media::StreamSession::start(*device, vr, verr, verbose);
-            std::printf("!! 第 %d 秒直接起第二条视频会话（没有发任何 stop）：%s\n", revideo_at,
+            std::printf(SCRCTL_TR("At %d seconds, requested an additional video session without a stop request: %s\n"), revideo_at,
                         second_video != nullptr
-                            ? ("已起，收流端口=" + std::to_string(second_video->receiver_port())).c_str()
+                            ? (SCRCTL_TR("started, receive port=") + std::to_string(second_video->receiver_port())).c_str()
                             : verr.c_str());
             second_started_ms = now_ms();
         }
@@ -262,12 +246,11 @@ int main(int argc, char **argv) {
             }
             if (now_ms() - second_started_ms > 3000 && !second_reported) {
                 second_reported = true;
-                std::printf("   第二条会话 3 秒里收到 %llu 个包\n",
+                std::printf(SCRCTL_TR("  Additional video session: %llu packets in the first 3 seconds\n"),
                             static_cast<unsigned long long>(second_video_packets));
             }
         }
-        // 把缓冲里的东西取出来只算峰值：不取就会一直堆到 0.5 秒然后开始丢旧帧，
-        // 那样"丢旧帧"这一位会被探针自己的不作为污染。
+        // 消费 PCM 并统计峰值，不交给本机音频设备。实时模式延迟开放消费时不读取。
         const std::size_t want = (realtime && draining) ? 480 : scratch_frames;
         const std::size_t got = (realtime && !draining) ? 0 : audio->read(scratch.data(), want);
         if (got > 0) {
@@ -285,23 +268,16 @@ int main(int argc, char **argv) {
         const auto st = audio->stats();
         const bool moved = st.packets != prev.packets || st.decode_failed != prev.decode_failed ||
                            st.restarts != prev.restarts || st.rtcp_failed != prev.rtcp_failed;
-        // 恢复的读数要在 `last_change_ms` 被推进**之前**算，否则"静默多久"这一位
-        // 永远是自己减自己（0）。这类"两个时间戳谁先动"的错只有一种防法：把要报的
-        // 那个差值当场打出来看一眼是不是 0。
-        // "静默过"必须先成立才算掉线开始：stopAll 那条 RPC 本身要 100~200ms，期间
-        // 设备的包还在路上，直接拿"包数比发出前多了"当恢复会读出 56ms 这种荒唐数
-        // （第一版就是这么错的，而它差一点被当成"音频根本不在乎会话停没停"的证据）。
+        // 在推进 last_change_ms 前计算恢复间隔。先观察至少 400 ms 无进展，
+        // 再建立收包基线，避免 stopAll 调用期间仍在路上的包造成虚假的恢复读数。
         if (killed && !saw_dead && now_ms() - last_change_ms >= 400) {
             saw_dead = true;
-            // 基线要在**见过静默之后**取，不能用发出 stopAll 那一刻的包数：那条 RPC
-            // 之后设备的包还在路上（实测又多了十几个才彻底停），拿旧基线会在
-            // "静默刚坐实"的瞬间就判成"已经恢复了"，把恢复时间读成 0。
+            // 静默成立后取基线，后续包数增加才记为恢复。
             packets_at_kill = st.packets;
         }
         if (killed && saw_dead && back_ms == 0 && st.packets > packets_at_kill) {
             back_ms = now_ms();
-            std::printf(">> 音频恢复：stopAll 之后 %llu ms 才重新有包，其中包静默 %llu ms；"
-                        "期间重起 %llu 次\n",
+            std::printf(SCRCTL_TR("Audio packets resumed %llu ms after stopAll; idle interval=%llu ms; restarts=%llu\n"),
                         static_cast<unsigned long long>(back_ms - kill_ms),
                         static_cast<unsigned long long>(back_ms - last_change_ms),
                         static_cast<unsigned long long>(st.restarts - restarts_at_kill));
@@ -315,29 +291,11 @@ int main(int argc, char **argv) {
         }
         if (now_ms() - last_print_ms >= 2000) {
             last_print_ms = now_ms();
-            window_peak = 0;
-            std::printf(
-                "+%3llus 包=%llu 解出=%llu 解败=%llu 非音频=%llu 缺口=%llu 真丢=%llu "
-                "迟到=%llu RR=%llu/%llu 丢旧=%llu 调速=%llu 重起=%llu 缓冲=%zu帧 静默=%llus "
-                "本段峰值=%zu\n",
-                static_cast<unsigned long long>((now_ms() - t0) / 1000),
-                static_cast<unsigned long long>(st.packets),
-                static_cast<unsigned long long>(st.decoded),
-                static_cast<unsigned long long>(st.decode_failed),
-                static_cast<unsigned long long>(st.other_payload),
-                static_cast<unsigned long long>(st.seq_gaps),
-                static_cast<unsigned long long>(st.seq_lost),
-                static_cast<unsigned long long>(st.out_of_order),
-                static_cast<unsigned long long>(st.rtcp_sent),
-                static_cast<unsigned long long>(st.rtcp_failed),
-                static_cast<unsigned long long>(st.dropped_stale),
-                static_cast<unsigned long long>(st.steered),
-                static_cast<unsigned long long>(st.restarts), audio->buffered_frames(),
-                static_cast<unsigned long long>((now_ms() - last_change_ms) / 1000),
-                window_peak);
+            print_audio_window(st, (now_ms() - t0) / 1000, audio->buffered_frames(),
+                               (now_ms() - last_change_ms) / 1000, window_peak);
             if (video != nullptr) {
                 const auto vs = video->stats();
-                std::printf("        视频：包=%llu AU=%llu 出图=%llu 非视频=%llu 重起=%llu\n",
+                std::printf(SCRCTL_TR("        Video: packets=%llu access_units=%llu decoded=%llu other_payload=%llu restarts=%llu\n"),
                             static_cast<unsigned long long>(vs.packets),
                             static_cast<unsigned long long>(vs.aus),
                             static_cast<unsigned long long>(vs.decoded),
@@ -353,20 +311,17 @@ int main(int argc, char **argv) {
             buttons->press(scrctl::hid::button::kUsagePageConsumer,
                            scrctl::hid::button::kVolumeUp, 30, berr);
         }
-        std::printf("② 已按回音量（25 次音量加）\n");
+        std::printf(SCRCTL_TR("Sent 25 VolumeUp presses after the test\n"));
     }
-    // 末段峰值必须一起打：打印窗口是 2 秒而循环到点就退，最后那不到 2 秒的样本
-    // 从来不会出现在任何一行"本段峰值"里。只打全程峰值的话，读的人会以为
-    // "本段全是 0 而合计不是 0"是自相矛盾（它其实只是最后那一段没打）。
-    std::printf("音频最长包静默 %llu ms（第二条视频会话起来之后有没有掉过包，看这一位）\n",
+    // 最后不足两秒的窗口不会进入周期输出，单独保留其峰值。
+    std::printf(SCRCTL_TR("Longest interval without audio progress: %llu ms\n"),
                 static_cast<unsigned long long>(longest_audio_silence_ms));
-    std::printf("合计：包=%llu 解出=%llu 解败=%llu 峰值=%zu 末段峰值=%zu（满幅 32767）"
-                " 重起=%llu\n",
+    std::printf(SCRCTL_TR("Total: packets=%llu decoded=%llu decode_failed=%llu peak=%zu final_window_peak=%zu (16-bit PCM) restarts=%llu\n"),
                 static_cast<unsigned long long>(st.packets),
                 static_cast<unsigned long long>(st.decoded),
                 static_cast<unsigned long long>(st.decode_failed), peak, window_peak,
                 static_cast<unsigned long long>(st.restarts));
-    // ②的判据就是最后那个"静默"：跑完后不主动出声，看它在没有声音的时段里到底还发不发包。
+    // 最长无进展间隔与 PCM 峰值分别描述传输和内容，不能仅由零峰值推断断流。
     audio.reset();
     return 0;
 }

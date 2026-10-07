@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 05:11+0800\n"
+"POT-Creation-Date: 2026-10-08 05:31+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -157,7 +157,9 @@ msgid ""
 "device."
 msgstr ""
 
-#: src/app/Cli.cpp:23 tools/screenshot_probe.cpp:52 tools/wifi_probe.cpp:642
+#: src/app/Cli.cpp:23 tools/audio_pump_probe.cpp:85
+#: tools/screenshot_probe.cpp:52 tools/stall_probe.cpp:59
+#: tools/wifi_probe.cpp:642
 msgid "Show help"
 msgstr ""
 
@@ -165,7 +167,7 @@ msgstr ""
 msgid "Play an Annex-B HEVC file"
 msgstr ""
 
-#: src/app/Cli.cpp:25 tools/screenshot_probe.cpp:58
+#: src/app/Cli.cpp:25 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
 msgid "Device UDID"
 msgstr ""
 
@@ -2973,6 +2975,171 @@ msgstr ""
 msgid ", received "
 msgstr ""
 
+#: tools/audio_pump_probe.cpp:44
+#, c-format
+msgid ""
+"+%3llus packets=%llu decoded=%llu decode_failed=%llu other_payload=%llu "
+"sequence_gaps=%llu missing_packets=%llu late_or_duplicate=%llu RR_sent/"
+"failed=%llu/%llu dropped_frames=%llu steered_frames=%llu restarts=%llu "
+"buffered=%zu_frames idle=%llus window_peak=%zu\n"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:79
+msgid "Inspect audio streaming, recovery and buffer levels"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:81
+msgid ""
+"PCM is read only to measure sample peaks; no local audio playback or window "
+"is opened. --mute lowers the phone volume with 25 VolumeDown presses, then "
+"sends 25 VolumeUp presses when the test ends; it does not restore the "
+"original volume or silence the mirrored stream. --help does not connect to a "
+"device."
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:87
+msgid "Observation duration in seconds (positive integer; default: 30)"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:89
+msgid "Start a video stream alongside audio"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:90
+msgid "Print connection and media details"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:91
+msgid "Lower the phone speaker volume during the test"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:93
+msgid ""
+"Stop all device media streams at N seconds (-1 disables; 0 starts "
+"immediately)"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:96
+msgid ""
+"Start another video stream at N seconds without stopping streams (-1 "
+"disables)"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:98
+msgid "Read 480 audio frames every 10 ms"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:100
+msgid ""
+"Delay PCM consumption by N seconds in --realtime mode (nonnegative; default: "
+"0)"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:105
+msgid "Device identifier (optional; last value is used)"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:117 tools/rr_keepalive_probe.cpp:462
+#: tools/screenshot_probe.cpp:69 tools/stall_probe.cpp:88
+#: tools/wifi_probe.cpp:742
+#, c-format
+msgid "Invalid arguments: %s\n"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:125 tools/rr_keepalive_probe.cpp:554
+#: tools/screenshot_probe.cpp:77 tools/stall_probe.cpp:133
+#, c-format
+msgid "Failed to establish device session: %s\n"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:133
+#, c-format
+msgid "Failed to start audio stream: %s\n"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:136
+#, c-format
+msgid ""
+"Audio stream started with its own session: port=%u payload_type=%u "
+"decoder=%s\n"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:144
+#, c-format
+msgid "Failed to start video stream; continuing audio test: %s\n"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:146
+#, c-format
+msgid "Video stream started alongside audio\n"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:157
+#, c-format
+msgid "Cannot open button service; skipping phone volume adjustment: %s\n"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:163
+#, c-format
+msgid "Sent 25 VolumeDown presses; observing audio for %d seconds\n"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:226
+#, c-format
+msgid "At %d seconds, requested stopAll: %s\n"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:227
+msgid "accepted"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:235
+#, c-format
+msgid ""
+"At %d seconds, requested an additional video session without a stop request: "
+"%s\n"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:237
+msgid "started, receive port="
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:249
+#, c-format
+msgid "  Additional video session: %llu packets in the first 3 seconds\n"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:280
+#, c-format
+msgid ""
+"Audio packets resumed %llu ms after stopAll; idle interval=%llu ms; "
+"restarts=%llu\n"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:298
+#, c-format
+msgid ""
+"        Video: packets=%llu access_units=%llu decoded=%llu "
+"other_payload=%llu restarts=%llu\n"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:314
+#, c-format
+msgid "Sent 25 VolumeUp presses after the test\n"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:317
+#, c-format
+msgid "Longest interval without audio progress: %llu ms\n"
+msgstr ""
+
+#: tools/audio_pump_probe.cpp:319
+#, c-format
+msgid ""
+"Total: packets=%llu decoded=%llu decode_failed=%llu peak=%zu "
+"final_window_peak=%zu (16-bit PCM) restarts=%llu\n"
+msgstr ""
+
 #: tools/rr_keepalive_probe.cpp:121 tools/rr_keepalive_probe.cpp:122
 #: tools/rr_keepalive_probe.cpp:1004 tools/rr_keepalive_probe.cpp:1005
 #: tools/rr_keepalive_probe.cpp:1010
@@ -3021,7 +3188,7 @@ msgstr ""
 msgid " keyframe requests=%llu first at +%llums subsequent IDR "
 msgstr ""
 
-#: tools/rr_keepalive_probe.cpp:263
+#: tools/rr_keepalive_probe.cpp:263 tools/stall_probe.cpp:298
 msgid "not observed"
 msgstr ""
 
@@ -3189,12 +3356,6 @@ msgid ""
 "Without --help or --dump-packets, this probe connects to the USB device."
 msgstr ""
 
-#: tools/rr_keepalive_probe.cpp:462 tools/screenshot_probe.cpp:69
-#: tools/wifi_probe.cpp:742
-#, c-format
-msgid "Invalid arguments: %s\n"
-msgstr ""
-
 #: tools/rr_keepalive_probe.cpp:474
 msgid "timeout key omitted"
 msgstr ""
@@ -3231,11 +3392,6 @@ msgstr ""
 #: tools/rr_keepalive_probe.cpp:547
 #, c-format
 msgid "Using %s as raw negotiatorOffer (%zu bytes; offer builder bypassed)\n"
-msgstr ""
-
-#: tools/rr_keepalive_probe.cpp:554 tools/screenshot_probe.cpp:77
-#, c-format
-msgid "Failed to establish device session: %s\n"
 msgstr ""
 
 #: tools/rr_keepalive_probe.cpp:564
@@ -3689,6 +3845,279 @@ msgstr ""
 #: tools/screenshot_probe.cpp:133
 #, c-format
 msgid "Saved to %s\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:56
+msgid "Test video recovery with packet loss and decode failures"
+msgstr ""
+
+#: tools/stall_probe.cpp:58
+msgid ""
+"Injects faults into a real device stream. --help does not connect to a "
+"device."
+msgstr ""
+
+#: tools/stall_probe.cpp:60
+msgid "LAN address; requires an existing pairing record"
+msgstr ""
+
+#: tools/stall_probe.cpp:62
+msgid "Verbose protocol logging"
+msgstr ""
+
+#: tools/stall_probe.cpp:63
+msgid "Keyframe wait limit in milliseconds"
+msgstr ""
+
+#: tools/stall_probe.cpp:65
+msgid "Drop this video packet; 0 disables"
+msgstr ""
+
+#: tools/stall_probe.cpp:67
+msgid "Ignore later video packets; 0 disables"
+msgstr ""
+
+#: tools/stall_probe.cpp:69
+msgid "Fail this many recovery keyframes"
+msgstr ""
+
+#: tools/stall_probe.cpp:71
+msgid "Fail keyframes including startup"
+msgstr ""
+
+#: tools/stall_probe.cpp:73
+msgid "Observation duration in milliseconds"
+msgstr ""
+
+#: tools/stall_probe.cpp:77
+msgid ""
+"Keep requesting keyframes after injected failures to test repeated no-output "
+"recovery"
+msgstr ""
+
+#: tools/stall_probe.cpp:93
+#, c-format
+msgid ""
+"--keep-pli requires --fail-decode and is incompatible with --fail-every-"
+"keyframe\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:104
+#, c-format
+msgid ""
+"--ignore-video-after(%d) must exceed --drop-at-packet(%d) + 40 so later "
+"packets can reveal the sequence gap\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:114
+#, c-format
+msgid ""
+"--drop-at-packet(%d) must be 0 or at least 200 to avoid dropping part of the "
+"startup IDR\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:124
+#, c-format
+msgid ""
+"--fail-every-keyframe(%d) must be 0 or at least 4 to test fallback after "
+"three restarts\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:160
+#, c-format
+msgid "Failed to start video stream: %s\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:165
+#, c-format
+msgid ""
+"Test: fail the next %d keyframes including startup; no packet loss or "
+"silence restart; observe fallback and recovery\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:170
+#, c-format
+msgid ""
+"Test: drop video packet %d, ignore video after packet %d, suppress PLI and "
+"disable silence restart; keyframe wait limit %d ms\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:175
+#, c-format
+msgid ""
+"Test: drop packet %d, fail %d recovery keyframes, continue PLI; restart "
+"deadline %d ms\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:180
+#, c-format
+msgid ""
+"Test: drop packet %d, disable silence restart, wait up to %d ms for "
+"recovery; fail %d recovery keyframes and suppress PLI after the first "
+"failure\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:187
+#, c-format
+msgid "PLI remains enabled while recovery keyframes repeatedly fail decoding\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:210
+#, c-format
+msgid "  +%-6llu ms  Waiting for keyframe: PLI suppressed %llu times\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:217
+#, c-format
+msgid "  +%-6llu ms  Keyframe wait triggered restart (stall_restarts=%llu)\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:227
+#, c-format
+msgid "  +%-6llu ms  Video entered fallback (restarts=%llu decoded=%llu)\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:232
+#, c-format
+msgid ""
+"  +%-6llu ms  Video recovered from fallback (restarts=%llu decoded=%llu)\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:245
+#, c-format
+msgid ""
+"  +%-6llu ms  Decode failure injected; baseline: dropped AU=%llu "
+"decoded=%llu suppressed PLI=%llu\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:257
+#, c-format
+msgid ""
+"  +%-6llu ms  Failure observation ended (%llu ms): dropped AU +%llu, decoded "
+"frames +%llu\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:266
+#, c-format
+msgid "  +%-6llu ms  Sender reports received=%llu\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:274
+#, c-format
+msgid ""
+"\n"
+"Summary: packets=%llu (video=%llu SR=%llu) gaps=%llu PLI=%llu "
+"(suppressed=%llu) AU=%llu dropped=%llu decoded=%llu injected failures=%llu "
+"stall restarts=%llu total restarts=%llu\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:293
+#, c-format
+msgid ""
+"Startup failure test: fallback at +%llu ms (restarts=%llu decoded=%llu), "
+"recovery=%s, final decoded frames=%llu\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:302
+#, c-format
+msgid "FAIL: video did not enter fallback after reaching the restart limit\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:307
+#, c-format
+msgid ""
+"INCONCLUSIVE: no recovery after fallback during the %s ms observation; "
+"fallback retries are 60 seconds apart, so --watch must allow enough time\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:313
+#, c-format
+msgid ""
+"Recovery observed: fallback at +%llu ms after %llu restarts; video recovered "
+"at +%llu ms (%llu ms after fallback); final decoded frames=%llu total "
+"restarts=%llu\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:324
+#, c-format
+msgid ""
+"INCONCLUSIVE: no recovery keyframe received for decode failure injection; "
+"check whether packet %d belongs to the startup IDR\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:330
+#, c-format
+msgid ""
+"After injected failure (%llu ms): dropped AU +%llu, decoded frames +%llu, "
+"suppressed PLI +%llu\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:340
+#, c-format
+msgid ""
+"FAIL: within %llu ms after injected keyframe failure, %llu frames were "
+"published; recovery state was cleared before successful keyframe decoding\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:348
+#, c-format
+msgid ""
+"INCONCLUSIVE: neither dropped AU nor decoded frames increased during the "
+"observation window; no video progress to compare\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:353
+#, c-format
+msgid "FAIL: recovery state held (%llu AU dropped), but restart %s\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:355
+msgid "was not observed"
+msgstr ""
+
+#: tools/stall_probe.cpp:356
+msgid "occurred only before the injected failure"
+msgstr ""
+
+#: tools/stall_probe.cpp:361
+#, c-format
+msgid ""
+"FAIL: repeated failed keyframes delayed restart by %llu ms (limit %d ms plus "
+"1000 ms tolerance)\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:367
+#, c-format
+msgid ""
+"Recovery state held: failure at +%-llu ms, %llu ms window with %llu AU "
+"dropped and no published frames; restart at +%-llu ms (%llu ms after "
+"failure, limit %d ms); decoded frames after restart=%llu\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:378
+#, c-format
+msgid ""
+"INCONCLUSIVE: packet loss was not injected; fewer than %d video packets may "
+"have arrived\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:384
+#, c-format
+msgid ""
+"INCONCLUSIVE: keyframe waiting was not observed; restart conditions were not "
+"reached\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:388
+#, c-format
+msgid "FAIL: no restart observed within %d ms after packet loss\n"
+msgstr ""
+
+#: tools/stall_probe.cpp:393
+#, c-format
+msgid ""
+"Restart observed: %llu ms after packet loss, %llu ms after keyframe waiting "
+"began (limit %d ms); decoded frames after restart=%llu\n"
 msgstr ""
 
 #: tools/wifi_probe.cpp:72

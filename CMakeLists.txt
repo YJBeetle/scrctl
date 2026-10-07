@@ -307,6 +307,12 @@ if(SCRCTL_BUILD_TESTS)
     add_test(NAME wifi_probe_cli COMMAND "${Python3_EXECUTABLE}"
         "${PROJECT_SOURCE_DIR}/tests/wifi_probe_cli_test.py" "$<TARGET_FILE:wifi_probe>")
     set_tests_properties(wifi_probe_cli PROPERTIES TIMEOUT 30)
+    add_test(NAME stall_probe_cli COMMAND "${Python3_EXECUTABLE}"
+        "${PROJECT_SOURCE_DIR}/tests/stall_probe_cli_test.py" "$<TARGET_FILE:stall_probe>")
+    set_tests_properties(stall_probe_cli PROPERTIES TIMEOUT 30)
+    add_test(NAME audio_pump_probe_cli COMMAND "${Python3_EXECUTABLE}"
+        "${PROJECT_SOURCE_DIR}/tests/audio_pump_probe_cli_test.py" "$<TARGET_FILE:audio_pump_probe>")
+    set_tests_properties(audio_pump_probe_cli PROPERTIES TIMEOUT 30)
     add_test(NAME i18n COMMAND "${Python3_EXECUTABLE}"
         "${PROJECT_SOURCE_DIR}/tests/i18n_test.py" "$<TARGET_FILE:scrctl>")
     set_tests_properties(i18n PROPERTIES TIMEOUT 30)
@@ -479,7 +485,7 @@ add_executable(stall_probe tools/stall_probe.cpp)
 target_link_libraries(stall_probe PRIVATE scrctl_app CLI11::CLI11)
 
 add_executable(audio_pump_probe tools/audio_pump_probe.cpp)
-target_link_libraries(audio_pump_probe PRIVATE scrctl_core)
+target_link_libraries(audio_pump_probe PRIVATE scrctl_core CLI11::CLI11)
 
 # M5：对我们自己的 RemotePairing 实现做真机握手（要设备在同一网络上）。
 add_executable(wifi_probe tools/wifi_probe.cpp)
