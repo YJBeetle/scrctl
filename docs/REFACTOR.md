@@ -9,7 +9,7 @@ scrctl 是独立产品，也是设备协议与恢复行为的验证项目。MaaF
 | --- | --- | --- |
 | JSON | 已使用 nlohmann/json，删除 jsonlite | 通用解析替换已完成，保留输入限制和协议取值辅助 |
 | CLI | 已使用 CLI11，触摸和按键校验前移 | crop、颜色、测试时刻表等领域规则仍由项目处理 |
-| main 职责拆分 | 入口 5 行，独立命令与应用启动已拆入 Commands | LiveSource 的统计职责仍可继续收敛 |
+| main 职责拆分 | 入口 5 行，Commands 负责独立命令，LiveStats 负责统计 | 继续复审模块协作及异常退出，不增加公共 SDK |
 | XML / binary plist | XML 使用 pugixml；起流改为 XML，通用 binary 编解码已删除 | macOS USB 视频/音频对照通过；其他设备系统版本仍需回归 |
 | IPv6 / TCP / UDP 用户态栈 | 已使用 lwIP；删除旧 TCP 和手工 UDP 收发 | USB / Wi-Fi 视频、截图切换已通过；物理断线、多设备及长时间运行待验证 |
 | HTTP/2 | 已完成 nghttp2 第一轮评估，生产仍自实现 | 控制流和内联大回复兼容；偶数文件流存在限制，真机 FileTransfer 子流尚未触发 |
@@ -34,12 +34,13 @@ XPC、OPACK、Apple 配对和控制语义、SRP 的 Apple 适配、Deflate 小�
 | `Presenter` | SDL 窗口、渲染、回读和鼠标坐标映射 |
 | `FrameSource` | 应用内统一的已解码画面来源 |
 | `FileSource` | Annex-B 文件解析、解码和队列背压 |
-| `LiveSource` | 设备会话、画面源切换、输入与统计 |
+| `LiveSource` | 设备会话、画面源切换、输入及统计快照采集 |
+| `LiveStats` | 快照输出、各媒体独立的统计时间与计数基线 |
 | `AudioOut` | SDL 声卡输出；音频接收与解码仍在 AudioPump |
 
 `src/app` 内这些类型是应用实现，不承诺外部接口稳定。
 媒体恢复状态机继续由 FramePump / ScreenshotSource 承担，模块拆分保留其调用顺序、
-退避、线程回收和停止逻辑。LiveSource 的恢复编排与统计职责仍可继续细化。
+退避、线程回收和停止逻辑。统计已从 LiveSource 拆入 LiveStats；恢复编排仍可随复审继续细化。
 
 ## 通用解析
 
@@ -359,3 +360,13 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
 - 旧 CI 的 Ubuntu 仅 i18n 失败：glibc 将 C.UTF-8 视为 C 消息 locale，忽略 LANGUAGE。
   修改为优先可用的中英文 UTF-8 locale；glibc 只有 C 类 locale 时正常使用英文。
   默认 auto 仍跟随 LC_ALL / LC_MESSAGES / LANG；显式语言覆盖规则不变。
+
+## 第二十七轮：实时源统计职责
+
+- `LiveSource` 只采集网络、截图、视频、音频与声卡的值快照；`LiveStats` 负责
+  输出及时间/计数基线，不持有设备、媒体泵、线程或声卡资源。
+- 保留各源创建时的统计时刻、截图优先输出和后台视频/音频的独立采样窗口；
+  每次安装新截图源时显式重置截图基线，媒体停止及逆序析构顺序不变。
+- 声卡交付计数只采样一次，同一数值用于本次速率和下次基线，避免两次读取之间
+  新交付的采样被遗漏。统计提示文本和中英文消息不变。
+- macOS 全套离线回归 23/23。手机已被用户带走，本轮没有新增真机验证。

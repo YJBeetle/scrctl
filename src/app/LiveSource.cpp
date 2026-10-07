@@ -5,7 +5,6 @@
 #include "app/Reap.h"
 #include "app/SourcePick.h"
 #include "app/ViewGeom.h"
-#include <algorithm>
 #include <cstdio>
 
 namespace scrctl::app {
@@ -83,7 +82,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
         pump_ = scrctl::media::FramePump::start(*device_, options, err);
         if (pump_ != nullptr) {
             // 创建媒体泵时建立统计时间基线，首次速率使用真实经过的时间。
-            last_stream_ms_ = SDL_GetTicks64();
+            stats_.video_started(SDL_GetTicks64());
         }
     }
     if (pump_ == nullptr) {
@@ -176,7 +175,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             } else {
                 // 音频统计使用独立时间基线。切到截图期间音频仍在独立线程接收和解码，
                 // 不能用视频统计窗口计算这段音频增量。
-                last_audio_ms_ = SDL_GetTicks64();
+                stats_.audio_started(SDL_GetTicks64());
                 std::printf(SCRCTL_TR("Audio stream started: receive port=%u PT=%u backend=%s\n"), audio_->receiver_port(),
                             audio_->payload_type(), audio_->backend_name().c_str());
             }
@@ -273,7 +272,9 @@ bool LiveSource::start_screenshot(bool capture_first, std::string &err) {
         return false;
     }
     // 新源从序号 0 起算；统计基线和时钟必须一起换，防止漏帧、无符号下溢或速率虚高。
-    screenshot_ = ScreenshotState{std::move(source), 0, SDL_GetTicks64(), 0, std::nullopt};
+    const uint64_t now = SDL_GetTicks64();
+    screenshot_ = ScreenshotState{std::move(source), 0, std::nullopt};
+    stats_.reset_screenshot(now);
     return true;
 }
 
@@ -339,163 +340,40 @@ std::string LiveSource::end_reason() const {
 }
 
 void LiveSource::print_stats() {
-    // TCP 字节统计包括实时流和截图连接；lwIP 已负责缓存和恢复乱序段。
+    LiveStats::Snapshot snapshot;
     if (device_ != nullptr && device_->stack() != nullptr) {
-        const auto c = device_->stack()->tcp_counters();
-        const uint64_t now = SDL_GetTicks64();
-        const double span = last_tcp_ms_ == 0 ? 1.0 : std::max(0.001, (now - last_tcp_ms_) / 1000.0);
-        const auto delta = c.recv_bytes >= last_tcp_recv_ ? c.recv_bytes - last_tcp_recv_ : 0;
-        std::printf(SCRCTL_TR("  Tunnel TCP: receive %.1f KiB/s, total %.2f MiB (lwIP)\n"),
-                    delta / 1024.0 / span, c.recv_bytes / (1024.0 * 1024.0));
-        if (device_->stack()->net_debug()) {
-            std::printf(SCRCTL_TR("  Network diagnostics: bad checksums %llu, ICMPv6 %llu, echo replies %llu\n"),
-                        static_cast<unsigned long long>(device_->stack()->bad_checksums()),
-                        static_cast<unsigned long long>(device_->stack()->icmp_seen()),
-                        static_cast<unsigned long long>(device_->stack()->echo_replies()));
+        const auto *stack = device_->stack();
+        LiveStats::Tcp tcp;
+        tcp.recv_bytes = stack->tcp_counters().recv_bytes;
+        tcp.now_ms = SDL_GetTicks64();
+        tcp.net_debug = stack->net_debug();
+        if (tcp.net_debug) {
+            tcp.bad_checksums = stack->bad_checksums();
+            tcp.icmp_seen = stack->icmp_seen();
+            tcp.echo_replies = stack->echo_replies();
         }
-        last_tcp_ms_ = now;
-        last_tcp_recv_ = c.recv_bytes;
+        snapshot.tcp = tcp;
     }
     if (screenshot_.source != nullptr) {
-        // 截图统计报告本次速率、累计张数、数据量和失败数。使用独立时间窗口，
-        // 失败数可用于观察设备是否开始拒绝截图。
-        const auto st = screenshot_.source->stats();
-        const uint64_t now = SDL_GetTicks64();
-        // 截图和媒体统计分别维护时钟及计数基线，防止切回实时流时将整个截图
-        // 期间的增量除以单次打印间隔。
-        const double secs = scrctl::app::settle_window(now, screenshot_.stats_ms);
-        // 新截图源从零计数；安装源时重置基线，计算差值时再防止无符号下溢。
-        const uint64_t shot_frames = scrctl::app::counter_delta(st.frames, screenshot_.frames_base);
-        std::printf(SCRCTL_TR("  Screenshots: %5.2f/s, total %llu images / %llu KiB, %llu failures\n"),
-                    static_cast<double>(shot_frames) / secs,
-                    static_cast<unsigned long long>(st.frames),
-                    static_cast<unsigned long long>(st.bytes / 1024),
-                    static_cast<unsigned long long>(st.failures));
-        return;
+        snapshot.screenshot = LiveStats::Screenshot{screenshot_.source->stats(), SDL_GetTicks64()};
+    } else if (pump_ != nullptr) {
+        snapshot.video = LiveStats::Video{pump_->stats(), SDL_GetTicks64()};
+        if (audio_ != nullptr) {
+            LiveStats::Audio audio;
+            audio.counters = audio_->stats();
+            audio.delivered = audio_out_.delivered();
+            audio.output_open = audio_out_.dev_open();
+            if (audio.output_open) {
+                if (const char *driver = SDL_GetCurrentAudioDriver()) {
+                    audio.output_driver = driver;
+                }
+            }
+            audio.silence = audio_out_.silence();
+            audio.buffered_frames = audio_->buffered_frames();
+            snapshot.audio = std::move(audio);
+        }
     }
-    if (pump_ == nullptr) {
-        return;
-    }
-    const auto st = pump_->stats();
-    const uint64_t now = SDL_GetTicks64();
-    const double secs = scrctl::app::settle_window(now, last_stream_ms_);
-    const auto rate = [&](uint64_t now_value, uint64_t before) {
-        return static_cast<double>(now_value - before) / secs;
-    };
-    // SR 更新间隔可能超过一秒，空闲时实测超过四秒。设备速率按两次 SR
-    // 变化之间的真实时间计算，并报告该间隔，不能直接使用日志打印周期。
-    double dev_rate = 0;
-    uint64_t dev_span_ms = 0;
-    // 新会话的设备累计计数从零开始，计算差值前处理计数回退。
-    const bool dev_reset = st.dev_sent_packets < last_dev_packets_;
-    if (dev_reset) {
-        last_dev_packets_ = st.dev_sent_packets;
-        last_dev_change_ms_ = now;
-        last_dev_rate_ = 0;
-    } else if (st.dev_sent_packets != last_dev_packets_ && last_dev_change_ms_ != 0) {
-        dev_span_ms = now - last_dev_change_ms_;
-        dev_rate = static_cast<double>(st.dev_sent_packets - last_dev_packets_) /
-                   std::max(0.001, dev_span_ms / 1000.0);
-    } else {
-        // 没有新 SR 时保留上次设备速率及其采样间隔。
-        dev_rate = last_dev_rate_;
-        dev_span_ms = last_dev_span_ms_;
-    }
-    // 设备 SR 按会话计数，本地 packets 按进程累计。减去会话基线后再比较，
-    // 避免将旧会话的数据误算为当前会话丢包。
-    const uint64_t mine_session =
-        st.packets > st.session_packets_base ? st.packets - st.session_packets_base : 0;
-    std::printf(SCRCTL_TR(
-        "  Video: device video packets %6.0f/s, local datagrams (including RTCP) "
-        "%6.0f/s, assembled %5.1f/s, decoded %5.1f/s\n"), dev_rate,
-                rate(st.packets, last_packets_), rate(st.aus, last_aus_),
-                rate(st.decoded, last_decoded_));
-    // 设备速率按 SR 更新间隔计算，本地速率按打印间隔计算，两者时间窗口
-    // 不同，不能直接相减判断丢包。输出两个窗口，并单独报告 RTP 序号缺口。
-    if (dev_span_ms == 0) {
-        std::printf(SCRCTL_TR("      Sampling: device SR not received yet, local %.1f s\n"), secs);
-    } else {
-        std::printf(SCRCTL_TR(
-            "      Sampling: device %.1f s, local %.1f s (different intervals; rates cannot "
-            "be subtracted directly)\n"),
-                    dev_span_ms / 1000.0, secs);
-    }
-    // 设备 SR 报告累计视频包，本地数据报计数含 RTCP，两者均按当前会话
-    // 显示但不能直接相减；AU 和解码计数跨会话累计。
-    std::printf(SCRCTL_TR(
-        "      Current session: device video packets %llu, local datagrams (including "
-        "RTCP) %llu; all sessions: assembled %llu, decoded %llu\n"),
-                static_cast<unsigned long long>(st.dev_sent_packets),
-                static_cast<unsigned long long>(mine_session),
-                static_cast<unsigned long long>(st.aus),
-                static_cast<unsigned long long>(st.decoded));
-    std::printf(SCRCTL_TR("      Per frame: depacketize %.1f ms, decode %.1f ms, deliver %.1f ms (%llu AU calls)\n"),
-                (st.ms_depacketize) / std::max<uint64_t>(1, st.packets),
-                st.ms_decode / std::max<uint64_t>(1, st.decode_calls),
-                st.ms_publish / std::max<uint64_t>(1, st.decode_calls),
-                static_cast<unsigned long long>(st.decode_calls));
-    // 拆包器计数随会话重建而清零；泵计数跨会话累加，输出中分别标明范围。
-    std::printf(SCRCTL_TR("      Current session: non-video packets %llu, sequence gaps %llu, dropped fragments %llu\n"),
-                static_cast<unsigned long long>(st.other_payload),
-                static_cast<unsigned long long>(st.gaps),
-                static_cast<unsigned long long>(st.dropped_fragments));
-    std::printf(SCRCTL_TR(
-        "      All sessions: no output %llu, dropped waiting for keyframe %llu, restarts "
-        "%llu, oversized NAL drops %llu\n"),
-                static_cast<unsigned long long>(st.no_output),
-                static_cast<unsigned long long>(st.dropped_awaiting_keyframe),
-                static_cast<unsigned long long>(st.restarts),
-                static_cast<unsigned long long>(st.dropped_oversized));
-    // 视频数据报和 SR 接收计数跨会话累加。视频停止但 SR 增长可能只是画面
-    // 静止；两者都停止时需要检查连接或会话。RR 是本地发出的保活反馈，
-    // 发送成功不等同于设备已经收到。
-    std::printf(SCRCTL_TR("      All sessions: video packets %llu, SR %llu, sent RR %llu, PLI %llu\n"),
-                static_cast<unsigned long long>(st.video_packets),
-                static_cast<unsigned long long>(st.sr_packets),
-                static_cast<unsigned long long>(st.rtcp_sent),
-                static_cast<unsigned long long>(st.pli_sent));
-    if (audio_ != nullptr) {
-        const auto as = audio_->stats();
-        // 音频使用独立统计窗口；截图模式期间也在持续收包和解码。
-        // 不能把音频增量除以视频分支的计时窗口。音频无声时仍可收到静音包，
-        // 持续收包率降到零可作为排查连接或会话的线索。
-        const double audio_secs = scrctl::app::settle_window(now, last_audio_ms_);
-        const auto arate = [&](uint64_t now_value, uint64_t before) {
-            return static_cast<double>(now_value - before) / audio_secs;
-        };
-        std::printf(SCRCTL_TR(
-            "  Audio: received %6.0f packets/s, decoded %6.0f packets/s, delivered %6.0f "
-            "frames/s (output=%s)\n"),
-                    arate(as.packets, last_audio_packets_), arate(as.decoded, last_audio_decoded_),
-                    arate(audio_out_.delivered(), last_audio_delivered_),
-                    audio_out_.dev_open() ? SDL_GetCurrentAudioDriver() : SCRCTL_TR("closed"));
-        std::printf(SCRCTL_TR(
-            "      All sessions: decode failures %llu, lost %llu, late %llu, dropped old "
-            "samples %llu, adjusted samples %llu, silence fill %llu, RR sent/failed "
-            "%llu/%llu, restarts %llu, buffered %zu frames, interval %.1f s\n"),
-                    static_cast<unsigned long long>(as.decode_failed),
-                    static_cast<unsigned long long>(as.seq_lost),
-                    static_cast<unsigned long long>(as.out_of_order),
-                    static_cast<unsigned long long>(as.dropped_stale),
-                    static_cast<unsigned long long>(as.steered),
-                    static_cast<unsigned long long>(audio_out_.silence()),
-                    static_cast<unsigned long long>(as.rtcp_sent),
-                    static_cast<unsigned long long>(as.rtcp_failed),
-                    static_cast<unsigned long long>(as.restarts), audio_->buffered_frames(),
-                    audio_secs);
-        last_audio_packets_ = as.packets;
-        last_audio_decoded_ = as.decoded;
-        last_audio_delivered_ = audio_out_.delivered();
-    }
-    last_packets_ = st.packets;
-    if (st.dev_sent_packets != last_dev_packets_) {
-        last_dev_rate_ = dev_rate;
-        last_dev_span_ms_ = dev_span_ms;
-        last_dev_change_ms_ = now;
-        last_dev_packets_ = st.dev_sent_packets;
-    }
-    last_aus_ = st.aus;
-    last_decoded_ = st.decoded;
+    stats_.print(snapshot);
 }
 
 } // namespace scrctl::app

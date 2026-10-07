@@ -202,7 +202,8 @@ add_library(scrctl_app STATIC
         src/app/FileSource.cpp
         src/app/Cli.cpp
         src/app/DeviceConnection.cpp
-        src/app/LiveSource.cpp)
+        src/app/LiveSource.cpp
+        src/app/LiveStats.cpp)
 target_link_libraries(scrctl_app PUBLIC scrctl_core Scrctl::SDL2 PRIVATE CLI11::CLI11)
 target_compile_options(scrctl_app PRIVATE -Wall -Wextra)
 target_compile_definitions(scrctl_app PRIVATE SCRCTL_VERSION_STRING="${PROJECT_VERSION}")

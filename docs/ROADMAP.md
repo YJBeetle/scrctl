@@ -25,8 +25,8 @@
   [适配记录](NGHTTP2_COMPATIBILITY.md)。后续还需复审输入缓冲与流状态边界。
 - plist：起流已改用 XML，通用 binary 编解码删除；macOS USB 视频和音频对照通过，
   其他 iOS / iPadOS 版本的 XML 协商需要设备回归，见 [格式记录](BPLIST_COMPATIBILITY.md)。
-- 应用：命令分支已拆入 Commands，继续收敛 LiveSource 统计职责，并对照旧 review
-  逐项确认仍有效的问题；模块拆分不等于所有生命周期路径已经验证。
+- 应用：独立命令与统计已拆入 Commands / LiveStats，继续对照旧 review
+  确认模块协作及退出问题；模块拆分不等于所有生命周期路径已经验证。
 - 库嵌入：TLS 当前使用进程级 SIGPIPE 忽略策略，会影响宿主信号处理。MaaFramework
   接入暂缓，后续需要在宿主场景中评估这一行为；当前不建立公共 SDK 或稳定 C ABI。
 

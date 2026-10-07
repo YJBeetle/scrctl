@@ -2,7 +2,7 @@
 
 #include "app/AudioOut.h"
 #include "app/FrameSource.h"
-#include "app/StatsWindow.h"
+#include "app/LiveStats.h"
 #include "hid/Hid.h"
 #include "media/FramePump.h"
 #include "media/ScreenshotSource.h"
@@ -78,25 +78,7 @@ class LiveSource final : public FrameSource {
     /// Device 之后声明，并先关闭声卡、停止音频线程，再销毁设备。
     std::unique_ptr<scrctl::media::AudioPump> audio_;
     AudioOut audio_out_;
-    uint64_t last_packets_ = 0;
-    uint64_t last_dev_packets_ = 0;
-    uint64_t last_dev_change_ms_ = 0;
-    double last_dev_rate_ = 0;
-    /// 上次设备速率计算使用的 SR 更新间隔，输出时与本地采样窗口分别标明。
-    uint64_t last_dev_span_ms_ = 0;
-    uint64_t last_aus_ = 0;
-    uint64_t last_decoded_ = 0;
-    uint64_t last_audio_packets_ = 0;
-    uint64_t last_audio_decoded_ = 0;
-    uint64_t last_audio_delivered_ = 0;
-    /// 视频和音频分别维护计数与时间基线，截图另有独立状态。切换画面源时，
-    /// 后台媒体和音频仍累计数据，不能用截图的打印时钟计算它们的增量。
-    /// 各源建立时初始化时钟，首次统计使用真实经过的时间。
-    uint64_t last_stream_ms_ = 0;
-    uint64_t last_audio_ms_ = 0;
-    /// 隧道 TCP 的统计时钟，不随画面来源切换。
-    uint64_t last_tcp_ms_ = 0;
-    uint64_t last_tcp_recv_ = 0;
+    LiveStats stats_;
     /// 设备可见区尺寸，未知为 0/0。
     int display_w_ = 0;
     int display_h_ = 0;
@@ -114,12 +96,10 @@ class LiveSource final : public FrameSource {
     bool hid_unavailable_ = false;
     uint64_t serial_ = 0;
 
-    // 截图源的序号和统计随每次新源一起重置，只由 start_screenshot 安装。
+    // 截图源的序号和失败状态随每次新源一起重置，只由 start_screenshot 安装。
     struct ScreenshotState {
         std::unique_ptr<scrctl::media::ScreenshotSource> source;
         uint64_t serial = 0;
-        uint64_t stats_ms = 0;
-        uint64_t frames_base = 0;
         std::optional<uint64_t> failed_at;
     } screenshot_;
     /// 切回实时流后，request_stop 的截图源暂存在此。next() 仅回收 worker 已
