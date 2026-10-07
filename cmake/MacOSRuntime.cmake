@@ -2,6 +2,10 @@
 # 根就是 bin，所以库放在 bin/lib，避免它的安全检查拒绝修改根目录外的文件。
 target_link_options(scrctl PRIVATE "-Wl,-headerpad_max_install_names")
 install(CODE [[
+    # --prefix dist-macos 会保留相对路径；BundleUtilities 的已解析依赖使用
+    # 绝对路径，安全边界比较要求 executable 根也一致。安装阶段再标准化，
+    # 既支持命令行覆盖 prefix，也不会改变 configure 时的安装目录选择。
+    get_filename_component(CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}" ABSOLUTE)
     # 独立 CLI 会让 BundleUtilities 扫描整个 bin；提前拒绝共享前缀，避免
     # 用户误把 /usr/local/bin 或其他已有程序的目录当成可移动包来修复。
     set(scrctl_root "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}")
