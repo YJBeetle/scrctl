@@ -41,6 +41,15 @@ int main() {
     Options empty;
     check(parse({"scrctl", "--title", ""}, empty) == ParseResult::Run && empty.title.empty(),
           "explicit empty string argument");
+    check(!defaults.copy_text, "clipboard write is absent by default");
+    Options empty_copy;
+    check(parse({"scrctl", "--copy", ""}, empty_copy) == ParseResult::Run &&
+              empty_copy.copy_text && empty_copy.copy_text->empty(),
+          "explicit empty clipboard write remains a standalone command");
+    Options unicode_copy;
+    check(parse({"scrctl", "--copy=中文🙂", "--paste"}, unicode_copy) == ParseResult::Run &&
+              unicode_copy.copy_text && *unicode_copy.copy_text == "中文🙂" && unicode_copy.paste,
+          "Unicode clipboard write and read-back options remain distinct");
     Options input;
     check(parse({"scrctl", "--test-touch", "0,.25,.75,1", "--test-button", "home"}, input) ==
               ParseResult::Run && input.test_touch == std::vector<double>({0, .25, .75, 1}) &&

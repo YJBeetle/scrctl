@@ -56,7 +56,7 @@ std::optional<int> run_standalone_command(const Options &o) {
     // ASCII；中文和 emoji 应使用剪贴板。
     // 同时指定 --copy 和 --paste 时，写入后读回验证。设备可能对无效结构返回
     // SET_REPLY 后丢弃内容，例如 types 为空时，仅检查写入回复不能确认保存成功。
-    if (!o.copy_text.empty() || o.paste) {
+    if (o.copy_text || o.paste) {
         std::string err;
         auto dev = open_device(o.serial, o.wifi, err);
         if (!dev) {
@@ -64,9 +64,9 @@ std::optional<int> run_standalone_command(const Options &o) {
             return 1;
         }
         int rc = 0;
-        if (!o.copy_text.empty()) {
-            if (scrctl::remote::Pasteboard::set_text(*dev, o.copy_text, err)) {
-                std::printf(SCRCTL_TR("Wrote %zu bytes to device clipboard\n"), o.copy_text.size());
+        if (o.copy_text) {
+            if (scrctl::remote::Pasteboard::set_text(*dev, *o.copy_text, err)) {
+                std::printf(SCRCTL_TR("Wrote %zu bytes to device clipboard\n"), o.copy_text->size());
             } else {
                 std::fprintf(stderr, SCRCTL_TR("--copy failed: %s\n"), err.c_str());
                 rc = 1;
@@ -75,7 +75,9 @@ std::optional<int> run_standalone_command(const Options &o) {
         if (o.paste) {
             std::string text;
             if (scrctl::remote::Pasteboard::get_text(*dev, text, err)) {
-                std::printf(SCRCTL_TR("Device clipboard (%zu bytes): %s\n"), text.size(), text.c_str());
+                std::printf(SCRCTL_TR("Device clipboard (%zu bytes): "), text.size());
+                std::fwrite(text.data(), 1, text.size(), stdout);
+                std::putchar('\n');
             } else {
                 std::fprintf(stderr, SCRCTL_TR("--paste failed: %s\n"), err.c_str());
                 rc = 1;

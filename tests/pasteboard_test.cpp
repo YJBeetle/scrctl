@@ -64,10 +64,38 @@ int main() {
     check(policy != nullptr && policy->find("allResolved") != nullptr, "那个键是 allResolved");
 
     std::printf("\n== 从回信里取文本 ==\n");
-    check(Pasteboard::find_text(pull) == nullptr, "不是 PULL_REPLY 的回信取不出文本");
+    check(!Pasteboard::find_text(pull), "不是 PULL_REPLY 的回信取不出文本");
     Value reply = make_dict();
     dict_set(reply, "command", make_string("PULL_REPLY"));
-    check(Pasteboard::find_text(reply) == nullptr, "没有 pasteboard 字段时返回 nullptr");
+    check(!Pasteboard::find_text(reply), "没有 pasteboard 字段时没有文本结果");
+
+    const auto text_reply = [](const std::string &text) {
+        auto result = scrctl::xpc::make_dict();
+        scrctl::xpc::dict_set(result, "pasteboard", Pasteboard::build_set(text));
+        return result;
+    };
+    const auto first = Pasteboard::find_text(text_reply("第一段文本"));
+    check(first && *first == "第一段文本", "提取 UTF-8 文本");
+    const auto second = Pasteboard::find_text(text_reply("第二段文本"));
+    check(second && *second == "第二段文本", "提取第二段文本");
+    check(first && *first == "第一段文本", "后续提取不改写此前结果");
+    const auto empty_text = Pasteboard::find_text(text_reply(""));
+    check(empty_text && empty_text->empty(), "空 Data 是存在的空文本，不是缺少文本表示");
+    const std::string embedded_nul("A\0B", 3);
+    const auto binary_text = Pasteboard::find_text(text_reply(embedded_nul));
+    check(binary_text && *binary_text == embedded_nul, "文本按 Data 长度读取，保留内嵌零字节");
+    auto invalid_snapshot = Pasteboard::build_set("text");
+    auto invalid_items = invalid_snapshot.at("items");
+    auto &item = invalid_items.array.front();
+    auto wrong_data = make_dict();
+    auto wrong_representation = make_dict();
+    dict_set(wrong_representation, "data", make_string("not Data"));
+    dict_set(wrong_data, "public.utf8-plain-text", std::move(wrong_representation));
+    dict_set(item, "data", std::move(wrong_data));
+    dict_set(invalid_snapshot, "items", std::move(invalid_items));
+    auto wrong_type_reply = make_dict();
+    dict_set(wrong_type_reply, "pasteboard", std::move(invalid_snapshot));
+    check(!Pasteboard::find_text(wrong_type_reply), "同名字段不是 Data 时不当作空文本");
 
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;

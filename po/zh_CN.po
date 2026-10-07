@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 15:34+0800\n"
+"POT-Creation-Date: 2026-10-07 16:09+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -385,39 +385,39 @@ msgstr "--copy 写入失败: %s\n"
 
 #: src/app/Commands.cpp:78
 #, c-format
-msgid "Device clipboard (%zu bytes): %s\n"
-msgstr "设备剪贴板（%zu 字节）：%s\n"
+msgid "Device clipboard (%zu bytes): "
+msgstr "设备剪贴板（%zu 字节）： "
 
-#: src/app/Commands.cpp:80
+#: src/app/Commands.cpp:82
 #, c-format
 msgid "--paste failed: %s\n"
 msgstr "--paste 读取失败: %s\n"
 
-#: src/app/Commands.cpp:106
+#: src/app/Commands.cpp:108
 #, c-format
 msgid "--start-app requires a nonempty app name\n"
 msgstr "--start-app 的名字是空的\n"
 
-#: src/app/Commands.cpp:116
+#: src/app/Commands.cpp:118
 #, c-format
 msgid "Failed to find app by name: %s\n"
 msgstr "按名字找 App 失败: %s\n"
 
-#: src/app/Commands.cpp:134
+#: src/app/Commands.cpp:136
 #, c-format
 msgid "No app name starts with %s\n"
 msgstr "没有名字以 %s 开头的 App\n"
 
-#: src/app/Commands.cpp:142
+#: src/app/Commands.cpp:144
 #, c-format
 msgid "Failed to launch %s: %s\n"
 msgstr "启动 %s 失败: %s\n"
 
-#: src/app/Commands.cpp:145
+#: src/app/Commands.cpp:147
 msgid " (previous instance terminated)"
 msgstr "（已先终止原实例）"
 
-#: src/app/Commands.cpp:145
+#: src/app/Commands.cpp:147
 #, c-format
 msgid "Launched %s%s\n"
 msgstr "已启动 %s%s\n"
@@ -840,7 +840,7 @@ msgstr "存在无效字符：\""
 msgid "Schedule requires at least one time"
 msgstr "时刻表至少需要一个时刻"
 
-#: src/decode/AudioDecoder.h:52
+#: src/decode/AudioDecoder.h:54
 msgid ""
 "AAC-ELD decoding is unavailable on this platform. This build uses "
 "AudioToolbox on macOS; the tested native FFmpeg AAC decoder does not support "
@@ -849,19 +849,19 @@ msgstr ""
 "此平台没有 AAC-ELD 解码后端。本项目在 macOS 使用 AudioToolbox；已测试的 "
 "FFmpeg 原生 AAC 解码器不支持 ELD。视频可继续运行。"
 
-#: src/decode/AudioToolboxEldDecoder.cpp:100
+#: src/decode/AudioToolboxEldDecoder.cpp:86
 msgid "Failed to allocate AudioBufferList"
 msgstr "分配 AudioBufferList 失败"
 
-#: src/decode/AudioToolboxEldDecoder.cpp:113
+#: src/decode/AudioToolboxEldDecoder.cpp:99
 msgid "AudioConverterFillComplexBuffer failed: "
 msgstr "AudioConverterFillComplexBuffer 失败: "
 
-#: src/decode/AudioToolboxEldDecoder.cpp:160
+#: src/decode/AudioToolboxEldDecoder.cpp:146
 msgid "AudioConverterNew failed: "
 msgstr "AudioConverterNew 失败: "
 
-#: src/decode/Decoder.h:76
+#: src/decode/Decoder.h:77
 msgid ""
 "No HEVC decoder in this build. Non-Apple platforms require FFmpeg "
 "development packages. Install them and reconfigure (Debian/Ubuntu: apt "
@@ -872,37 +872,37 @@ msgstr ""
 "（Debian/Ubuntu: apt install libavcodec-dev libavutil-dev libswscale-dev；"
 "Fedora: dnf install ffmpeg-devel）。\n"
 
-#: src/decode/FFmpegDecoder.cpp:42
+#: src/decode/FFmpegDecoder.cpp:37
 #, c-format
 msgid "FFmpeg has no HEVC decoder\n"
 msgstr "libavcodec 里没有 HEVC 解码器\n"
 
-#: src/decode/FFmpegDecoder.cpp:58
+#: src/decode/FFmpegDecoder.cpp:52
 #, c-format
 msgid "Failed to open FFmpeg HEVC decoder: %s\n"
 msgstr "libavcodec 打开 HEVC 解码器失败: %s\n"
 
-#: src/decode/FFmpegDecoder.cpp:111
+#: src/decode/FFmpegDecoder.cpp:105
 #, c-format
 msgid "FFmpeg rejected packet: %s\n"
 msgstr "libavcodec 收包失败: %s\n"
 
-#: src/decode/FFmpegDecoder.cpp:157
+#: src/decode/FFmpegDecoder.cpp:150
 #, c-format
 msgid "Software decoder requires CPU frames; received format=%d %dx%d\n"
 msgstr "软解后端只认 CPU 帧，收到 format=%d %dx%d\n"
 
-#: src/decode/VideoToolboxDecoder.cpp:66
+#: src/decode/VideoToolboxDecoder.cpp:59
 #, c-format
 msgid "Failed to parse HEVC parameter sets: %d\n"
 msgstr "HEVC 参数集解析失败: %d\n"
 
-#: src/decode/VideoToolboxDecoder.cpp:94
+#: src/decode/VideoToolboxDecoder.cpp:87
 #, c-format
 msgid "Failed to create VideoToolbox session: %d\n"
 msgstr "VideoToolbox 解码会话创建失败: %d\n"
 
-#: src/decode/VideoToolboxDecoder.cpp:216
+#: src/decode/VideoToolboxDecoder.cpp:211
 #, c-format
 msgid ""
 "NAL size %zu exceeds the 2-byte length prefix; frame dropped. This stream "
@@ -1718,19 +1718,19 @@ msgstr "收到的消息类型不匹配，预期为 "
 msgid " (value field missing): "
 msgstr "（缺少 value 字段）："
 
-#: src/remote/Pasteboard.cpp:92
+#: src/remote/Pasteboard.cpp:90
 msgid "SET failed: "
 msgstr "SET 失败: "
 
-#: src/remote/Pasteboard.cpp:97
+#: src/remote/Pasteboard.cpp:95
 msgid "SET response is not SET_REPLY: "
 msgstr "SET 的回信不是 SET_REPLY: "
 
-#: src/remote/Pasteboard.cpp:110
+#: src/remote/Pasteboard.cpp:108
 msgid "PULL failed: "
 msgstr "PULL 失败: "
 
-#: src/remote/Pasteboard.cpp:117
+#: src/remote/Pasteboard.cpp:115
 msgid "Response has no plain-text representation: "
 msgstr "响应缺少纯文本表示形式："
 
@@ -2833,3 +2833,7 @@ msgstr "载荷解码失败"
 #: src/xpc/XpcValue.cpp:702
 msgid ", received "
 msgstr ", 已到"
+
+#, c-format
+#~ msgid "Device clipboard (%zu bytes): %s\n"
+#~ msgstr "设备剪贴板（%zu 字节）：%s\n"

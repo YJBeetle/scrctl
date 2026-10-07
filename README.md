@@ -30,7 +30,7 @@ AAC 后端未能正确解码该流，不能据此推定其他库也不支持；
 [重构记录](docs/REFACTOR.md) 说明当前实现及验证边界；
 [路线图](docs/ROADMAP.md) 列出剩余工作。
 GitHub Actions 配置了 macOS、Ubuntu、Windows ARM64 和 ASan / UBSan 离线作业，真机测试单独进行。
-Windows ARM64 作业另保存安装产物；本轮新增配置尚未取得远端 CI 结果。
+Windows ARM64 和 macOS 作业另保存可搬移安装包；已下载的真实产物验证结果见各平台说明。
 
 ## 实现结构
 
@@ -136,6 +136,22 @@ scrctl --wifi 192.168.1.50 --stats
 scrctl --video-source screenshot
 scrctl --help
 ```
+
+## 剪贴板
+
+`--copy TEXT` 请求写入设备剪贴板，`--paste` 读取设备剪贴板并输出文本。
+这些命令完成后退出，可用于传递中文和 emoji；它们不会模拟设备上的粘贴动作。
+同时指定两者时，先写入再读回，便于检查设备实际保存的内容。
+
+```bash
+scrctl --copy "中文🙂"
+scrctl --paste
+scrctl --copy "" --paste
+```
+
+空文本应作为独立参数传入，例如 `--copy ""`；`--copy=` 按缺少参数处理。
+存在但长度为零的文本表示会成功读回；只有图片或没有文本表示时给出错误原因。
+输出按文本字节长度写入，包含内嵌零字节，终端未必能直接显示这类字符。
 
 ## 研究工具
 

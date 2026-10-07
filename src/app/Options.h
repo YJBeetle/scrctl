@@ -46,7 +46,8 @@ struct Options {
     /// + 先终止原实例；否则按 bundle ID 精确指定。
     std::string start_app;
     bool list_apps = false; ///< --list-apps：列出设备上装的 App 后退出
-    std::string copy_text;  ///< --copy TEXT：写进设备剪贴板后退出
+    /// --copy TEXT：写入设备剪贴板后退出；空字符串也是显式写入，未指定时不执行。
+    std::optional<std::string> copy_text;
     bool paste = false;     ///< --paste：读设备剪贴板打印后退出
     bool no_window = false; ///< --no-window：不起窗口，只收流（脚本/自动化用）
     /// --display-orientation：画面顺时针转这么多度。-1 = auto，跟着设备报的

@@ -18,8 +18,8 @@ xpc::Value Pasteboard::build_pull() {
     auto msg = xpc::make_dict();
     xpc::dict_set(msg, "command", xpc::make_string("PULL"));
     xpc::dict_set(msg, "pasteboardName", xpc::make_string("general"));
-    // dataPolicy 是"只带一个键的枚举"：空字典或两个键都被拒（"Invalid number of
-    // keys found, expected one."）。allResolved = 把每种表示形式都内联带回来。
+    // dataPolicy 使用单键枚举表示；已测服务拒绝空字典和多键字典。
+    // allResolved 请求将可解析的表示形式以内联 Data 返回。
     auto all_resolved = xpc::make_dict();
     auto data_policy = xpc::make_dict();
     xpc::dict_set(data_policy, "allResolved", std::move(all_resolved));
@@ -52,15 +52,14 @@ xpc::Value Pasteboard::build_set(const std::string &text) {
     return msg;
 }
 
-const std::string *Pasteboard::find_text(const xpc::Value &reply) {
-    static std::string holder;  // 返回的是指向这里的指针，调用方要当场用完
+std::optional<std::string> Pasteboard::find_text(const xpc::Value &reply) {
     const auto *snapshot = reply.find("pasteboard");
     if (snapshot == nullptr) {
-        return nullptr;
+        return std::nullopt;
     }
     const auto *items = snapshot->find("items");
     if (items == nullptr) {
-        return nullptr;
+        return std::nullopt;
     }
     for (const auto &item : items->array) {
         const auto *data = item.find("data");
@@ -72,13 +71,12 @@ const std::string *Pasteboard::find_text(const xpc::Value &reply) {
             continue;
         }
         const auto *bytes = rep->find("data");
-        if (bytes == nullptr || bytes->data.empty()) {
+        if (bytes == nullptr || bytes->type != xpc::Type::Data) {
             continue;
         }
-        holder.assign(bytes->data.begin(), bytes->data.end());
-        return &holder;
+        return std::string(bytes->data.begin(), bytes->data.end());
     }
-    return nullptr;
+    return std::nullopt;
 }
 
 bool Pasteboard::set_text(Device &device, const std::string &text, std::string &err,
@@ -92,7 +90,7 @@ bool Pasteboard::set_text(Device &device, const std::string &text, std::string &
         err = SCRCTL_TR("SET failed: ") + err;
         return false;
     }
-    // 设备对形状不对的 SET 也可能回个 SET_REPLY，所以命令名要核一下。
+    // 检查回复命令。SET_REPLY 本身不证明设备已保存文本，落地验证需另行读回。
     if (reply.at("command").as_string_or("") != "SET_REPLY") {
         err = SCRCTL_TR("SET response is not SET_REPLY: ") + xpc::describe(reply).substr(0, 300);
         return false;
@@ -110,10 +108,10 @@ bool Pasteboard::get_text(Device &device, std::string &out, std::string &err, bo
         err = SCRCTL_TR("PULL failed: ") + err;
         return false;
     }
-    const auto *text = find_text(reply);
-    if (text == nullptr) {
-        // 剪贴板是空的、里面只有图片、或者我们的请求形状不对，都走这一支。
-        // 把回信带上：不然"没读到"和"设备其实在报错"分不开。
+    const auto text = find_text(reply);
+    if (!text) {
+        // 缺少 UTF-8 Data 表示时保留有限长度的回复描述，帮助区分只有其他类型内容
+        // 和设备返回错误；存在但零长度的 Data 已由 find_text 作为空文本接受。
         err = SCRCTL_TR("Response has no plain-text representation: ") + xpc::describe(reply).substr(0, 400);
         return false;
     }
