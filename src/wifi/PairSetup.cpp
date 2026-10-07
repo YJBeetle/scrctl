@@ -35,8 +35,8 @@ std::string hex_upper(const uint8_t *data, size_t len) {
     return out;
 }
 
-/// uuid3 用的 MD5。这里 MD5 不是做密码学用途，只是 UUID 版本 3 的定义本身——
-/// 换成 SHA-256 得到的就是另一个 UUID，设备认的是那一个。
+/// UUID v3 所需的 MD5 摘要，仅用于确定性标识生成，不用于认证或签名。
+/// 更换摘要算法会改变生成标识，无法替代已有记录中注册的 identifier。
 bool md5_of(std::string_view data, Bytes &out, std::string &err) {
     out.assign(16, 0);
     unsigned int len = 0;
@@ -48,8 +48,8 @@ bool md5_of(std::string_view data, Bytes &out, std::string &err) {
     return true;
 }
 
-/// handshake：与 pair-verify 同一条开场白，只是 `attemptPairVerify` 由调用方定。
-/// 设备在这里自报 identifier 与 model，前者正是记录里 advertised_identifier 的来源。
+/// 发送 handshake，attemptPairVerify 由调用方选择。要求响应包含完整的
+/// response._1.handshake._0 路径；peerDeviceInfo.identifier 用于保存广播标识。
 std::optional<json::Value> do_handshake(Rppairing &channel, bool attempt_verify,
                                         std::string &err) {
     const json::Value host_options = j_obj({{"attemptPairVerify", j_bool(attempt_verify)}});
@@ -72,7 +72,8 @@ std::optional<json::Value> do_handshake(Rppairing &channel, bool attempt_verify,
     return *zero;
 }
 
-/// 把 M2/M4/M6 这类回信解开，顺手挡掉设备塞在里面的错误码。
+/// 解析 M2/M4/M6 的外层 TLV，拒绝不完整编码或 Error 字段，并标注失败阶段。
+/// 此函数不检查 State 是否符合阶段，也不解密 EncryptedData。
 std::optional<std::map<uint8_t, Bytes>> parse_reply(const Bytes &raw, const char *which,
                                                     std::string &err) {
     std::string tlv_err;
@@ -89,12 +90,10 @@ std::optional<std::map<uint8_t, Bytes>> parse_reply(const Bytes &raw, const char
     return fields;
 }
 
-/// 这条面收不收 pair-setup，设备在 handshake 里**自己就报了**：字节流面（Wi-Fi 手动口
-/// 49152、USB lockdown 的 remotepairingdeviced）上是"否"，RemoteXPC 面（隧道内的
-/// untrusted.tunnelservice）上是"是"——iOS 27 的那道门就挂在这一层（docs §25.8）。
-///
-/// 必须在**发任何 pairingData 之前**问：不问的话症状是"M1 发出去就没有然后了"，与
-/// "字段不对"长得一模一样，我们为此逐条否证过十一条假设（25.1–25.7）。
+/// 在发送 pairingData 前检查设备是否明确声明 allowsPairSetup=false。
+/// 字段缺失或非布尔值时当前实现继续尝试，不将其当作已确认允许配对。
+/// 已测 iOS 27 的字节流入口声明 false，而隧道内 RemoteXPC 入口声明 true
+///（docs §25.8）；此兼容性结论仅覆盖已记录的设备与入口。
 bool plane_allows_pair_setup(const json::Value &handshake, std::string &err) {
     const json::Value *options = json::find(handshake, "deviceOptions");
     const json::Value *allowed = options != nullptr ? json::find(*options, "allowsPairSetup") : nullptr;
@@ -118,8 +117,8 @@ std::string host_identifier_uuid3(std::string_view hostname) {
     if (!md5_of(sv(input), digest, err)) {
         return {};
     }
-    digest[6] = static_cast<uint8_t>((digest[6] & 0x0F) | 0x30);  // version 3
-    digest[8] = static_cast<uint8_t>((digest[8] & 0x3F) | 0x80);  // RFC 4122 variant
+    digest[6] = static_cast<uint8_t>((digest[6] & 0x0F) | 0x30);  // UUID 版本 3
+    digest[8] = static_cast<uint8_t>((digest[8] & 0x3F) | 0x80);  // RFC 4122 变体位
     std::string out = hex_upper(digest.data(), 4) + "-" + hex_upper(digest.data() + 4, 2) + "-" +
                       hex_upper(digest.data() + 6, 2) + "-" + hex_upper(digest.data() + 8, 2) +
                       "-" + hex_upper(digest.data() + 10, 6);
@@ -147,24 +146,23 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
         err = SCRCTL_TR("Host identifier missing; provide one if hostname lookup is unavailable");
         return fail();
     }
-    // host 密钥一开始就生成：verify 探针的签名必须用它（真钥匙），M5 注册的是同一把。
+    // 本次 setup 生成一组 Ed25519 主机密钥，verify 探测签名与 M5 注册共用此密钥。
+    // 记录保存同一密钥的种子及公钥，供后续连接签名。
     const std::optional<Ed25519KeyPair> host_key = ed25519_keypair(err);
     if (!host_key) {
         return fail();
     }
     const Bytes host_public(host_key->pub.begin(), host_key->pub.end());
-    // 苹果客户端在 pairingData 里报的主机名不带 ".local"（oslog 实测 sendingHost 是
-    // "YJBeetle-M2"），照它来。
+    // pairingData 的主机显示名去除末尾 .local，与已有客户端样本保持一致。
+    // 这里只调整显示名，不修改 host_identifier。
     std::string host_label(hostname);
     if (host_label.size() > 6 && host_label.compare(host_label.size() - 6, 6, ".local") == 0) {
         host_label.erase(host_label.size() - 6);
     }
 
-    // 1) 开场。两档（见 PairSetupOptions）：
-    //    probe_verify_first —— 先按 verify 问一轮"认不认识我"（参考实现的走法）；
-    //    否则 —— handshake 里直接报 attemptPairVerify=false，然后发 setup 的 M1。
-    //    iOS 27 上这两档实测都被设备掐掉（docs §25.3），留开关是为了下一台设备/下一次
-    //    现场能一行命令换着试，不用重新编译。
+    // 1) 根据选项先执行 verify 探测，或直接以 attemptPairVerify=false 握手。
+    // 两条路径都在任何 pairingData 前检查 allowsPairSetup，并保存设备广播标识。
+    // 已测字节流入口存在连接关闭限制；入口与选项的验证范围见 docs §25.3/§25.8。
     std::string advertised;
     if (options.probe_verify_first) {
         const std::optional<json::Value> device_handshake =
@@ -181,10 +179,9 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
                 advertised = json::as_string_or(*identifier);
             }
         }
-        // verify 探针。签名必须用**真钥匙**：全零钥匙的签名在密码学上无效，设备会走错误
-        // 路径、状态卡在 verifyManualPairingInProgress，之后的 upgrade M1 一律被掐；
-        // 真钥匙 + 未知 identifier 才走到干净的 unauthenticated（docs §25.6，苹果成功
-        // 样本与我们的失败样本在设备 oslog 里逐行对出来的差别）。
+        // verify 探测使用本次生成的主机密钥签名，不用占位签名字节。
+        // 已有设备日志中，正确生成的签名与未知 identifier 可进入未认证分支；
+        // 无效签名可能保留 verify 进行中状态，影响后续 upgrade（docs §25.6）。
         const std::optional<X25519KeyPair> vk = x25519_keypair(err);
         if (!vk) {
             return fail();
@@ -207,11 +204,11 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
             channel.send_plain(j_obj({{"event", j_obj({{"_0", std::move(body)}})}}), ignored);
         };
         if (tlv_get(*vf, TlvType::Error) != nullptr) {
-            // 设备连试都不试（"Not paired with anyone"）：回一句 pairVerifyFailed 就落到
-            // unauthenticated，**千万别发 Msg03**（docs §25.6）。
+            // M2 已含 Error 时结束 verify 探测，不再发送 Msg03。
+            // 尽力通知 pairVerifyFailed 后继续 setup；该事件的设备行为见 docs §25.6。
             send_verify_failed();
         } else {
-            // identifier 可能在设备那边挂着（含已撤销的）：走完 Msg03 看它认不认。
+            // M2 未含 Error，按公钥派生 verify 密钥并发送 Msg03，检查 M4 是否拒绝。
             const Bytes *peer_x = tlv_get(*vf, TlvType::PublicKey);
             if (peer_x == nullptr || peer_x->size() != 32) {
                 err = SCRCTL_TR("Verify M2 missing 32-byte public key");
@@ -258,7 +255,7 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
                 return fail();
             }
             if (tlv_get(v4f, TlvType::Error) != nullptr) {
-                // ERROR = 不认这把钥匙，正是我们要的正常结局。
+                // 探测收到 Error 表示本次凭据未被接受，发送失败通知后继续 setup。
                 send_verify_failed();
             } else {
                 err = SCRCTL_TR("Device accepted this identifier; already paired, pair-setup is unnecessary");
@@ -306,13 +303,14 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
         return fail();
     }
 
-    // 3) SRP-6a。PIN 固定 "000000"（见头注释）。
+    // 3) 以固定用户名 Pair-Setup 和 PIN "000000" 执行 SRP-6a；不支持输入其他 PIN。
     SrpClient srp("Pair-Setup", "000000");
     if (!srp.process(*salt, *server_public, err)) {
         return fail();
     }
 
-    // 4) M3 → M4：我们给 A 与 M1 证明，设备回它自己的 M2 证明。
+    // 4) M3 → M4：提交 SRP 公钥 A 与客户端证明，接收并验证服务端证明。
+    // SRP 证明 M1/M2 与配对消息阶段 M1/M2 是不同命名。
     const Bytes m3 = tlv_build({{TlvType::State, Bytes{0x03}},
                                 {TlvType::PublicKey, srp.client_public()},
                                 {TlvType::Proof, srp.client_proof()}});
@@ -330,8 +328,8 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
         err = SCRCTL_TR("M4 missing PROOF");
         return fail();
     }
-    // 这一条是 pair-setup 唯一能挡住"中间人接了这条控制面"的地方：设备若不知道 PIN，
-    // 就算不出 K，也就给不出对的 M2。不过就得往下走等于把 host 密钥交给陌生人。
+    // 必须验证 SRP 服务端证明后才继续注册主机密钥；证明绑定本次 SRP 会话。
+    // 固定 PIN 的证明不等于验证设备长期身份，不能据此声称完成独立设备身份认证。
     if (!srp.verify_server_proof(*server_proof)) {
         err = SCRCTL_TR("Device SRP proof mismatch; pairing aborted. Check PIN and peer identity");
         return fail();
@@ -362,9 +360,9 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
         return fail();
     }
 
-    // 5) M5 里的设备信息（OPACK 字典）。altIRK 是**我们**那把身份解析密钥，设备把它
-    //    存进这份配对记录；mac/btAddr 设备到底看不看我们没量过，照参考实现带上，
-    //    填的是随机值——真网卡地址没有理由交给设备。
+    // 5) M5 的主机信息使用 OPACK 字典。altIRK 是随机生成的主机身份解析密钥，
+    // mac/btAddr 来自同一组随机六字节，不读取真实网卡地址。设备对这些字段的
+    // 必需性和具体使用方式尚未在本项目逐项验证。
     const std::optional<Bytes> our_alt_irk = random_bytes(16, err);
     if (!our_alt_irk) {
         return fail();
@@ -414,9 +412,10 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
         return fail();
     }
 
-    // 6) M6：设备那份身份材料。我们只从里面取 altIRK（mDNS 广播里的 authTag 由它
-    //    派生，见 #49）。设备自己的签名这里**不验**：它用的 salt 我们没量过，而身份
-    //    已经由上面那条 M2 证明 + "我们签的东西设备收下了"两件事确立。
+    // 6) 若 M6 提供 EncryptedData，则用 setup_key 验证并解密，再尝试提取设备的
+    // 16 字节 altIRK，供 mDNS authTag 匹配使用。该字段缺失或内部信息无法解析时
+    // 当前实现允许 peer_alt_irk 留空；设备的长期公钥、标识和签名未在此验证，
+    // 不能用 SRP 证明或主机注册成功替代设备长期身份认证。
     Bytes peer_alt_irk;
     const Bytes *sealed6 = tlv_get(*fields6, TlvType::EncryptedData);
     if (sealed6 != nullptr) {
@@ -444,8 +443,8 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
         }
     }
 
-    // 7) 主密钥。salt 是**空**串（等于全零盐），与上面那两条带 salt 的不是一回事；
-    //    这一对密钥既加密这条控制面之后的请求，也派生出隧道用的东西。
+    // 7) 从 SRP 会话密钥派生双向控制面主密钥，salt 为空，info 分别为
+    // ClientEncrypt-main 与 ServerEncrypt-main；与 setup 加密及签名的派生参数不同。
     const std::optional<Bytes> client_key =
         hkdf_sha512(session_key, "", "ClientEncrypt-main", 32, err);
     if (!client_key) {
@@ -466,8 +465,8 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
     record.advertised_identifier = advertised;
     record.peer_alt_irk = peer_alt_irk;
 
-    // 8) 远程解锁密钥。这一步失败不致命：老设备/tvOS 没有这个功能（参考实现也是
-    //    try/except 吞掉），而它跟"能不能镜像+控制"无关。
+    // 8) 可选远程解锁密钥。请求失败只通过 progress 报告，不撤销已安装的主密钥，
+    // 也不改变本次 setup 的成功结果；成功响应中没有 hostKey 时字段保持为空。
     std::string unlock_err;
     const json::Value unlock_request =
         j_obj({{"request", j_obj({{"_0", j_obj({{"createRemoteUnlockKey", j_obj({})}})}})}});

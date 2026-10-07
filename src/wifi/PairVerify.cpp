@@ -15,7 +15,7 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
         return result;
     }
 
-    // 1) handshake：告诉设备"我配过你了，走 verify 这条路"。
+    // 1) 以 attemptPairVerify=true 发送明文 handshake，选择验证已有配对的流程。
     const json::Value host_options = j_obj({{"attemptPairVerify", j_bool(true)}});
     const json::Value handshake_body = j_obj({{"hostOptions", host_options},
                                               {"wireProtocolVersion", j_int(kWireProtocolVersion)}});
@@ -34,7 +34,7 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
         }
     }
 
-    // 2) PV-Msg01：我们这一步的临时 X25519 公钥（每次握手都新生成，这是前向保密的来源）。
+    // 2) PV-Msg01：为本次验证新建临时 X25519 密钥对，发送公钥；私钥留在本地用于共享秘密。
     const std::optional<X25519KeyPair> keypair = x25519_keypair(err);
     if (!keypair) {
         result.error = err;
@@ -49,14 +49,12 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
         return result;
     }
 
-    // 3) PV-Msg02。注意这一段的 encryptedData 我们**不解**——那是设备的身份材料，
-    //    而"对端是不是那台设备"在这一步是由"我们签的东西对方验不验得过"来证明的。
-    //    苹果那套实现同样没解（它的 TODO 里明写着），所以这里不解不是偷懒，是与对端一致。
+    // 3) PV-Msg02：解析 Error 与设备临时公钥，当前未解密 EncryptedData，
+    // 也未验证其中的设备标识、长期公钥或签名。设备接受主机签名不能替代该身份校验。
     std::string tlv_err;
     const std::map<uint8_t, Bytes> second = tlv_parse(*reply1, tlv_err);
-    // 设备在 M2 里就带 ERROR = 它连试都不试（"Not paired with anyone"，设备 oslog 原话）。
-    // 这时**不能**再发 PV-Msg03：那条序外消息会让设备把连接掐掉（docs §25.6，我们踩了
-    // 一整晚）。正确收尾是一句 pairVerifyFailed，然后报"没配对"。
+    // M2 已含 Error 时不再发送 PV-Msg03，返回 NotPaired，并按选项尽力通知失败。
+    // 已测设备在此继续接收 Msg03 会关闭连接，兼容约束见 docs §25.6。
     if (tlv_get(second, TlvType::Error) != nullptr) {
         if (announce_failure) {
             std::string ignored;
@@ -106,7 +104,7 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
         return result;
     }
 
-    // 4) PV-Msg03 → PV-Msg04。到这里设备才真正"认人"。
+    // 4) PV-Msg03 → PV-Msg04：提交加密的主机标识和签名，检查设备是否返回 Error。
     const Bytes third =
         tlv_build({{TlvType::State, Bytes{0x03}}, {TlvType::EncryptedData, *sealed}});
     const std::optional<Bytes> reply3 =
@@ -116,10 +114,12 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
         return result;
     }
     std::string final_err;
+    // 当前未检查 final_err 或 State，仅以不存在 Error TLV 继续；Paired 的判断
+    // 范围受此实现约束，不表示已验证最终消息的完整格式。
     const std::map<uint8_t, Bytes> final_fields = tlv_parse(*reply3, final_err);
     if (tlv_get(final_fields, TlvType::Error) != nullptr) {
-        // 设备答了、但说不认识这把钥匙。补一句 pairVerifyFailed 让对端把会话收干净，
-        // 然后**不要**重连重试——重试一万次也是同一句。
+        // 设备返回配对错误，按选项发送 pairVerifyFailed 并返回 NotPaired。
+        // 调用方可据此检查本地记录与设备信任状态，不应将此结果等同于网络超时。
         if (announce_failure) {
             std::string ignored;
             json::Value body = j_obj({{"pairVerifyFailed", j_obj({})}});
@@ -131,8 +131,8 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
         return result;
     }
 
-    // 5) 主密钥。这两条 HKDF 的 salt 是**空**（RFC 5869 下等于全零盐），和第 3 步
-    //    那条带 salt 的不是一回事；写串一个字节就是"设备回的所有帧都解不开"。
+    // 5) 从本次 X25519 共享秘密派生双向主密钥，salt 为空，info 分别为
+    // ClientEncrypt-main 与 ServerEncrypt-main；与 Pair-Verify 加密密钥的参数不同。
     const std::optional<Bytes> client_key = hkdf_sha512(*shared, "", "ClientEncrypt-main", 32, err);
     if (!client_key) {
         result.error = err;

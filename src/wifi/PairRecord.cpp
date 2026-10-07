@@ -23,6 +23,7 @@ namespace scrctl::wifi {
 namespace {
 
 constexpr char kHeader[] = "scrctl-pair-record 1";
+// 文本读取完成后的大小校验值，不限制 ifstream/ostringstream 的读取分配。
 constexpr size_t kMaxRecordText = 16384;
 
 std::string hex(const Bytes &data) {
@@ -76,8 +77,8 @@ std::string_view trim(std::string_view s) {
     return s;
 }
 
-/// UDID 是设备给的外部输入，不能直接当文件名的一部分——一台恶意/故障设备给一个
-/// `../../etc/x` 就能把我们这份"读出来再写回去"的代码变成任意路径写。
+/// 将外部提供的 UDID 转为文件名片段，仅保留 ASCII 字母和数字，其余替换为下划线。
+/// 净化防止 UDID 引入目录跳转或路径分隔符，但不保证不同原始标识之间没有重名。
 std::string sanitize(const std::string &udid) {
     std::string out;
     out.reserve(udid.size());
@@ -89,6 +90,8 @@ std::string sanitize(const std::string &udid) {
     return out;
 }
 
+/// 随机后缀临时文件与目标位于同目录，成功关闭后通过 rename 替换。
+/// POSIX 路径不调用 fsync，成功返回不能作为断电后持久性的保证。
 bool write_file(const std::string &path, std::string_view text, std::string &err) {
     const auto nonce = random_bytes(8, err);
     if (!nonce) return false;
@@ -101,7 +104,7 @@ bool write_file(const std::string &path, std::string_view text, std::string &err
         err = SCRCTL_TR("Cannot open temporary file ") + tmp;
         return false;
     }
-    // 0600 要在内容落地之前设好：这把钥匙加对方设备的信任，值得较这个真。
+    // 在写入含私钥的记录前将临时文件权限设为 0600；设置失败即关闭并移除文件。
     if (::fchmod(::fileno(f), 0600) != 0) {
         err = SCRCTL_TR("Failed to set record file permissions");
         std::fclose(f);
@@ -226,7 +229,7 @@ std::optional<PairRecord> parse_record(std::string_view text, std::string &err) 
         } else if (key == "remote_unlock_host_key") {
             record.remote_unlock_host_key = value;
         }
-        // 未知键**忽略**：向后兼容比报错有用——老版本读新记录时该能继续用。
+        // 忽略未知键，允许新增可选字段后的记录继续由旧版本解析。
     }
     if (!seen_private) {
         err = SCRCTL_TR("Record missing host_private_key");
@@ -239,7 +242,7 @@ bool save_record(const std::string &path, const PairRecord &record, std::string 
     const auto parent = std::filesystem::path(path).parent_path();
     const std::string dir = parent.string();
     if (!dir.empty()) {
-        // 创建缺失的父目录；记录保存失败会让下次连接仍需重新配对。
+        // 创建缺失的父目录；任何目录创建错误都在写入记录前返回。
         std::error_code ec;
         const bool existed = std::filesystem::is_directory(dir, ec);
         std::filesystem::create_directories(dir, ec);
@@ -295,8 +298,8 @@ std::vector<std::string> list_record_udids(const std::string &dir, std::string &
     std::error_code ec;
     const std::filesystem::path root(dir);
     if (!std::filesystem::is_directory(root, ec)) {
-        // 目录不存在只是"还没有任何记录"，不是错误：调用方要能分清"没有"与"读不了"，
-        // 但这两种在这里的处置一样（都当成没有），所以不必把 ec 抬出去。
+        // 未识别为目录时统一返回空列表，包括不存在和 is_directory 查询失败。
+        // 当前接口在此清除 err，调用方无法用该结果区分不存在与查询失败。
         err.clear();
         return out;
     }

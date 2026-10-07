@@ -9,6 +9,8 @@
 
 namespace scrctl::wifi {
 namespace {
+/// RAII 管理安全描述符的 LocalAlloc 内存，令牌句柄和临时 SID 字符串在初始化时释放。
+/// DACL 仅含当前进程用户 SID 的完全访问 ACE，启用保护以阻止继承父目录的 ACE。
 struct PrivateDescriptor {
     PSECURITY_DESCRIPTOR data = nullptr;
     PrivateDescriptor() = default;
@@ -33,6 +35,7 @@ struct PrivateDescriptor {
         LPWSTR sid = nullptr;
         if (!ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER *>(buffer.data())->User.Sid, &sid))
             return fail(err);
+        // P 表示受保护 DACL；OI/CI 允许该 ACE 由文件及子目录继承，FA 为完全访问。
         const std::wstring sddl = std::wstring(L"D:P(A;OICI;FA;;;") + sid + L")";
         LocalFree(sid);
         if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1,
@@ -77,6 +80,7 @@ bool write_private_record(const std::string &temporary, const std::string &path,
     PrivateDescriptor descriptor;
     if (!descriptor.initialize(err))
         return false;
+    // 创建时即应用 DACL，句柄不可继承；CREATE_NEW 避免覆盖已有同名临时文件。
     SECURITY_ATTRIBUTES attributes{sizeof(attributes), descriptor.data, FALSE};
     const auto temp = std::filesystem::path(temporary).wstring();
     HANDLE file = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, &attributes, CREATE_NEW,
@@ -96,7 +100,8 @@ bool write_private_record(const std::string &temporary, const std::string &path,
         err = SCRCTL_TR("Incomplete record file write");
         return false;
     }
-    // 临时文件与目标在同目录，替换不会跨卷丢失安全描述符。
+    // 调用方提供同目录临时文件，替换沿用它的安全描述符，不经过跨卷复制。
+    // 写入、刷新或替换失败时尝试删除临时文件，保留错误供调用方处理。
     if (!MoveFileExW(temp.c_str(), std::filesystem::path(path).c_str(),
                      MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
         const DWORD code = GetLastError();

@@ -9,49 +9,45 @@
 
 namespace scrctl::wifi {
 
-/// 苹果那套实现的主机标识：`uuid3(DNS, hostname)` 的大写文本形式。
-///
-/// 为什么非得是这一个算法：pair-setup 注册时发出去的 identifier、M5 签名缓冲里放的
-/// identifier、以及之后每次 pair-verify 签名里放的 identifier 必须是**同一个字符串**，
-/// 而设备那边把它当不透明串存着。跟着苹果现算的规矩走，好处是同一台主机上任何工具
-/// （Xcode、参考实现、我们）算出来的都是它，不会因为"各自随机生成一个"而互相顶掉。
+/// 由主机名生成 DNS 命名空间的 UUID v3，输出大写文本；MD5 不可用时返回空串。
+/// pair-setup 的标识字段、M5 签名和后续 pair-verify 签名应使用同一字符串。
+/// 此函数提供确定性生成方式；读取已有记录时应使用保存的标识，不重新生成。
 std::string host_identifier_uuid3(std::string_view hostname);
 
-/// 本机主机名。取不到时返回空串（调用方要么报错，要么自己给一个稳定值）。
+/// 获取本机主机名，失败时返回空串；调用方需报错或提供稳定的替代标识。
 std::string local_hostname();
 
 struct PairSetupResult {
     bool ok = false;
-    /// 成功时填好、可直接 `save_record` 的记录。
+    /// 成功时生成的记录；保存由调用方负责，仍需核对传入的设备标识。
     PairRecord record;
-    /// 设备 handshake 回信原文（`peerDeviceInfo` 等），给日志和判能力用。
+    /// 设备 handshake 响应体，包含 peerDeviceInfo 等信息，可供调用方查询协商能力。
     json::Value device_handshake;
     std::string error;
 };
 
-/// 在一条已连上的 RPPairing 控制面上走完整的 pair-setup：M1..M6 + createRemoteUnlockKey。
-///
-/// 成功时两条主密钥已经装进 `channel`（当场就能接着 createListener），但**设备会在
-/// 配对结束后关掉这条连接**（实测），所以真要起隧道得重连一次。
-///
-/// PIN 一律按 `"000000"`：iOS 上手动配对不核对 PIN，身份是靠"我们签的东西设备验得
-/// 过、设备签的东西我们验得过"这两条建立的（tvOS 才要人输 PIN，这里不支持）。
-///
-/// `progress` 用来把"设备在等你在屏幕上点信任"这类中间状态说给人听。Wi-Fi 那条面会
-/// 弹这个框；USB lockdown 那条实测不弹（它跑在已信任的 lockdownd 之上）。
+/// pair-setup 的入口参数。流程包含可选 verify 探测、M1..M6 及远程解锁密钥请求。
+/// 当前 SRP 用户名为 Pair-Setup、PIN 固定为 "000000"，不提供交互输入其他 PIN 的接口。
+/// 已有设备记录显示不同控制面可能有不同确认流程；progress 用于报告中间状态。
+/// 接入其他设备配置时需重新验证，不能假定所有 iOS/tvOS 都采用相同配对方式。
 struct PairSetupOptions {
-    /// 要不要先按 verify 的路数问一轮"认不认识我"（handshake 里报 attemptPairVerify=true）。
-    /// 参考实现是这么做的；但 iOS 27 上 verify 会话一旦开起来就不肯在同一条连接上换到
-    /// setup（docs §25.2/§25.3），所以这条路留作开关，另一档是 handshake 直接报
-    /// attemptPairVerify=false、然后发 setup 的 M1。
+    /// 是否先发送 attemptPairVerify=true 的 handshake 并执行 verify 探测；false
+    /// 表示直接以 attemptPairVerify=false 开始 setup。已测 iOS 27 字节流入口存在
+    /// verify 后切换 setup 被关闭连接的情况（docs §25.2/§25.3），开关保留两种入口。
     bool probe_verify_first = true;
-    /// pairingData 的 kind。iOS 27 实测（docs §25.6）：已经有 lockdown（USB 信任）配对、
-    /// 但还没有远程配对记录的主机，设备只收 `upgradeNonAutomationLockdownPairing`；
-    /// 参考实现硬编码的 `setupManualPairing` 在这台设备上两条面都被直接掐掉。
-    /// 完全没有 lockdown 配对的新主机才走 setupManualPairing（带屏幕同意框那条）。
+    /// pairingData 的 kind，默认升级已有 lockdown 信任到远程配对。
+    /// 已测 iOS 27/已建立 USB 信任的配置接受 upgradeNonAutomationLockdownPairing，
+    /// setupManualPairing 在所测入口被关闭连接（docs §25.6）；不将该样本外推为所有
+    /// 设备的唯一选择。调用方可显式指定 kind，但设备是否允许仍由握手和响应决定。
     std::string pairing_kind = "upgradeNonAutomationLockdownPairing";
 };
 
+/// 在已连接的控制面执行配对，不负责建立连接或写入记录。成功时安装双向主密钥，
+/// 可选 createRemoteUnlockKey 失败不改变 ok。失败时 ok=false，error 与 err 记录原因；
+/// 已执行的设备端配对步骤不会由本函数回滚，channel 也不保证恢复到初始状态。
+/// 已有设备在 setup 后关闭连接，后续起隧道需重连并 verify（验证范围见 docs §25）。
+/// 当前实现检查 SRP 服务端证明；M6 携带密文时验证并解密，但不要求存在密文，
+/// 也未校验其中设备的长期签名。
 PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
                            std::string_view hostname, std::string_view udid,
                            const ProgressFn &progress, const PairSetupOptions &options,
