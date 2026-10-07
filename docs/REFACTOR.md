@@ -694,3 +694,13 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
   仍不能据此确认截图与朝向同步。实际订阅中断后的真机行为尚未单独验证。
 - 相关 Release 回归 4/4；启用 UBSan 遇错终止后，完整 Debug + ASan/UBSan
   回归 24/24。未知几何及触点释放继续由实际 Presenter 的 SDL 事件用例覆盖。
+
+## 第五十二轮：UBSan 错误使 CI 失败
+
+- sanitizer 作业的 UBSAN_OPTIONS 增加 halt_on_error=1，保留错误堆栈。
+  仅启用检测和堆栈输出时，多数 UBSan 错误会报告后继续执行，可能留下成功状态；
+  运行选项的行为见 [Clang 官方说明](https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html)。
+- 用独立的有符号溢出程序验证该门：原配置报告错误但退出 0，新配置报告错误并
+  以非零状态终止。该故障夹具只存放于本机 /tmp，没有加入产品或仓库测试。
+- 工作流 YAML 与 sanitizer 步骤配置检查通过；以新选项执行的本机完整
+  Debug + ASan/UBSan 回归 24/24。

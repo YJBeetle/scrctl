@@ -177,5 +177,5 @@ jobs:
 
       - name: 离线自检
         env:
-          UBSAN_OPTIONS: print_stacktrace=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: ctest --test-dir build-san --output-on-failure
