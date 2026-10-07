@@ -1,19 +1,23 @@
-// 获取一张设备截图，验证 XPC 大回复接收和 PNG 内容。
+// 获取一张设备截图，查看 XPC 大回复及 PNG 头部尺寸。
 // image 可直接包含 Data，也可通过 FileTransfer 在独立流上交付；具体形式由设备决定。
 // 2026-10-03 的 iOS 27 实测返回约 4 MiB 的内联 Data。
+#include <CLI/CLI.hpp>
+#include <cerrno>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
+#include "i18n/Translation.h"
 #include "remote/Device.h"
 #include "xpc/XpcValue.h"
 
 namespace {
 
-/// PNG 的宽高在 IHDR 里，大端。取出来是为了证明「字节完整且真是图」，
-/// 而不是只看到一串长度对得上的数字。
+/// PNG 签名之后的 IHDR 宽高使用大端编码。这里读取签名与尺寸，
+/// 不替代解码器对完整文件、各区块长度和校验和的验证。
 bool png_size(const std::vector<uint8_t> &b, uint32_t &w, uint32_t &h) {
-    if (b.size() < 24) {
+    if (b.size() < 33) {
         return false;
     }
     static constexpr uint8_t kSig[8] = {0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a};
@@ -26,46 +30,86 @@ bool png_size(const std::vector<uint8_t> &b, uint32_t &w, uint32_t &h) {
         return static_cast<uint32_t>(b[at]) << 24 | static_cast<uint32_t>(b[at + 1]) << 16 |
                static_cast<uint32_t>(b[at + 2]) << 8 | static_cast<uint32_t>(b[at + 3]);
     };
+    if (be32(8) != 13 || b[12] != 'I' || b[13] != 'H' || b[14] != 'D' || b[15] != 'R') {
+        return false;
+    }
     w = be32(16);
     h = be32(20);
-    return true;
+    return w != 0 && h != 0;
 }
 
 }  // namespace
 
 int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
-    // 用法：screenshot_probe [-v] [-o 输出路径] [UDID]
-    // 输出路径走 -o 而不是第二个位置参数：位置参数只有一个含义（UDID），
-    // 否则 "-v /tmp/x.png" 会被当成指定了一台设备，报错信息看着像设备没连。
-    std::string_view udid;
+    scrctl::i18n::initialize();
+    std::string udid;
     std::string out_path = "/tmp/scrctl-shot.png";
+    std::string requested_language = "auto";
     bool verbose = false;
-    for (int i = 1; i < argc; ++i) {
-        const std::string_view a = argv[i];
-        if (a == "-v" || a == "--verbose") {
-            verbose = true;
-        } else if (a == "-o" || a == "--out") {
-            if (i + 1 >= argc) {
-                std::fprintf(stderr, "-o 后面要跟路径\n");
-                return 2;
-            }
-            out_path = argv[++i];
-        } else if (a.starts_with("-")) {
-            std::fprintf(stderr, "未知选项 %s\n", std::string(a).c_str());
-            return 2;
-        } else {
-            udid = a;
+    CLI::App app{SCRCTL_N_("Capture a device screenshot and save it as PNG")};
+    app.footer(SCRCTL_N_(
+        "With no UDID, use the connected device. --help does not connect to a device."));
+    app.set_help_flag("-h,--help", SCRCTL_N_("Show help"));
+    app.add_flag("-v,--verbose", verbose, SCRCTL_N_("Print device connection and request details"));
+    app.add_option("-o,--out", out_path,
+                   SCRCTL_N_("Output PNG path (default: /tmp/scrctl-shot.png)"))
+        ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
+    // 位置参数只有 UDID；多个 UDID 必须报错，不能静默选择最后一个。
+    app.add_option("UDID", udid, SCRCTL_N_("Device UDID"));
+    auto *language_option = app.add_option("--lang", requested_language,
+        SCRCTL_N_("Message language: auto, en, zh-CN (default: environment, fallback: en)"))
+        ->check(CLI::IsMember({"auto", "en", "zh-CN"}));
+    // CLI11 收集完参数后才抛出帮助请求；从 results 选择语言，使 --help 前后
+    // 的 --lang 均生效。设备连接必须在解析、帮助和错误处理全部完成之后。
+    auto select_language = [&]() {
+        const auto &values = language_option->results();
+        const auto requested = values.empty() ? std::string("auto") : values.back();
+        if (requested != "auto" && requested != "en" && requested != "zh-CN") {
+            std::fprintf(stderr, "%s\n", SCRCTL_TR("--lang must be auto, en or zh-CN"));
+            return false;
         }
+        if (!scrctl::i18n::initialize(requested)) {
+            std::fprintf(stderr, "%s\n", SCRCTL_TR(
+                "Cannot enable the requested message locale; using English"));
+        }
+        return true;
+    };
+    try {
+        app.parse(argc, argv);
+        if (!select_language()) return 2;
+    } catch (const CLI::CallForHelp &) {
+        if (!select_language()) return 2;
+        app.description(SCRCTL_TR(app.get_description().c_str()));
+        app.footer(SCRCTL_TR(app.get_footer().c_str()));
+        for (auto *option : app.get_options()) {
+            const auto description = option->get_description();
+            option->description(SCRCTL_TR(description.c_str()));
+            if (option->get_group() == "OPTIONS") {
+                option->group(SCRCTL_TR("Options"));
+            }
+        }
+        auto formatter = app.get_formatter();
+        formatter->label("Usage", SCRCTL_TR("Usage"));
+        formatter->label("POSITIONALS", SCRCTL_TR("Positionals"));
+        formatter->label("Options", SCRCTL_TR("Options"));
+        formatter->label("OPTIONS", SCRCTL_TR("Options"));
+        std::printf("%s", app.help().c_str());
+        return 0;
+    } catch (const CLI::ParseError &e) {
+        if (select_language()) {
+            std::fprintf(stderr, SCRCTL_TR("Invalid arguments: %s\n"), e.what());
+        }
+        return 2;
     }
 
     std::string err;
     auto dev = scrctl::remote::Device::establish(udid, err, verbose);
     if (!dev) {
-        std::fprintf(stderr, "建立会话失败: %s\n", err.c_str());
+        std::fprintf(stderr, SCRCTL_TR("Failed to establish device session: %s\n"), err.c_str());
         return 1;
     }
-    std::printf("设备：%s / iOS %s\n", dev->property("ProductType").c_str(),
+    std::printf(SCRCTL_TR("Device: %s / iOS %s\n"), dev->property("ProductType").c_str(),
                 dev->property("OSVersion").c_str());
 
     auto input = scrctl::xpc::make_dict();
@@ -77,35 +121,47 @@ int main(int argc, char **argv) {
                       "com.apple.coredevice.feature.capturescreenshot",
                       "com.apple.coredevice.action.capturescreenshot", input, out, err, verbose,
                       30000)) {
-        std::fprintf(stderr, "截图失败: %s\n", err.c_str());
+        std::fprintf(stderr, SCRCTL_TR("Failed to capture screenshot: %s\n"), err.c_str());
         return 1;
     }
-    std::printf("回信结构: %s\n", scrctl::xpc::describe(out).substr(0, 400).c_str());
+    std::printf(SCRCTL_TR("Reply structure: %s\n"), scrctl::xpc::describe(out).substr(0, 400).c_str());
 
     const auto *image = out.find("image");
     if (image == nullptr) {
-        std::fprintf(stderr, "回信里没有 image 字段\n");
+        std::fprintf(stderr, "%s\n", SCRCTL_TR("Screenshot reply contains no image field"));
         return 1;
     }
     if (image->data.empty()) {
-        std::fprintf(stderr, "image 里没有字节（文件流没收回来）\n");
+        std::fprintf(stderr, "%s\n", SCRCTL_TR("Screenshot image contains no bytes"));
         return 1;
     }
     uint32_t w = 0, h = 0;
     const bool is_png = png_size(image->data, w, h);
-    std::printf("image: %zu 字节，%s\n", image->data.size(),
-                is_png ? "PNG 头校验通过" : "PNG 头校验失败");
+    std::printf(SCRCTL_TR("Image: %zu bytes, %s\n"), image->data.size(),
+                is_png ? SCRCTL_TR("PNG header recognized") : SCRCTL_TR("PNG header not recognized"));
     if (is_png) {
-        std::printf("画面尺寸 %ux%u\n", w, h);
+        std::printf(SCRCTL_TR("Image dimensions: %ux%u\n"), w, h);
     }
 
-    FILE *f = std::fopen(out_path.data(), "wb");
+    FILE *f = std::fopen(out_path.c_str(), "wb");
     if (f == nullptr) {
-        std::fprintf(stderr, "写 %s 失败\n", out_path.c_str());
+        const int open_error = errno;
+        std::fprintf(stderr, SCRCTL_TR("Failed to open %s: %s\n"), out_path.c_str(),
+                     std::strerror(open_error));
         return 1;
     }
-    std::fwrite(image->data.data(), 1, image->data.size(), f);
-    std::fclose(f);
-    std::printf("已存 %s\n", out_path.c_str());
+    errno = 0;
+    const bool written = std::fwrite(image->data.data(), 1, image->data.size(), f) == image->data.size();
+    const int write_error = written ? 0 : (errno != 0 ? errno : EIO);
+    errno = 0;
+    const bool closed = std::fclose(f) == 0;
+    // 关闭可能刷新缓冲而失败；短写的首个原因不能被随后 fclose 的结果覆盖。
+    const int save_error = write_error != 0 ? write_error : (closed ? 0 : (errno != 0 ? errno : EIO));
+    if (save_error != 0) {
+        std::fprintf(stderr, SCRCTL_TR("Failed to save %s: %s\n"), out_path.c_str(),
+                     std::strerror(save_error));
+        return 1;
+    }
+    std::printf(SCRCTL_TR("Saved to %s\n"), out_path.c_str());
     return is_png ? 0 : 1;
 }

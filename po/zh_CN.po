@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 02:41+0800\n"
+"POT-Creation-Date: 2026-10-08 03:26+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -158,7 +158,7 @@ msgstr ""
 "鼠标左键映射为触摸；方向不支持 flip，录制保留原始码流。\n"
 "无线需要先配对；--help / --version 不连接设备。"
 
-#: src/app/Cli.cpp:24
+#: src/app/Cli.cpp:24 tools/screenshot_probe.cpp:53
 msgid "Show help"
 msgstr "显示帮助"
 
@@ -166,7 +166,7 @@ msgstr "显示帮助"
 msgid "Play an Annex-B HEVC file"
 msgstr "回放 Annex-B HEVC 文件"
 
-#: src/app/Cli.cpp:26
+#: src/app/Cli.cpp:26 tools/screenshot_probe.cpp:59
 msgid "Device UDID"
 msgstr "设备 UDID"
 
@@ -329,11 +329,11 @@ msgstr "背景色 #RRGGBB"
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr "第 N 帧回读窗口为 BMP：N FILE（需要窗口）"
 
-#: src/app/Cli.cpp:83
+#: src/app/Cli.cpp:83 tools/screenshot_probe.cpp:61
 msgid "Message language: auto, en, zh-CN (default: environment, fallback: en)"
 msgstr "提示语言：auto、en、zh-CN（默认按环境选择，回退英文）"
 
-#: src/app/Cli.cpp:89
+#: src/app/Cli.cpp:89 tools/screenshot_probe.cpp:69
 msgid "--lang must be auto, en or zh-CN"
 msgstr "--lang 必须为 auto、en 或 zh-CN"
 
@@ -362,11 +362,12 @@ msgstr "帧号需要正整数"
 msgid "Requires a window; incompatible with --no-window"
 msgstr "需要窗口，不能与 --no-window 同用"
 
-#: src/app/Cli.cpp:162
+#: src/app/Cli.cpp:162 tools/screenshot_probe.cpp:90
 msgid "Usage"
 msgstr "用法"
 
-#: src/app/Cli.cpp:163 src/app/Cli.cpp:164
+#: src/app/Cli.cpp:163 src/app/Cli.cpp:164 tools/screenshot_probe.cpp:92
+#: tools/screenshot_probe.cpp:93
 msgid "Options"
 msgstr "选项"
 
@@ -606,7 +607,7 @@ msgstr "没有可播放的音频流（已禁用、启动失败或构建不支持
 msgid "Control connected (touch injection available)\n"
 msgstr "控制已接通（触摸注入可用）\n"
 
-#: src/app/LiveSource.cpp:284
+#: src/app/LiveSource.cpp:289
 #, c-format
 msgid ""
 "Live video unavailable; using screenshot polling while retrying video in the "
@@ -614,21 +615,21 @@ msgid ""
 msgstr ""
 "实时视频暂不可用，已切换到截图轮询；后台继续尝试恢复视频，成功后自动切回\n"
 
-#: src/app/LiveSource.cpp:287
+#: src/app/LiveSource.cpp:292
 #, c-format
 msgid "Failed to switch to screenshots: %s (retry in %llu seconds)\n"
 msgstr "切换到截图失败: %s（%llu 秒后重试）\n"
 
-#: src/app/LiveSource.cpp:293
+#: src/app/LiveSource.cpp:298
 #, c-format
 msgid "Live video recovered; switched back to video stream\n"
 msgstr "实时视频已恢复，已切回视频流\n"
 
-#: src/app/LiveSource.cpp:332
+#: src/app/LiveSource.cpp:337
 msgid "); closing session"
 msgstr "），正在关闭会话"
 
-#: src/app/LiveSource.cpp:332
+#: src/app/LiveSource.cpp:337
 msgid "Device connection lost ("
 msgstr "设备连接已断开（"
 
@@ -2880,6 +2881,97 @@ msgstr "载荷解码失败"
 #: src/xpc/XpcValue.cpp:702
 msgid ", received "
 msgstr ", 已到"
+
+#: tools/screenshot_probe.cpp:50
+msgid "Capture a device screenshot and save it as PNG"
+msgstr "获取设备截图并保存为 PNG"
+
+#: tools/screenshot_probe.cpp:52
+msgid ""
+"With no UDID, use the connected device. --help does not connect to a device."
+msgstr "未指定 UDID 时使用已连接设备。--help 不会连接设备。"
+
+#: tools/screenshot_probe.cpp:54
+msgid "Print device connection and request details"
+msgstr "输出设备连接及请求详情"
+
+#: tools/screenshot_probe.cpp:56
+msgid "Output PNG path (default: /tmp/scrctl-shot.png)"
+msgstr "PNG 输出路径（默认：/tmp/scrctl-shot.png）"
+
+#: tools/screenshot_probe.cpp:74
+msgid "Cannot enable the requested message locale; using English"
+msgstr "无法启用请求的消息语言，使用英文"
+
+#: tools/screenshot_probe.cpp:91
+msgid "Positionals"
+msgstr "位置参数"
+
+#: tools/screenshot_probe.cpp:98
+#, c-format
+msgid "Invalid arguments: %s\n"
+msgstr "参数无效：%s\n"
+
+#: tools/screenshot_probe.cpp:106
+#, c-format
+msgid "Failed to establish device session: %s\n"
+msgstr "建立设备会话失败：%s\n"
+
+#: tools/screenshot_probe.cpp:109
+#, c-format
+msgid "Device: %s / iOS %s\n"
+msgstr "设备：%s / iOS %s\n"
+
+#: tools/screenshot_probe.cpp:121
+#, c-format
+msgid "Failed to capture screenshot: %s\n"
+msgstr "获取截图失败：%s\n"
+
+#: tools/screenshot_probe.cpp:124
+#, c-format
+msgid "Reply structure: %s\n"
+msgstr "回复结构：%s\n"
+
+#: tools/screenshot_probe.cpp:128
+msgid "Screenshot reply contains no image field"
+msgstr "截图回复缺少 image 字段"
+
+#: tools/screenshot_probe.cpp:132
+msgid "Screenshot image contains no bytes"
+msgstr "截图图像不含字节数据"
+
+#: tools/screenshot_probe.cpp:137
+#, c-format
+msgid "Image: %zu bytes, %s\n"
+msgstr "图像：%zu 字节，%s\n"
+
+#: tools/screenshot_probe.cpp:138
+msgid "PNG header not recognized"
+msgstr "无法识别 PNG 头部"
+
+#: tools/screenshot_probe.cpp:138
+msgid "PNG header recognized"
+msgstr "已识别 PNG 头部"
+
+#: tools/screenshot_probe.cpp:140
+#, c-format
+msgid "Image dimensions: %ux%u\n"
+msgstr "图像尺寸：%ux%u\n"
+
+#: tools/screenshot_probe.cpp:146
+#, c-format
+msgid "Failed to open %s: %s\n"
+msgstr "无法打开 %s：%s\n"
+
+#: tools/screenshot_probe.cpp:158
+#, c-format
+msgid "Failed to save %s: %s\n"
+msgstr "保存 %s 失败：%s\n"
+
+#: tools/screenshot_probe.cpp:162
+#, c-format
+msgid "Saved to %s\n"
+msgstr "已保存到 %s\n"
 
 #, c-format
 #~ msgid "Device clipboard (%zu bytes): %s\n"

@@ -18,8 +18,10 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="scrctl-translations-") as directory:
         template = Path(directory) / "scrctl.pot"
-        sources = sorted(str(p.relative_to(root)) for p in (root / "src").rglob("*")
-                         if p.suffix in (".cpp", ".h"))
+        # 主程序与诊断工具复用同一消息目录，只提取显式标记的输出。
+        sources = sorted(str(p.relative_to(root))
+                         for directory in (root / "src", root / "tools")
+                         for p in directory.rglob("*") if p.suffix in (".cpp", ".h"))
         run("xgettext", "--language=C++", "--from-code=UTF-8", "--sort-by-file",
             "--keyword=SCRCTL_TR", "--keyword=SCRCTL_N_",
             "--flag=SCRCTL_TR:1:pass-c-format", "--flag=SCRCTL_N_:1:pass-c-format",

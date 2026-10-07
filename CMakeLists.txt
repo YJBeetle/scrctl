@@ -222,7 +222,7 @@ add_executable(feature_probe tools/feature_probe.cpp)
 target_link_libraries(feature_probe PRIVATE scrctl_core)
 
 add_executable(screenshot_probe tools/screenshot_probe.cpp)
-target_link_libraries(screenshot_probe PRIVATE scrctl_core)
+target_link_libraries(screenshot_probe PRIVATE scrctl_core CLI11::CLI11)
 
 add_executable(rr_keepalive_probe tools/rr_keepalive_probe.cpp)
 target_link_libraries(rr_keepalive_probe PRIVATE scrctl_core CLI11::CLI11)
@@ -300,6 +300,9 @@ if(SCRCTL_BUILD_TESTS)
     add_test(NAME rr_probe_cli COMMAND "${Python3_EXECUTABLE}"
         "${PROJECT_SOURCE_DIR}/tests/rr_probe_cli_test.py" "$<TARGET_FILE:rr_keepalive_probe>")
     set_tests_properties(rr_probe_cli PROPERTIES TIMEOUT 30)
+    add_test(NAME screenshot_probe_cli COMMAND "${Python3_EXECUTABLE}"
+        "${PROJECT_SOURCE_DIR}/tests/screenshot_probe_cli_test.py" "$<TARGET_FILE:screenshot_probe>")
+    set_tests_properties(screenshot_probe_cli PROPERTIES TIMEOUT 30)
     add_test(NAME i18n COMMAND "${Python3_EXECUTABLE}"
         "${PROJECT_SOURCE_DIR}/tests/i18n_test.py" "$<TARGET_FILE:scrctl>")
     set_tests_properties(i18n PROPERTIES TIMEOUT 30)
