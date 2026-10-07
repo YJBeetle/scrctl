@@ -17,7 +17,7 @@
 
 int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
-    std::string_view udid;
+    std::string udid;
     std::string bundle;
     bool verbose = false;
     bool show_shape = false;
