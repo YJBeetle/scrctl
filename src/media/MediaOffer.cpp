@@ -1,6 +1,6 @@
 #include "media/MediaOffer.h"
 
-#include "plist/Bplist.h"
+#include "plist/Plist.h"
 #include "util/Deflate.h"
 
 namespace scrctl::media {
@@ -214,7 +214,8 @@ std::vector<uint8_t> build_negotiator_offer(const Offer &offer) {
     d.set("avcMediaStreamOptionCallID", plist::Value::Str(offer.call_id));
     d.set("avcMediaStreamOptionRemoteEndpointInfo",
           plist::Value::OfData(remote_endpoint_info(offer)));
-    return plist::write_binary(d);
+    const auto xml = plist::write(d);
+    return {xml.begin(), xml.end()};
 }
 
 }  // namespace scrctl::media

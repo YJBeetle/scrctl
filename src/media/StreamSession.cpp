@@ -43,7 +43,7 @@ uint16_t pick_port() {
 
 xpc::Value build_start_request(const std::string &receiver_ip, uint16_t receiver_port,
                                const std::string &sender_ip,
-                               const std::vector<uint8_t> &offer_bplist, uint32_t display_id,
+                               const std::vector<uint8_t> &offer_bytes, uint32_t display_id,
                                std::optional<uint32_t> timeout_seconds,
                                uint64_t client_supported_features,
                                const std::vector<uint8_t> &event_channel_uuid, bool audio,
@@ -51,7 +51,7 @@ xpc::Value build_start_request(const std::string &receiver_ip, uint16_t receiver
     auto d = xpc::make_dict();
     xpc::dict_set(d, "clientSupportedFeatures", xpc::make_uint64(client_supported_features));
     xpc::dict_set(d, "direction", xpc::make_string("output"));
-    xpc::dict_set(d, "negotiatorOffer", xpc::make_data(offer_bplist));
+    xpc::dict_set(d, "negotiatorOffer", xpc::make_data(offer_bytes));
 
     auto options = xpc::make_dict();
     xpc::dict_set(options, "AVCMediaStreamNegotiatorAccessNetworkType",

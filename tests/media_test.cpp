@@ -9,7 +9,7 @@
 #include "media/FramePump.h"
 #include "media/MediaOffer.h"
 #include "media/ScreenshotSource.h"
-#include "plist/Bplist.h"
+#include "plist/Plist.h"
 #include "util/Deflate.h"
 
 namespace {
@@ -196,14 +196,14 @@ int main() {
         check(!zlib_unstore(broken, back, err), "载荷被改后校验失败: " + err);
     }
 
-    std::printf("\n== offer 的 bplist 外壳 ==\n");
+    std::printf("\n== offer 的 XML plist ==\n");
     Offer offer;
     offer.session_id = 2368635137;
     offer.call_id = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE";
     const auto blob = build_negotiator_offer(offer);
     std::string err;
-    auto parsed = scrctl::plist::parse_binary(blob, &err);
-    check(parsed.has_value(), "offer 是合法 bplist: " + err);
+    auto parsed = scrctl::plist::parse(std::string(blob.begin(), blob.end()), &err);
+    check(parsed.has_value(), "offer 是合法 XML plist: " + err);
     if (!parsed) {
         return 1;
     }
@@ -257,8 +257,9 @@ int main() {
     Offer other = offer;
     other.host_model = "Mac9,1";
     other.avc_features = "FLS;SW:1;LTRP:1;";
-    const auto other_parsed = scrctl::plist::parse_binary(build_negotiator_offer(other));
-    check(other_parsed.has_value(), "改过的 offer 仍是合法 bplist");
+    const auto other_blob = build_negotiator_offer(other);
+    const auto other_parsed = scrctl::plist::parse(std::string(other_blob.begin(), other_blob.end()));
+    check(other_parsed.has_value(), "修改主机身份后的 offer 仍是合法 XML plist");
     if (other_parsed) {
         std::vector<Field> ep_fields;
         check(parse_fields(other_parsed->find("avcMediaStreamOptionRemoteEndpointInfo")->data,
@@ -290,6 +291,26 @@ int main() {
         const auto *features = only(other_avc, 3);
         check(features != nullptr && as_text(features->bytes) == "FLS;SW:1;LTRP:1;",
               "改能力串能落到 AVC bank 里（--bit-rate / 编解码开关以后就靠这条口子）");
+    }
+
+    std::printf("\n== 音频 XML offer ==\n");
+    Offer audio_offer = offer;
+    audio_offer.is_audio = true;
+    const auto audio_blob = build_negotiator_offer(audio_offer);
+    const auto audio_plist = scrctl::plist::parse(std::string(audio_blob.begin(), audio_blob.end()));
+    check(audio_plist.has_value(), "音频 offer 可解析为 XML plist");
+    if (audio_plist) {
+        const auto *mode = audio_plist->find("avcMediaStreamNegotiatorMode");
+        const auto *media = audio_plist->find("avcMediaStreamNegotiatorMediaBlob");
+        check(mode && mode->as_int_or() == 6, "音频使用 mode 6");
+        std::vector<uint8_t> audio_payload;
+        std::vector<Field> audio_top;
+        std::string audio_err;
+        const bool decoded = media && zlib_unstore(media->data, audio_payload, audio_err) &&
+                             parse_fields(audio_payload, audio_top);
+        check(decoded, "XML data 保留可解压的音频参数");
+        check(decoded && only(audio_top, 3) && !only(audio_top, 5),
+              "音频参数使用 f3，不含视频 f5");
     }
 
     // 音频水位与环容量。这一段是纯算术，不需要设备——而它要防的正是"没设备就测不到"

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 10:45+0800\n"
+"POT-Creation-Date: 2026-10-07 14:25+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,167 +17,103 @@ msgstr ""
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: src/app/Application.cpp:41
+#: src/app/Application.cpp:37
 #, c-format
 msgid ""
 "Visible area %ux%u -> %dx%d (device did not report dimensions; using model "
 "table)\n"
 msgstr ""
 
-#: src/app/Application.cpp:89 src/app/Application.cpp:108
-#, c-format
-msgid "Failed to establish session: %s\n"
-msgstr ""
-
-#: src/app/Application.cpp:94
-#, c-format
-msgid "Failed to list apps: %s\n"
-msgstr ""
-
-#: src/app/Application.cpp:100
-#, c-format
-msgid "Total: %zu\n"
-msgstr ""
-
-#: src/app/Application.cpp:114
-#, c-format
-msgid "Wrote %zu bytes to device clipboard\n"
-msgstr ""
-
-#: src/app/Application.cpp:116
-#, c-format
-msgid "--copy failed: %s\n"
-msgstr ""
-
-#: src/app/Application.cpp:123
-#, c-format
-msgid "Device clipboard (%zu bytes): %s\n"
-msgstr ""
-
-#: src/app/Application.cpp:125
-#, c-format
-msgid "--paste failed: %s\n"
-msgstr ""
-
-#: src/app/Application.cpp:143
+#: src/app/Application.cpp:73
 #, c-format
 msgid "Failed to start video: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:149
+#: src/app/Application.cpp:79
 #, c-format
 msgid "Device is in a call. End the call and try again.\n"
 msgstr ""
 
-#: src/app/Application.cpp:163
+#: src/app/Application.cpp:93
 #, c-format
 msgid "File playback cannot launch a device app; ignoring --start-app\n"
 msgstr ""
 
-#: src/app/Application.cpp:181
-#, c-format
-msgid "--start-app requires a nonempty app name\n"
-msgstr ""
-
-#: src/app/Application.cpp:191
-#, c-format
-msgid "Failed to find app by name: %s\n"
-msgstr ""
-
-#: src/app/Application.cpp:209
-#, c-format
-msgid "No app name starts with %s\n"
-msgstr ""
-
-#: src/app/Application.cpp:217
-#, c-format
-msgid "Failed to launch %s: %s\n"
-msgstr ""
-
-#: src/app/Application.cpp:220
-msgid " (previous instance terminated)"
-msgstr ""
-
-#: src/app/Application.cpp:220
-#, c-format
-msgid "Launched %s%s\n"
-msgstr ""
-
-#: src/app/Application.cpp:237
+#: src/app/Application.cpp:116
 #, c-format
 msgid "SDL initialization failed: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:246
+#: src/app/Application.cpp:125
 #, c-format
 msgid "Failed to open audio output: %s (receiving and decoding continue)\n"
 msgstr ""
 
-#: src/app/Application.cpp:249
+#: src/app/Application.cpp:128
 #, c-format
 msgid "Local audio playback disabled; receiving and decoding continue\n"
 msgstr ""
 
-#: src/app/Application.cpp:270
+#: src/app/Application.cpp:149
 msgid "failed"
 msgstr ""
 
-#: src/app/Application.cpp:270
+#: src/app/Application.cpp:149
 msgid "injected"
 msgstr ""
 
-#: src/app/Application.cpp:279
+#: src/app/Application.cpp:158
 #, c-format
 msgid "--test-button %s: pressed\n"
 msgstr ""
 
-#: src/app/Application.cpp:281
+#: src/app/Application.cpp:160
 #, c-format
 msgid "--test-button %s failed: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:290
+#: src/app/Application.cpp:169
 #, c-format
 msgid "--test-type %s: injected\n"
 msgstr ""
 
-#: src/app/Application.cpp:292
+#: src/app/Application.cpp:171
 #, c-format
 msgid "--test-type failed: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:317
+#: src/app/Application.cpp:196
 #, c-format
 msgid "Input injection failed (further attempts disabled): %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:328
+#: src/app/Application.cpp:207
 #, c-format
 msgid "Reached --time-limit %d seconds\n"
 msgstr ""
 
-#: src/app/Application.cpp:332
+#: src/app/Application.cpp:211
 #, c-format
 msgid "Received exit signal; closing device session\n"
 msgstr ""
 
-#: src/app/Application.cpp:342
+#: src/app/Application.cpp:221
 #, c-format
 msgid ""
 "  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
 msgstr ""
 
-#: src/app/Application.cpp:367 src/app/Application.cpp:419
+#: src/app/Application.cpp:246 src/app/Application.cpp:298
 #, c-format
 msgid "Reached --exit-after %d\n"
 msgstr ""
 
-#: src/app/Application.cpp:401
+#: src/app/Application.cpp:280
 #, c-format
 msgid "Display orientation changed to %d degrees clockwise; window recreated\n"
 msgstr ""
 
-#: src/app/Application.cpp:425
+#: src/app/Application.cpp:304
 #, c-format
 msgid "Finished: rendered %d frames\n"
 msgstr ""
@@ -419,6 +355,70 @@ msgstr ""
 
 #: src/app/Cli.cpp:163 src/app/Cli.cpp:164
 msgid "Options"
+msgstr ""
+
+#: src/app/Commands.cpp:40 src/app/Commands.cpp:63
+#, c-format
+msgid "Failed to establish session: %s\n"
+msgstr ""
+
+#: src/app/Commands.cpp:45
+#, c-format
+msgid "Failed to list apps: %s\n"
+msgstr ""
+
+#: src/app/Commands.cpp:51
+#, c-format
+msgid "Total: %zu\n"
+msgstr ""
+
+#: src/app/Commands.cpp:69
+#, c-format
+msgid "Wrote %zu bytes to device clipboard\n"
+msgstr ""
+
+#: src/app/Commands.cpp:71
+#, c-format
+msgid "--copy failed: %s\n"
+msgstr ""
+
+#: src/app/Commands.cpp:78
+#, c-format
+msgid "Device clipboard (%zu bytes): %s\n"
+msgstr ""
+
+#: src/app/Commands.cpp:80
+#, c-format
+msgid "--paste failed: %s\n"
+msgstr ""
+
+#: src/app/Commands.cpp:106
+#, c-format
+msgid "--start-app requires a nonempty app name\n"
+msgstr ""
+
+#: src/app/Commands.cpp:116
+#, c-format
+msgid "Failed to find app by name: %s\n"
+msgstr ""
+
+#: src/app/Commands.cpp:134
+#, c-format
+msgid "No app name starts with %s\n"
+msgstr ""
+
+#: src/app/Commands.cpp:142
+#, c-format
+msgid "Failed to launch %s: %s\n"
+msgstr ""
+
+#: src/app/Commands.cpp:145
+msgid " (previous instance terminated)"
+msgstr ""
+
+#: src/app/Commands.cpp:145
+#, c-format
+msgid "Launched %s%s\n"
 msgstr ""
 
 #: src/app/DeviceConnection.cpp:29
@@ -1343,134 +1343,6 @@ msgstr ""
 
 #: src/net/UdpSocket.cpp:141
 msgid "UDP receive timed out"
-msgstr ""
-
-#: src/plist/Bplist.cpp:54
-msgid "bplist input empty or larger than 8 MiB"
-msgstr ""
-
-#: src/plist/Bplist.cpp:58
-msgid "bplist too short"
-msgstr ""
-
-#: src/plist/Bplist.cpp:62
-msgid "Missing bplist magic"
-msgstr ""
-
-#: src/plist/Bplist.cpp:73
-msgid "Invalid byte width in bplist trailer"
-msgstr ""
-
-#: src/plist/Bplist.cpp:77
-msgid "Invalid bplist object count: "
-msgstr ""
-
-#: src/plist/Bplist.cpp:81
-msgid "Offset table out of bounds or truncated"
-msgstr ""
-
-#: src/plist/Bplist.cpp:85
-msgid "Root object index out of bounds"
-msgstr ""
-
-#: src/plist/Bplist.cpp:93
-msgid "Object offset outside object region"
-msgstr ""
-
-#: src/plist/Bplist.cpp:120
-msgid "Length field truncated"
-msgstr ""
-
-#: src/plist/Bplist.cpp:124
-msgid "Extended count marker is not 0x1X"
-msgstr ""
-
-#: src/plist/Bplist.cpp:129
-msgid "Invalid count width"
-msgstr ""
-
-#: src/plist/Bplist.cpp:133
-msgid "Count bytes truncated"
-msgstr ""
-
-#: src/plist/Bplist.cpp:150
-msgid "bplist expanded nodes exceed 65536"
-msgstr ""
-
-#: src/plist/Bplist.cpp:152
-msgid "Nesting too deep (possible cycle)"
-msgstr ""
-
-#: src/plist/Bplist.cpp:155
-msgid "Object index out of bounds"
-msgstr ""
-
-#: src/plist/Bplist.cpp:172
-msgid "Reserved marker"
-msgstr ""
-
-#: src/plist/Bplist.cpp:175
-msgid "Integer width exceeds 8 bytes"
-msgstr ""
-
-#: src/plist/Bplist.cpp:179
-msgid "Integer truncated"
-msgstr ""
-
-#: src/plist/Bplist.cpp:190
-msgid "Only 8-byte reals are supported"
-msgstr ""
-
-#: src/plist/Bplist.cpp:193
-msgid "Real truncated"
-msgstr ""
-
-#: src/plist/Bplist.cpp:205
-msgid "Data out of bounds"
-msgstr ""
-
-#: src/plist/Bplist.cpp:213
-msgid "String out of bounds"
-msgstr ""
-
-#: src/plist/Bplist.cpp:224
-msgid "UTF-16 string out of bounds"
-msgstr ""
-
-#: src/plist/Bplist.cpp:231
-msgid "UTF-16 missing low surrogate"
-msgstr ""
-
-#: src/plist/Bplist.cpp:239
-msgid "UTF-16 surrogate mismatch"
-msgstr ""
-
-#: src/plist/Bplist.cpp:241
-msgid "UTF-16 isolated low surrogate"
-msgstr ""
-
-#: src/plist/Bplist.cpp:255
-msgid "Element references exceed remaining bytes"
-msgstr ""
-
-#: src/plist/Bplist.cpp:262
-msgid "Dictionary key/value references exceed available bytes"
-msgstr ""
-
-#: src/plist/Bplist.cpp:265
-msgid "bplist expanded container exceeds node limit"
-msgstr ""
-
-#: src/plist/Bplist.cpp:285
-msgid "Dictionary key must be a string"
-msgstr ""
-
-#: src/plist/Bplist.cpp:296
-msgid "Unsupported bplist marker"
-msgstr ""
-
-#: src/plist/Bplist.cpp:323
-msgid "bplist expanded data exceeds 16 MiB"
 msgstr ""
 
 #: src/plist/Plist.cpp:27

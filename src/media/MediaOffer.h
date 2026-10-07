@@ -8,10 +8,9 @@ namespace scrctl::media {
 
 /// CoreDevice 媒体协商的 offer。
 ///
-/// 形态是「bplist 套 zlib 套 protobuf」三层，字段号与取值全部来自一次可用会话的
-/// 观测：设备只告诉我们它接受什么，不解释每个数的含义。凡是语义没搞清的，这里
-/// 都写成带注释的常量而不是编一个名字糊过去——猜错语义会表现为"流起不来"，
-/// 而留着观测值至少能保证起得来。
+/// 外层使用 XML plist，Data 字段包含 zlib 压缩的媒体参数和 endpoint protobuf。
+/// protobuf 字段号和取值来自可用会话的观测。未确认含义的参数保留观测值；
+/// 修改前需要分别验证协商回复、实际码流和恢复行为。
 struct Offer {
     /// 本腿在 offer 里声明的 SSRC（视频放 `VideoSettings.f1`、音频放 f3.f1）。
     ///
@@ -94,8 +93,9 @@ struct Offer {
     /// 分配并 memset 11MB 的开销），不是设备在保码率砍帧率。数字见 docs §11。
 };
 
-/// negotiatorOffer 的 bplist 字节，直接塞进 startmediastream 请求的
-/// `negotiatorOffer` 字段。
+/// 生成 XML plist，以 XPC Data 放入 startmediastream 的 negotiatorOffer。
+/// 两个 Data 字段在 XML 中使用 Base64；压缩媒体参数和 endpoint protobuf 不变。
+/// XML 视频、音频起流的真机对照见 docs/BPLIST_COMPATIBILITY.md。
 [[nodiscard]] std::vector<uint8_t> build_negotiator_offer(const Offer &offer);
 
 }  // namespace scrctl::media

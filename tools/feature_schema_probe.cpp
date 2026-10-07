@@ -14,7 +14,6 @@
 #include <string>
 #include <vector>
 
-#include "plist/Bplist.h"
 #include "plist/Plist.h"
 #include "remote/Device.h"
 #include "xpc/XpcValue.h"
@@ -372,10 +371,14 @@ int main(int argc, char** argv)
                 value = scrctl::xpc::make_int64(0);
             }
             else if (kind == "Data") {
-                // 设备对空 Data 的回话是 "Cannot parse a NULL or zero-length data"，
-                // 也就是说它是一段 plist。给一个空的 bplist 字典。
-                auto dict = scrctl::plist::Value::Dict();
-                value = scrctl::xpc::make_data(scrctl::plist::write_binary(dict));
+                // 保留探针原有的空 bplist 字典样本，供未知 Data 字段的类型探测。
+                // 固定 42 字节只表示空字典，不需要维护通用 binary plist 编解码器。
+                // 媒体 offer 已验证可用 XML，这不能证明其他 feature 的 Data 格式要求。
+                const std::vector<uint8_t> empty_dictionary {
+                    0x62, 0x70, 0x6c, 0x69, 0x73, 0x74, 0x30, 0x30, 0xd0, 0x08, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09 };
+                value = scrctl::xpc::make_data(empty_dictionary);
             }
             scrctl::xpc::dict_set(parent, key, std::move(value));
         }

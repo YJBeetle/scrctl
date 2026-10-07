@@ -1,9 +1,51 @@
-# binary plist 库评估（2026-10-07）
+# 媒体 offer 格式与 binary plist 评估（2026-10-07）
 
-## 结论
+## 当前结论
 
-本轮保留当前 binary plist 实现，XML 继续使用 pugixml。
-评估完成，不将“已经用库”记为已完成项。
+起流不必在客户端生成 binary plist。本次 macOS USB 真机对照确认，同一份视频和音频
+参数使用 XML plist 也能协商并收包；生产 offer 已改用现有 pugixml 写入器。
+`negotiatorOffer` 仍是 XPC Data，其中两个 Data 字段使用 XML 的 Base64 表示，
+zlib 媒体参数和 endpoint protobuf 的字节内容不变。
+
+删除 `Bplist.cpp`、`Bplist.h`（合计 672 行）及 300 行独立测试，不再维护通用
+binary plist 解析或序列化。研究工具 `feature_schema_probe` 只保留一份 42 字节的
+空 bplist 字典样本，用于未知 Data 字段的类型探测；其原有探测行为不变。
+媒体格式验证不代表其他 CoreDevice feature 的任意 Data 字段都接受 XML。
+
+## 真机对照
+
+设备：iPhone14,4 / iOS 27.0，macOS USB，通过已有信任与 DDI 连接。
+先由旧构造器生成固定 SSRC / CallID 的 binary offer，再由项目 pugixml 写入器生成
+相同 Value 的 XML；用 Python plistlib 逐值确认字典及两个 Data 载荷完全一致。
+视频为 566 → 956 字节，音频为 461 → 816 字节。XML 多出的几百字节只在起流时传输。
+
+每种媒体依次发送 binary → XML → binary；各观察 5 秒，租期 20 秒，不发送 RTCP，
+避免重放 offer 与探针生成的 SSRC 不一致影响判断。每轮结束执行 stopAll。
+
+| 顺序 | 视频 | 音频 |
+| --- | --- | --- |
+| binary 基线 | 起流成功，真实 IDR 1 个，会话仍存活 | RTP 501 个，RTCP 5 个，会话仍存活 |
+| XML | 起流成功，真实 IDR 1 个，会话仍存活 | RTP 500 个，RTCP 5 个，会话仍存活 |
+| binary 复测 | 起流成功，真实 IDR 1 个，会话仍存活 | RTP 500 个，RTCP 5 个，会话仍存活 |
+
+随后用修改后的生产程序运行：
+
+```bash
+./build/scrctl --lang en --no-window --no-audio-playback --stats \
+  --time-limit 45 --test-degrade 8,14
+```
+
+输出 2230 帧，强制截图降级后恢复视频，截图失败为 0；视频和音频跨过 20 秒租期，
+最后统计视频 RR 48 次、音频 RR 44 次，发送失败为 0。音频约 100 包/秒且持续解码，
+解码失败、丢包和重启计数为 0。本次禁用了本地声卡输出，不作为听感验证。
+
+以上结论覆盖本次设备与系统。其他受支持 iOS / iPadOS 版本的 XML 起流仍需设备回归。
+不根据 Apple 通用 plist API 或第三方客户端选择 binary 的代码推断所有服务的格式要求。
+
+## 移除前的库评估
+
+此前先评估了替换 binary 编解码库；以下是当时保留实现并修复边界的依据。
+后来真机 XML 对照通过，生产流程不再需要 binary 编解码，因此这些候选没有引入。
 
 | 候选 | 可用部分 | 影响替换的限制 |
 | --- | --- | --- |
@@ -21,7 +63,7 @@ libplist 的对象循环检查不能代替项目的资源限制。递归解析�
 
 原代码注释仅以 LGPL 名称认定 libplist 不可用，没有区分链接与分发安排，已删除。
 上游许可为 LGPL-2.1-or-later；未来若采用，需要明确实际链接方式和分发声明。
-本轮未增加 libplist 生产依赖，当前保留实现的理由是兼容性与资源控制。
+本轮未增加 libplist 生产依赖，当时保留实现的理由是兼容性与资源控制。
 
 ## 本轮修复
 

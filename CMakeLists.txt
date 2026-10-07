@@ -115,7 +115,6 @@ add_library(scrctl_core STATIC
         src/plist/Plist.cpp
         src/plist/PlistValue.cpp
         src/util/Base64.cpp
-        src/plist/Bplist.cpp
         src/xpc/XpcValue.cpp
         src/http2/Framing.cpp
         src/util/Deflate.cpp
@@ -195,7 +194,7 @@ endif()
 
 # ----------------------------------------------------------------- app ------
 add_library(scrctl_app STATIC
-        src/app/Application.cpp
+    src/app/Application.cpp
     src/app/Commands.cpp
         src/app/SdlRuntime.cpp
         src/app/Presenter.cpp
@@ -376,10 +375,6 @@ if(SCRCTL_BUILD_TESTS)
     add_executable(media_test tests/media_test.cpp)
     target_link_libraries(media_test PRIVATE scrctl_core)
     add_test(NAME media COMMAND media_test)
-
-    add_executable(bplist_test tests/bplist_test.cpp)
-    target_link_libraries(bplist_test PRIVATE scrctl_core)
-    add_test(NAME bplist COMMAND bplist_test)
 
     add_executable(json_test tests/json_test.cpp)
     target_link_libraries(json_test PRIVATE scrctl_core)

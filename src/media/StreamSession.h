@@ -96,13 +96,8 @@ public:
         /// 空 = 本腿自己生成一个。苹果是两条腿用同一个，所以要做那组实验必须能传进来。
         std::vector<uint8_t> client_session_uuid;
         Offer offer;
-        /// 非空时**原样**当作 `negotiatorOffer` 的字节发出去，绕开 `build_negotiator_offer`。
-        ///
-        /// 为什么要有：offer 是"bplist 套 zlib 套 protobuf"三层、几十个字段，而"逐字段
-        /// 比对我们的和苹果的"这件事一直做不干净——每次都有人说"这一位大概无所谓"。
-        /// 手里正好有苹果当场发出去的那 482 字节原文（抓包解出来的），最省事的判据就是
-        /// 把它**一个字节都不改地**发一遍：设备如果对 offer 里的某一位有反应，这样一定
-        /// 会反应出来；如果这样仍然 20 秒死，那 offer 这一整层就可以判掉，不用再猜字段。
+        /// 非空时原样作为 negotiatorOffer 的 XPC Data，供抓包重放和格式对照。
+        /// 不修改样本中的 SSRC / CallID；发送 RTCP 时需与样本身份保持一致。
         std::vector<uint8_t> raw_offer;
     };
 
@@ -212,7 +207,7 @@ private:
 [[nodiscard]] scrctl::xpc::Value build_start_request(const std::string &receiver_ip,
                                                      uint16_t receiver_port,
                                                      const std::string &sender_ip,
-                                                     const std::vector<uint8_t> &offer_bplist,
+                                                     const std::vector<uint8_t> &offer_bytes,
                                                      uint32_t display_id,
                                                      std::optional<uint32_t> timeout_seconds,
                                                      uint64_t client_supported_features,

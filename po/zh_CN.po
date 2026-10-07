@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 10:45+0800\n"
+"POT-Creation-Date: 2026-10-07 14:25+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -12,167 +12,103 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: src/app/Application.cpp:41
+#: src/app/Application.cpp:37
 #, c-format
 msgid ""
 "Visible area %ux%u -> %dx%d (device did not report dimensions; using model "
 "table)\n"
 msgstr "可见区 %ux%u -> %dx%d（设备未报告尺寸，使用机型表）\n"
 
-#: src/app/Application.cpp:89 src/app/Application.cpp:108
-#, c-format
-msgid "Failed to establish session: %s\n"
-msgstr "建立会话失败: %s\n"
-
-#: src/app/Application.cpp:94
-#, c-format
-msgid "Failed to list apps: %s\n"
-msgstr "列 App 失败: %s\n"
-
-#: src/app/Application.cpp:100
-#, c-format
-msgid "Total: %zu\n"
-msgstr "共 %zu 个\n"
-
-#: src/app/Application.cpp:114
-#, c-format
-msgid "Wrote %zu bytes to device clipboard\n"
-msgstr "已写入设备剪贴板：%zu 字节\n"
-
-#: src/app/Application.cpp:116
-#, c-format
-msgid "--copy failed: %s\n"
-msgstr "--copy 写入失败: %s\n"
-
-#: src/app/Application.cpp:123
-#, c-format
-msgid "Device clipboard (%zu bytes): %s\n"
-msgstr "设备剪贴板（%zu 字节）：%s\n"
-
-#: src/app/Application.cpp:125
-#, c-format
-msgid "--paste failed: %s\n"
-msgstr "--paste 读取失败: %s\n"
-
-#: src/app/Application.cpp:143
+#: src/app/Application.cpp:73
 #, c-format
 msgid "Failed to start video: %s\n"
 msgstr "启动视频失败: %s\n"
 
-#: src/app/Application.cpp:149
+#: src/app/Application.cpp:79
 #, c-format
 msgid "Device is in a call. End the call and try again.\n"
 msgstr "设备正在通话，请结束通话后重试。\n"
 
-#: src/app/Application.cpp:163
+#: src/app/Application.cpp:93
 #, c-format
 msgid "File playback cannot launch a device app; ignoring --start-app\n"
 msgstr "文件回放模式无法启动设备应用，已忽略 --start-app\n"
 
-#: src/app/Application.cpp:181
-#, c-format
-msgid "--start-app requires a nonempty app name\n"
-msgstr "--start-app 的名字是空的\n"
-
-#: src/app/Application.cpp:191
-#, c-format
-msgid "Failed to find app by name: %s\n"
-msgstr "按名字找 App 失败: %s\n"
-
-#: src/app/Application.cpp:209
-#, c-format
-msgid "No app name starts with %s\n"
-msgstr "没有名字以 %s 开头的 App\n"
-
-#: src/app/Application.cpp:217
-#, c-format
-msgid "Failed to launch %s: %s\n"
-msgstr "启动 %s 失败: %s\n"
-
-#: src/app/Application.cpp:220
-msgid " (previous instance terminated)"
-msgstr "（已先终止原实例）"
-
-#: src/app/Application.cpp:220
-#, c-format
-msgid "Launched %s%s\n"
-msgstr "已启动 %s%s\n"
-
-#: src/app/Application.cpp:237
+#: src/app/Application.cpp:116
 #, c-format
 msgid "SDL initialization failed: %s\n"
 msgstr "SDL 初始化失败: %s\n"
 
-#: src/app/Application.cpp:246
+#: src/app/Application.cpp:125
 #, c-format
 msgid "Failed to open audio output: %s (receiving and decoding continue)\n"
 msgstr "打开音频输出失败: %s（继续接收和解码音频）\n"
 
-#: src/app/Application.cpp:249
+#: src/app/Application.cpp:128
 #, c-format
 msgid "Local audio playback disabled; receiving and decoding continue\n"
 msgstr "已禁用本机音频播放，继续接收和解码音频\n"
 
-#: src/app/Application.cpp:270
+#: src/app/Application.cpp:149
 msgid "failed"
 msgstr "失败"
 
-#: src/app/Application.cpp:270
+#: src/app/Application.cpp:149
 msgid "injected"
 msgstr "已注入"
 
-#: src/app/Application.cpp:279
+#: src/app/Application.cpp:158
 #, c-format
 msgid "--test-button %s: pressed\n"
 msgstr "--test-button %s: 已按下\n"
 
-#: src/app/Application.cpp:281
+#: src/app/Application.cpp:160
 #, c-format
 msgid "--test-button %s failed: %s\n"
 msgstr "--test-button %s 失败: %s\n"
 
-#: src/app/Application.cpp:290
+#: src/app/Application.cpp:169
 #, c-format
 msgid "--test-type %s: injected\n"
 msgstr "--test-type %s: 已注入\n"
 
-#: src/app/Application.cpp:292
+#: src/app/Application.cpp:171
 #, c-format
 msgid "--test-type failed: %s\n"
 msgstr "--test-type 失败: %s\n"
 
-#: src/app/Application.cpp:317
+#: src/app/Application.cpp:196
 #, c-format
 msgid "Input injection failed (further attempts disabled): %s\n"
 msgstr "注入输入失败（已停止尝试）: %s\n"
 
-#: src/app/Application.cpp:328
+#: src/app/Application.cpp:207
 #, c-format
 msgid "Reached --time-limit %d seconds\n"
 msgstr "达到 --time-limit %d 秒\n"
 
-#: src/app/Application.cpp:332
+#: src/app/Application.cpp:211
 #, c-format
 msgid "Received exit signal; closing device session\n"
 msgstr "收到退出信号，正在关闭设备会话\n"
 
-#: src/app/Application.cpp:342
+#: src/app/Application.cpp:221
 #, c-format
 msgid ""
 "  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
 msgstr "  渲染：累计 %d 帧，本次 %d 帧 / %.1f fps，全程平均 %.1f fps\n"
 
-#: src/app/Application.cpp:367 src/app/Application.cpp:419
+#: src/app/Application.cpp:246 src/app/Application.cpp:298
 #, c-format
 msgid "Reached --exit-after %d\n"
 msgstr "达到 --exit-after %d\n"
 
-#: src/app/Application.cpp:401
+#: src/app/Application.cpp:280
 #, c-format
 msgid "Display orientation changed to %d degrees clockwise; window recreated\n"
 msgstr "显示方向已改为顺时针 %d°，窗口已重建\n"
 
-#: src/app/Application.cpp:425
+#: src/app/Application.cpp:304
 #, c-format
 msgid "Finished: rendered %d frames\n"
 msgstr "完成：渲染 %d 帧\n"
@@ -421,6 +357,70 @@ msgstr "用法"
 #: src/app/Cli.cpp:163 src/app/Cli.cpp:164
 msgid "Options"
 msgstr "选项"
+
+#: src/app/Commands.cpp:40 src/app/Commands.cpp:63
+#, c-format
+msgid "Failed to establish session: %s\n"
+msgstr "建立会话失败: %s\n"
+
+#: src/app/Commands.cpp:45
+#, c-format
+msgid "Failed to list apps: %s\n"
+msgstr "列 App 失败: %s\n"
+
+#: src/app/Commands.cpp:51
+#, c-format
+msgid "Total: %zu\n"
+msgstr "共 %zu 个\n"
+
+#: src/app/Commands.cpp:69
+#, c-format
+msgid "Wrote %zu bytes to device clipboard\n"
+msgstr "已写入设备剪贴板：%zu 字节\n"
+
+#: src/app/Commands.cpp:71
+#, c-format
+msgid "--copy failed: %s\n"
+msgstr "--copy 写入失败: %s\n"
+
+#: src/app/Commands.cpp:78
+#, c-format
+msgid "Device clipboard (%zu bytes): %s\n"
+msgstr "设备剪贴板（%zu 字节）：%s\n"
+
+#: src/app/Commands.cpp:80
+#, c-format
+msgid "--paste failed: %s\n"
+msgstr "--paste 读取失败: %s\n"
+
+#: src/app/Commands.cpp:106
+#, c-format
+msgid "--start-app requires a nonempty app name\n"
+msgstr "--start-app 的名字是空的\n"
+
+#: src/app/Commands.cpp:116
+#, c-format
+msgid "Failed to find app by name: %s\n"
+msgstr "按名字找 App 失败: %s\n"
+
+#: src/app/Commands.cpp:134
+#, c-format
+msgid "No app name starts with %s\n"
+msgstr "没有名字以 %s 开头的 App\n"
+
+#: src/app/Commands.cpp:142
+#, c-format
+msgid "Failed to launch %s: %s\n"
+msgstr "启动 %s 失败: %s\n"
+
+#: src/app/Commands.cpp:145
+msgid " (previous instance terminated)"
+msgstr "（已先终止原实例）"
+
+#: src/app/Commands.cpp:145
+#, c-format
+msgid "Launched %s%s\n"
+msgstr "已启动 %s%s\n"
 
 #: src/app/DeviceConnection.cpp:29
 #, c-format
@@ -1377,134 +1377,6 @@ msgstr "UDP 发送失败（lwIP "
 #: src/net/UdpSocket.cpp:141
 msgid "UDP receive timed out"
 msgstr "UDP 接收超时"
-
-#: src/plist/Bplist.cpp:54
-msgid "bplist input empty or larger than 8 MiB"
-msgstr "bplist 输入为空或超过 8 MiB"
-
-#: src/plist/Bplist.cpp:58
-msgid "bplist too short"
-msgstr "bplist 太短"
-
-#: src/plist/Bplist.cpp:62
-msgid "Missing bplist magic"
-msgstr "缺 bplist 魔数"
-
-#: src/plist/Bplist.cpp:73
-msgid "Invalid byte width in bplist trailer"
-msgstr "bplist 尾部声明的字节宽度不合理"
-
-#: src/plist/Bplist.cpp:77
-msgid "Invalid bplist object count: "
-msgstr "bplist 对象数不合理: "
-
-#: src/plist/Bplist.cpp:81
-msgid "Offset table out of bounds or truncated"
-msgstr "偏移表越界或被截断"
-
-#: src/plist/Bplist.cpp:85
-msgid "Root object index out of bounds"
-msgstr "根对象编号越界"
-
-#: src/plist/Bplist.cpp:93
-msgid "Object offset outside object region"
-msgstr "对象偏移落在尾部之后"
-
-#: src/plist/Bplist.cpp:120
-msgid "Length field truncated"
-msgstr "长度字段被截断"
-
-#: src/plist/Bplist.cpp:124
-msgid "Extended count marker is not 0x1X"
-msgstr "长形态的计数头不是 0x1X"
-
-#: src/plist/Bplist.cpp:129
-msgid "Invalid count width"
-msgstr "计数宽度不合理"
-
-#: src/plist/Bplist.cpp:133
-msgid "Count bytes truncated"
-msgstr "计数字节被截断"
-
-#: src/plist/Bplist.cpp:150
-msgid "bplist expanded nodes exceed 65536"
-msgstr "bplist 展开节点超过 65536 个"
-
-#: src/plist/Bplist.cpp:152
-msgid "Nesting too deep (possible cycle)"
-msgstr "嵌套过深（可能有环）"
-
-#: src/plist/Bplist.cpp:155
-msgid "Object index out of bounds"
-msgstr "对象编号越界"
-
-#: src/plist/Bplist.cpp:172
-msgid "Reserved marker"
-msgstr "保留标志位"
-
-#: src/plist/Bplist.cpp:175
-msgid "Integer width exceeds 8 bytes"
-msgstr "整数宽度超过 8 字节"
-
-#: src/plist/Bplist.cpp:179
-msgid "Integer truncated"
-msgstr "整数被截断"
-
-#: src/plist/Bplist.cpp:190
-msgid "Only 8-byte reals are supported"
-msgstr "只支持 8 字节浮点"
-
-#: src/plist/Bplist.cpp:193
-msgid "Real truncated"
-msgstr "浮点被截断"
-
-#: src/plist/Bplist.cpp:205
-msgid "Data out of bounds"
-msgstr "data 越界"
-
-#: src/plist/Bplist.cpp:213
-msgid "String out of bounds"
-msgstr "字符串越界"
-
-#: src/plist/Bplist.cpp:224
-msgid "UTF-16 string out of bounds"
-msgstr "UTF-16 串越界"
-
-#: src/plist/Bplist.cpp:231
-msgid "UTF-16 missing low surrogate"
-msgstr "UTF-16 缺少低代理项"
-
-#: src/plist/Bplist.cpp:239
-msgid "UTF-16 surrogate mismatch"
-msgstr "UTF-16 代理项不匹配"
-
-#: src/plist/Bplist.cpp:241
-msgid "UTF-16 isolated low surrogate"
-msgstr "UTF-16 出现孤立低代理项"
-
-#: src/plist/Bplist.cpp:255
-msgid "Element references exceed remaining bytes"
-msgstr "元素引用数超出剩余字节"
-
-#: src/plist/Bplist.cpp:262
-msgid "Dictionary key/value references exceed available bytes"
-msgstr "字典的键值两段引用放不下"
-
-#: src/plist/Bplist.cpp:265
-msgid "bplist expanded container exceeds node limit"
-msgstr "bplist 容器展开节点超过限制"
-
-#: src/plist/Bplist.cpp:285
-msgid "Dictionary key must be a string"
-msgstr "字典键必须是字符串"
-
-#: src/plist/Bplist.cpp:296
-msgid "Unsupported bplist marker"
-msgstr "不支持的 bplist 标志"
-
-#: src/plist/Bplist.cpp:323
-msgid "bplist expanded data exceeds 16 MiB"
-msgstr "bplist 展开数据超过 16 MiB"
 
 #: src/plist/Plist.cpp:27
 msgid "Container contains nonempty text"

@@ -10,7 +10,7 @@ namespace scrctl::plist {
 
 enum class Kind { Bool, Int, Real, String, Data, Array, Dict };
 
-/// XML 与 binary plist 共用的协议值类型。XML 编解码使用 pugixml。
+/// XML plist 的协议值类型，编解码使用 pugixml。
 ///
 /// dict 用 keys/values 平行数组而不是 vector<pair<string, Value>>：后者要在
 /// Value 尚不完整时实例化 pair，标准库不保证支持。平行数组同时保留插入顺序。
