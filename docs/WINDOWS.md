@@ -91,9 +91,9 @@ scrctl 使用 Apple 提供的 `127.0.0.1:27015` usbmux 通道。Windows 11 ARM64
    在管理员 PowerShell 中解包并安装，例如：
 
    ```powershell
-   New-Item -ItemType Directory -Path C:\AppleUsbDriver -Force
-   expand.exe "$env:USERPROFILE\Downloads\apple-usb-arm64.cab" -F:* C:\AppleUsbDriver
-   pnputil.exe /add-driver C:\AppleUsbDriver\AppleUsb.inf /install
+   New-Item -ItemType Directory -Path C:\Workspace\scrctl\setup\AppleUsbDriver -Force
+   expand.exe "$env:USERPROFILE\Downloads\apple-usb-arm64.cab" -F:* C:\Workspace\scrctl\setup\AppleUsbDriver
+   pnputil.exe /add-driver C:\Workspace\scrctl\setup\AppleUsbDriver\AppleUsb.inf /install
    ```
 
    `apple-usb-arm64.cab` 是这里使用的下载文件名，可按实际文件名修改。本轮所用包的

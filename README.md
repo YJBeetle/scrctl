@@ -98,6 +98,7 @@ CMake 优先找系统包，缺失时下载固定版本并校验 SHA256；首次�
 隧道内的 IPv6 / TCP / UDP 使用 lwIP 2.2.1（BSD-3-Clause），固定源码构建以保证配置一致。
 离线时还需用 `FETCHCONTENT_SOURCE_DIR_LWIP` 指定该版本源码；
 `-DSCRCTL_FETCH_DEPENDENCIES=OFF` 禁止下载缺失依赖。
+该选项仍允许使用上面指定的本地源码目录；目录无效时配置失败，不回退下载。
 第三方许可证位于对应依赖源码中，分发时应保留其许可声明。
 
 应用模块的职责与后续替换边界见 [重构说明](docs/REFACTOR.md)。
