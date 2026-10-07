@@ -69,7 +69,9 @@ scrctl --lang zh-CN --stats
 项目自己的帮助、状态和错误提示已接入翻译；设备响应、系统错误与 CLI11 自带校验文字保留其原文。
 Linux/glibc 需要至少安装一套中文或英文 UTF-8 locale 才能加载 gettext 中文翻译；
 只有 C / C.UTF-8 时回退英文。macOS 可搬移安装包及检查方法见 [macOS 说明](docs/MACOS.md)。
-开发探针 `tools/` 的独立输出暂不属于这次应用文案翻译范围。
+九个开发探针也已接入语言选择与消息目录：`screenshot_probe`、`rr_keepalive_probe`、
+`wifi_probe`、`stall_probe`、`audio_pump_probe`、`audio_decode_probe`、`feature_probe`、
+`applist_probe` 和 `app_launch_probe`。其余 `tools/` 输出仍在整理。
 
 修改用户提示时，英文消息使用 `SCRCTL_TR`（延后翻译的常量使用 `SCRCTL_N_`）。
 运行 `python3 tools/update_translations.py` 更新模板与中文目录，补齐 `po/zh_CN.po`
