@@ -16,7 +16,7 @@ scrctl 是独立产品，也是设备协议与恢复行为的验证项目。MaaF
 | 基础资源管理 | Base64 使用 OpenSSL；SDL 和系统 TCP 建连已收敛 | 本轮系统 socket 建连不替代隧道内 TCP 栈 |
 | 配对密码运算 | HKDF、SRP 摘要和 Ed25519 使用 OpenSSL；正式 M6/M2 已校验并保存设备原始标识和长期公钥 | USB 新建配对保存/重连、严格 Wi-Fi 身份校验及隧道/RSD 已通过；旧记录缺设备身份须 USB 重配，其他设备版本待验证 |
 | 恢复策略和旧 review 问题 | 可追溯旧项已逐项复查，线程信息和剪贴板边界本轮补修 | 长时间、物理断线和真实无线重连仍待验证，具体结论见下表 |
-| 注释与命令行文案 | 主要模块注释已整理；应用、核心输出及截图、RTCP、Wi-Fi、断流和音频会话探针支持 en / zh-CN / auto，默认跟随 locale | 其余 tools、零散注释与历史文档继续整理 |
+| 注释与命令行文案 | 主要模块注释已整理；应用、核心输出及九个独立探针支持 en / zh-CN / auto，默认跟随 locale | 其余 tools、零散注释与历史文档继续整理 |
 | MaaFramework | 按用户安排暂缓 | 后续参考 scrctl 验证过的实现，当前未修改 MaaFramework |
 
 XPC、OPACK、Apple 配对和控制语义、SRP 的 Apple 适配、Deflate 小工具暂时保留。
@@ -80,7 +80,7 @@ XPC、OPACK、Apple 配对和控制语义、SRP 的 Apple 适配、Deflate 小�
 
 | 剩余项 | 类型 | 下一步 |
 | --- | --- | --- |
-| tools 的输出和语言选择 | 文本 / 功能 | screenshot_probe、rr_keepalive_probe、wifi_probe、stall_probe 和 audio_pump_probe 的帮助、错误及运行期说明已接入 en / zh-CN / auto；其余探针继续整理 |
+| tools 的输出和语言选择 | 文本 / 功能 | screenshot_probe、rr_keepalive_probe、wifi_probe、stall_probe、audio_pump_probe、audio_decode_probe、feature_probe、applist_probe 和 app_launch_probe 的帮助、错误及运行期说明已接入 en / zh-CN / auto；其余探针继续整理 |
 | 零散注释与历史文档 | 文本 | 保留必要的详细协议说明，整理重复、过时和口语化表述；主要模块及配对注释已完成首轮 |
 | HTTP/2 库方案 | 功能 / 验证 | 生产继续保留当前帧层；后续获得实际 FileTransfer 子流证据后，再评估偶数文件流的适配 |
 | 设备长期身份认证 | 验证 / 使用 | 正式 M6/M2、USB 新建配对保存/重连和严格 Wi-Fi 身份校验/隧道/RSD 已通过；无设备身份的旧记录需 USB 重配，其他设备版本仍待测 |
@@ -967,3 +967,74 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
   keep-running 模式唤起正在播放的 QQ 音乐成功，未终止原实例。
 - 其余探针同类引用已核对：现存视图指向 argv，或解析结束后保持不变的
   字符串容器，没有发现相同的临时字符串生命周期问题。
+
+## 第六十八轮：音频文件、能力查询与应用列表探针
+
+- audio_decode_probe、feature_probe 和 applist_probe 使用 CLI11 和共用
+  CliLanguage，帮助、参数错误及运行期说明支持 en / zh-CN / auto，默认 auto
+  跟随 locale。必要的参数个数和数值校验先于文件读取或设备访问；帮助
+  和参数错误可在没有设备时退出，协议字段和值保持原有含义。
+  本批三个工具的实现已提交为 9fa7fa5。
+
+| 探针 | 默认执行环境中的完整双语 CLI 检查 |
+| --- | --- |
+| audio_decode_probe | 52 项通过 |
+| feature_probe | 40 项通过 |
+| applist_probe | 50 项通过 |
+
+- audio_decode_probe 的读写失败保留路径和原因，返回 1；打开、写出、刷新或关闭
+  输出失败时不再打印 Saved 成功提示。沙箱外使用真实 AudioToolbox 后端的
+  55 项集成检查通过，覆盖有效前缀、WAV 头、打开和刷新失败。另有四组 PCM
+  替身输入的新旧 WAV 字节完全相同；替身证明解析和写出行为，不作为真实 codec
+  解码的证据。
+- 完整 Release 与 ASan + UBSan 各通过 32/32；sanitizer 仪表化覆盖本次 C++
+  构建，不将未仪表化的 lwIP C 代码计入覆盖。最后一处 No connected devices
+  文案修正后，feature / gettext 目录的定向回归在两种构建中各通过 2/2。
+- feature_probe 和 applist_probe 的真实 USB 只读查询均成功，应用列表返回
+  241 项，其中包括 QQ 音乐。服务状态 sessions=[] / running=false 是数分钟
+  后的单次快照，不证明先前音乐测试退出时已立即停止设备流。音乐输出测试已
+  结束，用户确认电脑能够听到 QQ 音乐的证据仍按第六十五轮范围记录。
+- 已推送提交 70bb2f3 的
+  [CI run 37692331137](https://github.com/YJBeetle/scrctl/actions/runs/37692331137)
+  中，Ubuntu、macOS、Windows ARM64、ASan + UBSan 四个作业全部成功。该 CI
+  覆盖 70bb2f3；本轮三个工具的最新改动尚未进入新的 CI，以以上本地回归为证据。
+
+## 第六十九轮：应用控制和构建说明的中文注释
+
+- App.h / App.cpp 的中文注释改为直接描述请求结构、协议约束和当前行为，保留
+  applicationSpecifier 的 _0 嵌套、platformSpecificOptions 的 Data / plist 要求，
+  历史失败样本引用 coredevice 第 14 节，去掉对错误原因和重试效果的绝对化判断。
+- 修正 launch 的默认值说明：API 默认 terminate_existing=true，命令行默认
+  显式传 false，+ 前缀才请求终止重启。补清列表的部分结果与传输重试范围，以及
+  stop 成功返回不保证已观察到全部匹配进程退出。
+- App 两文件只改注释，1953 个完整非注释代码 token 和 69 个字符串字面量与修改前
+  完全相同，逻辑、默认值和输出均未变化。已独立提交为 a72eb18。
+- CMakeLists.txt 的中文说明同步整理，明确 SDL 的实际查找/下载选择、当前
+  VideoToolbox 的单 NAL 65535 字节范围、非 Apple 平台无 libav 时的视频后端
+  限制、静态库依赖使用 PUBLIC 传递的原因，以及 CLI 离线测试的验证范围。
+  剥离注释后全部命令语句完全相同，构建选项和依赖行为未改变。
+  已独立提交为 107adc0。
+
+## 第七十轮：应用启动和停止探针
+
+- app_launch_probe 改用 CLI11 和共用 CliLanguage，默认 auto；帮助、参数错误
+  和运行说明支持中英文。默认启动仍请求终止已有实例，--keep-running 保留
+  原实例；--shape 无需 bundle ID，只显示固定示例请求，不访问设备。
+- 停止提示不再声称一定发送过 SIGKILL 或进程已经退出。App::stop 在没有匹配
+  进程时也可能成功，工具提示另用进程路径筛选检查。启动请求成功也只确认
+  RPC 结果，是否已显示应用画面需另行检查。
+- 36 项双语离线检查通过，覆盖帮助、错误、默认语言及真实请求结构。
+  --shape 默认和 keep-running 两种输出与旧版逐字节相同；设备请求、60000 ms
+  超时与回复显示的 1500 字节截断保持不变。本轮没有启动或停止真机应用。
+- Release 和 ASan + UBSan 的应用 CLI、应用请求、语言及消息目录定向回归
+  各通过 4/4；全套 32 项回归的证据仍对应第六十八轮。
+
+## 第七十一轮：媒体协商与会话说明
+
+- MediaOffer.h / .cpp 和 StreamSession.h / .cpp 保留详细字段表、来源与验证
+  范围，改用直接描述行为的中文。明确 endpoint protobuf 与压缩媒体配置的
+  区别、音视频设置所在字段、独立/共享 UUID 的状态查询范围，以及 raw_offer
+  原样重放后反馈使用本次 answer 的 SSRC。
+- 注释中的样本大小、字段顺序和未知字段不再被描述为全部设备的协议要求。
+  Clang 词法对照确认 4033 个非注释 token、76 个字符串字面量和 19 个现有
+  Markdown 链接保持一致；仅改注释，已独立提交为 22d31f8。
