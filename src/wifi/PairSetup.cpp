@@ -13,6 +13,7 @@
 #include <map>
 
 #include "wifi/Opack.h"
+#include "wifi/PairingIdentity.h"
 #include "wifi/PairVerify.h"
 #include "wifi/Srp.h"
 #include "wifi/Tlv.h"
@@ -423,36 +424,39 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
         return fail();
     }
 
-    // 6) 若 M6 提供 EncryptedData，则用 setup_key 验证并解密，再尝试提取设备的
-    // 16 字节 altIRK，供 mDNS authTag 匹配使用。该字段缺失或内部信息无法解析时
-    // 当前实现允许 peer_alt_irk 留空；设备的长期公钥、标识和签名未在此验证，
-    // 不能用 SRP 证明或主机注册成功替代设备长期身份认证。
-    Bytes peer_alt_irk;
+    // 6) M6 必须携带设备身份密文。AEAD 解密后，用本次 SRP 会话派生的前缀
+    // 校验设备 Ed25519 签名，并保存原始标识和公钥，供后续 PairVerify 认证使用。
+    // 固定 PIN 的 SRP 和设备自签名仍需要可信的首次配对入口作为身份信任来源。
     const Bytes *sealed6 = tlv_get(*fields6, TlvType::EncryptedData);
-    if (sealed6 != nullptr) {
-        static constexpr char kPsMsg06[] = "\x00\x00\x00\x00PS-Msg06";
-        std::string open_err;
-        const std::optional<Bytes> plain6 =
-            chacha_open(sv(*setup_key), std::string_view(kPsMsg06, sizeof(kPsMsg06) - 1), *sealed6,
-                        open_err);
-        if (!plain6) {
-            err = SCRCTL_TR("Cannot decrypt M6: ") + open_err;
-            return fail();
-        }
-        std::string inner_err;
-        const std::map<uint8_t, Bytes> inner = tlv_parse(*plain6, inner_err);
-        if (!inner_err.empty()) {
-            err = std::string("M6") + SCRCTL_TR(" TLV decode incomplete: ") + inner_err;
-            return fail();
-        }
-        if (const Bytes *peer_info = tlv_get(inner, TlvType::Info)) {
-            OpackValue parsed;
-            std::string opack_err;
-            if (opack_decode(*peer_info, parsed, opack_err)) {
-                if (const OpackValue *irk = parsed.find("altIRK")) {
-                    if (irk->kind == OpackValue::Kind::kBytes && irk->bytes.size() == 16) {
-                        peer_alt_irk = irk->bytes;
-                    }
+    if (sealed6 == nullptr) {
+        err = SCRCTL_TR("PairSetup M6 missing encrypted device identity");
+        return fail();
+    }
+    static constexpr char kPsMsg06[] = "\x00\x00\x00\x00PS-Msg06";
+    std::string open_err;
+    const std::optional<Bytes> plain6 =
+        chacha_open(sv(*setup_key), std::string_view(kPsMsg06, sizeof(kPsMsg06) - 1), *sealed6,
+                    open_err);
+    if (!plain6) {
+        err = SCRCTL_TR("Cannot decrypt M6: ") + open_err;
+        return fail();
+    }
+    const std::optional<PairingIdentity> peer_identity =
+        authenticate_setup_identity(session_key, *plain6, err);
+    if (!peer_identity) {
+        return fail();
+    }
+
+    // altIRK 只用于 mDNS authTag 匹配，不参与设备签名校验。Info 缺失或其 OPACK
+    // 无法解析时可以留空；设备身份字段和签名已经由上一步单独验证。
+    Bytes peer_alt_irk;
+    if (!peer_identity->info.empty()) {
+        OpackValue parsed;
+        std::string opack_err;
+        if (opack_decode(peer_identity->info, parsed, opack_err)) {
+            if (const OpackValue *irk = parsed.find("altIRK")) {
+                if (irk->kind == OpackValue::Kind::kBytes && irk->bytes.size() == 16) {
+                    peer_alt_irk = irk->bytes;
                 }
             }
         }
@@ -478,6 +482,8 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
     record.host_private_key.assign(host_key->seed.begin(), host_key->seed.end());
     record.host_public_key = host_public;
     record.advertised_identifier = advertised;
+    record.peer_identifier = peer_identity->identifier;
+    record.peer_public_key = peer_identity->public_key;
     record.peer_alt_irk = peer_alt_irk;
 
     // 8) 可选远程解锁密钥。请求失败只通过 progress 报告，不撤销已安装的主密钥，

@@ -194,6 +194,15 @@ bool Device::finish_session(transport::PacketTunnel &&tunnel, PeerIdentity ident
 std::optional<Device> Device::establish_wifi(const std::string &address,
                                              const wifi::PairRecord &record, std::string &err,
                                              bool verbose, uint16_t port) {
+    // 本地记录问题应在连接前报出，避免网络不可达掩盖重新配对的原因。
+    if (!record.complete()) {
+        err = SCRCTL_TR("Pairing record incomplete; cannot sign");
+        return std::nullopt;
+    }
+    if (!record.has_peer_identity()) {
+        err = SCRCTL_TR("Pairing record has no device identity; pair again over USB");
+        return std::nullopt;
+    }
     std::optional<Device> dev;
     dev.emplace();
     dev->udid_ = record.udid;

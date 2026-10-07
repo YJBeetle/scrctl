@@ -264,7 +264,7 @@ bool open_plane(const PlaneSpec &spec, bool verbose, PairingPlane &out, std::str
     return true;
 }
 
-/// 有 UDID 时按标识符匹配；未指定时只选择 USB 设备，并要求候选设备唯一。
+/// 只选择 USB 设备，可按 UDID 过滤，并要求候选唯一；网络条目不能用于首次身份绑定。
 bool pick_usb_device(const std::string &udid_filter, scrctl::transport::DeviceRecord &out,
                      std::string &err) {
     auto mux = scrctl::transport::Usbmux::open(err);
@@ -278,16 +278,12 @@ bool pick_usb_device(const std::string &udid_filter, scrctl::transport::DeviceRe
     }
     std::vector<const scrctl::transport::DeviceRecord *> candidates;
     for (const auto &d : devices) {
-        if (!udid_filter.empty()) {
-            if (d.udid == udid_filter) {
-                candidates.push_back(&d);
-            }
-        } else if (d.is_usb()) {
+        if (d.is_usb() && (udid_filter.empty() || d.udid == udid_filter)) {
             candidates.push_back(&d);
         }
     }
     if (candidates.empty()) {
-        err = udid_filter.empty() ? SCRCTL_TR("No USB device found") : SCRCTL_TR("No device matches --udid");
+        err = udid_filter.empty() ? SCRCTL_TR("No USB device found") : SCRCTL_TR("No USB device matches --udid");
         return false;
     }
     if (candidates.size() > 1) {
@@ -517,7 +513,7 @@ int finish_pair_setup(const ChannelOpener &open, std::string udid,
         std::fprintf(stderr, SCRCTL_TR("  New record pair-verify failed: %s\n"), verified.error.c_str());
         return 1;
     }
-    std::printf(SCRCTL_TR("  New record pair-verify completed; device accepted the host key\n"));
+    std::printf(SCRCTL_TR("  New record pair-verify completed; device identity verified and host key accepted\n"));
     print_handshake(verified.device_handshake);
     return 0;
 }
@@ -595,7 +591,7 @@ int run_pair_setup_xpc(const std::string &service_name, const std::string &udid_
         return 1;
     }
     std::printf(SCRCTL_TR("Carrier = RemoteXPC (%s)\n"), service_name.c_str());
-    return finish_pair_setup(xpc_opener(service_name, udid_filter, verbose), device.udid,
+    return finish_pair_setup(xpc_opener(service_name, device.udid, verbose), device.udid,
                              host_id_override, save, probe_verify_first, host_name_override,
                              pairing_kind);
 }
@@ -652,7 +648,7 @@ int main(int argc, char **argv) {
     auto *record_option = app.add_option("--record", record_path,
         SCRCTL_N_("scrctl pairing record for Wi-Fi verification"));
     auto *foreign_option = app.add_option("--pmd3-record", foreign_path,
-        SCRCTL_N_("pymobiledevice3 plist record; requires --host-id"));
+        SCRCTL_N_("Import pymobiledevice3 host keys (no device identity; USB pairing required)"));
     auto *host_id_option = app.add_option("--host-id", host_id,
         SCRCTL_N_("Host identifier for pairing setup or a pymobiledevice3 record"));
     auto *udid_option = app.add_option("--udid", udid,
@@ -663,7 +659,7 @@ int main(int argc, char **argv) {
     auto *rsd_option = app.add_flag("--rsd", want_rsd,
         SCRCTL_N_("Read the tunnel RSD service directory (implies --tunnel)"));
     auto *setup_option = app.add_flag("--pair-setup", want_pair_setup,
-        SCRCTL_N_("Create a pairing record over USB or the given Wi-Fi address"));
+        SCRCTL_N_("Pair over USB, or experiment over Wi-Fi with --no-save"));
     auto *xpc_option = app.add_flag("--pair-setup-xpc", want_pair_setup_xpc,
         SCRCTL_N_("Create a pairing record over USB RemoteXPC"));
     auto *xpc_service_option = app.add_option("--xpc-service", xpc_service,
@@ -733,6 +729,10 @@ int main(int argc, char **argv) {
         if (foreign_option->count() && host_id.empty()) {
             throw CLI::ValidationError(SCRCTL_TR("--pmd3-record requires a nonempty --host-id"));
         }
+        if (want_pair_setup && !address.empty() && !no_save) {
+            throw CLI::ValidationError(SCRCTL_TR(
+                "Wi-Fi pair setup requires --no-save; pair over USB to save a trusted device identity"));
+        }
     } catch (const CLI::CallForHelp &) {
         if (!language.select()) return 2;
         std::printf("%s", language.help().c_str());
@@ -797,6 +797,10 @@ int main(int argc, char **argv) {
                      record.host_private_key.size(), record.host_public_key.size());
         return 1;
     }
+    if (!record.has_peer_identity()) {
+        std::fprintf(stderr, "%s\n", SCRCTL_TR("Pairing record has no device identity; pair again over USB"));
+        return 1;
+    }
 
     std::printf(SCRCTL_TR("Connecting to %s:%d (record %s)\n"), address.c_str(), port,
                 record.udid.empty() ? SCRCTL_TR("(unknown device)") : mask(record.udid, 8).c_str());
@@ -818,7 +822,7 @@ int main(int argc, char **argv) {
         std::fprintf(stderr, SCRCTL_TR("  Pair-verify failed (%s): %s\n"), tag, verified.error.c_str());
         return 1;
     }
-    std::printf(SCRCTL_TR("  Pair-verify completed; device accepted the host key\n"));
+    std::printf(SCRCTL_TR("  Pair-verify completed; device identity verified and host key accepted\n"));
     print_handshake(verified.device_handshake);
     std::printf(SCRCTL_TR("  Shared secret: %zu bytes (key derivation and tunnel PSK; contents hidden)\n"),
                 verified.shared_secret.size());

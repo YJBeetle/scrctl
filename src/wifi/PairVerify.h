@@ -18,7 +18,7 @@ enum class VerifyOutcome { Paired, NotPaired, TransportFailure };
 struct PairVerifyResult {
     VerifyOutcome outcome = VerifyOutcome::TransportFailure;
     /// X25519 共享秘密，用于主密钥派生及后续 TLS-PSK 隧道；应按敏感数据处理。
-    /// 它可在后续阶段失败前已填入，调用方必须先检查 outcome，再使用结果。
+    /// 仅在身份校验与 M4 均成功后填入，调用方仍应先检查 outcome。
     Bytes shared_secret;
     /// 设备 handshake 响应体，包含 wireProtocolVersion、deviceOptions 等信息。
     json::Value device_handshake;
@@ -28,8 +28,9 @@ struct PairVerifyResult {
 /// 在已连接的控制面执行 handshake + pair-verify，成功后安装双向主密钥。
 /// 主机 Ed25519 签名输入按固定顺序拼接：本次主机 X25519 公钥、记录中的
 /// host_identifier、设备 X25519 公钥；标识必须与 setup 注册时一致。
-/// 当前实现不解密或校验 PV-Msg02 的设备身份材料，不能据 Paired 推断已独立验证
-/// 设备长期身份。失败时也不保证 channel 的状态可直接用于下一次握手。
+/// 发送主机签名前解密 PV-Msg02，并用 USB 配对时保存的设备长期公钥校验签名，
+/// 要求设备标识与记录中的原始字节一致。旧记录缺少设备身份时应重新通过 USB 配对，
+/// 不能在网络重连时接受回复中的新公钥。失败时不保证 channel 可直接用于下一次握手。
 /// announce_failure 控制设备返回 Error TLV 后是否尽力发送 pairVerifyFailed；
 /// 发送失败不覆盖原配对错误。产品默认开启，实验入口可关闭，以研究同连接后续流程。
 /// 已测 iOS 27 中该事件可能伴随连接关闭，具体入口限制见 docs §25.2/§25.6。

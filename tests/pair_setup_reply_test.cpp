@@ -1,5 +1,6 @@
 // 经真实 RPPairing 字节流测试 setup/verify 探测的阶段与错误分支，不需要设备。
 #include "wifi/PairSetup.h"
+#include "wifi/Opack.h"
 #include "wifi/Rppairing.h"
 #include "wifi/Tlv.h"
 
@@ -75,7 +76,10 @@ struct SrpPeer {
 
 enum class Phase { VerifyM2, VerifyM4, SetupM2, SetupM4, SetupM6, Normal };
 enum class Form { Missing, Empty, Wrong, Multiple, Truncated, Error, ErrorTruncated,
-                  InnerTruncated, InnerOptional, Normal };
+                  InnerTruncated, MissingCiphertext, BadTag, MissingIdentifier,
+                  EmptyIdentifier, MissingPublicKey, ShortPublicKey, MissingSignature,
+                  ShortSignature, BadSignature, OtherSessionSignature, InfoAltIrk,
+                  InfoMalformed, Normal };
 
 const char *phase_name(Phase phase) {
     switch (phase) {
@@ -97,7 +101,18 @@ const char *form_name(Form form) {
     case Form::Error: return "explicit Error";
     case Form::ErrorTruncated: return "Error plus truncated TLV";
     case Form::InnerTruncated: return "authenticated truncated inner TLV";
-    case Form::InnerOptional: return "authenticated optional inner TLV";
+    case Form::MissingCiphertext: return "missing ciphertext";
+    case Form::BadTag: return "bad AEAD tag";
+    case Form::MissingIdentifier: return "missing Identifier";
+    case Form::EmptyIdentifier: return "empty Identifier";
+    case Form::MissingPublicKey: return "missing PublicKey";
+    case Form::ShortPublicKey: return "short PublicKey";
+    case Form::MissingSignature: return "missing Signature";
+    case Form::ShortSignature: return "short Signature";
+    case Form::BadSignature: return "bad device signature";
+    case Form::OtherSessionSignature: return "signature from another SRP session";
+    case Form::InfoAltIrk: return "optional altIRK";
+    case Form::InfoMalformed: return "malformed optional Info";
     default: return "normal";
     }
 }
@@ -108,6 +123,9 @@ public:
     Form form;
     int verify_m1 = 0, verify_m3 = 0, setup_m1 = 0, setup_m3 = 0, setup_m5 = 0;
     int notifications = 0, encrypted = 0;
+    bool host_signature_valid = false;
+    Bytes device_identifier = bytes_of("SYNTHETIC-DEVICE");
+    Bytes device_public_key;
     explicit MemStream(Phase p, Form f) : phase(p), form(f) {}
 
     bool read_exact(void *data, size_t len, std::string &err) override {
@@ -178,7 +196,7 @@ public:
         } else {
             require(state == 5);
             ++setup_m5;
-            // M6 身份字段的要求不属于本次修复；合法 State、无密文保持现有成功语义。
+            verify_m5(fields);
             reply(Phase::SetupM6, 6, {});
         }
         return true;
@@ -187,6 +205,71 @@ private:
     Bytes input_;
     size_t pos_ = 0;
     std::unique_ptr<SrpPeer> srp_;
+    void verify_m5(const std::map<uint8_t, Bytes> &fields) {
+        require(srp_ != nullptr);
+        std::string err;
+        const auto key = hkdf_sha512(srp_->session_key, "Pair-Setup-Encrypt-Salt",
+                                    "Pair-Setup-Encrypt-Info", 32, err);
+        const auto *ciphertext = tlv_get(fields, TlvType::EncryptedData);
+        require(key && ciphertext);
+        static constexpr char nonce[] = "\x00\x00\x00\x00PS-Msg05";
+        const auto plain = chacha_open(sv(*key), std::string_view(nonce, sizeof(nonce) - 1),
+                                       *ciphertext, err);
+        require(plain.has_value());
+        const auto inner = tlv_parse(*plain, err);
+        const auto *identifier = tlv_get(inner, TlvType::Identifier);
+        const auto *public_key = tlv_get(inner, TlvType::PublicKey);
+        const auto *signature = tlv_get(inner, TlvType::Signature);
+        require(err.empty() && identifier && public_key && signature);
+        const auto prefix = hkdf_sha512(srp_->session_key, "Pair-Setup-Controller-Sign-Salt",
+                                        "Pair-Setup-Controller-Sign-Info", 32, err);
+        require(prefix.has_value());
+        Bytes message = *prefix;
+        message.insert(message.end(), identifier->begin(), identifier->end());
+        message.insert(message.end(), public_key->begin(), public_key->end());
+        host_signature_valid = ed25519_verify(sv(*public_key), message, *signature, err);
+        require(host_signature_valid);
+    }
+    Bytes signed_m6(Form selected) {
+        require(srp_ != nullptr);
+        std::string err;
+        const auto peer = ed25519_keypair(err);
+        require(peer.has_value());
+        device_public_key.assign(peer->pub.begin(), peer->pub.end());
+        Bytes signing_key = srp_->session_key;
+        if (selected == Form::OtherSessionSignature) signing_key[0] ^= 1;
+        const auto prefix = hkdf_sha512(signing_key, "Pair-Setup-Accessory-Sign-Salt",
+                                        "Pair-Setup-Accessory-Sign-Info", 32, err);
+        require(prefix.has_value());
+        Bytes message = *prefix;
+        message.insert(message.end(), device_identifier.begin(), device_identifier.end());
+        message.insert(message.end(), device_public_key.begin(), device_public_key.end());
+        auto signature = ed25519_sign(
+            std::string_view(reinterpret_cast<const char *>(peer->seed.data()), peer->seed.size()),
+            message, err);
+        require(signature.has_value());
+        if (selected == Form::BadSignature) (*signature)[0] ^= 1;
+        if (selected == Form::ShortSignature) signature->pop_back();
+        auto identifier = device_identifier;
+        if (selected == Form::EmptyIdentifier) identifier.clear();
+        auto public_key = device_public_key;
+        if (selected == Form::ShortPublicKey) public_key.pop_back();
+        std::vector<std::pair<TlvType, Bytes>> fields;
+        if (selected != Form::MissingIdentifier) fields.emplace_back(TlvType::Identifier, identifier);
+        if (selected != Form::MissingPublicKey) fields.emplace_back(TlvType::PublicKey, public_key);
+        if (selected != Form::MissingSignature) fields.emplace_back(TlvType::Signature, *signature);
+        if (selected == Form::InfoAltIrk) {
+            OpackValue info;
+            info.kind = OpackValue::Kind::kDict;
+            info.dict = {{OpackValue::of_string("altIRK"), OpackValue::of_bytes(Bytes(16, 0x42))}};
+            Bytes raw;
+            require(opack_encode(info, raw, err));
+            fields.emplace_back(TlvType::Info, raw);
+        } else if (selected == Form::InfoMalformed) {
+            fields.emplace_back(TlvType::Info, Bytes{0xff});
+        }
+        return selected == Form::InnerTruncated ? Bytes{0x11} : tlv_build(fields);
+    }
     void feed(const scrctl::json::Value &inner) {
         const auto envelope = j_obj({{"originatedBy", j_str("device")}, {"sequenceNumber", j_int(0)},
             {"message", j_obj({{"plain", j_obj({{"_0", inner}})}})}});
@@ -202,17 +285,17 @@ private:
     }
     void reply(Phase target, uint8_t expected, std::vector<std::pair<TlvType, Bytes>> fields) {
         const auto selected = target == phase ? form : Form::Normal;
-        if (selected == Form::InnerTruncated || selected == Form::InnerOptional) {
-            require(srp_ && target == Phase::SetupM6);
+        if (target == Phase::SetupM6 && selected != Form::MissingCiphertext) {
+            require(srp_ != nullptr);
             std::string err;
             const auto key = hkdf_sha512(srp_->session_key, "Pair-Setup-Encrypt-Salt",
                                         "Pair-Setup-Encrypt-Info", 32, err);
             require(key.has_value());
-            const Bytes inner = selected == Form::InnerTruncated ? Bytes{0x11} :
-                tlv_build({{TlvType::Identifier, bytes_of("DEVICE")}});
+            const Bytes inner = signed_m6(selected);
             static constexpr char nonce[] = "\x00\x00\x00\x00PS-Msg06";
-            const auto sealed = chacha_seal(sv(*key), std::string_view(nonce, sizeof(nonce) - 1), inner, err);
+            auto sealed = chacha_seal(sv(*key), std::string_view(nonce, sizeof(nonce) - 1), inner, err);
             require(sealed.has_value());
+            if (selected == Form::BadTag) sealed->back() ^= 1;
             fields.emplace_back(TlvType::EncryptedData, *sealed);
         }
         if (selected == Form::Error || selected == Form::ErrorTruncated) {
@@ -280,8 +363,11 @@ void run_pair_setup_reply_tests(void (*check)(bool, const char *)) {
             check(!result.ok && err.find("returned error") != std::string::npos && io.encrypted == 0,
                   (std::string(phase_name(phase)) + " 显式 Error 仍终止 setup").c_str());
         }
-        {
-            MemStream io(Phase::SetupM6, Form::InnerTruncated);
+        for (const auto form : {Form::InnerTruncated, Form::MissingCiphertext, Form::BadTag,
+                               Form::MissingIdentifier, Form::EmptyIdentifier, Form::MissingPublicKey,
+                               Form::ShortPublicKey, Form::MissingSignature, Form::ShortSignature,
+                               Form::BadSignature, Form::OtherSessionSignature}) {
+            MemStream io(Phase::SetupM6, form);
             FramedCarrier carrier(io);
             Rppairing channel(carrier);
             PairSetupOptions options;
@@ -289,29 +375,37 @@ void run_pair_setup_reply_tests(void (*check)(bool, const char *)) {
             std::string err;
             const auto result = pair_setup(channel, "HOST-IDENTIFIER", "host.local", "UDID",
                                            nullptr, options, err);
-            check(!result.ok && err.find("M6") != std::string::npos && err.find("TLV") != std::string::npos,
-                  "已认证解密的 M6 内层 TLV 截断仍必须失败");
-            check(result.record.host_private_key.empty() && !result.record.complete(),
-                  "M6 内层 TLV 失败不发布配对记录");
+            const std::string label = std::string("M6 ") + form_name(form);
+            check(!result.ok && !err.empty(), (label + " 必须失败").c_str());
+            if (form == Form::InnerTruncated)
+                check(err.find("TLV") != std::string::npos, "M6 截断明确指出 TLV 格式错误");
+            check(result.record.host_private_key.empty() && !result.record.complete() &&
+                  !result.record.has_peer_identity(), (label + " 不发布主机凭据或设备身份").c_str());
             std::string key_err;
             channel.encrypted_roundtrip(j_obj({}), key_err);
             check(io.encrypted == 0 && key_err.find("Main key not installed") != std::string::npos,
-                  "M6 内层 TLV 失败不安装主密钥或发送解锁请求");
+                  (label + " 不安装主密钥或发送解锁请求").c_str());
         }
-        {
-            MemStream io(Phase::SetupM6, Form::InnerOptional);
+        for (const auto form : {Form::Normal, Form::InfoAltIrk, Form::InfoMalformed}) {
+            MemStream io(Phase::SetupM6, form);
             std::string err;
             const auto result = run(io, err);
-            check(result.ok && result.record.complete() && result.record.peer_alt_irk.empty(),
-                  "合法已认证内层 TLV 不含 altIRK 时仍允许配对成功");
+            check(result.ok && result.record.complete() && result.record.has_peer_identity() &&
+                  result.record.peer_identifier == io.device_identifier &&
+                  result.record.peer_public_key == io.device_public_key,
+                  "合法 M6 签名后保存设备原始标识和长期公钥");
+            check(form == Form::InfoAltIrk ? result.record.peer_alt_irk == Bytes(16, 0x42) :
+                      result.record.peer_alt_irk.empty(),
+                  "Info/altIRK 保持可选，格式有效时才保存 altIRK");
         }
         {
             MemStream io(Phase::Normal, Form::Normal);
             std::string err;
             const auto result = run(io, err);
-            check(result.ok && result.record.complete(), "合法 setup State 2/4/6 与真实 SRP 证明保持成功");
-            check(io.setup_m1 == 1 && io.setup_m3 == 1 && io.setup_m5 == 1 && io.encrypted == 1,
-                  "正常 setup 不新增 M6 身份字段要求，仍尝试可选解锁请求");
+            check(result.ok && result.record.complete() && result.record.has_peer_identity(),
+                  "合法 setup State 2/4/6、真实 SRP 证明与设备身份签名通过");
+            check(io.setup_m1 == 1 && io.setup_m3 == 1 && io.setup_m5 == 1 && io.host_signature_valid &&
+                  io.encrypted == 1, "正常 setup 验证双方身份签名后仍尝试可选解锁请求");
         }
         {
             MemStream io(Phase::VerifyM4, Form::Normal);

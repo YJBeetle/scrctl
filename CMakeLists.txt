@@ -152,6 +152,7 @@ add_library(scrctl_core STATIC
         src/wifi/Tlv.cpp
         src/wifi/Rppairing.cpp
         src/wifi/PairRecord.cpp
+        src/wifi/PairingIdentity.cpp
         src/wifi/PairVerify.cpp
         src/wifi/PairSetup.cpp
         src/wifi/RemotePairing.cpp)
@@ -394,6 +395,10 @@ if(SCRCTL_BUILD_TESTS)
     add_executable(wifi_test tests/wifi_test.cpp tests/pair_setup_reply_test.cpp)
     target_link_libraries(wifi_test PRIVATE scrctl_core)
     add_test(NAME wifi COMMAND wifi_test)
+
+    add_executable(pairing_identity_test tests/pairing_identity_test.cpp)
+    target_link_libraries(pairing_identity_test PRIVATE scrctl_core)
+    add_test(NAME pairing_identity COMMAND pairing_identity_test)
 
     add_executable(xpc_test tests/xpc_test.cpp)
     target_link_libraries(xpc_test PRIVATE scrctl_core)

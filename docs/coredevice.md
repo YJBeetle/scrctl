@@ -3286,3 +3286,159 @@ M2 外层包含 32 字节 X25519 公钥、120 字节 EncryptedData 和单字节 
 探针 SHA256 为 `0b6493383e3b628c43c75dbcfe525ffccde0e440f81650495f56542a0a6fdfb6`。
 本机证据位于 `/private/tmp/scrctl-pv-m2-usb-20261008/`，包含源码、构建脚本、
 离线发送限制检查和 `device-result.log`；真实进程返回 0，没有出现用户确认请求。
+
+### 31.2 USB 新建配对 M6 与固定身份的 M2 验签
+
+2026-10-08，继续使用 Mac USB / iPhone14,4 / iOS 27.0。独立临时探针从已有
+记录选择唯一匹配的 USB 设备，通过 CoreDeviceProxy → RSD →
+`com.apple.internal.dt.coredevice.untrusted.tunnelservice` 的 RemoteXPC 通道配对。
+本节验证候选身份公式；生产 PairSetup / PairVerify 及记录格式的接入仍在进行，
+不将临时探针的结果当作产品已完成。
+
+探针生成新的随机 UUID v4 主机标识和新的 Ed25519 主机密钥，明确拒绝重用
+原记录的主机标识。先在 0700 的临时目录保存 0600 主机记录，再以
+`attemptPairVerify=false` 和 `setupManualPairing` 开始配对。这样即使设备接受
+注册后发生观测失败，本次新主机凭据也仍可保留；已有记录和默认记录目录不被改写。
+这次配对新增了设备端的临时主机身份，探针没有删除设备端配对条目。
+
+首次尝试收到 `awaitingUserConsent`，但未完成手机确认。测试进程在 35 秒外部
+时限到期时结束，日志只有 handshake 与 M1 两次发送，未发送 M3/M5，也未完成
+M6 观察。该结果说明本次等待确认没有在测试时限内结束；不能据此判为设备拒绝
+协议、SRP 证明不匹配或身份签名失败。
+
+随后在用户确认手机提示的尝试中，SRP 服务端证明通过，M6 密文解密及签名验证
+成功。原连接释放后，探针重新打开 USB 会话和配对通道，使用刚取得的设备身份
+验证 M2，验签通过后才发送主机 M3，并取得 M4 接受响应。整次进程运行
+22.11 秒，返回 0，没有发生测试进程超时。
+
+| 阶段 | 实际取得的身份字段 | 验证结果 |
+| --- | --- | --- |
+| PairSetup M6 | Identifier 36 字节、长期 PublicKey 32 字节、Signature 64 字节 | 密文 AEAD、内层 TLV 完整性及设备身份签名均通过 |
+| 重连后 PairVerify M2 | Identifier 36 字节、Signature 64 字节；无长期 PublicKey | 标识符与 M6 一致，使用保存的 M6 公钥验签通过 |
+| PairVerify M4 | State=4 的接受响应 | 主机 M3 已被设备接受，verify 完成 |
+
+M6 使用 SRP 会话密钥派生 32 字节加密密钥，HKDF-SHA512 的 salt/info 分别为
+`Pair-Setup-Encrypt-Salt` / `Pair-Setup-Encrypt-Info`；nonce 为四个 NUL 字节后接
+`PS-Msg06`，共 12 字节，无 AAD。M6 签名的输入按以下顺序拼接：
+
+```text
+HKDF-SHA512(SRP session key,
+            "Pair-Setup-Accessory-Sign-Salt",
+            "Pair-Setup-Accessory-Sign-Info", 32)
+|| raw device Identifier
+|| device long-term Ed25519 PublicKey
+```
+
+使用 M6 中的设备长期公钥执行 PureEd25519 一次性验证，不对完整拼接消息预哈希。
+只有 M6 身份形状和签名均通过，才保存设备 Identifier 与 PublicKey 作为后续验证的
+固定身份材料，文件权限为 0600。M2 解密沿用 31.1 的 HKDF/nonce；签名输入为：
+
+```text
+device ephemeral X25519 PublicKey
+|| raw device Identifier
+|| host ephemeral X25519 PublicKey
+```
+
+M2 中的 Identifier 必须与保存的 M6 值逐字节一致，签名使用保存的 M6 长期公钥
+校验；不会将当前 M2 回复当成学习或替换长期公钥的来源。这次实机结果验证了
+上述候选公式在所测 RemotePairing 通道上的适用性。
+
+成功配对通道发送 handshake/M1/M3/M5 共四条消息，重新验证的通道发送
+handshake/M1/M3 共三条，发送允许列表的拒绝计数均为零。没有发送配对升级、
+远程解锁、createListener 或媒体请求。原始日志仅包含字段类型、长度、计数和
+成功状态；设备标识符、密钥、签名、密文和解密字段原文未写入文档。
+
+再用旧主机凭据与同一份 M6 固定身份材料执行一次独立 verify，M2 解密、标识符
+匹配、签名和 M4 均通过，进程返回 0；本次没有执行 pair-setup。默认目录中
+原配对文件的哈希前后未变。该结果证明此次新增临时主机身份后，原配对仍可连接
+同一设备长期身份；不将这一样本扩展为所有设备版本的配对共存规则。
+
+这里的信任起点是用户批准的 USB 配对以及当时保存的设备身份。M6 证明其签名
+与所提供的长期公钥一致，后续 M2 证明连接使用同一长期私钥；这不构成 Apple
+厂商证书或 Apple 根证书链认证，也没有证明 Wi-Fi 路径的生产接入已经完成。
+
+本机证据位于 `/private/tmp/scrctl-pair-identity-usb-20261008/`，包括
+`device-result.log`、`device-run-status.json`、`device-attempt1-await-consent.log`、
+`old-pair-coexistence.log`、`old-pair-coexistence-proof.json`，以及源码和 README。
+临时探针此前的 17 个离线场景覆盖签名篡改、缺失字段、认证后截断 TLV、缺失密文、
+AEAD 标签错误、固定身份不匹配及发送限制；这些离线场景与本节实机结果分别记录。
+
+### 31.3 正式身份校验、USB 验证与完整配对
+
+31.2 之后，设备长期身份解析和签名校验已接入正式 PairSetup / PairVerify。
+PairSetup 的 M6 必须携带可认证的身份密文，内层 TLV 必须完整，设备标识、公钥
+与签名须符合要求，签名输入沿用 31.2 已验证的公式。通过后保存以下身份字段：
+
+| 记录字段 | 保存形式 | 用途 |
+| --- | --- | --- |
+| peer_identifier | M6 Identifier 原始字节的十六进制表示 | 与后续 M2 Identifier 逐字节比较；不以 USB UDID、广播标识或主机标识替代 |
+| peer_public_key | 32 字节设备长期 Ed25519 公钥的十六进制表示 | 验证后续 M2 的设备签名 |
+
+记录仍使用版本 1 文本头，旧记录可加载用于选择设备；缺少上述可信身份材料时，
+严格 PairVerify 直接要求通过 USB 重新配对，不从当前网络握手学习设备公钥。
+现有 wifi_probe 的 --pmd3-record 适配器只导入主机 private_key/public_key 和
+命令行 host-id，没有导入可信设备身份，不能用于新的严格认证路径。
+
+USB 配对选设备时，即便指定 --udid，也只匹配 USB 类型条目。RemoteXPC 连接
+工厂固定初次选中的 UDID，setup 后的 verify 重连仍选择该设备。Wi-Fi 字节流
+setup 仅允许 --no-save 的对照方式；显式指定 UDID 不能把网络首次身份变成已
+批准的 USB 身份，因此不能将其写入可信记录。这些限制属于身份信任来源的约束。
+
+#### 当前生产 PairVerify 的三组实机检查
+
+使用链接当前生产核心的独立验证程序，保持 Mac USB 和相同 RemoteXPC 通道。
+前两组将 31.2 经过用户批准的 M6 身份材料分别与新、旧主机凭据组合；第三组
+故意修改固定设备公钥，检查失败发生在发送主机 M3 之前。
+
+| 输入 | 配对载体发送次数 | 生产验证结果 | 记录文件 |
+| --- | --- | --- | --- |
+| 新主机凭据 + 正确设备身份 | 3，handshake/M1/M3 | M2 验签、M4 接受及 32 字节共享密钥返回均通过 | 未改写 |
+| 旧主机凭据 + 同一设备身份 | 3，handshake/M1/M3 | 同样通过 | 未改写 |
+| 故意错误的固定设备公钥 | 2，handshake/M1 | M2 验签拒绝，不发送 M3，不返回共享密钥 | 未改写 |
+
+三组验证程序均返回 0；错误公钥组的 0 表示预期的拒绝行为成立，不表示配对成功。
+验证程序没有执行 setup、监听端口创建、媒体请求、输入操作或 VM 切换。
+该结果补充了临时探针的公式证明，确认当前生产 PairVerify 实际采用固定身份校验。
+
+#### 正式 PairSetup 的失败分类与完整成功流程
+
+正式 wifi_probe 使用新的主机标识，在隔离的 XDG_DATA_HOME 中测试 USB RemoteXPC
+配对。既有默认配对记录不作为写入目标。按实际 pairing kind 和确认情况分别记录：
+
+| 尝试 | 耗时 / 退出码 | 观察与结论 |
+| --- | --- | --- |
+| 默认 upgradeNonAutomationLockdownPairing | 0.72 秒 / 1 | 设备报告主机没有完成免提示配对的授权；仅说明本主机的 promptless kind 被拒绝 |
+| setupManualPairing，未完成手机确认 | 120.17 秒 / 1 | 进入等待手机确认，随后回复等待超时；没有完成正式配对，不能当作手动协议不兼容 |
+| setupManualPairing，用户完成手机确认 | 5.33 秒 / 0 | SRP/M5/M6 完成，新记录保存后重新连接，严格 PairVerify 成功 |
+
+成功趟的正式 M6 处理要求长期身份签名通过，因此不以“配对完成”的文案代替校验。
+保存的新记录包含 36 字节设备原始标识和 32 字节长期公钥，与 31.2 用户批准的
+M6 身份相同；主机私钥种子和公钥各 32 字节，altIRK 为 16 字节，远程解锁密钥
+字段存在。新记录的文件权限为 0600，所在目录权限为 0700。正式保存后重连的
+严格 PairVerify 已通过，另经生产 load_record 从磁盘重载后，再次发送
+handshake/M1/M3 三条消息完成严格 verify，发送限制未触发拒绝。
+取得远程解锁密钥不代表后续设备解锁路径已经验证。
+这里的设备身份信任仍起于用户批准的 USB 配对，不构成 Apple
+厂商证书或 Apple 根证书链认证。严格身份校验下的 Wi-Fi、其他设备和系统版本
+仍需分别验证。
+
+#### 本轮离线验证范围
+
+Release 全部 27/27 测试通过，耗时 13.71 秒；遇错终止的 ASan + UBSan 全部
+27/27 通过，耗时 14.96 秒。wifi 测试包含 597 条判据，独立身份模块包含 78 条。
+sanitizer 仪表化覆盖本次 C++ 构建，不将未仪表化的 lwIP C 代码计入覆盖。
+
+wifi_probe 的协议说明和错误已支持英文、中文及默认 auto。文案阶段排除翻译
+包装、文案及注释后，7430 个代码 token 和 112 个非文案字符串保持一致；这一
+比较不包含随后正式身份接入的功能改动。新版 CLI 在 Release 和 sanitizer 下
+的定向测试各 1/1 通过；禁网络沙箱中的 97/97 项 CLI 检查及 20/20 项合成记录
+运行期语言检查通过，gettext 目录检查通过。这些离线结果不替代设备协议验证。
+
+本机证据位于 `/private/tmp/scrctl-production-identity-20261008/`，包括
+`production-proof.json`、`fresh.log`、`old.log`、`wrong-pin.log`，以及正式 setup 的
+`production-setup.log` / `production-setup-status.json` 和记录字段长度、权限与
+判断结果的 `production-setup-proof.json`；从磁盘重载后另行验证的结果保存在
+`production-saved-record-reload.log`。前次等待确认超时的日志与
+状态保留为 `production-setup-await-consent.log` / `.status.json`；默认免提示拒绝
+保留为 `production-setup-promptless-rejected.log` / `-status.json`。记录字段原文、
+私钥、设备标识及签名没有写入本节。

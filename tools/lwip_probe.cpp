@@ -515,6 +515,9 @@ Session wifi_session(const std::string &address) {
     auto record = wifi::load_record(wifi::record_path(dir, ids.front()), err);
     if (!record)
         throw std::runtime_error(err);
+    require(record->complete(), "pairing record incomplete; cannot sign");
+    require(record->has_peer_identity(),
+            "pairing record has no device identity; pair again over USB");
     auto control = transport::connect_tcp(address, wifi::kAdvertisedPortFallback, 5000, err);
     if (!control)
         throw std::runtime_error(err);

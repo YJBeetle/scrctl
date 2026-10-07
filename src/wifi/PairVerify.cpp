@@ -1,6 +1,7 @@
 #include "i18n/Translation.h"
 #include "wifi/PairVerify.h"
 
+#include "wifi/PairingIdentity.h"
 #include "wifi/Tlv.h"
 
 namespace scrctl::wifi {
@@ -10,6 +11,12 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
     PairVerifyResult result;
     if (!host.complete()) {
         err = SCRCTL_TR("Pairing record incomplete; cannot sign");
+        result.outcome = VerifyOutcome::NotPaired;
+        result.error = err;
+        return result;
+    }
+    if (!host.has_peer_identity()) {
+        err = SCRCTL_TR("Pairing record has no device identity; pair again over USB");
         result.outcome = VerifyOutcome::NotPaired;
         result.error = err;
         return result;
@@ -49,8 +56,8 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
         return result;
     }
 
-    // 3) PV-Msg02：解析 Error 与设备临时公钥，当前未解密 EncryptedData，
-    // 也未验证其中的设备标识、长期公钥或签名。设备接受主机签名不能替代该身份校验。
+    // 3) PV-Msg02：从临时密钥派生解密密钥，再用 USB 配对时保存的长期公钥
+    // 校验设备签名。身份校验通过后才发送主机签名；不能从这次网络回复学习新公钥。
     std::string tlv_err;
     const std::map<uint8_t, Bytes> second = tlv_parse(*reply1, tlv_err);
     if (!tlv_err.empty()) {
@@ -88,11 +95,28 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
         result.error = err;
         return result;
     }
-    result.shared_secret = *shared;
-
     const std::optional<Bytes> verify_key =
         hkdf_sha512(*shared, "Pair-Verify-Encrypt-Salt", "Pair-Verify-Encrypt-Info", 32, err);
     if (!verify_key) {
+        result.error = err;
+        return result;
+    }
+    const Bytes *encrypted_identity = tlv_get(second, TlvType::EncryptedData);
+    if (encrypted_identity == nullptr || encrypted_identity->empty()) {
+        err = SCRCTL_TR("PV-Msg02 missing encrypted device identity");
+        result.error = err;
+        return result;
+    }
+    static constexpr char kPvMsg02[] = "\x00\x00\x00\x00PV-Msg02";
+    const auto peer_identity = chacha_open(sv(*verify_key),
+        std::string_view(kPvMsg02, sizeof(kPvMsg02) - 1), *encrypted_identity, err);
+    if (!peer_identity) {
+        err = SCRCTL_TR("PV-Msg02 device identity decryption failed: ") + err;
+        result.error = err;
+        return result;
+    }
+    if (!authenticate_verify_identity(host.peer_identifier, host.peer_public_key,
+                                      *peer_pub, our_pub, *peer_identity, err)) {
         result.error = err;
         return result;
     }
@@ -164,6 +188,8 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
         return result;
     }
     channel.install_main_keys(*client_key, *server_key);
+    result.shared_secret = *shared;
+    err.clear();
     result.outcome = VerifyOutcome::Paired;
     return result;
 }

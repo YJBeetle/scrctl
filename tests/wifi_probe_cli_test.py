@@ -2,8 +2,10 @@
 import os
 from pathlib import Path
 import platform
+import plistlib
 import subprocess
 import sys
+import tempfile
 
 
 binary = str(Path(sys.argv[1]).resolve())
@@ -85,6 +87,7 @@ help_is(["--help"], variables={"LANG": "unrecognized_LOCALE"})
 
 
 invalid = [["--unknown"], ["unexpected-position"], [], ["--address", "192.0.2.1"],
+           ["--pair-setup", "--address", "192.0.2.1", "--udid", "offline-udid"],
            ["--record", "missing.pair"], ["--port", "49152"],
            ["--pmd3-record", "missing.plist"],
            ["--address", "192.0.2.1", "--pmd3-record", "missing.plist", "--host-id", ""],
@@ -140,5 +143,33 @@ invalid_is(["--unknown"], chinese=True, variables={"LANG": "zh_CN.UTF-8"})
 invalid_is(["--usb-services", "--no-save", "--lang", "en"],
            variables={"LANG": "zh_CN.UTF-8"})
 invalid_is(["--pair-setup", "--pair-setup-xpc", "--lang", "zh-CN"], chinese=True)
+invalid_is(["--pair-setup", "--address", "192.0.2.1", "--lang", "zh-CN"], chinese=True)
+
+# 旧记录可读取，但缺少可信设备身份时必须在联网前给出 USB 重配提示。
+# 同时覆盖仅有一项身份及仅有主机密钥的外部记录，防止入口绕过核心检查。
+with tempfile.TemporaryDirectory(prefix="scrctl-wifi-records-") as directory:
+    directory = Path(directory)
+    host = ("scrctl-pair-record 1\nudid=offline-device\nhost_identifier=offline-host\n"
+            "host_private_key=" + "11" * 32 + "\nhost_public_key=" + "22" * 32 + "\n")
+    for name, extra in (("legacy", ""), ("id-only", "peer_identifier=70656572\n"),
+                        ("key-only", "peer_public_key=" + "33" * 32 + "\n")):
+        path = directory / (name + ".pair")
+        path.write_text(host + extra, encoding="utf-8")
+        for language in ("en", "zh-CN"):
+            result = run(["--address", "192.0.2.1", "--record", str(path), "--lang", language])
+            expected = ("配对记录缺少设备身份，请重新通过 USB 配对" if
+                        language == "zh-CN" and chinese_available else
+                        "Pairing record has no device identity; pair again over USB")
+            assert result.returncode == 1 and not result.stdout and expected in result.stderr, result
+    foreign = directory / "host-only.plist"
+    foreign.write_bytes(plistlib.dumps({"private_key": bytes([0x11]) * 32,
+                                       "public_key": bytes([0x22]) * 32}))
+    for language in ("en", "zh-CN"):
+        result = run(["--address", "192.0.2.1", "--pmd3-record", str(foreign),
+                      "--host-id", "offline-host", "--udid", "offline-device", "--lang", language])
+        expected = ("配对记录缺少设备身份，请重新通过 USB 配对" if
+                    language == "zh-CN" and chinese_available else
+                    "Pairing record has no device identity; pair again over USB")
+        assert result.returncode == 1 and not result.stdout and expected in result.stderr, result
 
 print(f"{checks} offline Wi-Fi CLI checks passed (help, modes, option scope, ports and locales)")

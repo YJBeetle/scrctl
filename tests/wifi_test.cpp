@@ -11,6 +11,7 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -555,16 +556,47 @@ void test_pair_record() {
           "记录存下去再读回来必须一模一样");
     check(scrctl::wifi::format_record(rec).find("peer_alt_irk") == std::string::npos,
           "空的可空字段不要写出去（读的时候按缺省处理）");
+    check(parsed && !parsed->has_peer_identity(),
+          "旧记录保持主机凭据可读，但不能用于设备身份认证");
+    check(scrctl::wifi::format_record(rec).find("peer_identifier=") == std::string::npos &&
+              scrctl::wifi::format_record(rec).find("peer_public_key=") == std::string::npos,
+          "未取得设备身份时不写空的身份字段");
 
     scrctl::wifi::PairRecord full = rec;
     full.advertised_identifier = "32567CFA-1462-41EE-94AD-182C31AAA6C3";
     full.peer_alt_irk = Bytes(16, 0x33);
     full.remote_unlock_host_key = "b879==";
+    full.peer_identifier = Bytes{'d', '\0', '\n', '=', 0xFF};
+    full.peer_public_key = Bytes(32, 0x44);
     const auto again = scrctl::wifi::parse_record(scrctl::wifi::format_record(full), err);
     check(again.has_value() && again->advertised_identifier == full.advertised_identifier &&
               again->peer_alt_irk == full.peer_alt_irk &&
               again->remote_unlock_host_key == full.remote_unlock_host_key,
           "可选字段（含 altIRK）也要过一遍存读");
+    check(again && again->has_peer_identity() &&
+              again->peer_identifier == full.peer_identifier &&
+              again->peer_public_key == full.peer_public_key,
+          "身份字段使用十六进制保存，保留 NUL、换行和非文本字节");
+    const auto legacy_text = scrctl::wifi::format_record(rec);
+    const auto id_only = scrctl::wifi::parse_record(legacy_text + "peer_identifier=01\n", err);
+    const auto key_only = scrctl::wifi::parse_record(
+        legacy_text + "peer_public_key=" + to_hex(full.peer_public_key) + "\n", err);
+    check(id_only && key_only && id_only->complete() && key_only->complete() &&
+              !id_only->has_peer_identity() && !key_only->has_peer_identity(),
+          "缺一项设备身份的旧记录仍可定位设备，认证前需补齐");
+    for (const std::string field : std::vector<std::string>{"peer_identifier=\n", "peer_identifier=xyz\n",
+             "peer_identifier=0\n", "peer_public_key=\n", "peer_public_key=0011\n",
+             "peer_public_key=" + to_hex(Bytes(33, 0x44)) + "\n"}) {
+        check(!scrctl::wifi::parse_record(legacy_text + field, err) && !err.empty(),
+              "身份字段存在时拒绝空值、无效十六进制和错误公钥长度");
+    }
+    for (const std::string field : std::vector<std::string>{"udid=other\n", "host_identifier=other\n",
+             "host_private_key=" + to_hex(rec.host_private_key) + "\n",
+             "peer_identifier=01\n", "peer_public_key=" + to_hex(full.peer_public_key) + "\n"}) {
+        check(!scrctl::wifi::parse_record(scrctl::wifi::format_record(full) + field, err) &&
+                  err.find("Duplicate") != std::string::npos,
+              "拒绝重复已知记录字段，防止凭据或设备身份存在歧义");
+    }
 
     std::string bad_err;
     check(!scrctl::wifi::parse_record("udid=x\nhost_private_key=0011", bad_err),
@@ -591,6 +623,7 @@ public:
     bool write_all(const void *data, size_t len, std::string &) override {
         const auto *p = static_cast<const uint8_t *>(data);
         written.append(reinterpret_cast<const char *>(p), len);  // NOLINT
+        if (on_write) on_write(std::string_view(reinterpret_cast<const char *>(p), len));
         return true;
     }
     bool read_exact(void *data, size_t len, std::string &err) override {
@@ -613,6 +646,7 @@ public:
     }
 
     std::string written;
+    std::function<void(std::string_view)> on_write;
 
 private:
     std::string in_;
@@ -738,210 +772,196 @@ void test_rppairing() {
     check(cold_err.find("main key") != std::string::npos, "这种情况要说清是没装主密钥");
 }
 
-/// ---- 5. pair-verify 的消息形状（对着真机抓下来的字节判） ----
-///
-/// 这一节存在的唯一理由：真机踩的那个坑（`event` 少一层 `_0`）在这里判得住。
-/// 帧的**内容**对不对只有设备说了算，但形状错了设备是"直接关连接、不给原因"，
-/// 所以在离线这侧把形状钉死，比在现场靠猜便宜两个数量级。
+/// ---- 5. pair-verify：真实双方签名、消息包装与失败后的状态 ----
 void test_pair_verify_shape() {
-    // 设备的回信用 j_obj 现搭，而不是手写一大串花括号：今晚这个测试自己就先被
-    // "少写一个 }" 绊了一次，而 JSON 括号数错在源码里根本看不出来。搭出来的内容与
-    // 真机上抓到的回信同构（handshake 回复 + pairingData 事件），字段值是实测的。
-    const scrctl::json::Value device_handshake = j_obj(
-        {{"minimumSupportedWireProtocolVersion", j_int(8)},
-         {"wireProtocolVersion", j_int(26)},
-         {"deviceOptions",
-          j_obj({{"allowsIncomingTunnelConnections", j_bool(true)},
-                 {"allowsPairSetup", j_bool(false)}})}});
-    // 一层一个语句地搭，不在一行里数括号——今晚这个测试自己就先被"少一个 }"绊了一次。
-    scrctl::json::Value hs_slot = j_obj({{"_0", device_handshake}});
-    scrctl::json::Value hs = j_obj({{"handshake", std::move(hs_slot)}});
-    scrctl::json::Value body = j_obj({{"_1", std::move(hs)}, {"forRequestIdentifier", j_int(0)}});
-    scrctl::json::Value response = j_obj({{"response", std::move(body)}});
-    scrctl::json::Value plain_slot = j_obj({{"_0", std::move(response)}});
-    scrctl::json::Value plain = j_obj({{"plain", std::move(plain_slot)}});
-    scrctl::json::Value envelope = j_obj({{"originatedBy", j_str("device")},
-                                  {"sequenceNumber", j_int(0)},
-                                  {"message", std::move(plain)}});
-    const std::string handshake_reply = scrctl::json::write(envelope);
-
-    // PV-Msg02：STATE=2 + 一个合法的 X25519 公钥（RFC 7748 5.2 里 Bob 的）。
-    const Bytes peer_pub =
-        from_hex("8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba9a994576788a8");
-    const Bytes msg02 = scrctl::wifi::tlv_build({{scrctl::wifi::TlvType::State, Bytes{0x02}},
-                                                 {scrctl::wifi::TlvType::PublicKey, peer_pub},
-                                                 {scrctl::wifi::TlvType::EncryptedData,
-                                                  Bytes(16, 0x5A)}});
-    const auto pairing_reply = [&](const Bytes &tlv) {
-        const scrctl::json::Value payload =
-            j_obj({{"data", j_str(scrctl::wifi::b64_encode(tlv))},
-                   {"kind", j_str("verifyManualPairing")}});
-        scrctl::json::Value data_slot = j_obj({{"_0", payload}});
-        scrctl::json::Value pairing = j_obj({{"pairingData", std::move(data_slot)}});
-        scrctl::json::Value event_slot = j_obj({{"_0", std::move(pairing)}});
-        scrctl::json::Value event = j_obj({{"event", std::move(event_slot)}});
-        scrctl::json::Value plain_slot = j_obj({{"_0", std::move(event)}});
-        scrctl::json::Value plain = j_obj({{"plain", std::move(plain_slot)}});
-        scrctl::json::Value envelope = j_obj({{"originatedBy", j_str("device")},
-                                      {"sequenceNumber", j_int(1)},
-                                      {"message", std::move(plain)}});
-        return scrctl::json::write(envelope);
+    using namespace scrctl::wifi;
+    using scrctl::json::Value;
+    const Value device_handshake = j_obj({{"wireProtocolVersion", j_int(26)}});
+    const auto plain_reply = [](Value body) {
+        return device_frame(scrctl::json::write(j_obj({
+            {"originatedBy", j_str("device")}, {"sequenceNumber", j_int(0)},
+            {"message", j_obj({{"plain", j_obj({{"_0", std::move(body)}})}})}})));
     };
-    const auto reply_with = [&](const Bytes &tlv) { return device_frame(pairing_reply(tlv)); };
-
-    scrctl::wifi::PairRecord record;
+    const auto pairing_reply = [&](const Bytes &tlv) {
+        return plain_reply(j_obj({{"event", j_obj({{"_0", j_obj({
+            {"pairingData", j_obj({{"_0", j_obj({
+                {"data", j_str(b64_encode(tlv))}, {"kind", j_str("verifyManualPairing")}})}})}})}})}}));
+    };
+    const auto handshake_reply = plain_reply(j_obj({{"response", j_obj({{"_1", j_obj({
+        {"handshake", j_obj({{"_0", device_handshake}})}})}})}}));
+    // 固定的测试设备密钥；主机仍由生产 API 为每次验证生成临时 X25519 密钥。
+    const Bytes peer_pub = from_hex("8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a");
+    const Bytes peer_priv_bytes = from_hex("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a");
+    std::array<uint8_t, 32> peer_priv{};
+    std::copy(peer_priv_bytes.begin(), peer_priv_bytes.end(), peer_priv.begin());
+    const Bytes peer_seed = from_hex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60");
+    PairRecord record;
     record.udid = "U";
     record.host_identifier = "AC106655-9E9F-3445-96B3-075257AF1912";
-    record.host_private_key =
-        from_hex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60");
-    record.host_public_key = Bytes(32, 0x22);
-
-    {
-        MemStream io;
-        scrctl::wifi::FramedCarrier carrier(io);
-        scrctl::wifi::Rppairing channel(carrier);
-        io.feed(device_frame(handshake_reply));
-        io.feed(reply_with(msg02));
-        io.feed(reply_with(scrctl::wifi::tlv_build({{scrctl::wifi::TlvType::State, Bytes{0x04}}})));
-
-        std::string err;
-        const scrctl::wifi::PairVerifyResult result = scrctl::wifi::pair_verify(channel, record, err);
-        check(result.outcome == scrctl::wifi::VerifyOutcome::Paired,
-              "有效 STATE=4 且没有 ERROR 时判成已配对");
-        check(result.shared_secret.size() == 32, "共享密钥 32 字节");
-        check(scrctl::json::find(result.device_handshake, "wireProtocolVersion") != nullptr &&
-                  scrctl::json::as_int_or(*scrctl::json::find(result.device_handshake, "wireProtocolVersion"), 0) == 26,
-              "设备握手里那个 26 要留档（它是设备的版本，不是我们该发的）");
-
-        // 三条发出去的帧：handshake 请求、PV-Msg01、PV-Msg03。
-        const std::string sent = io.take_written();
-        check(sent.find(R"JSON("event":{"_0":{"pairingData":{"_0":{"data":)JSON") !=
-                  std::string::npos,
-              "pairingData 事件必须有 event._0.pairingData._0 这两层联合体包装");
-        check(sent.find(R"JSON("kind":"verifyManualPairing","startNewSession":true)JSON") !=
-                  std::string::npos,
-              "第一条 verify 要 startNewSession=true");
-        check(sent.find(R"JSON("kind":"verifyManualPairing","startNewSession":false)JSON") !=
-                  std::string::npos,
-              "第三条（带签名的那条）要 startNewSession=false");
-        // 我们自己的 PV-Msg01 要能按同样的规矩解回来：STATE=1 + 32 字节临时公钥。
-        const size_t data_at = sent.find(R"JSON("data":")JSON") + 8;
-        const size_t data_end = sent.find('"', data_at);
-        std::string decode_err;
-        const auto tlv_bytes =
-            scrctl::wifi::b64_decode(sent.substr(data_at, data_end - data_at), decode_err);
-        std::string parse_err;
-        const auto fields = scrctl::wifi::tlv_parse(tlv_bytes.value_or(Bytes()), parse_err);
-        check(scrctl::wifi::tlv_state(fields) == 0x01, "第一步的 STATE 是 1");
-        const Bytes *our_pub = scrctl::wifi::tlv_get(fields, scrctl::wifi::TlvType::PublicKey);
-        check(our_pub != nullptr && our_pub->size() == 32, "第一步要带 32 字节的临时公钥");
-        std::string encrypted_err;
-        channel.encrypted_roundtrip(j_obj({}), encrypted_err);
-        check(!io.written.empty(), "成功后主密钥允许发送加密请求");
-    }
-
-    {
-        // 设备回 ERROR：要判成"没配对"，还要补一句 pairVerifyFailed（同样两层包装）。
-        MemStream io;
-        scrctl::wifi::FramedCarrier carrier(io);
-        scrctl::wifi::Rppairing channel(carrier);
-        io.feed(device_frame(handshake_reply));
-        io.feed(reply_with(msg02));
-        io.feed(reply_with(scrctl::wifi::tlv_build({{scrctl::wifi::TlvType::State, Bytes{0x06}},
-                                                    {scrctl::wifi::TlvType::Error, Bytes{0x02}}})));
-
-        std::string err;
-        const scrctl::wifi::PairVerifyResult result = scrctl::wifi::pair_verify(channel, record, err);
-        check(result.outcome == scrctl::wifi::VerifyOutcome::NotPaired,
-              "设备答了但带 ERROR，要判成没配对，不能算传输失败");
-        check(!err.empty(), "这种情况要给得出原因");
-        const std::string sent = io.take_written();
-        check(sent.find(R"JSON("event":{"_0":{"pairVerifyFailed":{}}})JSON") != std::string::npos,
-              "要补一句 pairVerifyFailed 让设备把会话收干净");
-    }
-
-    // 完整帧中的 TLV 仍可能缺字段或被截断。通过生产 API 判结果，并检查失败后
-    // 不能发出加密请求；不暴露私有密钥状态，也不借助真实设备。
-    const Bytes valid_m4 = scrctl::wifi::tlv_build(
-        {{scrctl::wifi::TlvType::State, Bytes{0x04}}});
-    const auto rejected_reply = [&](const Bytes &m2, const Bytes &m4, bool rejected_at_m2,
-                                    const char *name) {
-        MemStream io;
-        scrctl::wifi::FramedCarrier carrier(io);
-        scrctl::wifi::Rppairing channel(carrier);
-        io.feed(device_frame(handshake_reply));
-        io.feed(reply_with(m2));
-        io.feed(reply_with(m4));
-        std::string err;
-        const auto result = scrctl::wifi::pair_verify(channel, record, err, false);
-        check(result.outcome == scrctl::wifi::VerifyOutcome::TransportFailure, name);
-        check(!err.empty() && result.error == err, "无效回复保留具体失败原因");
-        check(channel.sequence() == (rejected_at_m2 ? 2 : 3),
-              "M2 被拒后不发送 Msg03；M4 被拒时已完成三条明文请求");
-        const std::string written_before = io.written;
-        std::string key_err;
-        const auto encrypted = channel.encrypted_roundtrip(j_obj({}), key_err);
-        check(!encrypted && !key_err.empty() && io.written == written_before,
-              "拒绝回复后没有安装主密钥，也不发送加密请求");
+    record.host_private_key = from_hex("4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb");
+    record.host_public_key = from_hex("3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c");
+    record.peer_identifier = Bytes{'p', 'e', 'e', 'r', '\0', 0xFF};
+    record.peer_public_key = from_hex("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+    const Bytes valid_m4 = tlv_build({{TlvType::State, Bytes{4}}});
+    const Bytes denied = tlv_build({{TlvType::State, Bytes{6}}, {TlvType::Error, Bytes{2}}});
+    enum class Fault { None, MissingCipher, BadTag, BadSignature, ChangedId, WrongSigner,
+                       WrongOrder, ReplayHost, MissingId, MissingSignature, TruncatedInner };
+    // 回信在写出 M1 后才生成，因而能覆盖实际随机主机临时公钥。
+    // 错误签名等夹具仍有正确的 AEAD 标签，确保测试真正进入设备身份校验。
+    const auto configure = [&](MemStream &io, Fault fault, std::optional<Bytes> m2_override,
+                               Bytes m4) {
+        io.on_write = [&, fault, m2_override = std::move(m2_override), m4 = std::move(m4),
+                       verify_key = Bytes{}, our_pub = Bytes{}](std::string_view frame) mutable {
+            std::string err;
+            const auto envelope = scrctl::json::parse(frame.substr(kRpPairingMagic.size() + 2), &err).value();
+            const auto *plain = scrctl::json::find(envelope.at("message"), "plain");
+            if (!plain) return; // 成功后的主密钥发送另行检查。
+            const auto &body = plain->at("_0");
+            if (scrctl::json::find(body, "request")) {
+                io.feed(handshake_reply);
+                return;
+            }
+            const auto &event = body.at("event").at("_0");
+            const auto *data = scrctl::json::find(event, "pairingData");
+            if (!data) return; // pairVerifyFailed 事件没有 pairingData。
+            const auto &payload = data->at("_0");
+            check(payload.at("kind") == "verifyManualPairing", "verify 事件保留正确的联合体包装与 kind");
+            const auto fields = tlv_parse(b64_decode(payload.at("data").get<std::string>(), err).value(), err);
+            if (tlv_state(fields) == 1) {
+                check(payload.at("startNewSession") == true, "M1 使用 startNewSession=true");
+                const auto *key = tlv_get(fields, TlvType::PublicKey);
+                check(key && key->size() == 32, "M1 包含真实的临时公钥");
+                our_pub = *key;
+                const auto shared = x25519_shared(peer_priv, bv(our_pub), err).value();
+                verify_key = hkdf_sha512(shared, "Pair-Verify-Encrypt-Salt", "Pair-Verify-Encrypt-Info", 32, err).value();
+                if (m2_override) { io.feed(pairing_reply(*m2_override)); return; }
+                Bytes id = record.peer_identifier;
+                if (fault == Fault::ChangedId) id.front() ^= 1;
+                Bytes signed_host = our_pub;
+                if (fault == Fault::ReplayHost) signed_host.front() ^= 1;
+                Bytes message = fault == Fault::WrongOrder ? our_pub : peer_pub;
+                message.insert(message.end(), id.begin(), id.end());
+                const auto &last = fault == Fault::WrongOrder ? peer_pub : signed_host;
+                message.insert(message.end(), last.begin(), last.end());
+                Bytes signature = ed25519_sign(bv(fault == Fault::WrongSigner ? record.host_private_key : peer_seed), message, err).value();
+                if (fault == Fault::BadSignature) signature.front() ^= 1;
+                std::vector<std::pair<TlvType, Bytes>> inner;
+                if (fault != Fault::MissingId) inner.emplace_back(TlvType::Identifier, id);
+                if (fault != Fault::MissingSignature) inner.emplace_back(TlvType::Signature, signature);
+                Bytes identity = tlv_build(inner);
+                if (fault == Fault::TruncatedInner) identity.push_back(0xFF);
+                Bytes sealed = chacha_seal(bv(verify_key), std::string("\0\0\0\0PV-Msg02", 12), identity, err).value();
+                if (fault == Fault::BadTag) sealed.back() ^= 1;
+                std::vector<std::pair<TlvType, Bytes>> outer{{TlvType::State, Bytes{2}}, {TlvType::PublicKey, peer_pub}};
+                if (fault != Fault::MissingCipher) outer.emplace_back(TlvType::EncryptedData, sealed);
+                io.feed(pairing_reply(tlv_build(outer)));
+            } else {
+                check(tlv_state(fields) == 3 && payload.at("startNewSession") == false,
+                      "M3 使用 State=3 和 startNewSession=false");
+                const auto *cipher = tlv_get(fields, TlvType::EncryptedData);
+                const auto identity = chacha_open(bv(verify_key), std::string("\0\0\0\0PV-Msg03", 12), *cipher, err);
+                check(identity.has_value(), "测试设备能够解密主机 M3");
+                const auto third = tlv_parse(identity.value(), err);
+                const auto *id = tlv_get(third, TlvType::Identifier);
+                const auto *signature = tlv_get(third, TlvType::Signature);
+                Bytes message = our_pub;
+                message.insert(message.end(), record.host_identifier.begin(), record.host_identifier.end());
+                message.insert(message.end(), peer_pub.begin(), peer_pub.end());
+                check(id && *id == sb(record.host_identifier) && signature &&
+                          ed25519_verify(bv(record.host_public_key), message, *signature, err),
+                      "M3 的主机标识和签名能由测试设备独立核对");
+                io.feed(pairing_reply(m4));
+            }
+        };
     };
-    Bytes truncated_m2 = msg02;
+    const auto no_keys = [&](Rppairing &channel, MemStream &io, const PairVerifyResult &result) {
+        check(result.shared_secret.empty(), "失败结果不发布共享秘密");
+        const auto before = io.written;
+        std::string err;
+        check(!channel.encrypted_roundtrip(j_obj({}), err) && !err.empty() && io.written == before,
+              "失败后未安装主密钥，也不能发送加密请求");
+    };
+    {
+        MemStream io;
+        configure(io, Fault::None, std::nullopt, valid_m4);
+        FramedCarrier carrier(io);
+        Rppairing channel(carrier);
+        std::string err = "old error";
+        const auto result = pair_verify(channel, record, err);
+        if (result.outcome != VerifyOutcome::Paired) std::fprintf(stderr, "valid PairVerify fixture failed: %s\n", err.c_str());
+        check(result.outcome == VerifyOutcome::Paired && err.empty(), "M2 身份认证和 M4 完成后成功并清除错误");
+        check(result.shared_secret.size() == 32 && channel.sequence() == 3, "成功结果提供共享秘密，发送三条明文请求");
+        check(result.device_handshake.at("wireProtocolVersion") == 26, "保留设备报告的协议版本");
+        const auto before = io.written.size();
+        channel.encrypted_roundtrip(j_obj({}), err);
+        check(io.written.size() > before, "成功后可发送主密钥加密请求");
+    }
+    for (const auto fault : {Fault::MissingCipher, Fault::BadTag, Fault::BadSignature,
+             Fault::ChangedId, Fault::WrongSigner, Fault::WrongOrder, Fault::ReplayHost,
+             Fault::MissingId, Fault::MissingSignature, Fault::TruncatedInner}) {
+        MemStream io;
+        configure(io, fault, std::nullopt, valid_m4);
+        FramedCarrier carrier(io);
+        Rppairing channel(carrier);
+        std::string err;
+        const auto result = pair_verify(channel, record, err);
+        check(result.outcome == VerifyOutcome::TransportFailure && !err.empty() && result.error == err,
+              "无效 M2 密文或设备身份有明确失败原因");
+        check(channel.sequence() == 2, "身份认证失败时不发送主机 M3 签名");
+        if (fault == Fault::BadSignature || fault == Fault::WrongSigner ||
+            fault == Fault::WrongOrder || fault == Fault::ReplayHost)
+            check(err.find("signature verification") != std::string::npos, "正确 AEAD 的错误签名到达验签路径");
+        no_keys(channel, io, result);
+    }
+    Bytes truncated_m2 = tlv_build({{TlvType::State, Bytes{2}}, {TlvType::PublicKey, peer_pub}});
     truncated_m2.push_back(0xFF);
-    const std::vector<std::pair<const char *, Bytes>> invalid_m2 = {
-        {"M2 拒绝空 TLV", {}},
-        {"M2 拒绝缺失 State", scrctl::wifi::tlv_build(
-             {{scrctl::wifi::TlvType::PublicKey, peer_pub}})},
-        {"M2 拒绝错误 State", scrctl::wifi::tlv_build(
-             {{scrctl::wifi::TlvType::State, Bytes{0x03}},
-              {scrctl::wifi::TlvType::PublicKey, peer_pub}})},
-        {"M2 拒绝多字节 State", scrctl::wifi::tlv_build(
-             {{scrctl::wifi::TlvType::State, Bytes{0x02, 0x00}},
-              {scrctl::wifi::TlvType::PublicKey, peer_pub}})},
-        {"M2 拒绝有效前缀后的截断 TLV", truncated_m2},
-    };
-    for (const auto &[name, m2] : invalid_m2) {
-        rejected_reply(m2, valid_m4, true, name);
-    }
+    const std::vector<Bytes> bad_m2{{}, tlv_build({{TlvType::PublicKey, peer_pub}}),
+        tlv_build({{TlvType::State, Bytes{3}}, {TlvType::PublicKey, peer_pub}}),
+        tlv_build({{TlvType::State, Bytes{2, 0}}, {TlvType::PublicKey, peer_pub}}), truncated_m2};
     Bytes truncated_m4 = valid_m4;
     truncated_m4.push_back(0xFF);
-    const std::vector<std::pair<const char *, Bytes>> invalid_m4 = {
-        {"M4 拒绝空 TLV", {}},
-        {"M4 拒绝缺失 State", scrctl::wifi::tlv_build(
-             {{scrctl::wifi::TlvType::Identifier, scrctl::wifi::bytes_of("peer")}})},
-        {"M4 拒绝错误 State", scrctl::wifi::tlv_build(
-             {{scrctl::wifi::TlvType::State, Bytes{0x06}}})},
-        {"M4 拒绝多字节 State", scrctl::wifi::tlv_build(
-             {{scrctl::wifi::TlvType::State, Bytes{0x04, 0x00}}})},
-        {"M4 拒绝有效前缀后的截断 TLV", truncated_m4},
-    };
-    for (const auto &[name, m4] : invalid_m4) {
-        rejected_reply(msg02, m4, false, name);
-    }
-
-    // 完整 Error 回复保持既有分类；State=6 不应使设备拒绝变成传输失败。
-    const Bytes denied = scrctl::wifi::tlv_build(
-        {{scrctl::wifi::TlvType::State, Bytes{0x06}},
-         {scrctl::wifi::TlvType::Error, Bytes{0x02}}});
-    for (const bool error_at_m2 : {true, false}) {
-        for (const bool announce_failure : {true, false}) {
+    const std::vector<Bytes> bad_m4{{}, tlv_build({{TlvType::Identifier, sb("peer")}}),
+        tlv_build({{TlvType::State, Bytes{6}}}), tlv_build({{TlvType::State, Bytes{4, 0}}}), truncated_m4};
+    for (const bool at_m2 : {true, false}) {
+        for (const auto &bad : at_m2 ? bad_m2 : bad_m4) {
             MemStream io;
-            scrctl::wifi::FramedCarrier carrier(io);
-            scrctl::wifi::Rppairing channel(carrier);
-            io.feed(device_frame(handshake_reply));
-            io.feed(reply_with(error_at_m2 ? denied : msg02));
-            io.feed(reply_with(error_at_m2 ? valid_m4 : denied));
+            configure(io, Fault::None, at_m2 ? std::optional<Bytes>(bad) : std::nullopt,
+                      at_m2 ? valid_m4 : bad);
+            FramedCarrier carrier(io);
+            Rppairing channel(carrier);
             std::string err;
-            const auto result = scrctl::wifi::pair_verify(channel, record, err, announce_failure);
-            check(result.outcome == scrctl::wifi::VerifyOutcome::NotPaired,
-                  "M2/M4 的显式 Error 保持 NotPaired 分类");
-            check(!err.empty() && result.error == err, "设备拒绝保留失败原因");
-            check((io.written.find("pairVerifyFailed") != std::string::npos) == announce_failure,
-                  "设备拒绝按 announce_failure 决定是否通知");
-            const std::string written_before = io.written;
-            std::string key_err;
-            const auto encrypted = channel.encrypted_roundtrip(j_obj({}), key_err);
-            check(!encrypted && !key_err.empty() && io.written == written_before,
-                  "显式 Error 后没有安装主密钥，也不发送加密请求");
+            const auto result = pair_verify(channel, record, err, false);
+            check(result.outcome == VerifyOutcome::TransportFailure && !err.empty() && result.error == err,
+                  "M2/M4 缺少 State、错误 State 或截断均被拒绝");
+            check(channel.sequence() == (at_m2 ? 2 : 3), "失败阶段决定是否已发送 M3");
+            no_keys(channel, io, result);
         }
+        for (const bool announce : {true, false}) {
+            MemStream io;
+            configure(io, Fault::None, at_m2 ? std::optional<Bytes>(denied) : std::nullopt,
+                      at_m2 ? valid_m4 : denied);
+            FramedCarrier carrier(io);
+            Rppairing channel(carrier);
+            std::string err;
+            const auto result = pair_verify(channel, record, err, announce);
+            check(result.outcome == VerifyOutcome::NotPaired && !err.empty() && result.error == err,
+                  "M2/M4 显式 Error 保持 NotPaired 分类");
+            check((io.written.find("pairVerifyFailed") != std::string::npos) == announce,
+                  "仅按 announce_failure 发送设备拒绝通知");
+            no_keys(channel, io, result);
+        }
+    }
+    for (const bool missing_id : {true, false}) {
+        auto legacy = record;
+        if (missing_id) legacy.peer_identifier.clear(); else legacy.peer_public_key.clear();
+        MemStream io;
+        FramedCarrier carrier(io);
+        Rppairing channel(carrier);
+        std::string err;
+        const auto result = pair_verify(channel, legacy, err);
+        check(result.outcome == VerifyOutcome::NotPaired && err.find("USB") != std::string::npos &&
+                  io.written.empty(), "旧记录缺少设备身份时在发消息前要求 USB 重新配对");
+        no_keys(channel, io, result);
     }
 }
 

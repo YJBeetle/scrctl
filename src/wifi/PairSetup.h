@@ -19,7 +19,8 @@ std::string local_hostname();
 
 struct PairSetupResult {
     bool ok = false;
-    /// 成功时生成的记录；保存由调用方负责，仍需核对传入的设备标识。
+    /// 成功时生成含已校验设备长期身份的记录；保存由调用方负责，仍需核对
+    /// 传入的设备标识与首次配对入口的信任来源。
     PairRecord record;
     /// 设备 handshake 响应体，包含 peerDeviceInfo 等信息，可供调用方查询协商能力。
     json::Value device_handshake;
@@ -36,9 +37,9 @@ struct PairSetupOptions {
     /// verify 后切换 setup 被关闭连接的情况（docs §25.2/§25.3），开关保留两种入口。
     bool probe_verify_first = true;
     /// pairingData 的 kind，默认升级已有 lockdown 信任到远程配对。
-    /// 已测 iOS 27/已建立 USB 信任的配置接受 upgradeNonAutomationLockdownPairing，
-    /// setupManualPairing 在所测入口被关闭连接（docs §25.6）；不将该样本外推为所有
-    /// 设备的唯一选择。调用方可显式指定 kind，但设备是否允许仍由握手和响应决定。
+    /// 已测 iOS 27 的字节流入口和隧道内 RemoteXPC 入口行为不同：后者接受
+    /// setupManualPairing 并要求设备确认，免提示升级还受主机授权限制（docs §25.8）。
+    /// 调用方可显式指定 kind，不能仅凭握手能力字段推断主机已获得配对授权。
     std::string pairing_kind = "upgradeNonAutomationLockdownPairing";
 };
 
@@ -46,8 +47,9 @@ struct PairSetupOptions {
 /// 可选 createRemoteUnlockKey 失败不改变 ok。失败时 ok=false，error 与 err 记录原因；
 /// 已执行的设备端配对步骤不会由本函数回滚，channel 也不保证恢复到初始状态。
 /// 已有设备在 setup 后关闭连接，后续起隧道需重连并 verify（验证范围见 docs §25）。
-/// 当前实现检查 SRP 服务端证明；M6 携带密文时验证并解密，但不要求存在密文，
-/// 也未校验其中设备的长期签名。
+/// 验证 SRP 服务端证明，并要求 M6 身份密文通过 AEAD 和设备 Ed25519 签名校验。
+/// 只有这些检查完成后才安装主密钥、发布含设备长期身份的记录并请求可选解锁密钥。
+/// 首次配对的身份信任仍依赖可信入口及用户确认；此处没有 Apple 根证书认证。
 PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
                            std::string_view hostname, std::string_view udid,
                            const ProgressFn &progress, const PairSetupOptions &options,

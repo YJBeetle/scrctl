@@ -129,6 +129,9 @@ feature 可用：已有 iPadOS 18.7.8 记录中，设备拒绝实时媒体流并
 Wi-Fi 需要设备可达和已有 RemotePairing 记录。目前产品没有新建远程配对的命令，
 研究探针 `wifi_probe --pair-setup-xpc` 可用于建立记录。使用方法与验证边界见
 [路线图](docs/ROADMAP.md)。
+记录现在需要包含 USB 配对时校验并保存的设备标识和长期公钥；旧记录缺少这些字段时，
+请重新通过 USB 配对。探针的 `--pmd3-record` 当前只导入主机密钥，因此也不能直接用于
+设备身份验证。通过 Wi-Fi 地址进行首次配对仅供实验，需显式指定 `--no-save`。
 
 ```bash
 scrctl --list-devices

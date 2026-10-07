@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <set>
 
 #include "wifi/Tlv.h"
 
@@ -160,6 +161,12 @@ std::string format_record(const PairRecord &record) {
     if (!record.advertised_identifier.empty()) {
         out << "advertised_identifier=" << record.advertised_identifier << '\n';
     }
+    if (!record.peer_identifier.empty()) {
+        out << "peer_identifier=" << hex(record.peer_identifier) << '\n';
+    }
+    if (!record.peer_public_key.empty()) {
+        out << "peer_public_key=" << hex(record.peer_public_key) << '\n';
+    }
     if (!record.peer_alt_irk.empty()) {
         out << "peer_alt_irk=" << hex(record.peer_alt_irk) << '\n';
     }
@@ -173,6 +180,7 @@ std::optional<PairRecord> parse_record(std::string_view text, std::string &err) 
     PairRecord record;
     bool first = true;
     bool seen_private = false;
+    std::set<std::string_view> seen_fields;
     size_t pos = 0;
     while (pos <= text.size()) {
         size_t nl = text.find('\n', pos);
@@ -199,6 +207,15 @@ std::optional<PairRecord> parse_record(std::string_view text, std::string &err) 
         }
         const std::string_view key = trim(line.substr(0, eq));
         const std::string_view value = trim(line.substr(eq + 1));
+        const bool known = key == "udid" || key == "host_identifier" ||
+                           key == "host_private_key" || key == "host_public_key" ||
+                           key == "advertised_identifier" || key == "peer_identifier" ||
+                           key == "peer_public_key" || key == "peer_alt_irk" ||
+                           key == "remote_unlock_host_key";
+        if (known && !seen_fields.insert(key).second) {
+            err = SCRCTL_TR("Duplicate pairing record field: ") + std::string(key);
+            return std::nullopt;
+        }
         auto set_hex = [&](Bytes &field, size_t want) -> bool {
             const std::optional<Bytes> bytes = unhex(value, err);
             if (!bytes) {
@@ -227,6 +244,20 @@ std::optional<PairRecord> parse_record(std::string_view text, std::string &err) 
             }
         } else if (key == "advertised_identifier") {
             record.advertised_identifier = value;
+        } else if (key == "peer_identifier") {
+            const std::optional<Bytes> identifier = unhex(value, err);
+            if (!identifier) {
+                return std::nullopt;
+            }
+            if (identifier->empty()) {
+                err = SCRCTL_TR("Pairing record peer_identifier must not be empty");
+                return std::nullopt;
+            }
+            record.peer_identifier = *identifier;
+        } else if (key == "peer_public_key") {
+            if (!set_hex(record.peer_public_key, 32)) {
+                return std::nullopt;
+            }
         } else if (key == "peer_alt_irk") {
             if (!set_hex(record.peer_alt_irk, 16)) {
                 return std::nullopt;

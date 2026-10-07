@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 05:12+0800\n"
+"POT-Creation-Date: 2026-10-08 05:11+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -157,7 +157,7 @@ msgid ""
 "device."
 msgstr ""
 
-#: src/app/Cli.cpp:23 tools/screenshot_probe.cpp:52 tools/wifi_probe.cpp:646
+#: src/app/Cli.cpp:23 tools/screenshot_probe.cpp:52 tools/wifi_probe.cpp:642
 msgid "Show help"
 msgstr ""
 
@@ -1572,7 +1572,7 @@ msgstr ""
 msgid "lockdown pairing session"
 msgstr ""
 
-#: src/remote/Device.cpp:136 tools/wifi_probe.cpp:352
+#: src/remote/Device.cpp:136 tools/wifi_probe.cpp:348
 msgid "Failed to establish lockdown session: "
 msgstr ""
 
@@ -1581,8 +1581,8 @@ msgid "Start CoreDeviceProxy"
 msgstr ""
 
 #: src/remote/Device.cpp:142 src/remote/Rsd.cpp:152 src/remote/Rsd.cpp:355
-#: src/transport/Usbmux.cpp:92 src/wifi/PairRecord.cpp:313
-#: tools/wifi_probe.cpp:357
+#: src/transport/Usbmux.cpp:92 src/wifi/PairRecord.cpp:344
+#: tools/wifi_probe.cpp:353
 msgid " failed: "
 msgstr ""
 
@@ -1594,7 +1594,7 @@ msgstr ""
 msgid "CDTunnel handshake"
 msgstr ""
 
-#: src/remote/Device.cpp:150 src/remote/Device.cpp:241
+#: src/remote/Device.cpp:150 src/remote/Device.cpp:250
 msgid "Failed to establish packet tunnel: "
 msgstr ""
 
@@ -1614,54 +1614,63 @@ msgstr ""
 msgid "Ready"
 msgstr ""
 
-#: src/remote/Device.cpp:202
+#: src/remote/Device.cpp:199 src/wifi/PairVerify.cpp:13
+msgid "Pairing record incomplete; cannot sign"
+msgstr ""
+
+#: src/remote/Device.cpp:203 src/wifi/PairVerify.cpp:19
+#: tools/wifi_probe.cpp:801
+msgid "Pairing record has no device identity; pair again over USB"
+msgstr ""
+
+#: src/remote/Device.cpp:211
 msgid "LAN pair-verify"
 msgstr ""
 
-#: src/remote/Device.cpp:205
+#: src/remote/Device.cpp:214
 msgid "Cannot connect to device RemotePairing port "
 msgstr ""
 
-#: src/remote/Device.cpp:206
+#: src/remote/Device.cpp:215
 msgid ""
 " (check that the device is reachable on this network and has been paired)"
 msgstr ""
 
-#: src/remote/Device.cpp:215
+#: src/remote/Device.cpp:224
 msgid "Device rejected pairing record: "
 msgstr ""
 
-#: src/remote/Device.cpp:216
+#: src/remote/Device.cpp:225
 msgid " is not paired with this device, or its pairing was removed"
 msgstr ""
 
-#: src/remote/Device.cpp:218
+#: src/remote/Device.cpp:227
 msgid "pair-verify failed: "
 msgstr ""
 
-#: src/remote/Device.cpp:223
+#: src/remote/Device.cpp:232
 msgid "Request device tunnel port"
 msgstr ""
 
-#: src/remote/Device.cpp:231
+#: src/remote/Device.cpp:240
 msgid "TLS-PSK and CDTunnel handshake"
 msgstr ""
 
-#: src/remote/Device.cpp:234
+#: src/remote/Device.cpp:243
 msgid "Cannot connect to tunnel port "
 msgstr ""
 
-#: src/remote/Device.cpp:248
+#: src/remote/Device.cpp:257
 msgid ""
 "Pairing host identifier is not a valid UUID; cannot construct a stable peer "
 "identity"
 msgstr ""
 
-#: src/remote/Device.cpp:268
+#: src/remote/Device.cpp:277
 msgid "Session not established"
 msgstr ""
 
-#: src/remote/Device.cpp:280
+#: src/remote/Device.cpp:289
 msgid " does not advertise feature "
 msgstr ""
 
@@ -2502,179 +2511,269 @@ msgstr ""
 msgid "OPACK decode: "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:42
+#: src/wifi/PairRecord.cpp:43
 msgid "Hex length must be even"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:62
+#: src/wifi/PairRecord.cpp:63
 msgid "Invalid hex character"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:104 src/wifi/PairRecordWindows.cpp:89
+#: src/wifi/PairRecord.cpp:105 src/wifi/PairRecordWindows.cpp:89
 msgid "Cannot open temporary file "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:109 src/wifi/PairRecord.cpp:265
+#: src/wifi/PairRecord.cpp:110 src/wifi/PairRecord.cpp:296
 #: src/wifi/PairRecordWindows.cpp:47
 msgid "Failed to set record file permissions"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:117 src/wifi/PairRecordWindows.cpp:77
+#: src/wifi/PairRecord.cpp:118 src/wifi/PairRecordWindows.cpp:77
 #: src/wifi/PairRecordWindows.cpp:100
 msgid "Incomplete record file write"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:122 src/wifi/PairRecordWindows.cpp:109
+#: src/wifi/PairRecord.cpp:123 src/wifi/PairRecordWindows.cpp:109
 msgid "Rename failed"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:133
+#: src/wifi/PairRecord.cpp:134
 msgid "Cannot open "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:140
+#: src/wifi/PairRecord.cpp:141
 msgid "Failed to read pairing record file "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:144
+#: src/wifi/PairRecord.cpp:145
 msgid "Pairing record file too large"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:190
+#: src/wifi/PairRecord.cpp:198
 msgid "Invalid scrctl pairing record header"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:197
+#: src/wifi/PairRecord.cpp:205
 msgid "Record line is not key=value"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:208
+#: src/wifi/PairRecord.cpp:216
+msgid "Duplicate pairing record field: "
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:225
 msgid " requires "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:208
+#: src/wifi/PairRecord.cpp:225
 msgid "Incorrect field length: "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:209
+#: src/wifi/PairRecord.cpp:226
 msgid " bytes; got "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:240
+#: src/wifi/PairRecord.cpp:253
+msgid "Pairing record peer_identifier must not be empty"
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:271
 msgid "Record missing host_private_key"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:255
+#: src/wifi/PairRecord.cpp:286
 msgid "Failed to create directory "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:313
+#: src/wifi/PairRecord.cpp:344
 msgid "Reading directory "
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:45
+#: src/wifi/PairSetup.cpp:46
 msgid "MD5 unavailable; check OpenSSL algorithm providers"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:69
+#: src/wifi/PairSetup.cpp:70
 msgid "Handshake response missing response._1.handshake._0"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:84 src/wifi/PairSetup.cpp:445
+#: src/wifi/PairSetup.cpp:85
 msgid " TLV decode incomplete: "
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:91
+#: src/wifi/PairSetup.cpp:92
 msgid " returned error code 0x"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:97
+#: src/wifi/PairSetup.cpp:98
 msgid " reply must contain a one-byte State equal to "
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:113
+#: src/wifi/PairSetup.cpp:114
 msgid ""
 "Control channel does not allow pair-setup "
 "(deviceOptions.allowsPairSetup=false). Tested iOS 27 devices require the "
 "RemoteXPC entry point (wifi_probe --pair-setup-xpc)"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:157
+#: src/wifi/PairSetup.cpp:158
 msgid "Host identifier missing; provide one if hostname lookup is unavailable"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:226
+#: src/wifi/PairSetup.cpp:227
 msgid "Verify M2 missing 32-byte public key"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:272
+#: src/wifi/PairSetup.cpp:273
 msgid ""
 "Device accepted this identifier; already paired, pair-setup is unnecessary"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:277
+#: src/wifi/PairSetup.cpp:278
 msgid "Verify completed without accepting this key; sending upgrade M1"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:295
+#: src/wifi/PairSetup.cpp:296
 msgid "Handshake (attemptPairVerify=false) completed; sending M1"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:313
+#: src/wifi/PairSetup.cpp:314
 msgid "M2 missing PUBLIC_KEY or SALT"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:339
+#: src/wifi/PairSetup.cpp:340
 msgid "M4 missing PROOF"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:345
+#: src/wifi/PairSetup.cpp:346
 msgid "Device SRP proof mismatch; pairing aborted. Check PIN and peer identity"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:349
+#: src/wifi/PairSetup.cpp:350
 msgid "SRP mutual verification passed; registering host key on device (M5)"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:439
+#: src/wifi/PairSetup.cpp:432
+msgid "PairSetup M6 missing encrypted device identity"
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:441
 msgid "Cannot decrypt M6: "
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:496
+#: src/wifi/PairSetup.cpp:502
 msgid "); pairing itself succeeded"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:496
+#: src/wifi/PairSetup.cpp:502
 msgid "createRemoteUnlockKey failed ("
 msgstr ""
 
-#: src/wifi/PairVerify.cpp:12
-msgid "Pairing record incomplete; cannot sign"
-msgstr ""
-
-#: src/wifi/PairVerify.cpp:57
+#: src/wifi/PairVerify.cpp:64
 msgid "PV-Msg02 TLV decode incomplete: "
 msgstr ""
 
-#: src/wifi/PairVerify.cpp:69 src/wifi/PairVerify.cpp:142
+#: src/wifi/PairVerify.cpp:76 src/wifi/PairVerify.cpp:166
 msgid ""
 "Device does not recognize this pairing record (not paired or pairing removed)"
 msgstr ""
 
-#: src/wifi/PairVerify.cpp:76
+#: src/wifi/PairVerify.cpp:83
 msgid "PV-Msg02 response has invalid State (expected 2)"
 msgstr ""
 
-#: src/wifi/PairVerify.cpp:82
+#: src/wifi/PairVerify.cpp:89
 msgid "PV-Msg02 missing 32-byte public key"
 msgstr ""
 
-#: src/wifi/PairVerify.cpp:130
+#: src/wifi/PairVerify.cpp:106
+msgid "PV-Msg02 missing encrypted device identity"
+msgstr ""
+
+#: src/wifi/PairVerify.cpp:114
+msgid "PV-Msg02 device identity decryption failed: "
+msgstr ""
+
+#: src/wifi/PairVerify.cpp:154
 msgid "PV-Msg04 TLV decode incomplete: "
 msgstr ""
 
-#: src/wifi/PairVerify.cpp:149
+#: src/wifi/PairVerify.cpp:173
 msgid "PV-Msg04 response has invalid State (expected 4)"
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:27
+msgid "Identity TLV decode failed: "
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:45
+msgid "Identity TLV field repeated without a valid continuation: "
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:64
+msgid "PS-Msg06 identity validation requires a 64-byte SRP session key"
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:70
+msgid "PS-Msg06 identity validation failed: "
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:75
+msgid "PS-Msg06 missing nonempty device Identifier"
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:80
+msgid "PS-Msg06 missing 32-byte device public key"
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:85
+msgid "PS-Msg06 missing 64-byte device signature"
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:91
+msgid "PS-Msg06 signature key derivation failed: "
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:98
+msgid "PS-Msg06 device signature verification failed: "
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:116
+msgid "PV-Msg02 requires a saved device Identifier; pair again over USB"
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:120
+msgid ""
+"PV-Msg02 requires a saved 32-byte device public key; pair again over USB"
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:124
+msgid ""
+"PV-Msg02 identity validation requires 32-byte device and host ephemeral keys"
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:130
+msgid "PV-Msg02 identity validation failed: "
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:135
+msgid "PV-Msg02 missing nonempty device Identifier"
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:139
+msgid "PV-Msg02 device Identifier does not match the pairing record"
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:144
+msgid "PV-Msg02 device public key does not match the pairing record"
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:150
+msgid "PV-Msg02 missing 64-byte device signature"
+msgstr ""
+
+#: src/wifi/PairingIdentity.cpp:157
+msgid "PV-Msg02 device signature verification failed: "
 msgstr ""
 
 #: src/wifi/RemotePairing.cpp:35
@@ -2912,8 +3011,8 @@ msgstr ""
 msgid "absent"
 msgstr ""
 
-#: tools/rr_keepalive_probe.cpp:254 tools/wifi_probe.cpp:494
-#: tools/wifi_probe.cpp:495
+#: tools/rr_keepalive_probe.cpp:254 tools/wifi_probe.cpp:490
+#: tools/wifi_probe.cpp:491
 msgid "present"
 msgstr ""
 
@@ -3636,217 +3735,219 @@ msgstr ""
 msgid "Failed to connect to usbmuxd: "
 msgstr ""
 
-#: tools/wifi_probe.cpp:290
+#: tools/wifi_probe.cpp:286
 msgid "No USB device found"
 msgstr ""
 
-#: tools/wifi_probe.cpp:290
-msgid "No device matches --udid"
+#: tools/wifi_probe.cpp:286
+msgid "No USB device matches --udid"
 msgstr ""
 
-#: tools/wifi_probe.cpp:294
+#: tools/wifi_probe.cpp:290
 msgid " devices; select one with --udid"
 msgstr ""
 
-#: tools/wifi_probe.cpp:294
+#: tools/wifi_probe.cpp:290
 msgid "Found "
 msgstr ""
 
-#: tools/wifi_probe.cpp:298
+#: tools/wifi_probe.cpp:294
 #, c-format
 msgid "Device %s (%s)\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:357
+#: tools/wifi_probe.cpp:353
 msgid "Start service "
 msgstr ""
 
-#: tools/wifi_probe.cpp:364
+#: tools/wifi_probe.cpp:360
 msgid "Failed to establish tunnel: "
 msgstr ""
 
-#: tools/wifi_probe.cpp:371
+#: tools/wifi_probe.cpp:367
 msgid "Failed to start network stack inside tunnel: "
 msgstr ""
 
-#: tools/wifi_probe.cpp:377
+#: tools/wifi_probe.cpp:373
 msgid "host_id is not a valid UUID"
 msgstr ""
 
-#: tools/wifi_probe.cpp:383
+#: tools/wifi_probe.cpp:379
 msgid "Failed to open RSD: "
 msgstr ""
 
-#: tools/wifi_probe.cpp:406
+#: tools/wifi_probe.cpp:402
 msgid " (use --usb-services to list the directory)"
 msgstr ""
 
-#: tools/wifi_probe.cpp:406
+#: tools/wifi_probe.cpp:402
 msgid "RSD service not found: "
 msgstr ""
 
-#: tools/wifi_probe.cpp:410
+#: tools/wifi_probe.cpp:406
 msgid ""
 " is not a RemoteXPC service (UsesRemoteXPC=false); cannot use this carrier"
 msgstr ""
 
-#: tools/wifi_probe.cpp:413
+#: tools/wifi_probe.cpp:409
 #, c-format
 msgid "  Pairing service %s, port %u\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:425
+#: tools/wifi_probe.cpp:421
 #, c-format
 msgid "  Initial device message: %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:427
+#: tools/wifi_probe.cpp:423
 #, c-format
 msgid "  No initial version message (%s); proceeding with handshake\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:448
+#: tools/wifi_probe.cpp:444
 #, c-format
 msgid "Failed to obtain local hostname\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:463
+#: tools/wifi_probe.cpp:459
 #, c-format
 msgid "Failed to derive host identifier\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:466
+#: tools/wifi_probe.cpp:462
 #, c-format
 msgid "Host identifier = %s (%s)\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:467
+#: tools/wifi_probe.cpp:463
 msgid "provided on command line"
 msgstr ""
 
-#: tools/wifi_probe.cpp:467
+#: tools/wifi_probe.cpp:463
 msgid "uuid3(hostname + \".scrctl\")"
 msgstr ""
 
-#: tools/wifi_probe.cpp:471
+#: tools/wifi_probe.cpp:467
 #, c-format
 msgid "Failed to connect to pairing channel: %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:475
+#: tools/wifi_probe.cpp:471
 #, c-format
 msgid "  · %.*s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:483
+#: tools/wifi_probe.cpp:479
 #, c-format
 msgid "Pairing kind = %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:487
+#: tools/wifi_probe.cpp:483
 #, c-format
 msgid "Pair setup failed: %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:490
+#: tools/wifi_probe.cpp:486
 #, c-format
 msgid "Pair setup completed\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:492
+#: tools/wifi_probe.cpp:488
 #, c-format
 msgid ""
 "  Host private/public key lengths: %zu/%zu bytes; peer altIRK: %s; remote "
 "unlock key: %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:494 tools/wifi_probe.cpp:495
+#: tools/wifi_probe.cpp:490 tools/wifi_probe.cpp:491
 msgid "missing"
 msgstr ""
 
-#: tools/wifi_probe.cpp:501
+#: tools/wifi_probe.cpp:497
 #, c-format
 msgid "Failed to save pairing record: %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:504
+#: tools/wifi_probe.cpp:500
 #, c-format
 msgid "Pairing record saved to %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:508
+#: tools/wifi_probe.cpp:504
 #, c-format
 msgid "Reconnecting to verify the new pairing record\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:511
+#: tools/wifi_probe.cpp:507
 #, c-format
 msgid "Failed to reconnect to pairing channel: %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:517
+#: tools/wifi_probe.cpp:513
 #, c-format
 msgid "  New record pair-verify failed: %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:520
+#: tools/wifi_probe.cpp:516
 #, c-format
-msgid "  New record pair-verify completed; device accepted the host key\n"
+msgid ""
+"  New record pair-verify completed; device identity verified and host key "
+"accepted\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:546
+#: tools/wifi_probe.cpp:542
 #, c-format
 msgid "Failed to establish lockdown session: %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:552
+#: tools/wifi_probe.cpp:548
 #, c-format
 msgid "Failed to start service %s: %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:555
+#: tools/wifi_probe.cpp:551
 #, c-format
 msgid "Pairing channel port %u (TLS: %s)\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:556
+#: tools/wifi_probe.cpp:552
 msgid "not required"
 msgstr ""
 
-#: tools/wifi_probe.cpp:556
+#: tools/wifi_probe.cpp:552
 msgid "required"
 msgstr ""
 
-#: tools/wifi_probe.cpp:572
+#: tools/wifi_probe.cpp:568
 #, c-format
 msgid "Using connected USB device %s as the pairing record identifier\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:575
+#: tools/wifi_probe.cpp:571
 #, c-format
 msgid "Wi-Fi pairing requires --udid when no USB device is selected\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:579
+#: tools/wifi_probe.cpp:575
 #, c-format
 msgid "Pairing channel %s:%d (Wi-Fi manual pairing)\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:597
+#: tools/wifi_probe.cpp:593
 #, c-format
 msgid "Carrier = RemoteXPC (%s)\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:613
+#: tools/wifi_probe.cpp:609
 #, c-format
 msgid "USB tunnel RSD directory: %zu services\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:641
+#: tools/wifi_probe.cpp:637
 msgid "Inspect RemotePairing connections and USB pairing services"
 msgstr ""
 
-#: tools/wifi_probe.cpp:643
+#: tools/wifi_probe.cpp:639
 msgid ""
 "By default, verify an existing record over Wi-Fi using --address and either "
 "--record or --pmd3-record. --pair-setup uses a byte stream over USB, or Wi-"
@@ -3854,113 +3955,120 @@ msgid ""
 "not connect to a device."
 msgstr ""
 
-#: tools/wifi_probe.cpp:648
+#: tools/wifi_probe.cpp:644
 msgid "Device address for Wi-Fi verification or byte-stream pairing"
 msgstr ""
 
-#: tools/wifi_probe.cpp:650
+#: tools/wifi_probe.cpp:646
 msgid "Wi-Fi RemotePairing port (1..65535; default: 49152)"
 msgstr ""
 
-#: tools/wifi_probe.cpp:653
+#: tools/wifi_probe.cpp:649
 msgid "scrctl pairing record for Wi-Fi verification"
 msgstr ""
 
-#: tools/wifi_probe.cpp:655
-msgid "pymobiledevice3 plist record; requires --host-id"
+#: tools/wifi_probe.cpp:651
+msgid ""
+"Import pymobiledevice3 host keys (no device identity; USB pairing required)"
 msgstr ""
 
-#: tools/wifi_probe.cpp:657
+#: tools/wifi_probe.cpp:653
 msgid "Host identifier for pairing setup or a pymobiledevice3 record"
 msgstr ""
 
-#: tools/wifi_probe.cpp:659
+#: tools/wifi_probe.cpp:655
 msgid ""
 "USB device filter, or device identifier for Wi-Fi pairing and foreign records"
 msgstr ""
 
-#: tools/wifi_probe.cpp:660
+#: tools/wifi_probe.cpp:656
 msgid "Print connection and pairing details"
 msgstr ""
 
-#: tools/wifi_probe.cpp:662
+#: tools/wifi_probe.cpp:658
 msgid "Establish the tunnel after Wi-Fi verification"
 msgstr ""
 
-#: tools/wifi_probe.cpp:664
+#: tools/wifi_probe.cpp:660
 msgid "Read the tunnel RSD service directory (implies --tunnel)"
 msgstr ""
 
-#: tools/wifi_probe.cpp:666
-msgid "Create a pairing record over USB or the given Wi-Fi address"
+#: tools/wifi_probe.cpp:662
+msgid "Pair over USB, or experiment over Wi-Fi with --no-save"
 msgstr ""
 
-#: tools/wifi_probe.cpp:668
+#: tools/wifi_probe.cpp:664
 msgid "Create a pairing record over USB RemoteXPC"
 msgstr ""
 
-#: tools/wifi_probe.cpp:670
+#: tools/wifi_probe.cpp:666
 msgid "RemoteXPC pairing service (only with --pair-setup-xpc)"
 msgstr ""
 
-#: tools/wifi_probe.cpp:672
+#: tools/wifi_probe.cpp:668
 msgid "List services in the USB tunnel RSD directory"
 msgstr ""
 
-#: tools/wifi_probe.cpp:674
+#: tools/wifi_probe.cpp:670
 msgid "Do not save the new pairing record (pairing setup only)"
 msgstr ""
 
-#: tools/wifi_probe.cpp:676
+#: tools/wifi_probe.cpp:672
 msgid "Skip the initial verification attempt (pairing setup only)"
 msgstr ""
 
-#: tools/wifi_probe.cpp:678
+#: tools/wifi_probe.cpp:674
 msgid "Override the pairing host name (pairing setup only)"
 msgstr ""
 
-#: tools/wifi_probe.cpp:680
+#: tools/wifi_probe.cpp:676
 msgid "Override the pairingData kind (pairing setup only)"
 msgstr ""
 
-#: tools/wifi_probe.cpp:703
+#: tools/wifi_probe.cpp:699
 msgid ""
 "--no-save, --no-verify-probe, --host-name and --pairing-kind require --pair-"
 "setup or --pair-setup-xpc"
 msgstr ""
 
-#: tools/wifi_probe.cpp:709
+#: tools/wifi_probe.cpp:705
 msgid ""
 "--record, --pmd3-record, --tunnel and --rsd are only for Wi-Fi verification"
 msgstr ""
 
-#: tools/wifi_probe.cpp:713
+#: tools/wifi_probe.cpp:709
 msgid "--address cannot be combined with --pair-setup-xpc or --usb-services"
 msgstr ""
 
-#: tools/wifi_probe.cpp:716
+#: tools/wifi_probe.cpp:712
 msgid "--port requires a Wi-Fi --address"
 msgstr ""
 
-#: tools/wifi_probe.cpp:720
+#: tools/wifi_probe.cpp:716
 msgid "--host-id requires pairing setup or --pmd3-record"
 msgstr ""
 
-#: tools/wifi_probe.cpp:724
+#: tools/wifi_probe.cpp:720
 msgid ""
 "--udid is only used with USB modes, Wi-Fi pairing setup or --pmd3-record"
 msgstr ""
 
-#: tools/wifi_probe.cpp:727
+#: tools/wifi_probe.cpp:723
 msgid "Wi-Fi verification requires --address"
 msgstr ""
 
-#: tools/wifi_probe.cpp:731
+#: tools/wifi_probe.cpp:727
 msgid "Wi-Fi verification requires --record or --pmd3-record"
 msgstr ""
 
-#: tools/wifi_probe.cpp:734
+#: tools/wifi_probe.cpp:730
 msgid "--pmd3-record requires a nonempty --host-id"
+msgstr ""
+
+#: tools/wifi_probe.cpp:734
+msgid ""
+"Wi-Fi pair setup requires --no-save; pair over USB to save a trusted device "
+"identity"
 msgstr ""
 
 #: tools/wifi_probe.cpp:767
@@ -3999,118 +4107,119 @@ msgstr ""
 msgid "(empty)"
 msgstr ""
 
-#: tools/wifi_probe.cpp:801
+#: tools/wifi_probe.cpp:805
 #, c-format
 msgid "Connecting to %s:%d (record %s)\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:802
+#: tools/wifi_probe.cpp:806
 msgid "(unknown device)"
 msgstr ""
 
-#: tools/wifi_probe.cpp:805
+#: tools/wifi_probe.cpp:809
 #, c-format
 msgid "  Connection failed: %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:816
+#: tools/wifi_probe.cpp:820
 msgid "device rejected the pairing record"
 msgstr ""
 
-#: tools/wifi_probe.cpp:817
+#: tools/wifi_probe.cpp:821
 msgid "verification did not complete"
 msgstr ""
 
-#: tools/wifi_probe.cpp:818
+#: tools/wifi_probe.cpp:822
 #, c-format
 msgid "  Pair-verify failed (%s): %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:821
+#: tools/wifi_probe.cpp:825
 #, c-format
-msgid "  Pair-verify completed; device accepted the host key\n"
+msgid ""
+"  Pair-verify completed; device identity verified and host key accepted\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:823
+#: tools/wifi_probe.cpp:827
 #, c-format
 msgid ""
 "  Shared secret: %zu bytes (key derivation and tunnel PSK; contents hidden)\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:839
+#: tools/wifi_probe.cpp:843
 #, c-format
 msgid "  createListener failed: %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:845
+#: tools/wifi_probe.cpp:849
 #, c-format
 msgid "  Response missing createListener.port; actual fields:"
 msgstr ""
 
-#: tools/wifi_probe.cpp:852
+#: tools/wifi_probe.cpp:856
 #, c-format
 msgid "  createListener port = %lld\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:858
+#: tools/wifi_probe.cpp:862
 #, c-format
 msgid "  Listener port connection: %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:858
+#: tools/wifi_probe.cpp:862
 msgid "connected"
 msgstr ""
 
-#: tools/wifi_probe.cpp:867
+#: tools/wifi_probe.cpp:871
 #, c-format
 msgid "  Failed to connect to tunnel port %u: %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:870
+#: tools/wifi_probe.cpp:874
 #, c-format
 msgid ""
 "  Connected to tunnel port %u; starting TLS-PSK and CDTunnel handshakes\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:875
+#: tools/wifi_probe.cpp:879
 #, c-format
 msgid "  Failed to establish tunnel: %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:879
+#: tools/wifi_probe.cpp:883
 #, c-format
 msgid "  Tunnel established: local %s / device %s / RSD port %u / MTU %u\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:889
+#: tools/wifi_probe.cpp:893
 #, c-format
 msgid "  Failed to parse tunnel addresses\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:893
+#: tools/wifi_probe.cpp:897
 #, c-format
 msgid "  Failed to start tunnel packet pump: %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:901
+#: tools/wifi_probe.cpp:905
 #, c-format
 msgid "  Host identifier is not a valid UUID: %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:908
+#: tools/wifi_probe.cpp:912
 #, c-format
 msgid "  Failed to open RSD: %s\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:911
+#: tools/wifi_probe.cpp:915
 #, c-format
 msgid "  RSD directory: %zu services\n"
 msgstr ""
 
-#: tools/wifi_probe.cpp:916
+#: tools/wifi_probe.cpp:920
 msgid "available"
 msgstr ""
 
-#: tools/wifi_probe.cpp:916
+#: tools/wifi_probe.cpp:920
 msgid "not available"
 msgstr ""
