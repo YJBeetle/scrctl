@@ -239,7 +239,7 @@ add_executable(applist_probe tools/applist_probe.cpp)
 target_link_libraries(applist_probe PRIVATE scrctl_core CLI11::CLI11)
 
 add_executable(app_launch_probe tools/app_launch_probe.cpp)
-target_link_libraries(app_launch_probe PRIVATE scrctl_core)
+target_link_libraries(app_launch_probe PRIVATE scrctl_core CLI11::CLI11)
 
 add_executable(hid_probe tools/hid_probe.cpp)
 target_link_libraries(hid_probe PRIVATE scrctl_core)
@@ -320,6 +320,9 @@ if(SCRCTL_BUILD_TESTS)
     add_test(NAME applist_probe_cli COMMAND "${Python3_EXECUTABLE}"
         "${PROJECT_SOURCE_DIR}/tests/applist_probe_cli_test.py" "$<TARGET_FILE:applist_probe>")
     set_tests_properties(applist_probe_cli PROPERTIES TIMEOUT 30)
+    add_test(NAME app_launch_probe_cli COMMAND "${Python3_EXECUTABLE}"
+        "${PROJECT_SOURCE_DIR}/tests/app_launch_probe_cli_test.py" "$<TARGET_FILE:app_launch_probe>")
+    set_tests_properties(app_launch_probe_cli PROPERTIES TIMEOUT 30)
     add_test(NAME i18n COMMAND "${Python3_EXECUTABLE}"
         "${PROJECT_SOURCE_DIR}/tests/i18n_test.py" "$<TARGET_FILE:scrctl>")
     set_tests_properties(i18n PROPERTIES TIMEOUT 30)

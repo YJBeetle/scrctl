@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 06:05+0800\n"
+"POT-Creation-Date: 2026-10-08 06:17+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -157,7 +157,7 @@ msgid ""
 "device."
 msgstr ""
 
-#: src/app/Cli.cpp:23 tools/applist_probe.cpp:34
+#: src/app/Cli.cpp:23 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
 #: tools/audio_decode_probe.cpp:189 tools/audio_pump_probe.cpp:85
 #: tools/feature_probe.cpp:61 tools/screenshot_probe.cpp:52
 #: tools/stall_probe.cpp:59 tools/wifi_probe.cpp:642
@@ -406,7 +406,7 @@ msgstr ""
 msgid "No app name starts with %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:144
+#: src/app/Commands.cpp:144 tools/app_launch_probe.cpp:100
 #, c-format
 msgid "Failed to launch %s: %s\n"
 msgstr ""
@@ -1247,20 +1247,20 @@ msgstr ""
 msgid "Screenshot response missing image data"
 msgstr ""
 
-#: src/media/StreamSession.cpp:127 src/remote/App.cpp:218
+#: src/media/StreamSession.cpp:123 src/remote/App.cpp:218
 #: src/transport/TcpConnect.cpp:27
 msgid ": "
 msgstr ""
 
-#: src/media/StreamSession.cpp:127
+#: src/media/StreamSession.cpp:123
 msgid "Failed to bind UDP port "
 msgstr ""
 
-#: src/media/StreamSession.cpp:160
+#: src/media/StreamSession.cpp:156
 msgid "startmediastream failed on the retained connection (transport failed)"
 msgstr ""
 
-#: src/media/StreamSession.cpp:262
+#: src/media/StreamSession.cpp:259
 msgid "getmediastreamserverstatus response missing sessions array"
 msgstr ""
 
@@ -2976,6 +2976,93 @@ msgstr ""
 msgid ", received "
 msgstr ""
 
+#: tools/app_launch_probe.cpp:26
+msgid "Inspect app launch requests or stop an app"
+msgstr ""
+
+#: tools/app_launch_probe.cpp:28
+msgid ""
+"Launch requests terminate an existing instance by default; --keep-running "
+"leaves it running. --shape prints a launch request for com.example.App and "
+"does not connect to a device. --help also runs without a device."
+msgstr ""
+
+#: tools/app_launch_probe.cpp:32 tools/applist_probe.cpp:35
+msgid "Print connection and request details"
+msgstr ""
+
+#: tools/app_launch_probe.cpp:33
+msgid "Print the example launch request without connecting"
+msgstr ""
+
+#: tools/app_launch_probe.cpp:34
+msgid "Stop the app instead of launching it"
+msgstr ""
+
+#: tools/app_launch_probe.cpp:36
+msgid "Do not terminate an existing instance before launching"
+msgstr ""
+
+#: tools/app_launch_probe.cpp:37
+msgid "App bundle ID (required unless --shape is used)"
+msgstr ""
+
+#: tools/app_launch_probe.cpp:38 tools/applist_probe.cpp:40
+#: tools/audio_pump_probe.cpp:105 tools/feature_probe.cpp:65
+msgid "Device identifier (optional; last value is used)"
+msgstr ""
+
+#: tools/app_launch_probe.cpp:50 tools/applist_probe.cpp:52
+#: tools/audio_decode_probe.cpp:206 tools/audio_pump_probe.cpp:117
+#: tools/feature_probe.cpp:77 tools/rr_keepalive_probe.cpp:462
+#: tools/screenshot_probe.cpp:69 tools/stall_probe.cpp:88
+#: tools/wifi_probe.cpp:742
+#, c-format
+msgid "Invalid arguments: %s\n"
+msgstr ""
+
+#: tools/app_launch_probe.cpp:66
+#, c-format
+msgid "A bundle ID is required unless --shape is used (see --help)\n"
+msgstr ""
+
+#: tools/app_launch_probe.cpp:73 tools/applist_probe.cpp:62
+#: tools/audio_pump_probe.cpp:125 tools/feature_probe.cpp:100
+#: tools/rr_keepalive_probe.cpp:554 tools/screenshot_probe.cpp:77
+#: tools/stall_probe.cpp:133
+#, c-format
+msgid "Failed to establish device session: %s\n"
+msgstr ""
+
+#: tools/app_launch_probe.cpp:76 tools/applist_probe.cpp:65
+#, c-format
+msgid "Device session ready: %s / iOS %s\n"
+msgstr ""
+
+#: tools/app_launch_probe.cpp:81
+#, c-format
+msgid "Failed to stop %s: %s\n"
+msgstr ""
+
+#: tools/app_launch_probe.cpp:87
+#, c-format
+msgid ""
+"Stop operation for %s completed without an error. To check for remaining "
+"processes, run applist_probe --grep with part of the executable path.\n"
+msgstr ""
+
+#: tools/app_launch_probe.cpp:103
+#, c-format
+msgid "Raw reply: %s\n"
+msgstr ""
+
+#: tools/app_launch_probe.cpp:108
+#, c-format
+msgid ""
+"Launch request for %s succeeded (%lld ms). Use screenshot_probe to confirm "
+"the app is visible.\n"
+msgstr ""
+
 #: tools/applist_probe.cpp:30
 msgid "Inspect device processes or installed apps"
 msgstr ""
@@ -2987,41 +3074,12 @@ msgid ""
 "to a device."
 msgstr ""
 
-#: tools/applist_probe.cpp:35
-msgid "Print connection and request details"
-msgstr ""
-
 #: tools/applist_probe.cpp:36
 msgid "List installed apps instead of processes"
 msgstr ""
 
 #: tools/applist_probe.cpp:37
 msgid "Show processes containing TEXT; ignored with --list"
-msgstr ""
-
-#: tools/applist_probe.cpp:40 tools/audio_pump_probe.cpp:105
-#: tools/feature_probe.cpp:65
-msgid "Device identifier (optional; last value is used)"
-msgstr ""
-
-#: tools/applist_probe.cpp:52 tools/audio_decode_probe.cpp:206
-#: tools/audio_pump_probe.cpp:117 tools/feature_probe.cpp:77
-#: tools/rr_keepalive_probe.cpp:462 tools/screenshot_probe.cpp:69
-#: tools/stall_probe.cpp:88 tools/wifi_probe.cpp:742
-#, c-format
-msgid "Invalid arguments: %s\n"
-msgstr ""
-
-#: tools/applist_probe.cpp:62 tools/audio_pump_probe.cpp:125
-#: tools/feature_probe.cpp:100 tools/rr_keepalive_probe.cpp:554
-#: tools/screenshot_probe.cpp:77 tools/stall_probe.cpp:133
-#, c-format
-msgid "Failed to establish device session: %s\n"
-msgstr ""
-
-#: tools/applist_probe.cpp:65
-#, c-format
-msgid "Device session ready: %s / iOS %s\n"
 msgstr ""
 
 #: tools/applist_probe.cpp:74

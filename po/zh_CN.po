@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 06:05+0800\n"
+"POT-Creation-Date: 2026-10-08 06:17+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -158,7 +158,7 @@ msgstr ""
 "鼠标左键映射为触摸；方向不支持 flip，录制保留原始码流。\n"
 "无线需要先配对；--help / --version 不连接设备。"
 
-#: src/app/Cli.cpp:23 tools/applist_probe.cpp:34
+#: src/app/Cli.cpp:23 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
 #: tools/audio_decode_probe.cpp:189 tools/audio_pump_probe.cpp:85
 #: tools/feature_probe.cpp:61 tools/screenshot_probe.cpp:52
 #: tools/stall_probe.cpp:59 tools/wifi_probe.cpp:642
@@ -407,7 +407,7 @@ msgstr "按名字找 App 失败: %s\n"
 msgid "No app name starts with %s\n"
 msgstr "没有名字以 %s 开头的 App\n"
 
-#: src/app/Commands.cpp:144
+#: src/app/Commands.cpp:144 tools/app_launch_probe.cpp:100
 #, c-format
 msgid "Failed to launch %s: %s\n"
 msgstr "启动 %s 失败: %s\n"
@@ -1280,20 +1280,20 @@ msgstr "设备目录缺少服务："
 msgid "Screenshot response missing image data"
 msgstr "截图响应缺少 image 数据"
 
-#: src/media/StreamSession.cpp:127 src/remote/App.cpp:218
+#: src/media/StreamSession.cpp:123 src/remote/App.cpp:218
 #: src/transport/TcpConnect.cpp:27
 msgid ": "
 msgstr " 失败: "
 
-#: src/media/StreamSession.cpp:127
+#: src/media/StreamSession.cpp:123
 msgid "Failed to bind UDP port "
 msgstr "绑 UDP 端口 "
 
-#: src/media/StreamSession.cpp:160
+#: src/media/StreamSession.cpp:156
 msgid "startmediastream failed on the retained connection (transport failed)"
 msgstr "在持有的连接上发 startmediastream 失败（链路断了）"
 
-#: src/media/StreamSession.cpp:262
+#: src/media/StreamSession.cpp:259
 msgid "getmediastreamserverstatus response missing sessions array"
 msgstr "getmediastreamserverstatus 的回复里没有 sessions 数组"
 
@@ -3022,6 +3022,98 @@ msgstr "载荷解码失败"
 msgid ", received "
 msgstr "，已收到"
 
+#: tools/app_launch_probe.cpp:26
+msgid "Inspect app launch requests or stop an app"
+msgstr "查看应用启动请求或停止应用"
+
+#: tools/app_launch_probe.cpp:28
+msgid ""
+"Launch requests terminate an existing instance by default; --keep-running "
+"leaves it running. --shape prints a launch request for com.example.App and "
+"does not connect to a device. --help also runs without a device."
+msgstr ""
+"启动请求默认终止已有实例；--keep-running 保留已有实例。--shape 显示 "
+"com.example.App 的启动请求，不连接设备。--help 同样无需连接设备。"
+
+#: tools/app_launch_probe.cpp:32 tools/applist_probe.cpp:35
+msgid "Print connection and request details"
+msgstr "显示连接和请求详情"
+
+#: tools/app_launch_probe.cpp:33
+msgid "Print the example launch request without connecting"
+msgstr "显示示例启动请求，不连接设备"
+
+#: tools/app_launch_probe.cpp:34
+msgid "Stop the app instead of launching it"
+msgstr "停止应用"
+
+#: tools/app_launch_probe.cpp:36
+msgid "Do not terminate an existing instance before launching"
+msgstr "启动前不终止已有实例"
+
+#: tools/app_launch_probe.cpp:37
+msgid "App bundle ID (required unless --shape is used)"
+msgstr "应用 bundle ID（除 --shape 外必填）"
+
+#: tools/app_launch_probe.cpp:38 tools/applist_probe.cpp:40
+#: tools/audio_pump_probe.cpp:105 tools/feature_probe.cpp:65
+msgid "Device identifier (optional; last value is used)"
+msgstr "设备标识（可选，多次提供时使用最后一个）"
+
+#: tools/app_launch_probe.cpp:50 tools/applist_probe.cpp:52
+#: tools/audio_decode_probe.cpp:206 tools/audio_pump_probe.cpp:117
+#: tools/feature_probe.cpp:77 tools/rr_keepalive_probe.cpp:462
+#: tools/screenshot_probe.cpp:69 tools/stall_probe.cpp:88
+#: tools/wifi_probe.cpp:742
+#, c-format
+msgid "Invalid arguments: %s\n"
+msgstr "参数无效：%s\n"
+
+#: tools/app_launch_probe.cpp:66
+#, c-format
+msgid "A bundle ID is required unless --shape is used (see --help)\n"
+msgstr "需要提供应用 bundle ID，使用 --shape 时可省略（详见 --help）\n"
+
+#: tools/app_launch_probe.cpp:73 tools/applist_probe.cpp:62
+#: tools/audio_pump_probe.cpp:125 tools/feature_probe.cpp:100
+#: tools/rr_keepalive_probe.cpp:554 tools/screenshot_probe.cpp:77
+#: tools/stall_probe.cpp:133
+#, c-format
+msgid "Failed to establish device session: %s\n"
+msgstr "建立设备会话失败：%s\n"
+
+#: tools/app_launch_probe.cpp:76 tools/applist_probe.cpp:65
+#, c-format
+msgid "Device session ready: %s / iOS %s\n"
+msgstr "设备会话已就绪：%s / iOS %s\n"
+
+#: tools/app_launch_probe.cpp:81
+#, c-format
+msgid "Failed to stop %s: %s\n"
+msgstr "停止 %s 失败：%s\n"
+
+#: tools/app_launch_probe.cpp:87
+#, c-format
+msgid ""
+"Stop operation for %s completed without an error. To check for remaining "
+"processes, run applist_probe --grep with part of the executable path.\n"
+msgstr ""
+"停止 %s 的操作已完成，未报告错误。可用 applist_probe --grep 检查剩余进程，筛"
+"选值应取可执行文件路径中的一部分。\n"
+
+#: tools/app_launch_probe.cpp:103
+#, c-format
+msgid "Raw reply: %s\n"
+msgstr "原始回复：%s\n"
+
+#: tools/app_launch_probe.cpp:108
+#, c-format
+msgid ""
+"Launch request for %s succeeded (%lld ms). Use screenshot_probe to confirm "
+"the app is visible.\n"
+msgstr ""
+"启动 %s 的请求成功（%lld 毫秒）。请用 screenshot_probe 确认应用画面。\n"
+
 #: tools/applist_probe.cpp:30
 msgid "Inspect device processes or installed apps"
 msgstr "查看设备进程或已安装应用"
@@ -3035,10 +3127,6 @@ msgstr ""
 "默认最多显示前三个进程。--grep 显示全部匹配进程；--list 显示全部已安装应用，"
 "并忽略 --grep。--help 不连接设备。"
 
-#: tools/applist_probe.cpp:35
-msgid "Print connection and request details"
-msgstr "显示连接和请求详情"
-
 #: tools/applist_probe.cpp:36
 msgid "List installed apps instead of processes"
 msgstr "显示已安装应用列表"
@@ -3046,31 +3134,6 @@ msgstr "显示已安装应用列表"
 #: tools/applist_probe.cpp:37
 msgid "Show processes containing TEXT; ignored with --list"
 msgstr "显示包含 TEXT 的进程；使用 --list 时忽略此选项"
-
-#: tools/applist_probe.cpp:40 tools/audio_pump_probe.cpp:105
-#: tools/feature_probe.cpp:65
-msgid "Device identifier (optional; last value is used)"
-msgstr "设备标识（可选，多次提供时使用最后一个）"
-
-#: tools/applist_probe.cpp:52 tools/audio_decode_probe.cpp:206
-#: tools/audio_pump_probe.cpp:117 tools/feature_probe.cpp:77
-#: tools/rr_keepalive_probe.cpp:462 tools/screenshot_probe.cpp:69
-#: tools/stall_probe.cpp:88 tools/wifi_probe.cpp:742
-#, c-format
-msgid "Invalid arguments: %s\n"
-msgstr "参数无效：%s\n"
-
-#: tools/applist_probe.cpp:62 tools/audio_pump_probe.cpp:125
-#: tools/feature_probe.cpp:100 tools/rr_keepalive_probe.cpp:554
-#: tools/screenshot_probe.cpp:77 tools/stall_probe.cpp:133
-#, c-format
-msgid "Failed to establish device session: %s\n"
-msgstr "建立设备会话失败：%s\n"
-
-#: tools/applist_probe.cpp:65
-#, c-format
-msgid "Device session ready: %s / iOS %s\n"
-msgstr "设备会话已就绪：%s / iOS %s\n"
 
 #: tools/applist_probe.cpp:74
 #, c-format
