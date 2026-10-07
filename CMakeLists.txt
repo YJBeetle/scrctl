@@ -31,8 +31,8 @@ option(SCRCTL_BUILD_TESTS "构建无头自检" ON)
 option(SCRCTL_FETCH_SDL2 "用 FetchContent 拉取 SDL2，而不是找系统安装" OFF)
 
 # ---------------------------------------------------------------- SDL2 ------
-# 优先用系统的 SDL2（macOS: brew，Linux: apt/libsdl2-dev），找不到再按源码拉。
-# 关掉拉取又找不到时给出明确指引，而不是抛一个看不懂的 CMake 错误。
+# 默认查找系统 SDL2 包；指定 SCRCTL_FETCH_SDL2 时改为下载固定版本源码。
+# 未找到系统包且未启用下载时，配置失败并给出安装方式。
 if(SCRCTL_FETCH_SDL2)
     include(FetchContent)
     FetchContent_Declare(sdl2
@@ -65,8 +65,8 @@ else()
 endif()
 
 # ------------------------------------------------------- Apple frameworks ---
-# VideoToolbox / CoreMedia / CoreVideo 是纯 C API，所以解码器写成 .cpp 而非
-# .mm，避开 ARC 与 CF 桥接。非 Apple 平台后续接 libav 后端。
+# Apple 媒体框架通过 C API 调用，解码器使用 .cpp，无需 Objective-C++ 或 ARC。
+# 非 Apple 平台使用下方按依赖选择的解码后端。
 add_library(ScrctlAppleFrameworks INTERFACE)
 if(APPLE)
     target_link_libraries(ScrctlAppleFrameworks INTERFACE
@@ -79,18 +79,18 @@ if(APPLE)
 endif()
 
 # ------------------------------------------------------------- OpenSSL ------
-# lockdown 的 StartSession 之后必须双向 TLS（客户端证书来自配对记录），
-# 而 /var/db/lockdown 是 root-only，所以配对材料只能经 usbmuxd 取。
+# lockdown 的 StartSession 可能要求双向 TLS，客户端证书来自配对记录。
+# 本项目通过 usbmuxd 获取配对材料，避免要求读取受保护的 /var/db/lockdown。
 # OpenSSL 是 Apache-2.0，与本项目许可兼容。
 find_package(OpenSSL REQUIRED)
 
 # ---------------------------------------------------------------- 解码后端 ---
-# VideoToolbox 的长度前缀只有 2 字节可用（4 字节的会话见一个样本拒一个），所以
-# 单帧超过 65535 字节的码流它吃不下——真机主屏的 IDR 实测 70101 字节。那种码流
-# 只有软解能救，而 Linux/Windows 上软解又是唯一后端，所以 libavcodec 找得到就编。
-#
-# 找不到时降级：只留平台后端，超大 NAL 仍然只能丢帧。这样没有 ffmpeg 开发件的
-# 机器仍然能构建，只是失去对高分辨率细节画面的兜底。
+# 当前 VideoToolbox 适配器使用 2 字节 NAL 长度前缀，单个 NAL 最大为 65535 字节；
+# 已有设备样本包含 70101 字节的 NAL。此前 4 字节配置失败的范围见解码器注释，
+# 不能据此推断所有系统和码流都有相同限制。
+# 找到 libavcodec 时编入软件 HEVC 解码，供 macOS 处理超限 NAL，并作为
+# Linux / Windows 的视频后端。缺少开发包时仍可构建：macOS 只保留平台后端，
+# 非 Apple 平台则没有可用的视频解码后端。
 option(SCRCTL_LIBAV "用 libavcodec 编软件 HEVC 解码后端（超大 NAL 的兜底）" ON)
 set(SCRCTL_LIBAV_FOUND OFF)
 if(SCRCTL_LIBAV)
@@ -171,8 +171,8 @@ target_compile_definitions(scrctl_core PRIVATE
 add_dependencies(scrctl_core scrctl_translations)
 target_compile_options(scrctl_core PRIVATE -Wall -Wextra)
 
-# 解码后端按平台与依赖挑：平台后端在 Apple 上是 VideoToolbox，别处只能借用软解；
-# 软解后端有 libavcodec 就用，没有就换回返回 nullptr 的占位实现。
+# Apple 平台启用 VideoToolbox 和 AudioToolbox；其他平台没有对应的系统后端。
+# 软件视频解码另按 libavcodec 的可用性选择实现或报告不可用的占位实现。
 if(APPLE)
     target_sources(scrctl_core PRIVATE src/decode/VideoToolboxDecoder.cpp
             src/decode/AudioToolboxEldDecoder.cpp)
@@ -182,12 +182,10 @@ else()
 endif()
 if(SCRCTL_LIBAV_FOUND)
     target_sources(scrctl_core PRIVATE src/decode/FFmpegDecoder.cpp)
-    # 必须是 PUBLIC：解码后端编在静态库里，最终链接由各个可执行文件做，
-    # 搜索路径不传下去就是"库找到了、链接找不到"。
+    # 静态库的 libav 符号由最终可执行文件链接，需要向使用方传递链接依赖。
     target_link_libraries(scrctl_core PUBLIC PkgConfig::LIBAV)
-    # 同样是 PUBLIC：`decode/Decoder.h` 里的 `kHaveDecoder` 要靠它判断"这个构建有没有
-    # 后端"。只在库里定义、头文件在调用点看不到，就成了"库能解、主程序以为自己不能解"，
-    # 而且两边取值不一样还是 ODR 违规。
+    # Decoder.h 的 kHaveDecoder 依赖这个宏；库与调用方必须看到相同定义，
+    # 才能一致判断后端是否可用，并保持头文件中的内联定义一致。
     target_compile_definitions(scrctl_core PUBLIC SCRCTL_HAVE_LIBAV=1)
 else()
     target_sources(scrctl_core PRIVATE src/decode/SoftwareDecoderStub.cpp)
@@ -212,7 +210,7 @@ add_executable(scrctl src/app/main.cpp)
 target_link_libraries(scrctl PRIVATE scrctl_app)
 target_compile_options(scrctl PRIVATE -Wall -Wextra)
 
-# 需要真机在线的手工探针，不进 ctest。
+# 设备服务和媒体探针的业务路径需要真机；部分工具另有离线 CLI 的 CTest 用例。
 add_executable(usbmux_probe tools/usbmux_probe.cpp)
 target_link_libraries(usbmux_probe PRIVATE scrctl_core)
 
