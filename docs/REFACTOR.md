@@ -80,7 +80,7 @@ XPC、OPACK、Apple 配对和控制语义、SRP 的 Apple 适配、Deflate 小�
 
 | 剩余项 | 类型 | 下一步 |
 | --- | --- | --- |
-| tools 的输出和语言选择 | 文本 / 功能 | screenshot_probe 已接入 en / zh-CN / auto；翻译提取覆盖 src 与 tools，其余探针继续逐项整理 |
+| tools 的输出和语言选择 | 文本 / 功能 | screenshot_probe、rr_keepalive_probe 已接入 en / zh-CN / auto；其余探针继续逐项整理 |
 | 零散注释与历史文档 | 文本 | 保留必要的详细协议说明，整理重复、过时和口语化表述；主要模块及配对注释已完成首轮 |
 | HTTP/2 库方案 | 功能 / 验证 | 生产继续保留当前帧层；后续获得实际 FileTransfer 子流证据后，再评估偶数文件流的适配 |
 | 设备长期身份认证 | 功能 / 验证 | 补齐 PairVerify / PairSetup 中设备长期公钥、标识和签名的校验，并验证已有记录及新建配对 |
@@ -799,3 +799,17 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
   locale 优先级、错误前缀及中英文包输出。CLI11 的部分参数错误正文仍为英文。
 - 完整 Release 与启用遇错终止的 Debug + ASan/UBSan 回归各通过 25/25，
   gettext 提取、译文和 printf 格式检查通过。本轮没有重复真机反馈策略比较。
+
+## 第五十九轮：设备签名校验的基础接口与 M2 取证
+
+- Crypto 增加 OpenSSL Ed25519 一次性签名校验，要求原始 32 字节公钥和
+  64 字节签名，使用完整消息且不预哈希；区分长度错误、签名不匹配与库执行失败。
+  依据 [OpenSSL 官方说明](https://docs.openssl.org/3.5/man7/EVP_SIGNATURE-ED25519/)。
+- 现有 wifi 测试新增 18 条独立判据，使用 [RFC 8032](https://www.rfc-editor.org/rfc/rfc8032.html#section-7.1)
+  的空消息、单字节及二字节向量，覆盖篡改、长度边界、Ed25519ph 拒绝与错误恢复。
+  Release 和 ASan/UBSan 各通过 393 条判据，未新增测试目标。
+- Mac USB 真机的受限临时探针只发送 verify handshake 和 M1。M2 使用候选
+  HAP HKDF/nonce 成功解密，内层为 36 字节设备标识及 64 字节签名，没有公钥。
+  详细过程见 [设备验证 31.1](coredevice.md#311-usb-pairverify-m2-解密)。
+- 现有配对记录没有设备长期公钥，本轮没有把新接口接入生产配对流程，也没有
+  将解密当作设备身份认证。下一步先确认新建配对 M6 的公钥、标识及签名公式。

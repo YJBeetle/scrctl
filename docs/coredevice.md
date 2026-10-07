@@ -3233,3 +3233,33 @@ FIR `3914 / 3930 / 4011ms`，FIR+fb `3246 / 3924 / 3944ms`。
 没有注入触摸或启用音频，不能据此扩展显式角度触摸和 Metal 渲染的真机覆盖。
 本机证据为 `/tmp/scrctl-landscape-explicit-proof-20261008.json` 及对应
 `scrctl-landscape-explicit90-20261008.log/.err/.bmp`、`explicit180` 文件。
+
+## 31. 设备长期身份校验的协议取证
+
+### 31.1 USB PairVerify M2 解密
+
+2026-10-08，Mac USB / iPhone14,4 / iOS 27.0，使用已有配对记录定位唯一匹配的
+USB 设备，再打开 `com.apple.internal.dt.coredevice.untrusted.tunnelservice` 的
+RemoteXPC 通道。临时探针仅发送 verify handshake 和 M1，收到 M2 后关闭连接。
+发送载体另有限制，拒绝 M3、setup、upgrade 和 pairVerifyFailed；记录不被写入。
+探针本身不是生产功能，源码与原始日志留在本机临时目录。
+
+M2 外层包含 32 字节 X25519 公钥、120 字节 EncryptedData 和单字节 State=2。
+使用新生成的主机临时私钥与设备临时公钥计算共享秘密，再使用以下候选参数：
+
+- HKDF-SHA512 salt：`Pair-Verify-Encrypt-Salt`。
+- HKDF-SHA512 info：`Pair-Verify-Encrypt-Info`，输出 32 字节。
+- ChaCha20-Poly1305 nonce：四个 NUL 字节后接 `PV-Msg02`，共 12 字节，无 AAD。
+
+候选参数来自 [Apple HomeKitADK PairVerify 实现](https://github.com/apple/HomeKitADK/blob/master/HAP/HAPPairingPairVerify.c)。
+本次真实回复通过 AEAD 标签校验并完整解析：Identifier 为 36 字节，Signature 为
+64 字节，没有 PublicKey。日志只记录字段类型、长度和成功状态，不包含字段值、
+密钥、密文或设备标识原文。
+
+**这仅确认本次回复的解密约定。** M2 未提供长期公钥，现有记录也未保存它，因此
+尚未校验签名，不能据此认为设备长期身份已认证。生产 PairVerify / PairSetup
+仍按已有流程处理；下一步需从受信任的新建配对取得长期身份材料并验证签名公式。
+
+探针 SHA256 为 `0b6493383e3b628c43c75dbcfe525ffccde0e440f81650495f56542a0a6fdfb6`。
+本机证据位于 `/private/tmp/scrctl-pv-m2-usb-20261008/`，包含源码、构建脚本、
+离线发送限制检查和 `device-result.log`；真实进程返回 0，没有出现用户确认请求。

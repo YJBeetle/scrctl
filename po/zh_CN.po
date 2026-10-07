@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 04:01+0800\n"
+"POT-Creation-Date: 2026-10-08 04:12+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -2460,15 +2460,39 @@ msgstr "取 Ed25519 签名长度失败"
 msgid "Ed25519 signing failed"
 msgstr "Ed25519 签名失败"
 
-#: src/wifi/Crypto.cpp:248
+#: src/wifi/Crypto.cpp:242
+msgid "Ed25519 public key must be 32 bytes"
+msgstr "Ed25519 公钥必须为 32 字节"
+
+#: src/wifi/Crypto.cpp:246
+msgid "Ed25519 signature must be 64 bytes"
+msgstr "Ed25519 签名必须为 64 字节"
+
+#: src/wifi/Crypto.cpp:255
+msgid "Failed to allocate EVP_MD_CTX"
+msgstr "无法分配 EVP_MD_CTX"
+
+#: src/wifi/Crypto.cpp:260
+msgid "Failed to initialize Ed25519 verification"
+msgstr "无法初始化 Ed25519 签名校验"
+
+#: src/wifi/Crypto.cpp:266
+msgid "Ed25519 signature verification failed"
+msgstr "Ed25519 签名校验失败"
+
+#: src/wifi/Crypto.cpp:267
+msgid "OpenSSL Ed25519 verification error"
+msgstr "OpenSSL 执行 Ed25519 签名校验时出错"
+
+#: src/wifi/Crypto.cpp:283
 msgid "HKDF-SHA512 input or output exceeds supported limits"
 msgstr "HKDF-SHA512 输入或输出超过支持的限制"
 
-#: src/wifi/Crypto.cpp:266
+#: src/wifi/Crypto.cpp:301
 msgid "Failed to initialize HKDF-SHA512"
 msgstr "HKDF-SHA512 初始化失败"
 
-#: src/wifi/Crypto.cpp:272
+#: src/wifi/Crypto.cpp:307
 msgid "HKDF-SHA512 derivation failed"
 msgstr "HKDF-SHA512 密钥派生失败"
 

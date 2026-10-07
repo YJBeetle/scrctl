@@ -11,19 +11,17 @@ namespace scrctl::wifi {
 
 using Bytes = std::vector<uint8_t>;
 
-/// `Bytes` → `string_view`。下面这几个 API 的密钥/nonce 一律收 `string_view`，
-/// 而 `vector<uint8_t>` 到它是没有隐式转换的——与其在每一处手写 `reinterpret_cast`
-/// （写错一次就是一条静默的错密钥），不如把这一道转换集中在这里。
+/// 字节缓冲区的只读视图，保留完整长度及内嵌 NUL。视图不拥有数据。
 [[nodiscard]] inline std::string_view sv(const Bytes &data) {
     return std::string_view(reinterpret_cast<const char *>(data.data()), data.size());  // NOLINT
 }
 
-/// 文本 → 字节（签名缓冲里要拼 identifier 这类字符串，写全一遍太吵）。
+/// 将文本复制为字节，供签名消息拼接 identifier 等字段。
 [[nodiscard]] inline Bytes bytes_of(std::string_view text) {
     return Bytes(text.begin(), text.end());
 }
 
-/// X25519 临时密钥对（pair-verify 每一步都用新的一对，这是协议的向前保密来源）。
+/// X25519 临时密钥对；每次 PairVerify 使用新生成的密钥对。
 struct X25519KeyPair {
     std::array<uint8_t, 32> priv{};
     std::array<uint8_t, 32> pub{};
@@ -31,8 +29,7 @@ struct X25519KeyPair {
 
 std::optional<X25519KeyPair> x25519_keypair(std::string &err);
 
-/// Ed25519 长期身份密钥对（pair-setup 时新生成一把，之后一直存在配对记录里）。
-/// 与 X25519 那对的区别：这对**不是**临时的，它就是设备认我们这台主机的凭据。
+/// Ed25519 主机身份密钥对；PairSetup 时生成，随后保存在配对记录中。
 struct Ed25519KeyPair {
     std::array<uint8_t, 32> seed{};  ///< 私钥种子（不是 PEM/DER）
     std::array<uint8_t, 32> pub{};
@@ -43,13 +40,19 @@ std::optional<Ed25519KeyPair> ed25519_keypair(std::string &err);
 /// CSPRNG 字节。`n` 为 0 时返回空 vector。
 std::optional<Bytes> random_bytes(size_t n, std::string &err);
 
-/// 共享密钥。任一公钥不是合法的 Curve25519 点时返回 nullopt——对端给的是外部输入，
-/// 全零/低阶点必须在这里挡掉，否则后面所有密钥都从一个可预测的值派生。
+/// 计算 X25519 共享密钥。对端公钥必须是 32 字节；拒绝低阶点和全零共享密钥，
+/// 避免后续密钥从可预测的值派生。校验或计算失败时返回 nullopt。
 std::optional<Bytes> x25519_shared(const std::array<uint8_t, 32> &priv, std::string_view peer_pub,
                                    std::string &err);
 
 /// Ed25519 签名（64 字节）。`seed` 是 32 字节的私钥种子，不是 PEM、不是 DER。
 std::optional<Bytes> ed25519_sign(std::string_view seed, const Bytes &msg, std::string &err);
+
+/// 校验 Ed25519 签名：公钥为 32 字节、签名为 64 字节，均为原始字节格式。
+/// msg 是完整消息，允许为空；使用 PureEd25519，不做预哈希。
+/// 成功时清空 err；长度错误、签名不匹配或 OpenSSL 失败时返回 false 并填写原因。
+bool ed25519_verify(std::string_view public_key, const Bytes &msg, const Bytes &signature,
+                    std::string &err);
 
 /// OpenSSL HKDF-SHA512。空 salt 与 RFC 5869 的全零盐等价。
 /// 输出最多 255 * 64 字节，info 最多 1024 字节，输入需可表示为 int 长度。

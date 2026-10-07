@@ -223,6 +223,91 @@ void test_crypto() {
     check(fresh2.has_value() && fresh->pub != fresh2->pub, "每次生成的临时公钥要不一样");
 }
 
+void test_ed25519_verify() {
+    // 公钥、消息和签名直接来自 RFC 8032 §7.1，不依赖本项目的签名函数。
+    // https://www.rfc-editor.org/rfc/rfc8032.html#section-7.1
+    const Bytes empty_public = from_hex(
+        "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+    const Bytes empty_signature = from_hex(
+        "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555f"
+        "b8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b");
+    std::string err = "previous failure";
+    check(scrctl::wifi::ed25519_verify(bv(empty_public), {}, empty_signature, err) && err.empty(),
+          "Ed25519 verifies RFC 8032 empty message and clears stale error");
+
+    const Bytes public_key = from_hex(
+        "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c");
+    const Bytes message = from_hex("72");
+    const Bytes signature = from_hex(
+        "92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da"
+        "085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00");
+    check(scrctl::wifi::ed25519_verify(bv(public_key), message, signature, err) && err.empty(),
+          "Ed25519 verifies RFC 8032 one-byte message");
+
+    const Bytes binary_public = from_hex(
+        "fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025");
+    const Bytes binary_signature = from_hex(
+        "6291d657deec24024827e69c3abe01a30ce548a284743a445e3680d7db5ac3ac"
+        "18ff9b538d16f290ae67f760984dc6594a7c15e9716ed28dc027beceea1ec40a");
+    check(scrctl::wifi::ed25519_verify(bv(binary_public), from_hex("af82"), binary_signature, err),
+          "Ed25519 verifies RFC 8032 two-byte binary message");
+
+    Bytes altered = message;
+    altered[0] ^= 0x01;
+    err.clear();
+    check(!scrctl::wifi::ed25519_verify(bv(public_key), altered, signature, err) && !err.empty(),
+          "Ed25519 rejects changed message with an error reason");
+    altered = message;
+    altered.push_back(0);
+    check(!scrctl::wifi::ed25519_verify(bv(public_key), altered, signature, err),
+          "Ed25519 verifies the full message length including trailing NUL");
+
+    altered = public_key;
+    altered[0] ^= 0x01;
+    err.clear();
+    check(!scrctl::wifi::ed25519_verify(bv(altered), message, signature, err) && !err.empty(),
+          "Ed25519 rejects changed public key");
+    check(!scrctl::wifi::ed25519_verify(bv(Bytes(32, 0)), message, signature, err),
+          "Ed25519 rejects a different all-zero public key");
+    for (const size_t index : {size_t{0}, size_t{63}}) {
+        altered = signature;
+        altered[index] ^= 0x01;
+        err.clear();
+        check(!scrctl::wifi::ed25519_verify(bv(public_key), message, altered, err) && !err.empty(),
+              "Ed25519 rejects changes to either signature half");
+    }
+    check(!scrctl::wifi::ed25519_verify(bv(public_key), message, Bytes(64, 0), err),
+          "Ed25519 rejects an all-zero signature");
+
+    for (const size_t size : {size_t{0}, size_t{31}, size_t{33}}) {
+        altered = public_key;
+        altered.resize(size);
+        err.clear();
+        check(!scrctl::wifi::ed25519_verify(bv(altered), message, signature, err) &&
+                  err.find("32") != std::string::npos,
+              "Ed25519 rejects wrong public key length with the required size");
+    }
+    for (const size_t size : {size_t{0}, size_t{63}, size_t{65}}) {
+        altered = signature;
+        altered.resize(size);
+        err.clear();
+        check(!scrctl::wifi::ed25519_verify(bv(public_key), message, altered, err) &&
+                  err.find("64") != std::string::npos,
+              "Ed25519 rejects wrong signature length with the required size");
+    }
+
+    // RFC 8032 §7.3 的 Ed25519ph 向量不能当作 PureEd25519 签名接受。
+    const Bytes ph_public = from_hex(
+        "ec172b93ad5e563bf4932c70e1245034c35467ef2efd4d64ebf819683467e2bf");
+    const Bytes ph_signature = from_hex(
+        "98a70222f0b8121aa9d30f813d683f809e462b469c7ff87639499bb94e6dae41"
+        "31f85042463c2a355a2003d062adf5aaa10b8c61e636062aaad11c2a26083406");
+    check(!scrctl::wifi::ed25519_verify(bv(ph_public), sb("abc"), ph_signature, err),
+          "Ed25519 rejects RFC 8032 prehashed Ed25519ph signature");
+    check(scrctl::wifi::ed25519_verify(bv(empty_public), {}, empty_signature, err) && err.empty(),
+          "Ed25519 valid verification after failures clears the last error");
+}
+
 /// ---- 1b. SRP-6a(3072, SHA-512) ----
 void test_srp() {
     const auto from_hex = [](const char *h) {
@@ -1199,6 +1284,7 @@ void test_pairing_xpc() {
 
 int main() {
     test_crypto();
+    test_ed25519_verify();
     test_srp();
     test_opack();
     test_tlv();

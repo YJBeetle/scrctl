@@ -236,6 +236,41 @@ std::optional<Bytes> ed25519_sign(std::string_view seed, const Bytes &msg, std::
     return out;
 }
 
+bool ed25519_verify(std::string_view public_key, const Bytes &msg, const Bytes &signature,
+                    std::string &err) {
+    if (public_key.size() != 32) {
+        err = SCRCTL_TR("Ed25519 public key must be 32 bytes");
+        return false;
+    }
+    if (signature.size() != 64) {
+        err = SCRCTL_TR("Ed25519 signature must be 64 bytes");
+        return false;
+    }
+    PkeyUp key = raw_key(EVP_PKEY_ED25519, public_key, false, err);
+    if (!key) {
+        return false;
+    }
+    MdCtxUp mdctx(EVP_MD_CTX_new());
+    if (!mdctx) {
+        err = SCRCTL_TR("Failed to allocate EVP_MD_CTX");
+        return false;
+    }
+    // PureEd25519 需要完整消息；digest 参数必须为 nullptr，不能使用流式 verify。
+    if (EVP_DigestVerifyInit(mdctx.get(), nullptr, nullptr, nullptr, key.get()) != 1) {
+        err = SCRCTL_TR("Failed to initialize Ed25519 verification");
+        return false;
+    }
+    const int result = EVP_DigestVerify(mdctx.get(), signature.data(), signature.size(),
+                                        msg.data(), msg.size());
+    if (result != 1) {
+        err = result == 0 ? SCRCTL_TR("Ed25519 signature verification failed")
+                          : SCRCTL_TR("OpenSSL Ed25519 verification error");
+        return false;
+    }
+    err.clear();
+    return true;
+}
+
 std::optional<Bytes> hkdf_sha512(const Bytes &ikm, std::string_view salt, std::string_view info,
                                  size_t out_len, std::string &err) {
     // EVP_PKEY_HKDF 在 OpenSSL 1.1.1 已提供，不要求 EVP_KDF 的 OpenSSL 3 API。
