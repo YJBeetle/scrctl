@@ -69,7 +69,9 @@ public:
 
     struct Started {
         /// answer 的 connection.sender.port，设备发送媒体使用的端口。
-        /// 缺失时为 0，接收端允许任意源端口；反馈目的端口需依据协商结果或实际对端确定。
+        /// 显式提供时须为 1..65535 的整数或十进制字符串；非法值使起流失败。
+        /// 缺失时保留 0，仍可收包，但 UdpSocket 拒绝向 0 发送反馈。
+        /// 当前 FramePump / AudioPump 不会用收包源端口自动补全反馈目的端口。
         uint16_t sender_port = 0;
         /// 协商的媒体 RTP payload type，来自 streamConfig.RxPayloadType 的低七位。
         /// 缺失时保留默认 100；音频也使用协商值。拆包前需区分同端口收到的裸 RTCP。
@@ -89,7 +91,10 @@ public:
     };
 
     /// 在已建立隧道并取得 RSD 目录的 Device 上起流，先绑定接收 UDP 端口。
-    /// 失败时返回 nullptr，并通过 err 提供传输或 CoreDevice 错误信息。
+    /// 失败时返回 nullptr，并通过 err 提供传输、CoreDevice 或回复解析错误。
+    /// 设备已接受请求后若回复解析失败，只释放本地 UDP 套接字，不发送 stopAll，
+    /// 避免停止并存的音视频会话。本次设备流可能已开始，依赖请求中的 RTCP 租期释放；
+    /// 产品请求为 20 秒，低层 Request 默认 3600 秒，此处不更改租期。
     ///
     /// 默认通过 Device::feature 新建服务连接，调用结束后释放。on_conn 非空时借用
     /// 调用方持有的连接，不取得所有权，也不在调用结束后关闭它。
@@ -156,6 +161,14 @@ private:
     std::unique_ptr<scrctl::net::UdpSocket> socket_;
     Started started_;
 };
+
+/// 将 startmediastream 回复解析为会话参数，不进行网络 I/O。
+/// answer 与本次请求的 session_uuid 原样保留；PT、SSRC 维持既有转换和缺失默认值。
+/// 仅收紧显式 connection.sender.port：接受 1..65535 的 Int64、UInt64 或完整十进制
+/// 字符串，拒绝其它类型、符号、空白、尾随内容及溢出。字段缺失时仍保留 0。
+/// 失败返回 nullopt 并说明端口约束，成功清空 err。
+[[nodiscard]] std::optional<StreamSession::Started> parse_start_answer(
+    scrctl::xpc::Value answer, std::vector<uint8_t> session_uuid, std::string &err);
 
 /// 组装 startmediastream 的 CoreDevice.input，不进行网络 I/O，供起流和离线协议校验使用。
 /// options 的参数按 int / string / uuid 标签包装；会话与事件通道 UUID 使用 16 字节

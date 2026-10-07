@@ -2,6 +2,7 @@
 // 因为一旦上线，"流起不来"的原因可能是 offer 里任何一个字节。
 #include <cstdio>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -10,6 +11,7 @@
 #include "media/FramePump.h"
 #include "media/MediaOffer.h"
 #include "media/ScreenshotSource.h"
+#include "media/StreamSession.h"
 #include "plist/Plist.h"
 #include "util/Deflate.h"
 
@@ -158,11 +160,129 @@ std::string as_text(const std::vector<uint8_t> &b) {
     return std::string(b.begin(), b.end());
 }
 
+void check_start_answer() {
+    using namespace scrctl::xpc;
+    using scrctl::media::parse_start_answer;
+    const std::vector<uint8_t> uuid {
+        0x00, 0xff, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc,
+        0xde, 0xf0, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab};
+
+    // 保留未知字段与 Data，检查解析参数时没有重建或裁剪原始回复。
+    const auto answer_with_port = [](Value port) {
+        auto sc = make_dict();
+        dict_set(sc, "RxPayloadType", make_uint64(229));
+        dict_set(sc, "LocalSSRC", make_uint64(0xff112233));
+        dict_set(sc, "RemoteSSRC", make_int64(0x44556677));
+        dict_set(sc, "additionalSetting", make_bool(true));
+        auto sender = make_dict();
+        dict_set(sender, "port", std::move(port));
+        dict_set(sender, "address", make_string("fd00::2"));
+        auto connection = make_dict();
+        dict_set(connection, "streamConfig", std::move(sc));
+        dict_set(connection, "sender", std::move(sender));
+        dict_set(connection, "unrecognizedData", make_data({0x00, 0xff, 0x01}));
+        auto answer = make_dict();
+        dict_set(answer, "connection", std::move(connection));
+        dict_set(answer, "metadata", make_string("preserve this reply"));
+        return answer;
+    };
+    struct ValidPort {
+        Value value;
+        uint16_t expected;
+        const char *description;
+    };
+    const std::vector<ValidPort> valid {
+        {make_int64(1), 1, "Int64 下界"},
+        {make_int64(65535), 65535, "Int64 上界"},
+        {make_uint64(1), 1, "UInt64 下界"},
+        {make_uint64(65535), 65535, "UInt64 上界"},
+        {make_string("1"), 1, "字符串下界"},
+        {make_string("65535"), 65535, "字符串上界"},
+        {make_string("00080"), 80, "十进制前导零"},
+        {make_string("00065535"), 65535, "前导零与上界"},
+    };
+    for (const auto &port : valid) {
+        const auto answer = answer_with_port(port.value);
+        const auto wire = encode(answer);
+        std::string err = "previous error";
+        const auto parsed = parse_start_answer(answer, uuid, err);
+        check(parsed && parsed->sender_port == port.expected && err.empty(),
+              std::string("合法端口被接受并清空旧错误：") + port.description);
+        check(parsed && parsed->payload_type == 101 && parsed->local_ssrc == 0xff112233 &&
+                  parsed->remote_ssrc == 0x44556677,
+              std::string("保留 PT 低七位及协商 SSRC：") + port.description);
+        check(parsed && parsed->session_uuid == uuid && encode(parsed->answer) == wire &&
+                  encode(answer) == wire,
+              std::string("保留完整回复、请求 UUID 和调用方输入：") + port.description);
+    }
+
+    const auto reject = [&](Value port, const std::string &description) {
+        std::string err = "previous error";
+        const auto parsed = parse_start_answer(answer_with_port(std::move(port)), uuid, err);
+        check(!parsed && err != "previous error" &&
+                  err.find("connection.sender.port") != std::string::npos &&
+                  err.find("1..65535") != std::string::npos,
+              "非法端口返回字段诊断：" + description);
+    };
+    for (const int64_t port : {std::numeric_limits<int64_t>::min(), int64_t(-1), int64_t(0),
+                              int64_t(65536), std::numeric_limits<int64_t>::max()}) {
+        reject(make_int64(port), "Int64 " + std::to_string(port));
+    }
+    for (const uint64_t port : {uint64_t(0), uint64_t(65536),
+                               std::numeric_limits<uint64_t>::max()}) {
+        reject(make_uint64(port), "UInt64 " + std::to_string(port));
+    }
+    const std::vector<std::string> invalid_strings {
+        "", "0", "000", "65536", "-1", "+1", " 80", "80 ", "\t80", "80\n",
+        "80tail", "80.0", "0x50", "1e2", "18446744073709551616",
+        std::string(1000, '9'), std::string("123\0tail", 8), std::string("123\0", 4),
+        std::string("\0", 1), "８０"};
+    for (std::size_t i = 0; i < invalid_strings.size(); ++i) {
+        reject(make_string(invalid_strings[i]), "字符串案例 " + std::to_string(i));
+    }
+    reject(make_null(), "显式 Null");
+    reject(make_bool(true), "Bool true");
+    reject(make_bool(false), "Bool false");
+    reject(make_double(80.0), "Double 整数值");
+    reject(make_double(80.5), "Double 小数值");
+    reject(make_data({0x50}), "Data");
+    reject(make_array(), "Array");
+    reject(make_dict(), "Dict");
+    Value date;
+    date.type = Type::Date;
+    date.uint64 = 80;
+    reject(date, "Date");
+
+    // 缺少 connection、sender 或 port 都沿用 0，而显式 Null/0 已在上面拒绝。
+    for (int depth = 0; depth < 3; ++depth) {
+        auto answer = make_dict();
+        if (depth >= 1) {
+            auto connection = make_dict();
+            if (depth >= 2) {
+                auto sender = make_dict();
+                dict_set(sender, "address", make_string("fd00::2"));
+                dict_set(connection, "sender", std::move(sender));
+            }
+            dict_set(answer, "connection", std::move(connection));
+        }
+        const auto wire = encode(answer);
+        std::string err = "previous error";
+        const auto parsed = parse_start_answer(std::move(answer), uuid, err);
+        check(parsed && parsed->sender_port == 0 && parsed->payload_type == 100 &&
+                  parsed->local_ssrc == 0 && parsed->remote_ssrc == 0 && err.empty() &&
+                  parsed->session_uuid == uuid && encode(parsed->answer) == wire,
+              "字段缺失保留默认值与完整回复：层级 " + std::to_string(depth));
+    }
+}
+
 }  // namespace
 
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     using namespace scrctl::media;
+
+    std::printf("== 起流回复端口及会话参数 ==\n");
+    check_start_answer();
 
     std::printf("== AudioToolbox 状态诊断 ==\n");
     {

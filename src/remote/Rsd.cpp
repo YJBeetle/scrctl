@@ -1,11 +1,11 @@
 #include "i18n/Translation.h"
 #include "remote/Rsd.h"
 
+#include <charconv>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <random>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -22,13 +22,22 @@ uint16_t to_port(const xpc::Value *v) {
         return 0;
     }
     if (v->is_string()) {
-        // RSD 的 Port 可使用字符串形式，先按十进制读取，再转换为 16 位端口。
-        unsigned long parsed = 0;
-        std::istringstream in(v->string);
-        in >> parsed;
-        return static_cast<uint16_t>(parsed & 0xFFFF);
+        // 只接受完整的十进制端口，不能将尾随内容或越界值截断为另一个服务的端口。
+        uint64_t parsed = 0;
+        const char *end = v->string.data() + v->string.size();
+        const auto result = std::from_chars(v->string.data(), end, parsed, 10);
+        if (result.ec == std::errc{} && result.ptr == end && parsed <= 65535) {
+            return static_cast<uint16_t>(parsed);
+        }
+        return 0;
     }
-    return static_cast<uint16_t>(v->as_int_or(0) & 0xFFFF);
+    if (v->type == xpc::Type::Int64 && v->int64 >= 0 && v->int64 <= 65535) {
+        return static_cast<uint16_t>(v->int64);
+    }
+    if (v->type == xpc::Type::UInt64 && v->uint64 <= 65535) {
+        return static_cast<uint16_t>(v->uint64);
+    }
+    return 0;
 }
 
 std::string uuid_text_from(std::mt19937_64 &rng) {
@@ -46,6 +55,33 @@ std::string uuid_text_from(std::mt19937_64 &rng) {
 }
 
 }  // namespace
+
+std::vector<ServiceInfo> parse_service_directory(const xpc::Value &services) {
+    std::vector<ServiceInfo> parsed;
+    if (!services.is_dict()) return parsed;
+    for (const auto &entry : services.dict) {
+        if (!entry.value.is_dict()) {
+            // 跳过非字典条目，保留其它可识别的服务。
+            continue;
+        }
+        ServiceInfo si;
+        si.name = entry.key;
+        si.port = to_port(entry.value.find("Port"));
+        si.entitlement = entry.value.at("Entitlement").as_string_or("");
+        const auto &props = entry.value.at("Properties");
+        if (props.is_dict()) {
+            si.uses_remote_xpc = props.at("UsesRemoteXPC").as_bool_or(false);
+            si.encrypt_socket_data = props.at("EncryptSocketData").as_bool_or(false);
+            const auto &features = props.at("Features");
+            for (const auto &f : features.array) {
+                si.features.push_back(f.as_string_or(""));
+            }
+        }
+        // 端口缺失、为 0 或无效时仍保留目录项；连接前另行检查，能力与诊断信息不丢失。
+        parsed.push_back(std::move(si));
+    }
+    return parsed;
+}
 
 std::string random_uuid_text() {
     // 追踪号用的随机源，不是密钥；用 random_device 播种即可。
@@ -146,6 +182,11 @@ xpc::Value core_device_request(std::string_view feature_identifier,
 std::unique_ptr<ServiceConnection> ServiceConnection::open(net::Stack &stack,
                                                            const ServiceInfo &service,
                                                            std::string &err, bool verbose) {
+    if (service.port == 0) {
+        err = std::string(SCRCTL_TR("Service has no valid TCP port (expected 1..65535): ")) +
+              service.name;
+        return nullptr;
+    }
     auto conn = std::unique_ptr<ServiceConnection>(new ServiceConnection());
     conn->tcp_ = std::make_unique<net::TcpStream>(stack);
     if (!conn->tcp_->connect(service.port, err)) {
@@ -370,26 +411,7 @@ std::optional<Rsd> Rsd::open(net::Stack &stack, transport::PacketTunnel &tunnel,
         err = SCRCTL_TR("peer_info missing Services");
         return std::nullopt;
     }
-    for (const auto &entry : services->dict) {
-        if (!entry.value.is_dict()) {
-            // 跳过非字典条目，保留其它可识别的服务。
-            continue;
-        }
-        ServiceInfo si;
-        si.name = entry.key;
-        si.port = to_port(entry.value.find("Port"));
-        si.entitlement = entry.value.at("Entitlement").as_string_or("");
-        const auto &props = entry.value.at("Properties");
-        if (props.is_dict()) {
-            si.uses_remote_xpc = props.at("UsesRemoteXPC").as_bool_or(false);
-            si.encrypt_socket_data = props.at("EncryptSocketData").as_bool_or(false);
-            const auto &features = props.at("Features");
-            for (const auto &f : features.array) {
-                si.features.push_back(f.as_string_or(""));
-            }
-        }
-        rsd->services_.push_back(std::move(si));
-    }
+    rsd->services_ = parse_service_directory(*services);
     return rsd;
 }
 

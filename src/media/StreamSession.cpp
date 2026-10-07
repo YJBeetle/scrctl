@@ -2,6 +2,8 @@
 #include "media/StreamSession.h"
 
 #include <array>
+#include <charconv>
+#include <limits>
 #include <random>
 
 #include "remote/Device.h"
@@ -102,6 +104,59 @@ xpc::Value build_start_request(const std::string &receiver_ip, uint16_t receiver
     return d;
 }
 
+std::optional<StreamSession::Started> parse_start_answer(
+    xpc::Value answer, std::vector<uint8_t> session_uuid, std::string &err) {
+    StreamSession::Started started;
+    started.answer = std::move(answer);
+    started.session_uuid = std::move(session_uuid);
+
+    // answer 的 connection.sender.port 是设备媒体发送端口，
+    // connection.streamConfig.RxPayloadType 是本次协商的媒体载荷类型。
+    const auto *connection = started.answer.find("connection");
+    if (connection != nullptr) {
+        // 媒体 PT 使用协商结果；缺失时沿用默认 100。RTP 的该字段只有七位，因此
+        // 取低七位。音视频的接收端仍需先识别裸 RTCP，再按媒体 PT 处理 RTP。
+        if (const auto *sc = connection->find("streamConfig"); sc != nullptr) {
+            started.payload_type =
+                static_cast<uint8_t>(sc->at("RxPayloadType").as_int_or(100) & 0x7F);
+            // 名称采用设备视角：LocalSSRC 是设备媒体源，客户端 RTCP 报告块引用它；
+            // RemoteSSRC 是客户端反馈的发送者身份。已测设备回显 offer 中声明的 SSRC，
+            // 不代表总会另行生成新值；反馈使用本次 answer 中的两个值。
+            started.local_ssrc = static_cast<uint32_t>(sc->at("LocalSSRC").as_int_or(0));
+            started.remote_ssrc = static_cast<uint32_t>(sc->at("RemoteSSRC").as_int_or(0));
+        }
+        if (const auto *sender = connection->find("sender"); sender != nullptr) {
+            if (const auto *p = sender->find("port"); p != nullptr) {
+                // 先按实际 XPC 类型读取，避免 as_int_or 把 Bool 当作端口，或将大的
+                // UInt64 转成有符号数。范围检查通过后才收窄为 uint16_t。
+                uint64_t port = 0;
+                bool parsed = false;
+                if (p->type == xpc::Type::Int64 && p->int64 > 0) {
+                    port = static_cast<uint64_t>(p->int64);
+                    parsed = true;
+                } else if (p->type == xpc::Type::UInt64) {
+                    port = p->uint64;
+                    parsed = true;
+                } else if (p->is_string()) {
+                    const char *begin = p->string.data();
+                    const char *end = begin + p->string.size();
+                    const auto result = std::from_chars(begin, end, port, 10);
+                    parsed = result.ec == std::errc{} && result.ptr == end;
+                }
+                if (!parsed || port == 0 || port > std::numeric_limits<uint16_t>::max()) {
+                    err = SCRCTL_TR(
+                        "Invalid startmediastream answer: connection.sender.port must be an integer "
+                        "or decimal string in 1..65535");
+                    return std::nullopt;
+                }
+                started.sender_port = static_cast<uint16_t>(port);
+            }
+        }
+    }
+    err.clear();
+    return started;
+}
+
 std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
                                                    const Request &request, std::string &err,
                                                    bool verbose,
@@ -164,41 +219,16 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
         return nullptr;
     }
 
-    Started started;
-    started.answer = std::move(output);
     // 从实际请求的类型包装中读取 ClientSessionID，保证记录的是本次发送的 UUID，
     // 包括调用方提供共享标识与本地新生成标识两种情况。
-    started.session_uuid =
-        input.at("options").at("avcMediaStreamOptionClientSessionID").at("uuid").data;
-
-    // answer 的 connection.sender.port 是设备媒体发送端口，
-    // connection.streamConfig.RxPayloadType 是本次协商的媒体载荷类型。
-    const auto *connection = started.answer.find("connection");
-    if (connection != nullptr) {
-        // 媒体 PT 使用协商结果；缺失时沿用默认 100。RTP 的该字段只有七位，因此
-        // 取低七位。音视频的接收端仍需先识别裸 RTCP，再按媒体 PT 处理 RTP。
-        if (const auto *sc = connection->find("streamConfig"); sc != nullptr) {
-            started.payload_type =
-                static_cast<uint8_t>(sc->at("RxPayloadType").as_int_or(100) & 0x7F);
-            // 名称采用设备视角：LocalSSRC 是设备媒体源，客户端 RTCP 报告块引用它；
-            // RemoteSSRC 是客户端反馈的发送者身份。已测设备回显 offer 中声明的 SSRC，
-            // 不代表总会另行生成新值；反馈使用本次 answer 中的两个值。
-            started.local_ssrc = static_cast<uint32_t>(sc->at("LocalSSRC").as_int_or(0));
-            started.remote_ssrc = static_cast<uint32_t>(sc->at("RemoteSSRC").as_int_or(0));
-        }
-        if (const auto *sender = connection->find("sender"); sender != nullptr) {
-            // 对端端口兼容整数与字符串表示。RSD 目录已有字符串端口；仅按整数读取
-            // 这类值会落到默认 0，无法作为后续源端口检查或反馈目的端口的依据。
-            if (const auto *p = sender->find("port"); p != nullptr) {
-                if (p->is_string()) {
-                    started.sender_port = static_cast<uint16_t>(std::stoi(p->string));
-                } else {
-                    started.sender_port = static_cast<uint16_t>(p->as_int_or(0));
-                }
-            }
-        }
+    auto started = parse_start_answer(std::move(output),
+        input.at("options").at("avcMediaStreamOptionClientSessionID").at("uuid").data, err);
+    if (!started) {
+        // RPC 已成功，设备可能已起流。只释放本次局部 socket，不调用会停止其它
+        // 会话的 stopAll，也不关闭借用的 on_conn；设备端仍按请求租期处理空闲流。
+        return nullptr;
     }
-    return std::unique_ptr<StreamSession>(new StreamSession(std::move(socket), std::move(started)));
+    return std::unique_ptr<StreamSession>(new StreamSession(std::move(socket), std::move(*started)));
 }
 
 StreamSession::~StreamSession() = default;

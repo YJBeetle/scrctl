@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 06:17+0800\n"
+"POT-Creation-Date: 2026-10-08 06:35+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1134,7 +1134,7 @@ msgstr ""
 #: src/media/FramePump.cpp:494 src/media/ScreenshotSource.cpp:72
 #: src/net/Stack.cpp:359 src/net/TcpStream.cpp:44 src/net/TcpStream.cpp:122
 #: src/net/TcpStream.cpp:126 src/net/UdpSocket.cpp:109
-#: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:214
+#: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:255
 #: src/transport/Socket.cpp:114 src/wifi/RemotePairing.cpp:35
 #: tools/rr_keepalive_probe.cpp:636
 msgid ")"
@@ -1247,20 +1247,26 @@ msgstr ""
 msgid "Screenshot response missing image data"
 msgstr ""
 
-#: src/media/StreamSession.cpp:123 src/remote/App.cpp:218
+#: src/media/StreamSession.cpp:148
+msgid ""
+"Invalid startmediastream answer: connection.sender.port must be an integer "
+"or decimal string in 1..65535"
+msgstr ""
+
+#: src/media/StreamSession.cpp:178 src/remote/App.cpp:218
 #: src/transport/TcpConnect.cpp:27
 msgid ": "
 msgstr ""
 
-#: src/media/StreamSession.cpp:123
+#: src/media/StreamSession.cpp:178
 msgid "Failed to bind UDP port "
 msgstr ""
 
-#: src/media/StreamSession.cpp:156
+#: src/media/StreamSession.cpp:211
 msgid "startmediastream failed on the retained connection (transport failed)"
 msgstr ""
 
-#: src/media/StreamSession.cpp:259
+#: src/media/StreamSession.cpp:289
 msgid "getmediastreamserverstatus response missing sessions array"
 msgstr ""
 
@@ -1583,7 +1589,7 @@ msgstr ""
 msgid "Start CoreDeviceProxy"
 msgstr ""
 
-#: src/remote/Device.cpp:142 src/remote/Rsd.cpp:152 src/remote/Rsd.cpp:355
+#: src/remote/Device.cpp:142 src/remote/Rsd.cpp:193 src/remote/Rsd.cpp:396
 #: src/transport/Usbmux.cpp:92 src/wifi/PairRecord.cpp:344
 #: tools/wifi_probe.cpp:353
 msgid " failed: "
@@ -1962,119 +1968,123 @@ msgstr ""
 msgid "Disconnected while waiting for device reply: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:89
+#: src/remote/Rsd.cpp:125
 #, c-format
 msgid ""
 "Invalid numeric component in SCRCTL_COREDEVICE_VERSION: %s (using 629.3)\n"
 msgstr ""
 
-#: src/remote/Rsd.cpp:102
+#: src/remote/Rsd.cpp:138
 #, c-format
 msgid "  coreDeviceVersion overridden by environment: %s (default: 629.3)\n"
 msgstr ""
 
-#: src/remote/Rsd.cpp:152
+#: src/remote/Rsd.cpp:186
+msgid "Service has no valid TCP port (expected 1..65535): "
+msgstr ""
+
+#: src/remote/Rsd.cpp:193
 msgid " port "
 msgstr ""
 
-#: src/remote/Rsd.cpp:152 src/transport/Usbmux.cpp:92
+#: src/remote/Rsd.cpp:193 src/transport/Usbmux.cpp:92
 msgid "Connect to "
 msgstr ""
 
-#: src/remote/Rsd.cpp:161
+#: src/remote/Rsd.cpp:202
 msgid " HTTP/2 handshake failed: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:172 src/remote/Rsd.cpp:180 src/remote/Rsd.cpp:188
-#: src/remote/Rsd.cpp:196
+#: src/remote/Rsd.cpp:213 src/remote/Rsd.cpp:221 src/remote/Rsd.cpp:229
+#: src/remote/Rsd.cpp:237
 msgid "Service connection is not RemoteXPC"
 msgstr ""
 
-#: src/remote/Rsd.cpp:210
+#: src/remote/Rsd.cpp:251
 msgid " failed"
 msgstr ""
 
-#: src/remote/Rsd.cpp:214
+#: src/remote/Rsd.cpp:255
 msgid "(code "
 msgstr ""
 
-#: src/remote/Rsd.cpp:225
+#: src/remote/Rsd.cpp:266
 msgid "; original error: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:249
+#: src/remote/Rsd.cpp:290
 msgid " failed; response missing CoreDevice.output: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:261
+#: src/remote/Rsd.cpp:302
 msgid "Streaming feature requires an XPC service connection"
 msgstr ""
 
-#: src/remote/Rsd.cpp:276
+#: src/remote/Rsd.cpp:317
 msgid "Service connection is not an XPC channel"
 msgstr ""
 
-#: src/remote/Rsd.cpp:295
+#: src/remote/Rsd.cpp:336
 msgid " response missing both sideChannelStatus and error: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:301
+#: src/remote/Rsd.cpp:342
 msgid " failed mid-stream: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:355
+#: src/remote/Rsd.cpp:396
 msgid "Connect to RSD port "
 msgstr ""
 
-#: src/remote/Rsd.cpp:360
+#: src/remote/Rsd.cpp:401
 msgid "RSD control channel handshake failed: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:370
+#: src/remote/Rsd.cpp:411
 msgid "peer_info missing Services"
 msgstr ""
 
-#: src/remote/Rsd.cpp:440
+#: src/remote/Rsd.cpp:462
 msgid "."
 msgstr ""
 
-#: src/remote/Rsd.cpp:440
+#: src/remote/Rsd.cpp:462
 msgid "Device directory missing service "
 msgstr ""
 
-#: src/remote/Rsd.cpp:442
+#: src/remote/Rsd.cpp:464
 msgid "Directory is empty; check tunnel setup and DDI mounting."
 msgstr ""
 
-#: src/remote/Rsd.cpp:451
+#: src/remote/Rsd.cpp:473
 msgid " services, including "
 msgstr ""
 
-#: src/remote/Rsd.cpp:451
+#: src/remote/Rsd.cpp:473
 msgid "Device directory contains "
 msgstr ""
 
-#: src/remote/Rsd.cpp:452
+#: src/remote/Rsd.cpp:474
 msgid " com.apple.coredevice.* services:\n"
 msgstr ""
 
-#: src/remote/Rsd.cpp:455
+#: src/remote/Rsd.cpp:477
 msgid ""
 "  (none found; check DDI mounting through Xcode and the CoreDevice services "
 "available on this device)\n"
 msgstr ""
 
-#: src/remote/Rsd.cpp:462
+#: src/remote/Rsd.cpp:484
 msgid ""
 "Include this diagnostic when reporting the issue. For the full directory and "
 "feature lists, run feature_probe --all to print all "
 msgstr ""
 
-#: src/remote/Rsd.cpp:464
+#: src/remote/Rsd.cpp:486
 msgid " services.\n"
 msgstr ""
 
-#: src/remote/Rsd.cpp:474
+#: src/remote/Rsd.cpp:496
 msgid ""
 " (device rejected the system version: live media worked on tested iOS 27 "
 "devices and was rejected on tested iOS 18 devices. Screenshot fallback and "

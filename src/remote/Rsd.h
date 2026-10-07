@@ -18,7 +18,8 @@ namespace scrctl::remote {
 /// RSD peer_info.Services 中的服务条目；name 来自目录字典的键。
 struct ServiceInfo {
     std::string name;
-    /// Port 接受字符串和整数形式，转换为 16 位端口；缺失时为 0。
+    /// Port 接受 0..65535 的完整十进制字符串、Int64 或 UInt64。
+    /// 缺失、0 或非法值均保留为 0，表示没有可连接端口，不删除目录中的服务项。
     uint16_t port = 0;
     /// Properties.UsesRemoteXPC 决定是否在 TCP 上建立 RemoteXPC 通道。
     bool uses_remote_xpc = false;
@@ -28,6 +29,10 @@ struct ServiceInfo {
     std::string entitlement;
     std::vector<std::string> features;
 };
+
+/// 解析 RSD 的 Services 字典，不进行网络 I/O。保持字典条目顺序，跳过非字典条目；
+/// 无效端口仍保留服务的属性和能力信息。非字典输入返回空列表，Rsd::open 另行报告目录错误。
+[[nodiscard]] std::vector<ServiceInfo> parse_service_directory(const xpc::Value &services);
 
 /// 区分成功、能力/业务错误和连接/传输失败，供调用方决定后续处理。
 /// TransportError 不表示设备一定未执行请求，重试策略由调用方决定。
@@ -40,6 +45,7 @@ class ServiceConnection {
 public:
     ServiceConnection() = default;
 
+    /// 端口为 0 时在创建 TCP 连接前返回 nullptr，并在 err 中报告服务名与有效范围。
     static std::unique_ptr<ServiceConnection> open(net::Stack &stack, const ServiceInfo &service,
                                                    std::string &err, bool verbose = false);
 

@@ -399,6 +399,11 @@ if(SCRCTL_BUILD_TESTS)
     add_test(NAME tcp_connect COMMAND tcp_connect_test)
     set_tests_properties(tcp_connect PROPERTIES TIMEOUT 10)
 
+    add_executable(rsd_test tests/rsd_test.cpp)
+    target_link_libraries(rsd_test PRIVATE scrctl_core)
+    add_test(NAME rsd COMMAND rsd_test)
+    set_tests_properties(rsd PROPERTIES TIMEOUT 15)
+
     add_executable(media_test tests/media_test.cpp)
     target_link_libraries(media_test PRIVATE scrctl_core)
     add_test(NAME media COMMAND media_test)
