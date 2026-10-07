@@ -19,9 +19,9 @@ constexpr std::string_view kButtonFeature = "com.apple.coredevice.feature.remote
 constexpr std::size_t kTouchscreenReportLen = 58;
 constexpr std::size_t kKeyboardReportLen = 39;
 
-/// dtuhidd 这批服务的外壳与 CoreDevice feature 那套**不一样**：
-/// 没有 CoreDevice.input / actionIdentifier，只有 messageType + payload +
-/// featureIdentifier。用 core_device_request() 去调它，设备的反应是不安回。
+/// HID 请求直接使用 messageType、payload 和 featureIdentifier 字段。
+/// 不添加 CoreDevice.input、actionIdentifier 等通用 feature 请求包装；
+/// 已有设备使用此布局，不能改用 core_device_request() 代替。
 xpc::Value request(std::string_view feature_identifier, std::string_view message_type,
                    xpc::Value payload) {
     xpc::Value msg = xpc::make_dict();
@@ -31,7 +31,7 @@ xpc::Value request(std::string_view feature_identifier, std::string_view message
     return msg;
 }
 
-/// universalhidservice 的请求把动作名塞在 payload 里，动作的参数再套一层。
+/// universalhidservice 使用 Request 消息，payload 为 {动作名: 参数} 字典。
 xpc::Value universal_request(std::string_view key, xpc::Value payload) {
     xpc::Value body = xpc::make_dict();
     xpc::dict_set(body, std::string(key), std::move(payload));
@@ -41,7 +41,7 @@ xpc::Value universal_request(std::string_view key, xpc::Value payload) {
 }  // namespace
 
 uint64_t report_timestamp() {
-    // 以"本进程第一次取时间戳"为零点，量级和参考客户端一致（见头文件里的说明）。
+    // 起点只初始化一次；使用单调时钟表达报告间隔，传输字段保留低 48 位。
     static const auto epoch = std::chrono::steady_clock::now();
     const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
                         std::chrono::steady_clock::now() - epoch)
@@ -71,7 +71,7 @@ std::vector<uint8_t> keyboard_report(const std::vector<uint16_t> &usages, uint64
     std::vector<uint8_t> r(kKeyboardReportLen, 0);
     r[0] = 0x01;
     for (const uint16_t u : usages) {
-        // 位图只有 240 位；超出就编不下，静默丢掉比写坏别的键好。
+        // 位图对应 usage 0..239；忽略范围外的值，避免写入时间戳或保留区。
         if (u < 240) {
             r[1 + u / 8] = static_cast<uint8_t>(r[1 + u / 8] | (uint8_t { 1 } << (u % 8)));
         }
@@ -82,7 +82,7 @@ std::vector<uint8_t> keyboard_report(const std::vector<uint16_t> &usages, uint64
     return r;
 }
 
-uint16_t normalize(double v) {    if (!(v > 0.0)) {  // 也吃掉 NaN
+uint16_t normalize(double v) {    if (!(v > 0.0)) {  // 非正值及 NaN 均映射到 0。
         return 0;
     }
     if (v >= 1.0) {
@@ -115,7 +115,7 @@ bool Service::surfaces(std::vector<Surface> &out, std::string &err) {
     }
     const auto *list = reply.find("connectedServices");
     if (list == nullptr) {
-        // 不认识这个回信形状时把原文交出去，别猜。
+        // 必需字段缺失时保留原始回复供诊断，不推断其它字段为服务目录。
         err = SCRCTL_TR("connectedServices response missing connectedServices: ") + xpc::describe(reply);
         return false;
     }
@@ -141,6 +141,7 @@ bool Service::surfaces(std::vector<Surface> &out, std::string &err) {
 
 bool Service::send_report(uint64_t service_id, std::span<const uint8_t> report, std::string &err,
                           xpc::Value *reply) {
+    // send 参数按位置编号：_0 是报告 Data，_1 是目标面的 UInt64 标识。
     xpc::Value args = xpc::make_dict();
     xpc::dict_set(args, "_0", xpc::make_data(std::vector<uint8_t>(report.begin(), report.end())));
     xpc::dict_set(args, "_1", xpc::make_uint64(service_id));
@@ -200,7 +201,7 @@ bool Service::type(uint64_t surface, const std::vector<uint16_t> &usages, int ho
     if (hold_ms > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(hold_ms));
     }
-    // 松开不是"发一个 release"，而是带着去掉该键的完整集合再发一次。
+    // 位图表示当前完整按键状态；空集合将本次按住的所有键释放。
     return send_report(surface, keyboard_report({}), err);
 }
 
@@ -212,7 +213,7 @@ bool Service::press_chord(uint64_t surface, const std::vector<uint16_t> &usages,
             modifiers.push_back(u);
         }
     }
-    // 先只按修饰键：iOS 读位图时要求修饰键已经在按下状态，主键才带上档/组合效果。
+    // 已测设备需要先接收修饰键状态，再接收主键，才能识别组合效果。
     if (!modifiers.empty() &&
         !send_report(surface, keyboard_report(modifiers), err)) {
         return false;
@@ -260,8 +261,8 @@ bool Buttons::send(uint64_t state, uint16_t usage_page, uint16_t usage_code, std
 }
 
 bool Buttons::press(uint16_t usage_page, uint16_t usage_code, int hold_ms, std::string &err) {
-    // 按下与抬起是两条独立消息，设备不安回，所以中间只能真等一会儿。
-    // 太短会被当成抖动：实测 30ms 以下偶尔不生效，这里默认按 90ms。
+    // 按下和抬起各发送一条消息，不等待设备确认，间隔由调用方传入。
+    // 已有设备测试中，小于 30 ms 的间隔偶有不响应；这里不设默认值或下限。
     if (!send(kButtonStateDown, usage_page, usage_code, err)) {
         return false;
     }
@@ -272,8 +273,8 @@ bool Buttons::press(uint16_t usage_page, uint16_t usage_code, int hold_ms, std::
 }
 
 std::vector<std::vector<uint16_t>> text_reports(const std::string &text) {
-    // usage 号来自 USB-IF 的 HID Usage Tables（page 0x07），是公开标准里的数字，
-    // 不是哪个实现的私有约定。shifted 表示这个字符要按着左 Shift 才出得来。
+    // usage 来自 USB-IF HID Usage Tables page 0x07，字符映射采用 US 键盘布局。
+    // shifted 表示生成该字符需要先按左 Shift，再按对应的主键。
     struct Entry {
         char ch;
         uint16_t usage;
@@ -281,8 +282,7 @@ std::vector<std::vector<uint16_t>> text_reports(const std::string &text) {
     };
     static const Entry kTable[] = {
         { ' ', key::kSpace, false }, { '\t', key::kTab, false }, { '\n', key::kEnter, false },
-        // 数字的上档字符。少了这一组，"!" 会被当成"认不出的字符"静默跳过，
-        // 而密码、句子结尾里到处都是它们。
+        // US 布局中数字键配合 Shift 生成的标点。
         { '!', key::k1, true }, { '@', static_cast<uint16_t>(key::k1 + 1), true },
         { '#', static_cast<uint16_t>(key::k1 + 2), true },
         { '$', static_cast<uint16_t>(key::k1 + 3), true },
@@ -292,8 +292,7 @@ std::vector<std::vector<uint16_t>> text_reports(const std::string &text) {
         { '*', static_cast<uint16_t>(key::k1 + 7), true },
         { '(', static_cast<uint16_t>(key::k1 + 8), true },
         { ')', key::k0, true },
-        // 以下 usage 直接照 HID Usage Tables page 0x07 的编号写，不用"某个键加
-        // 多少"的算式——算式对了也读不出来，还容易在改表时错一位。
+        // 其它标点按 page 0x07 的键码列出，同一键的普通字符和上档字符共用 usage。
         { '-', 0x2D, false }, { '_', 0x2D, true },  { '=', 0x2E, false },
         { '+', 0x2E, true },  { '[', 0x2F, false }, { '{', 0x2F, true },
         { ']', 0x30, false }, { '}', 0x30, true },  { '\\', 0x31, false },
@@ -327,18 +326,17 @@ std::vector<std::vector<uint16_t>> text_reports(const std::string &text) {
             }
         }
         if (usage == 0) {
-            continue;  // 认不出来的字符跳过
+            continue;  // 按字节跳过未支持字符，不产生报告或错误。
         }
         if (shifted) {
-            // 先单独把 Shift 按下去，再发"Shift + 键"。合成一条 {Shift, 键} 的
-            // 报告实测只会出小写那个字符（"!" 变成 "1"）——iOS 读位图时要求
-            // 修饰键在按键之前就已经处于按下状态。
+            // 分两条报告建立 Shift 和主键状态；已有设备同时接收二者时，
+            // 上档效果未生效。该顺序与 press_chord() 的修饰键处理一致。
             out.push_back({ key::kShiftLeft });
             out.push_back({ key::kShiftLeft, usage });
         } else {
             out.push_back({ usage });
         }
-        out.push_back({});  // 空集合 = 全部松开
+        out.push_back({});  // 每个字符结束时释放全部按键。
     }
     return out;
 }

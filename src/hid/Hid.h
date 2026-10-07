@@ -12,28 +12,22 @@
 
 namespace scrctl::hid {
 
-/// 触摸注入。
+/// 触摸和键盘通过 `com.apple.coredevice.hid.universalhidservice` 注入。
+/// 设备在 dtuhidd 注册 HID 面，宿主按目标 `_ServiceID` 发送原始报告。
+/// 触摸坐标使用归一化的 0..65535，报告构造无需知道屏幕像素尺寸；坐标轴与
+/// 屏幕方向的对应关系仍需由调用方处理。
 ///
-/// 走的是 `com.apple.coredevice.hid.universalhidservice`：设备把自己的 HID 面
-/// （真正的触摸屏、手势面、侧键组…）注册在 dtuhidd 上，宿主往某个面的
-/// `_ServiceID` 上**投原始 HID 报告**即可，坐标是归一化的 0..65535，所以不依赖
-/// 屏幕分辨率——同一份代码在 1125x2436 与 1290x2796 上不用改。
+/// 已有设备验证表明：媒体会话运行、结束以及从未启动时，触摸报告都能生效。
+/// 因此本模块不以运行中的媒体会话为输入前提，也不为媒体状态增加等待。
+/// 该结论限于已有设备和 DDI 配置；认证状态的完整机制尚未确定。
+/// 验证记录见 docs/coredevice.md 第 12 节。
 ///
-/// 没有走 `hid.indigo` 的 digitizer feature：那条路要 Apple 的 Mercury 对端事件
-/// 外壳，实测设备收到 dispatch 后立刻 "Resetting gesture state then canceling"，
-/// 不进任何 handler。indigo 上确定能用的是 button（硬件按键）。
-///
-/// **输入不要求"此刻有一条流在跑"。** 早先的观测是：没有媒体会话时 dtuhidd 把我们
-/// 的面标成 `authenticated: NO / eventSource: externalAccessory`，backboardd 丢掉
-/// 每个 digitizer 事件（"ignoring digitizer event for display <main> from
-/// unsupported service"），于是得出结论"必须先起一条流"。2026-09-25 用
-/// `tools/hid_gate_probe` 按四种状态各画一条线复测——流活着、设备已把流结束掉 9
-/// 秒、我们自己拆了流、全新进程从头到尾没起过流——**四条全部落地**（按纵向带比对
-/// 截图，`tools/gate_diff.py`）。那条标志到底挂在什么上没查清（`connectedServices`
-/// 回信里 describe() 把它省略掉了），所以别把它当硬前提写进代码，也别为它加等待。
+/// `hid.indigo` 的 digitizer、keyboard 和 scroll 路径使用 Apple Mercury 事件包装，
+/// 当前尚未适配，已有请求未能完成注入。本模块的触摸与键盘使用 universalhidservice；
+/// 硬件按键使用 indigo 的 button。
 
-/// 设备注册的静态 HID 面。
-inline constexpr uint64_t kSurfaceMainTouchscreen = 257;   ///< 真数（0x101）
+/// 已测设备注册的 HID 面标识；可用面仍应以设备返回的 connectedServices 为准。
+inline constexpr uint64_t kSurfaceMainTouchscreen = 257;   ///< 主触摸屏（0x101）
 inline constexpr uint64_t kSurfaceKeyboard = 512;          ///< 设备自带的虚拟键盘（0x200）
 inline constexpr uint64_t kSurfaceTouchGesture = 1281;     ///< 触控板式指针（0x501）
 
@@ -41,12 +35,9 @@ inline constexpr uint64_t kSurfaceTouchGesture = 1281;     ///< 触控板式指�
 inline constexpr uint8_t kStateContact = 0xC2;  ///< 在该位置保持接触
 inline constexpr uint8_t kStateRelease = 0x02;  ///< 抬起
 
-/// 主机侧单调时钟，作为 48 位时间戳塞进报告尾部。
-///
-/// 要保住的性质只有两条：单调、以及帧间差值真实（手势/惯性靠差值算速度）。
-/// 绝对值不需要和设备的墙钟对齐——参考客户端抓下来的这个字段是 1.07e9 这个量级，
-/// 明显不是"开机至今"，而它的报告照样能画出来。这里取"本进程第一次取时间戳"
-/// 以来的纳秒，量级与之一致。
+/// 以本进程首次调用为起点，读取 steady_clock 的纳秒差值，返回低 48 位。
+/// 时间戳用于表达报告间隔，手势速度依赖这些差值，不需要与设备墙钟对齐。
+/// 低 48 位在范围耗尽后会回绕；未回绕时保留单调时钟的顺序和实际间隔。
 [[nodiscard]] uint64_t report_timestamp();
 
 /// 58 字节的 mainTouchscreen 报告（报告号 0x09）。
@@ -63,24 +54,24 @@ inline constexpr uint8_t kStateRelease = 0x02;  ///< 抬起
 ///  50-57 8 字节 0
 /// ```
 ///
-/// 一次点击 = 同一坐标上一个 CONTACT 加一个 RELEASE；一次拖动 = 一串推进坐标的
-/// CONTACT，最后跟一个 RELEASE。**没有**单独的 begin/end 操作码，每个 CONTACT
-/// 都是"此刻在此处接触着"。
+/// 点击在同一坐标依次发送 CONTACT 和 RELEASE；拖动逐点发送 CONTACT，最后
+/// 发送 RELEASE。CONTACT 表示该位置当前保持接触，报告没有独立的 begin/end 操作码。
+/// 坐标和时间戳按小端写入，timestamp 只写低 48 位，其余保留字节保持为零。
 [[nodiscard]] std::vector<uint8_t> touchscreen_report(uint8_t state, uint16_t x, uint16_t y,
                                                       uint64_t timestamp = report_timestamp());
 
-/// 归一化坐标（0.0..1.0）-> 报告里的 UInt16。越界值夹住而不是取模：取模会把
-/// 屏幕外的点变成屏幕内的点击，那是比"停在边上"更糟的结果。
+/// 将 0.0..1.0 坐标映射到 UInt16，区间内按最近整数取值。
+/// 小于等于 0 或 NaN 返回 0，大于等于 1 返回 65535；越界值不取模。
 [[nodiscard]] uint16_t normalize(double v);
 
-/// 把一段 ASCII 翻译成"逐个按键"的 usage 序列：需要 Shift 的字符会展开成
-/// {ShiftLeft, 该键} 两个报告。返回的是每次要发的完整按下集合，调用方逐条投递。
-///
-/// 只覆盖 US 键盘布局上能直接按出来的字符；认不出的字符被跳过而不是抛错——
-/// 自动化里"少打一个字符"比"整个动作失败"好排查。
+/// 按 US 键盘布局把可打印 ASCII、制表符和换行符转换为报告序列。
+/// 每个条目都是当前按住的完整 usage 集合：普通字符为 {键}、{}；需要 Shift 的
+/// 字符为 {ShiftLeft}、{ShiftLeft, 键}、{}，最后的空集合释放全部按键。
+/// 输入按字节遍历，非 ASCII 或其它未支持字符会被跳过，不返回错误。
+/// 此函数不解码 Unicode，也不根据设备当前键盘布局调整映射。
 [[nodiscard]] std::vector<std::vector<uint16_t>> text_reports(const std::string &text);
 
-/// 键盘 usage（HID Usage Page 0x07，USB-IF 公开表）。这里只列翻译 ASCII 用得上的。
+/// USB-IF HID Usage Page 0x07 中用于 ASCII 映射和组合键的键码。
 namespace key {
 inline constexpr uint16_t kA = 0x04;  ///< a..z 连续排到 0x1D
 inline constexpr uint16_t kZ = 0x1D;
@@ -91,7 +82,7 @@ inline constexpr uint16_t kEsc = 0x29;
 inline constexpr uint16_t kBackspace = 0x2A;
 inline constexpr uint16_t kTab = 0x2B;
 inline constexpr uint16_t kSpace = 0x2C;
-inline constexpr uint16_t kShiftLeft = 0xE1;  ///< 修饰键 0xE0..0xE7 各占一位
+inline constexpr uint16_t kShiftLeft = 0xE1;  ///< 0xE0..0xE7 为左右修饰键
 inline constexpr uint16_t kGuiLeft = 0xE3;    ///< 即 iOS 上的 Command 键
 }  // namespace key
 
@@ -104,15 +95,18 @@ inline constexpr uint16_t kGuiLeft = 0xE3;    ///< 即 iOS 上的 Command 键
 ///  37-38 保留
 /// ```
 ///
-/// 每个报告带的是**当前按住的完整集合**，所以要"抬起"一个键，是带着去掉它的集合
-/// 再发一次，而不是发一个 release 操作码。
+/// 报告携带当前按住的完整集合，释放按键时发送移除该 usage 后的集合；
+/// 空集合释放全部按键，没有独立的 release 操作码。usage >= 240 被忽略，
+/// timestamp 只写低 48 位，保留字节为零。
 [[nodiscard]] std::vector<uint8_t> keyboard_report(const std::vector<uint16_t> &usages,
                                                    uint64_t timestamp = report_timestamp());
 
-/// 一条已打开的 universalhidservice 连接。
+/// 独占一条 universalhidservice 连接，Device 的生命周期必须覆盖本对象。
+/// 同一实例的调用由调用方串行安排。发送中途失败会立即返回，不自动补发
+/// 抬起或松键报告；需要恢复已经发送的接触/按键状态时，由调用方处理。
 class Service {
 public:
-    /// 目录里没有这个服务时返回 nullptr（DDI 版本差异，调用方该给出人话）。
+    /// RSD 目录缺少服务或建立连接失败时返回 nullptr，并填写 err。
     static std::unique_ptr<Service> open(scrctl::remote::Device &device, std::string &err,
                                         bool verbose = false);
 
@@ -121,47 +115,53 @@ public:
         std::string name;
     };
 
-    /// 枚举设备当前注册的 HID 面。
+    /// 枚举设备当前注册的 HID 面，将非零 service_id 的条目追加到 out。
+    /// 读取 Product，缺失时使用 ServiceName。已有 USB 设备在目录回复后关闭过
+    /// 连接，因此枚举应使用独立实例，注入另开连接；枚举成功不保证该连接仍能发送报告。
     bool surfaces(std::vector<Surface> &out, std::string &err);
 
-    /// connectedServices 的**原文**。面的认证状态这类属性长什么样，事先猜不到，
-    /// 所以留一条把整份字典交出来的路。
+    /// 返回 connectedServices 的完整回复，保留 surfaces() 未提取的设备字段。
+    /// 此调用与 surfaces() 一样可能结束设备端连接，不应与后续注入共用实例。
     bool raw_connected_services(scrctl::xpc::Value &reply, std::string &err);
 
-    /// 投递一个原始报告（首字节是 HID 报告号）。默认不等回信——设备对 send 不安
-    /// 回，等就成了每个点一次往返，注入延迟立刻可见。
-    ///
-    /// 传 `reply` 就改走一次往返并把回信带回来。"发送成功但屏幕没反应"的时候，
-    /// 这是唯一能把 dtuhidd 的真实态度拿到的办法——它拒绝一个畸形请求时未必会
-    /// 留下别的痕迹，所以两种结果都有信息量。
+    /// 投递原始报告，首字节为 HID 报告号，service_id 指定目标面。
+    /// 默认只发送：已有设备不对正常 send 请求逐条回复。返回 true 仅表示
+    /// 本地发送成功，不确认设备接受报告或界面产生变化。
+    /// reply 非空时等待最多 5 秒并返回原始回复，供诊断使用；无回复时可能超时，
+    /// 不能把该路径的结果单独作为输入是否生效的判据。
     bool send_report(uint64_t service_id, std::span<const uint8_t> report, std::string &err,
                      scrctl::xpc::Value *reply = nullptr);
 
-    /// 在 mainTouchscreen 上放一个接触或抬起。x/y 是 0..1 的归一化屏幕坐标。
+    /// 向指定 service_id 发送主触摸屏格式的接触或抬起报告。
+    /// x/y 是 0..1 的归一化屏幕坐标；调用方应选择支持该报告格式的面。
     bool touch(uint64_t service_id, double x, double y, bool down, std::string &err);
 
-    /// 一次点击：按下、停 hold_ms、抬起。
+    /// 在主触摸屏同一坐标按下、等待 hold_ms、抬起；hold_ms <= 0 时不等待。
     bool tap(double x, double y, int hold_ms, std::string &err);
 
-    /// 一条折线：从 (x0,y0) 按点序接触移动，最后抬起。点与点之间睡 step_ms，
-    /// 让设备侧能算出速度——瞬移式的拖动会被当成抖动。
+    /// 按点序发送触摸报告：除末点外均为 CONTACT，末点为 RELEASE。
+    /// 空列表返回错误；只有一个点时仅发送 RELEASE，不构成点击或拖动。
+    /// step_ms > 0 时在相邻报告间等待，配合时间戳表达移动速度；具体间隔的
+    /// 适用范围取决于设备手势处理，已有测试记录见 docs/coredevice.md 第 12 节。
     bool stroke(const std::vector<std::pair<double, double>> &points, int step_ms,
                 std::string &err);
 
-    /// 在某个键盘面上敲一组键：发一次"这些键都按着"，停 hold_ms，再发空集合松开。
-    /// 键盘面是哪个 `_ServiceID` 要看 `surfaces()`——设备自带一个，宿主自己注册的
-    /// 另算。
+    /// 向指定键盘面发送 usages 完整集合，等待 hold_ms 后发送空集合松键。
+    /// hold_ms <= 0 时不等待。此函数不拆分修饰键；组合键使用 press_chord()。
+    /// surface 是该键盘面的 `_ServiceID`，设备当前面标识可通过独立连接枚举。
     bool type(uint64_t surface, const std::vector<uint16_t> &usages, int hold_ms,
               std::string &err);
 
-    /// 组合键（如 Command+V）。修饰键（usage >= 0xE0）会**先单独按下**，再发
-    /// "修饰键 + 主键"，最后全松——和 text_reports 里 Shift 的规矩同源：合成一条
-    /// 报告发过去，iOS 只会当主键被按了，修饰没生效。
+    /// 组合键（如 Command+V）：先单独发送 0xE0..0xE7 范围内的修饰键，
+    /// 再发送 usages 完整集合，等待 hold_ms 后全部松开。已有设备测试要求
+    /// 修饰键先进入按下状态，同时按下修饰键与主键不能保证组合效果。
     bool press_chord(uint64_t surface, const std::vector<uint16_t> &usages, int hold_ms,
                      std::string &err);
 
-    /// 往设备自带的键盘面上敲一段 ASCII。前提是有文本框正获得焦点——没有焦点时
-    /// 报告会照发不误但没有任何可见结果，所以"没生效"要先去查焦点。
+    /// 向设备自带键盘面逐条发送 text_reports() 生成的 ASCII 报告。
+    /// hold_ms > 0 时在每条报告后等待，包括修饰键和松键报告。
+    /// 文本目标须由调用方保持焦点；本函数不检查焦点，也不确认文本已被接收。
+    /// 不支持的字符被跳过，发送成功不表示原始字符串已完整输入。
     bool type_text(const std::string &text, int hold_ms, std::string &err);
 
 private:
@@ -178,20 +178,19 @@ inline constexpr uint64_t kButtonStateCanceled = 3;
 
 /// 硬件按键（home / 锁屏 / 音量 / 静音）。
 ///
-/// 走的是**另一条服务**：`com.apple.coredevice.hid.indigo` 的
-/// `remote.hid.button`。外壳与 universalhidservice 那批一样是
-/// `{messageType, featureIdentifier, payload}`，但 messageType 换成
-/// `IndigoButtonEvent`，payload 是 `{state, usagePage, usageCode}`。
-///
-/// indigo 上只有 button 这条路是通的：digitizer/keyboard/scroll 要 Apple 的
-/// Mercury 对端事件外壳，设备收到 dispatch 后立刻 "Resetting gesture state then
-/// canceling"，不进任何 handler。
+/// 使用 `com.apple.coredevice.hid.indigo` 的 `remote.hid.button` feature。
+/// 请求包含 `{messageType, featureIdentifier, payload}`，messageType 为
+/// `IndigoButtonEvent`，payload 为 `{state, usagePage, usageCode}`。
+/// 该 button 路径已有设备验证；不据此推定 indigo 的 digitizer、keyboard 或
+/// scroll 请求可用。连接由本对象独占，Device 必须比本对象活得更久。
 class Buttons {
 public:
     static std::unique_ptr<Buttons> open(scrctl::remote::Device &device, std::string &err,
                                          bool verbose = false);
 
-    /// 按一次：DOWN -> 停 hold_ms -> UP。state 1=按下 2=抬起 3=取消。
+    /// 依次发送 DOWN 和 UP，hold_ms > 0 时在两条消息间等待。
+    /// state 1=按下、2=抬起、3=取消；本函数仅使用 DOWN/UP。
+    /// 返回值表示发送结果，不确认设备动作；中途失败不自动补发 UP。
     bool press(uint16_t usage_page, uint16_t usage_code, int hold_ms, std::string &err);
 
     [[nodiscard]] bool available() const { return conn_ != nullptr; }
