@@ -19,18 +19,15 @@ constexpr std::string_view kFeature = "com.apple.coredevice.feature.launchapplic
 constexpr std::string_view kAction = "com.apple.coredevice.action.launch";
 constexpr int kSigKill = 9;
 
-/// 空字典的 plist。`platformSpecificOptions` 要的是 Data，而零长 Data 会被拒
-/// （"Cannot parse a NULL or zero-length data"），所以哪怕内容什么都没有，也得是
-/// 一段解析得动的 plist。
+/// 将空字典序列化为 plist 字节，作为 platformSpecificOptions 的 Data。
+/// 没有平台选项时仍需可解析的 plist；设备曾拒绝零长度 Data。
 std::vector<uint8_t> empty_plist() {
     const std::string text = plist::write(plist::Value::Dict());
     return {text.begin(), text.end()};
 }
 
-/// 幂等的读类 RPC：撞上**传输类**失败就换一条连接再问一次。
-/// 依据是 Rsd.h 里那条实测——约 15% 的服务连接会撞一次超时/帧错位/对端关闭，而换一条
-/// 连接重发往往就成了；设备真答了"不同意"（DeviceError）的话重试只会再拿到同一句话，
-/// 所以那种直接交回去。
+/// 对可重复的查询 RPC，仅在 TransportError 时重试，最多三次。
+/// feature_call 每次创建新服务连接；设备明确返回 DeviceError 时直接交给调用方。
 CallResult ask_idempotent(Device &device, std::string_view feature_identifier,
                           const xpc::Value &input, xpc::Value &output, std::string &err,
                           bool verbose, int timeout_ms) {
@@ -44,8 +41,8 @@ CallResult ask_idempotent(Device &device, std::string_view feature_identifier,
     return CallResult::TransportError;
 }
 
-/// file:///private/var/... -> /private/var/...
-/// 设备的 executableURL 带 scheme，而 app 列表里的 path 不带，不对齐就永远匹配不上。
+/// 移除 executableURL 的 file:// 前缀，以便与应用列表中不带 scheme 的路径比较。
+/// 这里只移除前缀，不做 URL 解码或其他路径规范化。
 std::string strip_file_scheme(std::string_view url) {
     constexpr std::string_view kPrefix = "file://";
     if (url.starts_with(kPrefix)) {
@@ -57,8 +54,8 @@ std::string strip_file_scheme(std::string_view url) {
 }  // namespace
 
 xpc::Value App::build_launch(const std::string &bundle_id, bool terminate_existing) {
-    // bundle id 套一层 _0：这是 XPC 里"带关联值的枚举 case"的通用形状，设备侧
-    // applicationSpecifier 就是一个枚举（bundleIdentifier / url / path 三选一）。
+    // applicationSpecifier 使用 bundleIdentifier 枚举分支，关联的 bundle ID 字符串
+    // 编码在 _0 下。specifier 与 options 是顶层并列字段。
     auto which = xpc::make_dict();
     xpc::dict_set(which, "_0", xpc::make_string(bundle_id));
     auto specifier = xpc::make_dict();
@@ -86,16 +83,14 @@ xpc::Value App::build_launch(const std::string &bundle_id, bool terminate_existi
 bool App::launch(Device &device, const std::string &bundle_id, std::string &err,
                  bool terminate_existing, bool verbose) {
     const auto input = build_launch(bundle_id, terminate_existing);
-    // 刚被杀掉的 App 立刻再起，设备有概率回 code 10004 "The process identifier of the
-    // launched application could not be determined"。这不是"参数不对"那类语义拒绝
-    // （重试同一件事不会变好），而是**进程还没死干净**：实测停掉之后隔 2 秒起必成，
-    // 立刻起则时好时坏（成功那次要 385ms，平时 50ms）。所以按可重试处理。
-    // 判据只能从回信文字里认：feature() 把设备侧的 code 折进了 err 字符串。
+    // 历史测试中，终止后立即启动曾返回 10004（未取得新进程标识），稍后重试成功。
+    // 当前据此提供有限重试，但错误码本身不能证明旧进程尚未退出。
+    // feature() 将设备错误汇总到 err 字符串，因此这里用 10004 文本作为重试判据。
+    // 设备样本与完整失败回复见 docs/coredevice.md 第 14 节。
     constexpr int kAttempts = 4;
     for (int attempt = 1; attempt <= kAttempts; ++attempt) {
         xpc::Value output;
-        // 60 秒：这条 RPC 在设备上要做杀旧实例 + 起新实例 + 等进程报告，10 秒的默认值
-        // 不够（同一台设备上 listapps 那种调用就会顶到几十秒）。
+        // 单次启动 RPC 使用 60 秒超时，包含按选项终止旧实例、启动及获取进程标识。
         if (device.feature(kService, kFeature, kAction, input, output, err, verbose, 60000)) {
             return true;
         }
@@ -119,8 +114,7 @@ std::vector<int64_t> App::matching_pids(const xpc::Value &processes,
     for (const auto &token : tokens->array) {
         const std::string exe =
             strip_file_scheme(token.at("executableURL").at("relative").as_string_or(""));
-        // 前缀要连上那个 '/'：/…/Foo.app 不能把 /…/Foo.app2 也算进来，
-        // 而进程的可执行文件一定在 App 目录里面（…/Foo.app/Foo）。
+        // 将 '/' 纳入前缀匹配，限定安装目录边界，避免 Foo.app 同时匹配 Foo.app2。
         if (exe.starts_with(app_path + "/")) {
             out.push_back(token.at("processIdentifier").as_int_or(0));
         }
@@ -140,11 +134,11 @@ bool App::list(Device &device, std::vector<Entry> &out, std::string &err, bool v
                           "includeAppGroupIdentifiers"}) {
         xpc::dict_set(flags, k, xpc::make_bool(true));
     }
-    // 要容器访问得持有权力字符串，开着大概率是直接失败而不是变慢。
+    // 本次列表请求不要求容器访问授权。
     xpc::dict_set(flags, "requireContainerAccess", xpc::make_bool(false));
 
-    // sideChannel 是客户端自己生成的 UUID，设备在每条回信里原样带回来。这里不校验
-    // 它：一条连接上只跑这一条流，串不了。
+    // 用随机的 16 字节值作为 sideChannel 的 XPC UUID。当前连接只承载这一条列表流，
+    // 本实现没有额外校验回复中的 sideChannel 标识。
     std::vector<uint8_t> side(16);
     for (auto &b : side) {
         b = static_cast<uint8_t>(std::random_device {}());
@@ -155,7 +149,7 @@ bool App::list(Device &device, std::vector<Entry> &out, std::string &err, bool v
     xpc::dict_set(input, "actualInput", std::move(flags));
     xpc::dict_set(input, "streamProxy", std::move(proxy));
 
-    // 整条流失败时重开一条连接重跑一遍（同样是"传输类失败换连接就好"那一类）。
+    // 仅对已连接后的流式调用 TransportError 重试，重新连接失败则直接返回。
     const auto collect = [&out](const xpc::Value &one) {
         Entry e {
             .bundle_id = one.at("bundleIdentifier").as_string_or(""),
@@ -177,7 +171,7 @@ bool App::list(Device &device, std::vector<Entry> &out, std::string &err, bool v
         if (got != CallResult::TransportError || attempt == 3) {
             return got == CallResult::Ok;
         }
-        out.clear();  // 上一条连接可能已经推了一半
+        out.clear();  // 舍弃上一轮的部分结果，避免重新拉取时重复追加。
     }
     return false;
 }
@@ -200,8 +194,7 @@ bool App::stop(Device &device, const std::string &bundle_id, std::string &err, b
     }
     const auto pids = matching_pids(procs, it->path);
     if (pids.empty()) {
-        // App 根本没在跑。Android 的 `am force-stop` 在这种情况下也是成功的，
-        // 所以这里返回真；调用方的意图（"它别在跑"）已经成立。
+        // 应用已安装，但当前进程表没有匹配项，无需发送信号即可返回成功。
         std::printf(SCRCTL_TR("stop_app(%s): app is not running\n"), bundle_id.c_str());
         return true;
     }
@@ -211,9 +204,8 @@ bool App::stop(Device &device, const std::string &bundle_id, std::string &err, b
         xpc::dict_set(process, "processIdentifier", xpc::make_int64(pid));
         xpc::dict_set(input, "process", std::move(process));
         xpc::dict_set(input, "signal", xpc::make_int64(kSigKill));
-        // 这条 RPC 实测会撞"等设备回信超时"——那是**传输类**失败（约 15% 的服务连接
-        // 会撞一次），不是设备拒绝，而每次 feature_call 都开新连接，正是它的解法。
-        // SIGKILL 重复发是幂等的，所以放心重试。
+        // 传输失败不能确认设备是否已执行信号请求；当前对这类失败最多尝试三次，
+        // 每次使用新服务连接。设备明确拒绝时立即失败，不继续重试。
         bool killed = false;
         for (int attempt = 1; attempt <= 3 && !killed; ++attempt) {
             xpc::Value output;
@@ -234,16 +226,15 @@ bool App::stop(Device &device, const std::string &bundle_id, std::string &err, b
         }
     }
 
-    // **等它真的没了再返回。** SIGKILL 的 RPC 是"发出去了"，不是"进程已经死了"，
-    // 而紧接着的 launchapplication 撞上未死干净的旧进程会回 code 10004 且**真的起不
-    // 来**（实测停完立刻起，连试 4 次 500ms 间隔全败；等进程表干净之后再起就一次成）。
-    // 让 stop 同步，调用方就不必自己去猜要等多久。
+    // 信号请求成功不等于进程已退出。轮询进程表，尽量避免紧接着启动时遇到状态竞态。
+    // 最多查询 40 次，查询之间等待 250 ms；每次 RPC 仍有各自的超时和传输重试。
+    // 查询失败或次数用尽时，下面仍按信号已发送返回成功，并提示未确认退出。
     for (int wait = 0; wait < 40; ++wait) {
         xpc::Value again;
         std::string perr;
         if (ask_idempotent(device, "com.apple.coredevice.feature.listprocesses",
                            xpc::make_dict(), again, perr, verbose, 30000) != CallResult::Ok) {
-            break;  // 问不动就不再等，信号已经发出去了
+            break;  // 查询失败后停止等待；此前已成功发送信号请求。
         }
         if (matching_pids(again, it->path).empty()) {
             return true;

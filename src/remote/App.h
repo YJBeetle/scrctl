@@ -8,65 +8,64 @@ namespace scrctl::remote {
 
 class Device;
 
-/// 启停设备上的 App。
+/// 设备上的应用启动、停止与列表接口。
 ///
-/// `appservice` 吃标准 CoreDevice 外壳（feature + action），但请求体的形状有两处
-/// 反直觉，都是"照着字段名猜一定猜错"的地方：
+/// `appservice` 使用 CoreDevice 的 feature / action 请求结构。启动请求中的
+/// 应用标识和平台选项有特定的嵌套与类型要求：
 ///
 /// ```text
 /// { applicationSpecifier: { bundleIdentifier: { _0: "com.apple.mobilesafari" } },
 ///   options: { arguments: [], environmentVariables: {},
 ///              standardIOUsesPseudoterminals: true, startStopped: false,
 ///              terminateExisting: true, user: { shortName: "mobile" },
-///              platformSpecificOptions: <Data: 一段 plist> },
+///              platformSpecificOptions: <Data: 序列化的 plist> },
 ///   standardIOIdentifiers: {} }
 /// ```
 ///
-/// 1. **bundle id 在顶层的 `applicationSpecifier` 里，不在 `options` 里**，而且它
-///    自己还要再套一层 `_0`（XPC 里带关联值的枚举 case 就是这个形状）。之前把
-///    bundle id / url 往 `options` 里塞，设备一律回
-///    "A URL to open must be specified in the launch options."——因为一个 specifier
-///    都没认出来时，它退回到"按 URL 启动"那条分支去要 url。
-/// 2. **`platformSpecificOptions` 不能是零长 Data**：设备回 "Cannot parse a NULL or
-///    zero-length data"。它是一段 plist（这里给空字典的 plist），不是字符串。
+/// 1. bundle ID 放在顶层 `applicationSpecifier.bundleIdentifier._0`。
+///    `_0` 是 bundleIdentifier 枚举分支关联值的编码，不能将应用标识移入 options。
+///    历史测试中，错误的嵌套曾得到要求提供 URL 的回复；该回复不足以说明应改用 URL。
+/// 2. `platformSpecificOptions` 使用 Data 携带可解析的 plist。设备曾拒绝零长度
+///    Data；没有额外平台选项时仍发送空字典的 plist，而不是空字节或 XPC 字符串。
+///
+/// 字段验证与历史设备回复见 docs/coredevice.md 第 14 节。
 class App {
 public:
-    /// 列表里的一项。`path` 是 App 在设备上的安装目录，`stop()` 拿它去对进程的可执行
-    /// 文件路径。
+    /// 应用列表项。`path` 是设备上的安装目录，stop() 用它匹配进程的可执行文件路径。
     struct Entry {
         std::string bundle_id;
         std::string path;
         std::string name;
     };
 
-    /// 启动一个 App。`terminate_existing=true` 会先把在跑的实例杀掉再冷启动——想要
-    /// "从这个 App 的初始状态开始"时才用。代价是每次都制造一次"刚杀完就起"的竞态
-    /// （实测那样有概率回 code 10004 且 App 真的没起来；launch() 内部会重试，但重试
-    /// 换来的是几百毫秒的抖动）。默认 false：只唤起、不动在跑的实例。
+    /// 启动应用。terminate_existing=true 请求终止已有实例后重新启动；false 允许
+    /// 直接唤起已有实例。此 API 的默认值为 true；命令行 --start-app 默认显式传入
+    /// false，只有 + 前缀才请求终止重启，两者的默认行为不同。
+    /// 终止后立即启动曾出现错误 10004，当前实现对该错误最多尝试四次，间隔 500 ms。
     static bool launch(Device &device, const std::string &bundle_id, std::string &err,
                        bool terminate_existing = true, bool verbose = false);
 
-    /// 杀掉一个 App（SIGKILL 给它的所有进程）。App 没在跑时也算成功——Android 那边
-    /// `am force-stop` 就是这个语义，调用方不该因为"本来就没开"收到失败。
+    /// 按应用安装目录匹配进程，并逐个发送 SIGKILL。应用已安装但没有匹配进程时
+    /// 返回成功。信号发送后尽力轮询退出状态；查询失败或轮询次数用尽时仍可能返回
+    /// 成功并提示未确认退出，因此返回 true 不保证已观察到所有匹配进程消失。
     static bool stop(Device &device, const std::string &bundle_id, std::string &err,
                      bool verbose = false);
 
-    /// 装上/系统自带的 App 列表。
+    /// 列出设备上已安装的应用，包括系统应用。
     ///
-    /// 走的是 **streamapplist**，不是 listapps：后者把 239 个 App 塞进一个回信，
-    /// 而大回复正是我们传不稳的那一类（实测任一 include* 为 true 时 60 秒不回话，
-    /// 而全部为 false 时秒回一个空列表——所以卡住的从来不是那个开关，是尺寸）。
+    /// 使用 streamapplist 逐批接收列表。历史 listapps 测试出现过大回复超时，
+    /// 因此设备未声明 streamapplist 时直接失败，不回退到 listapps。
+    /// out 逐批追加；传输重试前会清空，最终失败时可能保留已收到的部分结果。
+    /// 历史样本和流式回复结构见 docs/coredevice.md 第 14 节。
     static bool list(Device &device, std::vector<Entry> &out, std::string &err,
                      bool verbose = false);
 
-    /// 构造 launchapplication 的 input。拆出来是为了能离线自检：这套键值的任何
-    /// 一处写错，设备的表现都不是"报错"而是退到别的分支给一句误导的话。
+    /// 构造 launchapplication 的 input，供启动调用及离线字段、嵌套结构检查复用。
     [[nodiscard]] static xpc::Value build_launch(const std::string &bundle_id,
                                                  bool terminate_existing);
 
-    /// 从 listprocesses 的回信里挑出安装目录落在 `app_path` 下的进程号。
-    /// 拆出来是为了能离线钉住：这条匹配写错的表现是"stop 返回真而 App 还活着"，
-    /// 线上看不出来。
+    /// 从 listprocesses 回复中选择可执行文件位于 app_path 目录下的进程号。
+    /// 匹配包含目录分隔符边界，避免将 Foo.app2 误归入 Foo.app；可独立离线检查。
     static std::vector<int64_t> matching_pids(const xpc::Value &processes,
                                               const std::string &app_path);
 };
