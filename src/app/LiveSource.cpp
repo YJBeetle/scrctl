@@ -69,7 +69,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     }
 
     // 初次查询只确定启动时的朝向；后续变化由常驻显示订阅推送。
-    // 订阅失败仍可镜像，但朝向保持初次查询结果，无法自动跟随旋转。
+    // 订阅失败仍可镜像，视频保留初次查询结果；截图输入必须有持续的朝向来源。
     if (watch_display) {
         std::string werr;
         watcher_ = scrctl::remote::DisplayWatcher::start(*device_, display_id_, werr, false);
@@ -250,6 +250,11 @@ FrameGeometry LiveSource::sample_geometry(bool screenshot) const {
             geometry.display_h = st.height;
             geometry.panel_degrees = scrctl::app::parse_orientation_degrees(st.orientation);
         }
+    }
+    if (screenshot && (watcher_ == nullptr || !watcher_->alive())) {
+        // 已停止的订阅保留最后快照，但设备可能在此后旋转。不能把旧角度当成
+        // 当前 PNG 的方向；按未知几何处理，由 Presenter 释放触点并暂停新输入。
+        geometry.panel_degrees.reset();
     }
     return geometry;
 }

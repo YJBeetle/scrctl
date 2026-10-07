@@ -87,7 +87,8 @@ class LiveSource final : public FrameSource {
     uint64_t display_id_ = 0;
     std::string display_name_;
 
-    /// 显示订阅持有 Device 引用，需先于 Device 析构。订阅失败后沿用启动朝向。
+    /// 显示订阅持有 Device 引用，需先于 Device 析构。订阅不可用时视频沿用
+    /// 最后已知朝向；截图方向标为未知，避免用过期角度发送触摸。
     std::unique_ptr<scrctl::remote::DisplayWatcher> watcher_;
 
     std::unique_ptr<scrctl::hid::Service> hid_;
