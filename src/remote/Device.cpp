@@ -140,12 +140,12 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
         err = SCRCTL_TR("Failed to establish packet tunnel: ") + err;
         return std::nullopt;
     }
-    // peer UUID 用配对记录里的 HostID：设备上每条隧道只保留一个 RSD 连接，而且
-    // 会记住被它换掉的那个 peer，UUID 一变就把整台机器重新 attach、关掉所有已
-    // 公布的服务端口。所以这个值必须跨进程、跨重启稳定。
-    auto uuid = parse_uuid_text(dev->lockdown_->host_id());
+    // RSD 身份必须跨进程和重启稳定。本轮 Windows AMDS 记录的 HostID 是
+    // 27 字符的不透明标识，不能直接当 UUID 解析；仍从原配对身份确定性生成。
+    // 已是 UUID 的 HostID 保持原值，避免改变已有 macOS / Linux 会话的身份。
+    auto uuid = peer_uuid_from_host_id(dev->lockdown_->host_id());
     if (!uuid) {
-        err = SCRCTL_TR("Pairing HostID is not a valid UUID; cannot construct a stable peer identity");
+        err = SCRCTL_TR("Cannot construct a stable peer identity from pairing HostID");
         return std::nullopt;
     }
     PeerIdentity identity;

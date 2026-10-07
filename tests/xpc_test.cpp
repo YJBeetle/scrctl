@@ -471,6 +471,27 @@ void test_uuid_text_bounds() {
     check(v.has_value() && (*v)[0] == 0x6e && (*v)[15] == 0x78, "小写也认，字节序从高位起");
 }
 
+void test_pairing_peer_uuid() {
+    using scrctl::remote::parse_uuid_text;
+    using scrctl::remote::peer_uuid_from_host_id;
+    const auto original = parse_uuid_text("6EB71A28-1234-5678-9ABC-DEF012345678");
+    check(peer_uuid_from_host_id("6EB71A28-1234-5678-9ABC-DEF012345678") == original,
+          "已有 UUID 配对身份保持原字节");
+    check(peer_uuid_from_host_id("6eb71a28123456789abcdef012345678") == original,
+          "UUID 文本大小写与连字符不改变身份");
+    // 独立 Python uuid.uuid5(uuid.NAMESPACE_URL, prefix + host_id) 生成的向量。
+    // 使用人工标识，测试夹具不包含真机配对身份或密钥。
+    constexpr std::string_view opaque_host = "0123456789abcdef0123456789a";
+    const auto expected = parse_uuid_text("bf18fb74-41b0-59e6-aff8-d8d752019b08");
+    const auto derived = peer_uuid_from_host_id(opaque_host);
+    check(derived == expected, "27 字符 HostID 与独立 UUIDv5 向量一致");
+    check(peer_uuid_from_host_id(std::string(opaque_host)) == derived,
+          "同一不透明 HostID 重读后身份稳定");
+    check(peer_uuid_from_host_id("0123456789abcdef0123456789b") != derived,
+          "不同 HostID 不复用同一身份");
+    check(!peer_uuid_from_host_id(""), "缺失配对身份不能生成 UUID");
+}
+
 }  // namespace
 
 int main() {
@@ -482,6 +503,7 @@ int main() {
     test_describe();
     test_truncation_is_safe();
     test_uuid_text_bounds();
+    test_pairing_peer_uuid();
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;
 }

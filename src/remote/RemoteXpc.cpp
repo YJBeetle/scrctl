@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string_view>
+#include <openssl/evp.h>
 
 namespace scrctl::remote {
 namespace {
@@ -104,6 +105,34 @@ std::optional<std::array<uint8_t, 16>> parse_uuid_text(std::string_view text) {
         return std::nullopt;
     }
     return out;
+}
+
+std::optional<std::array<uint8_t, 16>> peer_uuid_from_host_id(std::string_view host_id) {
+    if (host_id.empty()) return std::nullopt;
+    if (auto uuid = parse_uuid_text(host_id)) return uuid;
+
+    // UUIDv5 = SHA-1(namespace || name)，按 RFC 9562 设置版本和 variant。
+    // URL 命名空间与用途前缀共同定义这条映射，后续不能随意变更，否则会改变
+    // 已配对设备的 RSD 身份。SHA-1 仅用于名称映射，不用于认证或密钥派生。
+    constexpr std::array<uint8_t, 16> namespace_url{
+        0x6b, 0xa7, 0xb8, 0x11, 0x9d, 0xad, 0x11, 0xd1,
+        0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8};
+    constexpr std::string_view prefix = "scrctl:usbmux:HostID:";
+    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
+    std::array<uint8_t, EVP_MAX_MD_SIZE> digest{};
+    unsigned int length = 0;
+    if (!ctx || EVP_DigestInit_ex(ctx.get(), EVP_sha1(), nullptr) != 1 ||
+        EVP_DigestUpdate(ctx.get(), namespace_url.data(), namespace_url.size()) != 1 ||
+        EVP_DigestUpdate(ctx.get(), prefix.data(), prefix.size()) != 1 ||
+        EVP_DigestUpdate(ctx.get(), host_id.data(), host_id.size()) != 1 ||
+        EVP_DigestFinal_ex(ctx.get(), digest.data(), &length) != 1 || length != 20) {
+        return std::nullopt;
+    }
+    std::array<uint8_t, 16> uuid{};
+    std::copy_n(digest.begin(), uuid.size(), uuid.begin());
+    uuid[6] = static_cast<uint8_t>((uuid[6] & 0x0f) | 0x50);
+    uuid[8] = static_cast<uint8_t>((uuid[8] & 0x3f) | 0x80);
+    return uuid;
 }
 
 bool Channel::send_bytes(std::span<const uint8_t> data, std::string &err) {

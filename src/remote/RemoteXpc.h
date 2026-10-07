@@ -33,6 +33,11 @@ struct PeerIdentity {
 /// 允许连字符；不按平台 UUID 结构中的字段端序重排。
 [[nodiscard]] std::optional<std::array<uint8_t, 16>> parse_uuid_text(std::string_view text);
 
+/// USB 配对的 HostID 不一定是 UUID。已有 UUID 保持原值，其他非空身份按固定
+/// 命名空间生成 UUIDv5，保证同一配对记录在不同进程和平台上使用相同的 RSD 身份。
+/// 不修改传给 lockdown 的原始 HostID；空值或摘要计算失败时返回 nullopt。
+[[nodiscard]] std::optional<std::array<uint8_t, 16>> peer_uuid_from_host_id(std::string_view host_id);
+
 /// 一条 TCP 连接上的 RemoteXPC 通道，负责 HTTP/2 帧和 XPC 消息。
 /// 每个 DDI 服务在 RSD 中有独立端口，需要建立自己的连接并完成握手。
 /// ByteStream 由调用方持有，必须比 Channel 活得更久。

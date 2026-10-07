@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 03:30+0800\n"
+"POT-Creation-Date: 2026-10-07 10:45+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -822,7 +822,7 @@ msgstr ""
 msgid "Schedule requires at least one time"
 msgstr ""
 
-#: src/decode/AudioDecoder.h:52
+#: src/decode/AudioDecoder.h:49
 msgid ""
 "AAC-ELD decoding is unavailable on this platform. This build uses "
 "AudioToolbox on macOS; the tested native FFmpeg AAC decoder does not support "
@@ -869,17 +869,17 @@ msgstr ""
 msgid "Software decoder requires CPU frames; received format=%d %dx%d\n"
 msgstr ""
 
-#: src/decode/VideoToolboxDecoder.cpp:70
+#: src/decode/VideoToolboxDecoder.cpp:66
 #, c-format
 msgid "Failed to parse HEVC parameter sets: %d\n"
 msgstr ""
 
-#: src/decode/VideoToolboxDecoder.cpp:98
+#: src/decode/VideoToolboxDecoder.cpp:94
 #, c-format
 msgid "Failed to create VideoToolbox session: %d\n"
 msgstr ""
 
-#: src/decode/VideoToolboxDecoder.cpp:220
+#: src/decode/VideoToolboxDecoder.cpp:216
 #, c-format
 msgid ""
 "NAL size %zu exceeds the 2-byte length prefix; frame dropped. This stream "
@@ -906,8 +906,8 @@ msgstr ""
 msgid "Frame length too large: "
 msgstr ""
 
-#: src/http2/Framing.cpp:152 src/remote/RemoteXpc.cpp:455
-#: src/remote/RemoteXpc.cpp:541 src/xpc/XpcValue.cpp:649
+#: src/http2/Framing.cpp:152 src/remote/RemoteXpc.cpp:484
+#: src/remote/RemoteXpc.cpp:570 src/xpc/XpcValue.cpp:649
 msgid " bytes"
 msgstr ""
 
@@ -1069,10 +1069,10 @@ msgid "device session ended"
 msgstr ""
 
 #: src/media/FramePump.cpp:480 src/media/ScreenshotSource.cpp:72
-#: src/net/Stack.cpp:350 src/net/TcpStream.cpp:41 src/net/TcpStream.cpp:118
+#: src/net/Stack.cpp:355 src/net/TcpStream.cpp:41 src/net/TcpStream.cpp:118
 #: src/net/TcpStream.cpp:122 src/net/UdpSocket.cpp:104
 #: src/net/UdpSocket.cpp:130 src/remote/Rsd.cpp:232
-#: src/transport/Usbmux.cpp:168 src/wifi/RemotePairing.cpp:35
+#: src/transport/Socket.cpp:114 src/wifi/RemotePairing.cpp:35
 msgid ")"
 msgstr ""
 
@@ -1184,7 +1184,7 @@ msgid "Screenshot response missing image data"
 msgstr ""
 
 #: src/media/StreamSession.cpp:127 src/remote/App.cpp:226
-#: src/transport/TcpConnect.cpp:28
+#: src/transport/TcpConnect.cpp:27
 msgid ": "
 msgstr ""
 
@@ -1200,96 +1200,96 @@ msgstr ""
 msgid "getmediastreamserverstatus response missing sessions array"
 msgstr ""
 
-#: src/net/Stack.cpp:139
+#: src/net/Stack.cpp:144
 msgid ""
 "Cannot start tunnel stack: invalid address or stack already started/stopped"
 msgstr ""
 
-#: src/net/Stack.cpp:142
+#: src/net/Stack.cpp:147
 msgid "Tunnel MTU is below the IPv6 minimum"
 msgstr ""
 
-#: src/net/Stack.cpp:157
+#: src/net/Stack.cpp:162
 msgid "Failed to register lwIP tunnel interface"
 msgstr ""
 
-#: src/net/Stack.cpp:162
+#: src/net/Stack.cpp:167
 msgid "Failed to start tunnel thread: "
 msgstr ""
 
-#: src/net/Stack.cpp:182
+#: src/net/Stack.cpp:187
 msgid "Tunnel stopped"
 msgstr ""
 
-#: src/net/Stack.cpp:223
+#: src/net/Stack.cpp:228
 msgid "Tunnel stopped or send queue full"
 msgstr ""
 
-#: src/net/Stack.cpp:278
+#: src/net/Stack.cpp:283
 msgid "Tunnel processing failed: "
 msgstr ""
 
-#: src/net/Stack.cpp:283
+#: src/net/Stack.cpp:288
 msgid "Tunnel read failed"
 msgstr ""
 
-#: src/net/Stack.cpp:344
+#: src/net/Stack.cpp:349
 msgid "beyond source address scope"
 msgstr ""
 
-#: src/net/Stack.cpp:344
+#: src/net/Stack.cpp:349
 msgid "communication administratively prohibited"
 msgstr ""
 
-#: src/net/Stack.cpp:344
+#: src/net/Stack.cpp:349
 msgid "no route to destination"
 msgstr ""
 
-#: src/net/Stack.cpp:345
+#: src/net/Stack.cpp:350
 msgid "address unreachable"
 msgstr ""
 
-#: src/net/Stack.cpp:345
+#: src/net/Stack.cpp:350
 msgid "port unreachable"
 msgstr ""
 
-#: src/net/Stack.cpp:345
+#: src/net/Stack.cpp:350
 msgid "source address failed ingress/egress policy"
 msgstr ""
 
-#: src/net/Stack.cpp:346
+#: src/net/Stack.cpp:351
 msgid "route to destination rejected"
 msgstr ""
 
-#: src/net/Stack.cpp:350
+#: src/net/Stack.cpp:355
 msgid "("
 msgstr ""
 
-#: src/net/Stack.cpp:352
+#: src/net/Stack.cpp:357
 msgid " (packet too big)"
 msgstr ""
 
-#: src/net/Stack.cpp:354
+#: src/net/Stack.cpp:359
 msgid " (hop limit exceeded)"
 msgstr ""
 
-#: src/net/Stack.cpp:356
+#: src/net/Stack.cpp:361
 msgid " (parameter problem)"
 msgstr ""
 
-#: src/net/Stack.cpp:358
+#: src/net/Stack.cpp:363
 msgid " (echo reply)"
 msgstr ""
 
-#: src/net/Stack.cpp:358
+#: src/net/Stack.cpp:363
 msgid " (echo request)"
 msgstr ""
 
-#: src/net/Stack.cpp:372
+#: src/net/Stack.cpp:377
 msgid " inner nh="
 msgstr ""
 
-#: src/net/Stack.cpp:376
+#: src/net/Stack.cpp:381
 msgid " ports "
 msgstr ""
 
@@ -1648,7 +1648,7 @@ msgid "Start CoreDeviceProxy"
 msgstr ""
 
 #: src/remote/Device.cpp:132 src/remote/Rsd.cpp:168 src/remote/Rsd.cpp:378
-#: src/transport/Usbmux.cpp:261 src/wifi/PairRecord.cpp:285
+#: src/transport/Usbmux.cpp:92 src/wifi/PairRecord.cpp:305
 msgid " failed: "
 msgstr ""
 
@@ -1665,8 +1665,7 @@ msgid "Failed to establish packet tunnel: "
 msgstr ""
 
 #: src/remote/Device.cpp:148
-msgid ""
-"Pairing HostID is not a valid UUID; cannot construct a stable peer identity"
+msgid "Cannot construct a stable peer identity from pairing HostID"
 msgstr ""
 
 #: src/remote/Device.cpp:154 src/remote/Device.cpp:164
@@ -1808,65 +1807,65 @@ msgstr ""
 msgid "Response has no plain-text representation: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:111
+#: src/remote/RemoteXpc.cpp:140
 #, c-format
 msgid "    >> %zu bytes: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:124
+#: src/remote/RemoteXpc.cpp:153
 msgid "Failed to send HTTP/2 preface: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:132
+#: src/remote/RemoteXpc.cpp:161
 msgid "Failed to send SETTINGS: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:138
+#: src/remote/RemoteXpc.cpp:167
 msgid "Failed to send WINDOW_UPDATE: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:146
+#: src/remote/RemoteXpc.cpp:175
 msgid "Failed to send primary channel HEADERS: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:152
+#: src/remote/RemoteXpc.cpp:181
 msgid "Failed to send first frame: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:157
+#: src/remote/RemoteXpc.cpp:186
 msgid "Failed to send reply channel HEADERS: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:163
+#: src/remote/RemoteXpc.cpp:192
 msgid "Failed to send terminating frame: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:168
+#: src/remote/RemoteXpc.cpp:197
 msgid "Failed to send INIT_HANDSHAKE frame: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:177
+#: src/remote/RemoteXpc.cpp:206
 msgid "Timed out waiting for device SETTINGS"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:181
+#: src/remote/RemoteXpc.cpp:210
 msgid "Disconnected while waiting for device SETTINGS: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:192
+#: src/remote/RemoteXpc.cpp:221
 msgid "Failed to send RemoteXPC identity: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:197
+#: src/remote/RemoteXpc.cpp:226
 msgid "Failed to read peer_info: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:217 src/remote/RemoteXpc.cpp:482
-#: src/remote/RemoteXpc.cpp:636
+#: src/remote/RemoteXpc.cpp:246 src/remote/RemoteXpc.cpp:511
+#: src/remote/RemoteXpc.cpp:665
 msgid "Connection terminated"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:244
+#: src/remote/RemoteXpc.cpp:273
 #, c-format
 msgid ""
 "    HTTP/2 parse failed: %s; buffered %zu bytes, stream offset %llu (total "
@@ -1874,95 +1873,95 @@ msgid ""
 "      "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:298
+#: src/remote/RemoteXpc.cpp:327
 #, c-format
 msgid "    HTTP/2 input dump -> %s\n"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:358
+#: src/remote/RemoteXpc.cpp:387
 msgid "PING payload shorter than 8 bytes"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:374
+#: src/remote/RemoteXpc.cpp:403
 msgid "Device sent GOAWAY "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:387
+#: src/remote/RemoteXpc.cpp:416
 msgid "Primary channel reset: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:409
+#: src/remote/RemoteXpc.cpp:438
 msgid "Device set END_STREAM on primary channel; connection ended"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:425
+#: src/remote/RemoteXpc.cpp:454
 msgid "Failed to replenish connection receive window: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:434
+#: src/remote/RemoteXpc.cpp:463
 msgid "Failed to replenish stream receive window: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:454
+#: src/remote/RemoteXpc.cpp:483
 msgid "Peer did not replenish flow-control window; sent "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:459
+#: src/remote/RemoteXpc.cpp:488
 msgid "Disconnected while waiting for flow-control window: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:469
+#: src/remote/RemoteXpc.cpp:498
 msgid "Failed to send DATA: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:488
+#: src/remote/RemoteXpc.cpp:517
 msgid "XPC encoding failed (depth or length limit exceeded)"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:530
+#: src/remote/RemoteXpc.cpp:559
 msgid "Failed to accept file stream: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:540
+#: src/remote/RemoteXpc.cpp:569
 msgid " has received "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:540
+#: src/remote/RemoteXpc.cpp:569
 msgid "File receive timed out: stream "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:548
+#: src/remote/RemoteXpc.cpp:577
 msgid "Disconnected while receiving file: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:574
+#: src/remote/RemoteXpc.cpp:603
 #, c-format
 msgid "    Receiving file: %llu bytes on stream %u\n"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:593
+#: src/remote/RemoteXpc.cpp:622
 msgid " contains malformed message: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:593
+#: src/remote/RemoteXpc.cpp:622
 msgid "Stream "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:600
+#: src/remote/RemoteXpc.cpp:629
 #, c-format
 msgid "    Stream %u message incomplete: %s\n"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:608
+#: src/remote/RemoteXpc.cpp:637
 #, c-format
 msgid "    => stream %u id=%llu %s\n"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:632
+#: src/remote/RemoteXpc.cpp:661
 msgid "Timed out waiting for device reply"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:645
+#: src/remote/RemoteXpc.cpp:674
 msgid "Disconnected while waiting for device reply: "
 msgstr ""
 
@@ -1981,7 +1980,7 @@ msgstr ""
 msgid " port "
 msgstr ""
 
-#: src/remote/Rsd.cpp:168 src/transport/Usbmux.cpp:261
+#: src/remote/Rsd.cpp:168 src/transport/Usbmux.cpp:92
 msgid "Connect to "
 msgstr ""
 
@@ -2101,7 +2100,7 @@ msgstr ""
 msgid "Failed to read TLS header"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:44 src/transport/Usbmux.cpp:227
+#: src/transport/Lockdown.cpp:44 src/transport/Socket.cpp:185
 msgid "Invalid lockdown frame length: "
 msgstr ""
 
@@ -2133,96 +2132,132 @@ msgstr ""
 msgid "StartService response missing Port"
 msgstr ""
 
-#: src/transport/TcpConnect.cpp:28
+#: src/transport/Socket.cpp:79
+msgid "send failed: "
+msgstr ""
+
+#: src/transport/Socket.cpp:83
+msgid "Peer closed write direction"
+msgstr ""
+
+#: src/transport/Socket.cpp:106
+msgid "Read timed out (no bytes before deadline)"
+msgstr ""
+
+#: src/transport/Socket.cpp:109
+msgid "recv failed: "
+msgstr ""
+
+#: src/transport/Socket.cpp:113
+msgid "Peer closed (received only "
+msgstr ""
+
+#: src/transport/Socket.cpp:132
+msgid "Failed to set read timeout: "
+msgstr ""
+
+#: src/transport/Socket.cpp:153
+msgid "Socket closed"
+msgstr ""
+
+#: src/transport/Socket.cpp:166
+msgid "Wait timed out"
+msgstr ""
+
+#: src/transport/Socket.cpp:171
+msgid "poll failed: "
+msgstr ""
+
+#: src/transport/TcpConnect.cpp:27
 msgid "Failed to resolve address "
 msgstr ""
 
-#: src/transport/TcpConnect.cpp:28
+#: src/transport/TcpConnect.cpp:27
 msgid "no results"
 msgstr ""
 
-#: src/transport/TcpConnect.cpp:49
+#: src/transport/TcpConnect.cpp:55
 msgid "Failed to enable nonblocking mode: "
 msgstr ""
 
-#: src/transport/TcpConnect.cpp:73
+#: src/transport/TcpConnect.cpp:78
 msgid "Connection timed out"
 msgstr ""
 
-#: src/transport/TcpConnect.cpp:74
+#: src/transport/TcpConnect.cpp:79
 msgid "Failed to wait for connection: "
 msgstr ""
 
-#: src/transport/TcpConnect.cpp:86
+#: src/transport/TcpConnect.cpp:96
 msgid "Failed to restore blocking mode: "
 msgstr ""
 
-#: src/transport/TcpConnect.cpp:91
+#: src/transport/TcpConnect.cpp:101
 msgid "Cannot connect to "
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:32 src/transport/TlsChannel.cpp:46
+#: src/transport/TlsChannel.cpp:33 src/transport/TlsChannel.cpp:47
 msgid "BIO_new_mem_buf failed"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:38
+#: src/transport/TlsChannel.cpp:39
 msgid "Failed to parse certificate PEM"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:52
+#: src/transport/TlsChannel.cpp:53
 msgid "Failed to parse private key PEM"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:167 src/transport/TlsChannel.cpp:243
+#: src/transport/TlsChannel.cpp:148 src/transport/TlsChannel.cpp:225
 msgid "SSL_CTX_new failed"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:180
+#: src/transport/TlsChannel.cpp:161
 msgid "Failed to add root certificate"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:204
+#: src/transport/TlsChannel.cpp:185
 msgid "Failed to load client certificate"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:207
+#: src/transport/TlsChannel.cpp:188
 msgid "Failed to load client private key"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:210
+#: src/transport/TlsChannel.cpp:191
 msgid "Client certificate does not match private key"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:215 src/transport/TlsChannel.cpp:260
+#: src/transport/TlsChannel.cpp:196 src/transport/TlsChannel.cpp:241
 msgid "SSL_new failed"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:220 src/transport/TlsChannel.cpp:266
+#: src/transport/TlsChannel.cpp:202 src/transport/TlsChannel.cpp:249
 msgid "SSL_set_fd failed"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:226
+#: src/transport/TlsChannel.cpp:208
 msgid "TLS handshake failed, ssl_err="
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:237
+#: src/transport/TlsChannel.cpp:219
 msgid "PSK is empty"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:250
+#: src/transport/TlsChannel.cpp:231
 msgid ""
 "TLS backend has no PSK cipher suite; use an OpenSSL build with PSK support"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:263
+#: src/transport/TlsChannel.cpp:244
 msgid "Failed to attach PSK to TLS channel"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:274
+#: src/transport/TlsChannel.cpp:256
 msgid "PSK handshake failed, ssl_err="
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:276
+#: src/transport/TlsChannel.cpp:258
 msgid ""
 " (device tunnel listener rejected the PSK; check pair-verify key derivation)"
 msgstr ""
@@ -2255,67 +2290,31 @@ msgstr ""
 msgid "Tunnel packet is not IPv6: version nibble="
 msgstr ""
 
-#: src/transport/Usbmux.cpp:135
-msgid "send failed: "
-msgstr ""
-
-#: src/transport/Usbmux.cpp:139
-msgid "Peer closed write direction"
-msgstr ""
-
-#: src/transport/Usbmux.cpp:161
-msgid "Read timed out (no bytes before deadline)"
-msgstr ""
-
-#: src/transport/Usbmux.cpp:164
-msgid "recv failed: "
-msgstr ""
-
-#: src/transport/Usbmux.cpp:168
-msgid "Peer closed (received only "
-msgstr ""
-
-#: src/transport/Usbmux.cpp:181
-msgid "Failed to set read timeout: "
-msgstr ""
-
-#: src/transport/Usbmux.cpp:194
-msgid "Socket closed"
-msgstr ""
-
-#: src/transport/Usbmux.cpp:208
-msgid "Wait timed out"
-msgstr ""
-
-#: src/transport/Usbmux.cpp:213
-msgid "poll failed: "
-msgstr ""
-
-#: src/transport/Usbmux.cpp:254
+#: src/transport/Usbmux.cpp:85
 msgid "socket failed: "
 msgstr ""
 
-#: src/transport/Usbmux.cpp:309
+#: src/transport/Usbmux.cpp:141
 msgid "Invalid mux frame length: "
 msgstr ""
 
-#: src/transport/Usbmux.cpp:322
+#: src/transport/Usbmux.cpp:154
 msgid "mux response is not a valid plist"
 msgstr ""
 
-#: src/transport/Usbmux.cpp:336
+#: src/transport/Usbmux.cpp:168
 msgid "ListDevices response missing DeviceList"
 msgstr ""
 
-#: src/transport/Usbmux.cpp:358
+#: src/transport/Usbmux.cpp:190
 msgid "Connect failed, usbmuxd returned Number="
 msgstr ""
 
-#: src/transport/Usbmux.cpp:379
+#: src/transport/Usbmux.cpp:211
 msgid "ReadPairRecord response missing PairRecordData (response "
 msgstr ""
 
-#: src/transport/Usbmux.cpp:380
+#: src/transport/Usbmux.cpp:212
 msgid "); device may not trust this computer yet"
 msgstr ""
 
@@ -2488,67 +2487,69 @@ msgstr ""
 msgid "OPACK decode: "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:37
+#: src/wifi/PairRecord.cpp:41
 msgid "Hex length must be even"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:57
+#: src/wifi/PairRecord.cpp:61
 msgid "Invalid hex character"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:92
+#: src/wifi/PairRecord.cpp:101 src/wifi/PairRecordWindows.cpp:85
 msgid "Cannot open temporary file "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:97
+#: src/wifi/PairRecord.cpp:106 src/wifi/PairRecord.cpp:257
+#: src/wifi/PairRecordWindows.cpp:44
 msgid "Failed to set record file permissions"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:105
+#: src/wifi/PairRecord.cpp:114 src/wifi/PairRecordWindows.cpp:74
+#: src/wifi/PairRecordWindows.cpp:96
 msgid "Incomplete record file write"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:110
+#: src/wifi/PairRecord.cpp:119 src/wifi/PairRecordWindows.cpp:104
 msgid "Rename failed"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:120
+#: src/wifi/PairRecord.cpp:130
 msgid "Cannot open "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:127
+#: src/wifi/PairRecord.cpp:137
 msgid "Pairing record file too large"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:172
+#: src/wifi/PairRecord.cpp:182
 msgid "Invalid scrctl pairing record header"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:179
+#: src/wifi/PairRecord.cpp:189
 msgid "Record line is not key=value"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:190
+#: src/wifi/PairRecord.cpp:200
 msgid " requires "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:190
+#: src/wifi/PairRecord.cpp:200
 msgid "Incorrect field length: "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:191
+#: src/wifi/PairRecord.cpp:201
 msgid " bytes; got "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:222
+#: src/wifi/PairRecord.cpp:232
 msgid "Record missing host_private_key"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:238
+#: src/wifi/PairRecord.cpp:247
 msgid "Failed to create directory "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:285
+#: src/wifi/PairRecord.cpp:305
 msgid "Reading directory "
 msgstr ""
 
