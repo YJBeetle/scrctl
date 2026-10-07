@@ -10,7 +10,7 @@
 namespace scrctl::app {
 
 bool FileSource::next(scrctl::Frame &out, int timeout_ms) {
-    (void)timeout_ms; // 文件不会"等不到"，只会有"读完了"
+    (void)timeout_ms; // 本地文件同步读取，不使用画面源的等待时限。
     std::string err;
     while (frames_.empty() && !done_ && !pump_bytes(err)) {
         if (!err.empty()) {

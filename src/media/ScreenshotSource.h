@@ -18,23 +18,21 @@ class ServiceConnection;
 
 namespace scrctl::media {
 
-/// 把 screencaptureservice 回的一张 PNG 解成 BGRA。libav 没编进来时返回 false 并在
-/// err 里说清——兜底路没有别的 PNG 解码后端可用。纯函数，离线可判（tests/media_test）。
+/// 将截图服务返回的 PNG 解码为 BGRA。当前使用 FFmpeg；未包含该后端的构建返回
+/// false 并说明原因。此函数不访问设备，可用 media_test 离线验证。
 bool decode_png_bgra(const std::vector<uint8_t> &png, scrctl::Frame &out, std::string &err);
 
-/// 兜底镜像源：媒体流被设备按版本拒（iOS 27 以下，code 9021）时，轮询截图当画面。
+/// 截图轮询画面源，用于显式截图模式或媒体流不可用时的降级。
 ///
-/// 实测 iPadOS 18.7.8 上一次截图 RPC 约 0.45~0.5 秒（10 张 5.6 秒含建会话），所以这条
-/// 路的上限就是 2 fps 上下：它是"能看、能操作"，不是"能看视频"。两个几何上的好处让它
-/// 比实时流简单：截图的像素尺寸**就是**可见区尺寸（没有 HEVC 的 CU 对齐填充），而且
-/// 截图本身已按界面方向摆正——所以这条源报的朝向恒为 0，不需要 displayinfoupdates。
+/// 已测 iPadOS 18.7.8 的截图 RPC 约 0.45~0.5 秒，10 张含建连耗时 5.6 秒；刷新率受
+/// 设备与连接耗时限制，不保证固定帧率。已测截图直接覆盖可见区，并按界面朝向摆正，
+/// 不包含 HEVC 对齐填充，因此应用以零额外旋转显示，不依赖显示变化订阅。
 class ScreenshotSource {
 public:
-    /// 目录里没有 screencaptureservice、连不上、或第一张截图就拿不到时返回 nullptr。
+    /// 服务缺失、连接失败或同步首帧失败时返回 nullptr，并说明原因。
     ///
-    /// `capture_first`：起流就降级那条路传 true（默认）——兜底路连一张都拿不到时它就是
-    /// 空的，原因要直接交出去，而不是起个线程在里面默默失败。运行中降级那条路传 false：
-    /// 那次切换发生在渲染线程上，同步拿第一张会把窗口冻到一次截图 RPC 的上限。
+    /// capture_first=true 时，先同步取得并解码首张，再建立 worker，适用于首次启动。
+    /// 运行中在渲染线程切换时传 false，首帧由 worker 异步获取，避免窗口等待网络请求。
     static std::unique_ptr<ScreenshotSource> start(remote::Device &device, std::string &err,
                                                    bool capture_first = true);
     ~ScreenshotSource();
@@ -42,24 +40,19 @@ public:
     ScreenshotSource(const ScreenshotSource &) = delete;
     ScreenshotSource &operator=(const ScreenshotSource &) = delete;
 
-    /// 等一张比 `serial` 新的画面（serial 是进出参）。超时或被 request_stop 唤醒返回 false。
+    /// 等待比 serial 更新的画面，成功时复制画面并更新序号。超时或停止时没有更新则返回 false。
     bool latest(scrctl::Frame &out, uint64_t &serial, int timeout_ms);
 
-    /// 叫 worker 停下来，**不 join**：置标志 + 唤醒等待者就返回。
+    /// 请求 worker 停止并唤醒等待者，不等待线程退出。
     ///
-    /// 不提供会 join 的版本是有意的：调用点（切回实时流）在渲染线程上，而 worker 可能
-    /// 正卡在一次截图 RPC 里，join 会把窗口冻到 RPC 上限（kCaptureTimeoutMs）。join
-    /// 只发生在析构里，所以"退下来但先不销毁"的对象（产品的 retired_）能把这次等待
-    /// 挪出热路径——之后由 `worker_done()` + `app::reap_finished` 逐步回收。
-    /// worker 最迟在一次 RPC 结束后退出，期间它仍然只用 `device_` 与本对象的成员——
-    /// 因此**析构必须比它引用的 Device 先发生**。
+    /// worker 可能仍在建连、截图 RPC、解码或失败退避中；本调用不取消这些步骤。
+    /// 调用方暂存退役对象，之后按 worker_done() 通过 app::reap_finished 回收，析构时
+    /// 才 join。截图源始终借用 Device，因此当前源和退役源都必须先于 Device 销毁。
     void request_stop();
 
-    /// worker 是否已经退出（`loop()` 的最后一行置位）。**只报信、不等**：切回实时流的
-    /// 那一刻不能 join（渲染线程会被一次截图 RPC 冻住），所以退下来的源先挂在调用方的
-    /// 退役表里，由 `app::reap_finished` 在后续帧里逐个回收——每个都揣着一整张解码好的
-    /// BGRA 画面，挂到 teardown 就是按切换次数堆内存（审查 P2）。
-    /// 返回 true 之后销毁它是安全的，那次 join 立刻返回。
+    /// loop 已结束设备访问和成员更新时发布完成标记，不等待线程。
+    /// 返回 true 后可析构并 join 剩余线程收尾。调用方逐帧回收已完成的源，
+    /// 避免反复切换时把每张 BGRA 缓冲一直保留至整个会话退出。
     [[nodiscard]] bool worker_done() const {
         return worker_done_.load(std::memory_order_acquire);
     }
@@ -70,7 +63,7 @@ public:
         uint64_t failures = 0;
     };
     [[nodiscard]] Stats stats() const;
-    /// 第一帧到来后才有意义（0/0 之前）。
+    /// 返回已解码画面尺寸；首帧尚未到达时为 0/0。
     void image_size(int &w, int &h) const;
 
 private:
@@ -78,13 +71,12 @@ private:
     bool capture_once(std::vector<uint8_t> &png, std::string &err);
     void loop();
 
-    /// 截图服务**一条连接只服务一次请求**（连拍十张的探针每次都是新连接才成的），
-    /// 所以这里存设备引用、每轮自己开一条新连接，而不是握一条长连接复用。
+    /// 已测截图服务复用连接后后续请求失败，因此每张截图建立独立连接。
     remote::Device &device_;
     std::thread worker_;
     std::atomic<bool> stopping_{false};
-    /// worker 跑完 `loop()` 的最后一行置位。与 `stopping_` 分开是因为两件事不同：
-    /// 一个是"我叫它停"，一个是"它真的停了"，回收只能按后者判（见 `worker_done()`）。
+    /// 与 stopping_ 区分：前者表示已提出停止请求，本标记表示 loop 已完成。
+    /// 回收依据本标记，不能仅按 stopping_ 销毁仍在使用 Device 的对象。
     std::atomic<bool> worker_done_{false};
 
     mutable std::mutex mu_;
