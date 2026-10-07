@@ -3212,5 +3212,24 @@ FIR `3914 / 3930 / 4011ms`，FIR+fb `3246 / 3924 / 3944ms`。
 `scrctl-landscape-ui-20261008.log/.err`、`scrctl-landscape-mouse-ui-20261008.log/.err`
 和 `scrctl-landscape-switch-ui-20261008.log/.err`；个人设备截图未放入仓库。
 
-同尺寸的 180 度旋转及显示订阅滞后、显式指定渲染方向的真机运行仍未覆盖。
+同尺寸的 180 度旋转及显示订阅滞后、显式指定渲染方向的真机触摸仍未覆盖。
 本轮也未验证音频、物理 USB 断线或 Wi-Fi。
+
+### 30.5 显式渲染方向的截图回读
+
+继续保持设备 rot90，使用提交 `be74427be26ad56e5112de567d0988bbf75c2235`
+的本机构建，二进制 SHA256 为
+`ab1b25f0ab0cbe76f13d06e32b5f51026e8bb1c272dcf3a0ac903442aedacb7a`。
+分别指定 `--video-source screenshot --orientation 90` 和 `--orientation 180`，
+两次均以 `--verify 1 FILE --exit-after 1` 保存首帧后正常退出。
+
+| 渲染角 | 源 PNG | 逻辑视口 | 窗口点数 | 回读像素 |
+| --- | --- | --- | --- | --- |
+| 90 度 | 2436×1125 | 1125×2436 | 360×780 | 720×1560 |
+| 180 度 | 2436×1125 | 2436×1125 | 780×360 | 1560×720 |
+
+两张回读图均完整保留画布和工具栏，并按显式角度旋转；没有未知几何警告。
+`--verify` 本轮使用 software 渲染，验证了 USB 截图、显式旋转、回读及退出路径。
+没有注入触摸或启用音频，不能据此扩展显式角度触摸和 Metal 渲染的真机覆盖。
+本机证据为 `/tmp/scrctl-landscape-explicit-proof-20261008.json` 及对应
+`scrctl-landscape-explicit90-20261008.log/.err/.bmp`、`explicit180` 文件。
