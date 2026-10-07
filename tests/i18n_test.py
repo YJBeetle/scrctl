@@ -1,6 +1,7 @@
 """以独立进程验证语言选择，避免 gettext 缓存掩盖初始化问题。"""
 import os
 from pathlib import Path
+import platform
 import subprocess
 import sys
 import tempfile
@@ -25,6 +26,7 @@ def help_is(chinese, variables=None, args=None):
 help_is(False)
 help_is(False, {'LANG': 'C'})
 help_is(False, {'LANG': 'POSIX'})
+help_is(False, {'LANG': 'C.UTF-8', 'LANGUAGE': 'zh_CN'})
 help_is(False, {'LANG': 'fr_FR.UTF-8'})
 help_is(True, {'LANG': 'zh_CN.UTF-8'})
 help_is(True, {'LANG': 'zh-CN'})
@@ -35,12 +37,36 @@ help_is(True, {'LANG': 'en_US.UTF-8', 'LC_MESSAGES': 'en', 'LC_ALL': 'zh_CN.UTF-
 help_is(True, {'LANG': 'zh_CN.UTF-8', 'LC_ALL': '', 'LC_MESSAGES': ''})
 help_is(False, {'LANG': 'zh_CN.UTF-8'}, ['--lang=en', '--help'])
 help_is(True, {'LC_ALL': 'C'}, ['--help', '--lang', 'zh-CN'])
+help_is(True, {'LC_ALL': 'C.UTF-8'}, ['--lang', 'zh-CN', '--help'])
 help_is(False, {'LANGUAGE': 'zh_CN'}, ['--lang', 'en', '--help'])
 help_is(False, {'LANG': 'en_US.UTF-8', 'LANGUAGE': 'zh_CN'})
 help_is(True, {'LANGUAGE': 'en'}, ['--lang', 'zh-CN', '--help'])
 help_is(True, {'LANG': 'zh_CN.UTF-8'}, ['--lang', 'auto', '--help'])
 with tempfile.TemporaryDirectory() as missing_catalog:
     help_is(False, {'SCRCTL_LOCALEDIR': missing_catalog}, ['--lang', 'zh-CN', '--help'])
+
+# glibc 的 LOCPATH 禁用 locale archive；系统单独安装的 locale 目录仍可能可用。
+# 先在新进程探测空 LOCPATH 是否只留下 C 类 locale，再验证英文兜底。
+if platform.libc_ver()[0] == 'glibc':
+    with tempfile.TemporaryDirectory() as missing_locales:
+        probe = subprocess.run([sys.executable, '-c', '''
+import locale
+import sys
+for candidate in ('zh_CN.UTF-8', 'zh_CN.utf8', 'en_US.UTF-8', 'en_US.utf8'):
+    try:
+        locale.setlocale(locale.LC_MESSAGES, candidate)
+    except locale.Error:
+        continue
+    sys.exit(0)
+sys.exit(1)
+'''], env={**base, 'LOCPATH': missing_locales}, capture_output=True, timeout=10)
+        assert probe.returncode in (0, 1), probe.stderr
+        if probe.returncode == 1:
+            help_is(False, {'LOCPATH': missing_locales, 'LANG': 'zh_CN.UTF-8'})
+            help_is(False, {'LOCPATH': missing_locales, 'LC_ALL': 'C.UTF-8'},
+                    ['--lang', 'zh-CN', '--help'])
+        else:
+            print('C-only fallback check skipped: non-C locale files remain available')
 
 for language, expected in [('en', 'finite positive'), ('zh-CN', '有限正数')]:
     result = run(['--lang', language, '--scale', '0', '--wifi', '127.0.0.1'])

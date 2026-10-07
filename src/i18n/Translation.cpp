@@ -36,10 +36,16 @@ std::string_view environment_locale() {
 bool message_locale() {
     // GNU gettext 在 C / POSIX 下不加载翻译。优先使用中文 locale，系统未安装
     // 时使用其他 UTF-8 消息 locale，再通过 LANGUAGE 指向中文目录。
-    for (const char *candidate : {"zh_CN.UTF-8", "zh_CN.utf8", "C.UTF-8", "en_US.UTF-8"}) {
+    for (const char *candidate : {"zh_CN.UTF-8", "zh_CN.utf8", "en_US.UTF-8", "en_US.utf8"}) {
         if (::setlocale(LC_MESSAGES, candidate))
             return true;
     }
+#if !defined(__GLIBC__)
+    // glibc 的 C.UTF-8 与 C 一样忽略 LANGUAGE，不能用它启用中文翻译。
+    // macOS / Windows 的 libintl 保留原来的 UTF-8 回退行为。
+    if (::setlocale(LC_MESSAGES, "C.UTF-8"))
+        return true;
+#endif
     return false;
 }
 
@@ -98,8 +104,15 @@ bool initialize(std::string_view requested) {
                                                : Language::English;
     if (target == Language::English)
         return true;
-    if (!message_locale())
+    // 只有 C 类消息 locale 的系统无法通过 glibc gettext 加载中文；保留英文
+    // 兜底，不把合法的中文选项误报为参数错误。安装中文或英文 UTF-8 locale 后可翻译。
+    if (!message_locale()) {
+#if defined(__GLIBC__)
+        return true;
+#else
         return false;
+#endif
+    }
 #ifdef _WIN32
     if (_putenv_s("LANGUAGE", "zh_CN") != 0)
         return false;
