@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 16:09+0800\n"
+"POT-Creation-Date: 2026-10-07 16:39+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1091,7 +1091,7 @@ msgstr ""
 #: src/media/FramePump.cpp:494 src/media/ScreenshotSource.cpp:72
 #: src/net/Stack.cpp:359 src/net/TcpStream.cpp:44 src/net/TcpStream.cpp:122
 #: src/net/TcpStream.cpp:126 src/net/UdpSocket.cpp:109
-#: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:232
+#: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:214
 #: src/transport/Socket.cpp:114 src/wifi/RemotePairing.cpp:35
 msgid ")"
 msgstr ""
@@ -1473,165 +1473,165 @@ msgid ""
 "pending)\n"
 msgstr ""
 
-#: src/remote/Device.cpp:22
+#: src/remote/Device.cpp:21
 #, c-format
 msgid "  [stage] %s\n"
 msgstr ""
 
-#: src/remote/Device.cpp:33
+#: src/remote/Device.cpp:31
 msgid ""
 " (device is locked; unlock it and keep the screen awake before retrying)"
 msgstr ""
 
-#: src/remote/Device.cpp:36
+#: src/remote/Device.cpp:34
 msgid " (computer not trusted; unlock the device and confirm Trust)"
 msgstr ""
 
-#: src/remote/Device.cpp:39
+#: src/remote/Device.cpp:37
 msgid ""
 " (service unavailable; check Developer Mode and DDI mounting through Xcode)"
 msgstr ""
 
-#: src/remote/Device.cpp:41
+#: src/remote/Device.cpp:39
 msgid " (check DDI mounting and Developer Mode)"
 msgstr ""
 
-#: src/remote/Device.cpp:80
+#: src/remote/Device.cpp:77
 msgid ""
 "No USB device found (usbmux list is empty). Check the data cable and USB "
 "connection, then reconnect the device. Untrusted devices normally appear in "
 "this list too."
 msgstr ""
 
-#: src/remote/Device.cpp:91
+#: src/remote/Device.cpp:87
 msgid "; select one: "
 msgstr ""
 
-#: src/remote/Device.cpp:91
+#: src/remote/Device.cpp:87
 msgid "Connected devices: "
 msgstr ""
 
-#: src/remote/Device.cpp:109
+#: src/remote/Device.cpp:103
 msgid "; connected devices: "
 msgstr ""
 
-#: src/remote/Device.cpp:109
+#: src/remote/Device.cpp:103
 msgid "No connected device matches "
 msgstr ""
 
-#: src/remote/Device.cpp:113
+#: src/remote/Device.cpp:107
 msgid " (total "
 msgstr ""
 
-#: src/remote/Device.cpp:113
+#: src/remote/Device.cpp:107
 msgid "). Check the selected UDID and USB connection."
 msgstr ""
 
-#: src/remote/Device.cpp:123
+#: src/remote/Device.cpp:117
 msgid "lockdown pairing session"
 msgstr ""
 
-#: src/remote/Device.cpp:126
+#: src/remote/Device.cpp:120
 msgid "Failed to establish lockdown session: "
 msgstr ""
 
-#: src/remote/Device.cpp:129
+#: src/remote/Device.cpp:123
 msgid "Start CoreDeviceProxy"
 msgstr ""
 
-#: src/remote/Device.cpp:132 src/remote/Rsd.cpp:168 src/remote/Rsd.cpp:378
-#: src/transport/Usbmux.cpp:92 src/wifi/PairRecord.cpp:305
+#: src/remote/Device.cpp:126 src/remote/Rsd.cpp:152 src/remote/Rsd.cpp:355
+#: src/transport/Usbmux.cpp:92 src/wifi/PairRecord.cpp:308
 msgid " failed: "
 msgstr ""
 
-#: src/remote/Device.cpp:132
+#: src/remote/Device.cpp:126
 msgid "Start "
 msgstr ""
 
-#: src/remote/Device.cpp:135
+#: src/remote/Device.cpp:129
 msgid "CDTunnel handshake"
 msgstr ""
 
-#: src/remote/Device.cpp:140 src/remote/Device.cpp:232
+#: src/remote/Device.cpp:134 src/remote/Device.cpp:225
 msgid "Failed to establish packet tunnel: "
 msgstr ""
 
-#: src/remote/Device.cpp:148
+#: src/remote/Device.cpp:141
 msgid "Cannot construct a stable peer identity from pairing HostID"
 msgstr ""
 
-#: src/remote/Device.cpp:154 src/remote/Device.cpp:164
+#: src/remote/Device.cpp:147 src/remote/Device.cpp:157
 msgid "Connect to RSD inside tunnel and read directory"
 msgstr ""
 
-#: src/remote/Device.cpp:170
+#: src/remote/Device.cpp:163
 msgid "Tunnel returned an invalid IPv6 address"
 msgstr ""
 
-#: src/remote/Device.cpp:181
+#: src/remote/Device.cpp:174
 msgid "Ready"
 msgstr ""
 
-#: src/remote/Device.cpp:193
+#: src/remote/Device.cpp:186
 msgid "LAN pair-verify"
 msgstr ""
 
-#: src/remote/Device.cpp:196
+#: src/remote/Device.cpp:189
 msgid "Cannot connect to device RemotePairing port "
 msgstr ""
 
-#: src/remote/Device.cpp:197
+#: src/remote/Device.cpp:190
 msgid ""
 " (check that the device is reachable on this network and has been paired)"
 msgstr ""
 
-#: src/remote/Device.cpp:206
+#: src/remote/Device.cpp:199
 msgid "Device rejected pairing record: "
 msgstr ""
 
-#: src/remote/Device.cpp:207
+#: src/remote/Device.cpp:200
 msgid " is not paired with this device, or its pairing was removed"
 msgstr ""
 
-#: src/remote/Device.cpp:209
+#: src/remote/Device.cpp:202
 msgid "pair-verify failed: "
 msgstr ""
 
-#: src/remote/Device.cpp:214
+#: src/remote/Device.cpp:207
 msgid "Request device tunnel port"
 msgstr ""
 
-#: src/remote/Device.cpp:222
+#: src/remote/Device.cpp:215
 msgid "TLS-PSK and CDTunnel handshake"
 msgstr ""
 
-#: src/remote/Device.cpp:225
+#: src/remote/Device.cpp:218
 msgid "Cannot connect to tunnel port "
 msgstr ""
 
-#: src/remote/Device.cpp:240
+#: src/remote/Device.cpp:232
 msgid ""
 "Pairing host identifier is not a valid UUID; cannot construct a stable peer "
 "identity"
 msgstr ""
 
-#: src/remote/Device.cpp:260
+#: src/remote/Device.cpp:252
 msgid "Session not established"
 msgstr ""
 
-#: src/remote/Device.cpp:272
+#: src/remote/Device.cpp:264
 msgid " does not advertise feature "
 msgstr ""
 
-#: src/remote/DisplayInfo.cpp:115
+#: src/remote/DisplayInfo.cpp:103
 msgid "Update missing displays array: "
 msgstr ""
 
-#: src/remote/DisplayInfo.cpp:152
+#: src/remote/DisplayInfo.cpp:139
 msgid "No recognized display entries"
 msgstr ""
 
-#: src/remote/DisplayInfo.cpp:178
+#: src/remote/DisplayInfo.cpp:165
 msgid " ended without an update"
 msgstr ""
 
@@ -1908,119 +1908,119 @@ msgstr ""
 msgid "Disconnected while waiting for device reply: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:99
+#: src/remote/Rsd.cpp:89
 #, c-format
 msgid ""
 "Invalid numeric component in SCRCTL_COREDEVICE_VERSION: %s (using 629.3)\n"
 msgstr ""
 
-#: src/remote/Rsd.cpp:112
+#: src/remote/Rsd.cpp:102
 #, c-format
 msgid "  coreDeviceVersion overridden by environment: %s (default: 629.3)\n"
 msgstr ""
 
-#: src/remote/Rsd.cpp:168
+#: src/remote/Rsd.cpp:152
 msgid " port "
 msgstr ""
 
-#: src/remote/Rsd.cpp:168 src/transport/Usbmux.cpp:92
+#: src/remote/Rsd.cpp:152 src/transport/Usbmux.cpp:92
 msgid "Connect to "
 msgstr ""
 
-#: src/remote/Rsd.cpp:177
+#: src/remote/Rsd.cpp:161
 msgid " HTTP/2 handshake failed: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:189 src/remote/Rsd.cpp:197 src/remote/Rsd.cpp:205
-#: src/remote/Rsd.cpp:213
+#: src/remote/Rsd.cpp:172 src/remote/Rsd.cpp:180 src/remote/Rsd.cpp:188
+#: src/remote/Rsd.cpp:196
 msgid "Service connection is not RemoteXPC"
 msgstr ""
 
-#: src/remote/Rsd.cpp:228
+#: src/remote/Rsd.cpp:210
 msgid " failed"
 msgstr ""
 
-#: src/remote/Rsd.cpp:232
+#: src/remote/Rsd.cpp:214
 msgid "(code "
 msgstr ""
 
-#: src/remote/Rsd.cpp:245
+#: src/remote/Rsd.cpp:225
 msgid "; original error: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:270
+#: src/remote/Rsd.cpp:249
 msgid " failed; response missing CoreDevice.output: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:282
+#: src/remote/Rsd.cpp:261
 msgid "Streaming feature requires an XPC service connection"
 msgstr ""
 
-#: src/remote/Rsd.cpp:297
+#: src/remote/Rsd.cpp:276
 msgid "Service connection is not an XPC channel"
 msgstr ""
 
-#: src/remote/Rsd.cpp:316
+#: src/remote/Rsd.cpp:295
 msgid " response missing both sideChannelStatus and error: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:322
+#: src/remote/Rsd.cpp:301
 msgid " failed mid-stream: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:378
+#: src/remote/Rsd.cpp:355
 msgid "Connect to RSD port "
 msgstr ""
 
-#: src/remote/Rsd.cpp:383
+#: src/remote/Rsd.cpp:360
 msgid "RSD control channel handshake failed: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:393
+#: src/remote/Rsd.cpp:370
 msgid "peer_info missing Services"
 msgstr ""
 
-#: src/remote/Rsd.cpp:470
+#: src/remote/Rsd.cpp:440
 msgid "."
 msgstr ""
 
-#: src/remote/Rsd.cpp:470
+#: src/remote/Rsd.cpp:440
 msgid "Device directory missing service "
 msgstr ""
 
-#: src/remote/Rsd.cpp:472
+#: src/remote/Rsd.cpp:442
 msgid "Directory is empty; check tunnel setup and DDI mounting."
 msgstr ""
 
-#: src/remote/Rsd.cpp:481
+#: src/remote/Rsd.cpp:451
 msgid " services, including "
 msgstr ""
 
-#: src/remote/Rsd.cpp:481
+#: src/remote/Rsd.cpp:451
 msgid "Device directory contains "
 msgstr ""
 
-#: src/remote/Rsd.cpp:482
+#: src/remote/Rsd.cpp:452
 msgid " com.apple.coredevice.* services:\n"
 msgstr ""
 
-#: src/remote/Rsd.cpp:485
+#: src/remote/Rsd.cpp:455
 msgid ""
 "  (none found; check DDI mounting through Xcode and the CoreDevice services "
 "available on this device)\n"
 msgstr ""
 
-#: src/remote/Rsd.cpp:492
+#: src/remote/Rsd.cpp:462
 msgid ""
 "Include this diagnostic when reporting the issue. For the full directory and "
 "feature lists, run feature_probe --all to print all "
 msgstr ""
 
-#: src/remote/Rsd.cpp:494
+#: src/remote/Rsd.cpp:464
 msgid " services.\n"
 msgstr ""
 
-#: src/remote/Rsd.cpp:506
+#: src/remote/Rsd.cpp:474
 msgid ""
 " (device rejected the system version: live media worked on tested iOS 27 "
 "devices and was rejected on tested iOS 18 devices. Screenshot fallback and "
@@ -2436,69 +2436,69 @@ msgstr ""
 msgid "OPACK decode: "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:41
+#: src/wifi/PairRecord.cpp:42
 msgid "Hex length must be even"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:61
+#: src/wifi/PairRecord.cpp:62
 msgid "Invalid hex character"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:101 src/wifi/PairRecordWindows.cpp:85
+#: src/wifi/PairRecord.cpp:104 src/wifi/PairRecordWindows.cpp:89
 msgid "Cannot open temporary file "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:106 src/wifi/PairRecord.cpp:257
-#: src/wifi/PairRecordWindows.cpp:44
+#: src/wifi/PairRecord.cpp:109 src/wifi/PairRecord.cpp:260
+#: src/wifi/PairRecordWindows.cpp:47
 msgid "Failed to set record file permissions"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:114 src/wifi/PairRecordWindows.cpp:74
-#: src/wifi/PairRecordWindows.cpp:96
+#: src/wifi/PairRecord.cpp:117 src/wifi/PairRecordWindows.cpp:77
+#: src/wifi/PairRecordWindows.cpp:100
 msgid "Incomplete record file write"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:119 src/wifi/PairRecordWindows.cpp:104
+#: src/wifi/PairRecord.cpp:122 src/wifi/PairRecordWindows.cpp:109
 msgid "Rename failed"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:130
+#: src/wifi/PairRecord.cpp:133
 msgid "Cannot open "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:137
+#: src/wifi/PairRecord.cpp:140
 msgid "Pairing record file too large"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:182
+#: src/wifi/PairRecord.cpp:185
 msgid "Invalid scrctl pairing record header"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:189
+#: src/wifi/PairRecord.cpp:192
 msgid "Record line is not key=value"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:200
+#: src/wifi/PairRecord.cpp:203
 msgid " requires "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:200
+#: src/wifi/PairRecord.cpp:203
 msgid "Incorrect field length: "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:201
+#: src/wifi/PairRecord.cpp:204
 msgid " bytes; got "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:232
+#: src/wifi/PairRecord.cpp:235
 msgid "Record missing host_private_key"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:247
+#: src/wifi/PairRecord.cpp:250
 msgid "Failed to create directory "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:305
+#: src/wifi/PairRecord.cpp:308
 msgid "Reading directory "
 msgstr ""
 
@@ -2510,71 +2510,71 @@ msgstr ""
 msgid "Handshake response missing response._1.handshake._0"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:81
+#: src/wifi/PairSetup.cpp:84 src/wifi/PairSetup.cpp:445
 msgid " TLV decode incomplete: "
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:85
+#: src/wifi/PairSetup.cpp:91
 msgid " returned error code 0x"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:103
+#: src/wifi/PairSetup.cpp:97
+msgid " reply must contain a one-byte State equal to "
+msgstr ""
+
+#: src/wifi/PairSetup.cpp:113
 msgid ""
 "Control channel does not allow pair-setup "
 "(deviceOptions.allowsPairSetup=false). Tested iOS 27 devices require the "
 "RemoteXPC entry point (wifi_probe --pair-setup-xpc)"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:147
+#: src/wifi/PairSetup.cpp:157
 msgid "Host identifier missing; provide one if hostname lookup is unavailable"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:217
+#: src/wifi/PairSetup.cpp:226
 msgid "Verify M2 missing 32-byte public key"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:257
-msgid "verify-M4 TLV decode incomplete: "
-msgstr ""
-
-#: src/wifi/PairSetup.cpp:264
+#: src/wifi/PairSetup.cpp:272
 msgid ""
 "Device accepted this identifier; already paired, pair-setup is unnecessary"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:269
+#: src/wifi/PairSetup.cpp:277
 msgid "Verify completed without accepting this key; sending upgrade M1"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:287
+#: src/wifi/PairSetup.cpp:295
 msgid "Handshake (attemptPairVerify=false) completed; sending M1"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:305
+#: src/wifi/PairSetup.cpp:313
 msgid "M2 missing PUBLIC_KEY or SALT"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:330
+#: src/wifi/PairSetup.cpp:339
 msgid "M4 missing PROOF"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:336
+#: src/wifi/PairSetup.cpp:345
 msgid "Device SRP proof mismatch; pairing aborted. Check PIN and peer identity"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:340
+#: src/wifi/PairSetup.cpp:349
 msgid "SRP mutual verification passed; registering host key on device (M5)"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:429
+#: src/wifi/PairSetup.cpp:439
 msgid "Cannot decrypt M6: "
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:482
+#: src/wifi/PairSetup.cpp:496
 msgid "); pairing itself succeeded"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:482
+#: src/wifi/PairSetup.cpp:496
 msgid "createRemoteUnlockKey failed ("
 msgstr ""
 
@@ -2582,13 +2582,29 @@ msgstr ""
 msgid "Pairing record incomplete; cannot sign"
 msgstr ""
 
-#: src/wifi/PairVerify.cpp:66 src/wifi/PairVerify.cpp:128
+#: src/wifi/PairVerify.cpp:57
+msgid "PV-Msg02 TLV decode incomplete: "
+msgstr ""
+
+#: src/wifi/PairVerify.cpp:69 src/wifi/PairVerify.cpp:142
 msgid ""
 "Device does not recognize this pairing record (not paired or pairing removed)"
 msgstr ""
 
-#: src/wifi/PairVerify.cpp:73
+#: src/wifi/PairVerify.cpp:76
+msgid "PV-Msg02 response has invalid State (expected 2)"
+msgstr ""
+
+#: src/wifi/PairVerify.cpp:82
 msgid "PV-Msg02 missing 32-byte public key"
+msgstr ""
+
+#: src/wifi/PairVerify.cpp:130
+msgid "PV-Msg04 TLV decode incomplete: "
+msgstr ""
+
+#: src/wifi/PairVerify.cpp:149
+msgid "PV-Msg04 response has invalid State (expected 4)"
 msgstr ""
 
 #: src/wifi/RemotePairing.cpp:35

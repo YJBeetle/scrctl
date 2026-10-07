@@ -72,10 +72,12 @@ std::optional<json::Value> do_handshake(Rppairing &channel, bool attempt_verify,
     return *zero;
 }
 
-/// 解析 M2/M4/M6 的外层 TLV，拒绝不完整编码或 Error 字段，并标注失败阶段。
-/// 此函数不检查 State 是否符合阶段，也不解密 EncryptedData。
+/// 解析完整外层 TLV，成功回复的 State 必须是预期的单字节阶段。
+/// setup 的 Error 直接失败；verify 探测可显式允许 Error，由调用方通知并继续 setup。
+/// 无论是否允许 Error，都不能忽略不完整编码。本函数不解密 EncryptedData。
 std::optional<std::map<uint8_t, Bytes>> parse_reply(const Bytes &raw, const char *which,
-                                                    std::string &err) {
+                                                    uint8_t expected_state, std::string &err,
+                                                    bool allow_error = false) {
     std::string tlv_err;
     std::map<uint8_t, Bytes> fields = tlv_parse(raw, tlv_err);
     if (!tlv_err.empty()) {
@@ -83,8 +85,17 @@ std::optional<std::map<uint8_t, Bytes>> parse_reply(const Bytes &raw, const char
         return std::nullopt;
     }
     if (const Bytes *code = tlv_get(fields, TlvType::Error)) {
+        if (allow_error) {
+            return fields;
+        }
         err = std::string(which) + SCRCTL_TR(" returned error code 0x");
         err += hex_upper(code->data(), code->size());
+        return std::nullopt;
+    }
+    const Bytes *state = tlv_get(fields, TlvType::State);
+    if (state == nullptr || state->size() != 1 || (*state)[0] != expected_state) {
+        err = std::string(which) + SCRCTL_TR(" reply must contain a one-byte State equal to ") +
+              std::to_string(expected_state);
         return std::nullopt;
     }
     return fields;
@@ -194,7 +205,8 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
         if (!raw_v2) {
             return fail();
         }
-        const std::optional<std::map<uint8_t, Bytes>> vf = parse_reply(*raw_v2, "verify-M2", err);
+        const std::optional<std::map<uint8_t, Bytes>> vf =
+            parse_reply(*raw_v2, "verify-M2", 2, err, true);
         if (!vf) {
             return fail();
         }
@@ -248,13 +260,12 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
             if (!raw_v4) {
                 return fail();
             }
-            std::string v4_tlv_err;
-            const std::map<uint8_t, Bytes> v4f = tlv_parse(*raw_v4, v4_tlv_err);
-            if (!v4_tlv_err.empty()) {
-                err = SCRCTL_TR("verify-M4 TLV decode incomplete: ") + v4_tlv_err;
+            const std::optional<std::map<uint8_t, Bytes>> v4f =
+                parse_reply(*raw_v4, "verify-M4", 4, err, true);
+            if (!v4f) {
                 return fail();
             }
-            if (tlv_get(v4f, TlvType::Error) != nullptr) {
+            if (tlv_get(*v4f, TlvType::Error) != nullptr) {
                 // 探测收到 Error 表示本次凭据未被接受，发送失败通知后继续 setup。
                 send_verify_failed();
             } else {
@@ -292,7 +303,7 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
     if (!raw_m2) {
         return fail();
     }
-    const std::optional<std::map<uint8_t, Bytes>> fields2 = parse_reply(*raw_m2, "M2", err);
+    const std::optional<std::map<uint8_t, Bytes>> fields2 = parse_reply(*raw_m2, "M2", 2, err);
     if (!fields2) {
         return fail();
     }
@@ -319,7 +330,7 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
     if (!raw_m4) {
         return fail();
     }
-    const std::optional<std::map<uint8_t, Bytes>> fields4 = parse_reply(*raw_m4, "M4", err);
+    const std::optional<std::map<uint8_t, Bytes>> fields4 = parse_reply(*raw_m4, "M4", 4, err);
     if (!fields4) {
         return fail();
     }
@@ -407,7 +418,7 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
     if (!raw_m6) {
         return fail();
     }
-    const std::optional<std::map<uint8_t, Bytes>> fields6 = parse_reply(*raw_m6, "M6", err);
+    const std::optional<std::map<uint8_t, Bytes>> fields6 = parse_reply(*raw_m6, "M6", 6, err);
     if (!fields6) {
         return fail();
     }
@@ -430,6 +441,10 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
         }
         std::string inner_err;
         const std::map<uint8_t, Bytes> inner = tlv_parse(*plain6, inner_err);
+        if (!inner_err.empty()) {
+            err = std::string("M6") + SCRCTL_TR(" TLV decode incomplete: ") + inner_err;
+            return fail();
+        }
         if (const Bytes *peer_info = tlv_get(inner, TlvType::Info)) {
             OpackValue parsed;
             std::string opack_err;

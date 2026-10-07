@@ -382,7 +382,7 @@ if(SCRCTL_BUILD_TESTS)
     add_test(NAME json COMMAND json_test)
 
     # 无线那一套（密码学 / TLV / 记录 / 帧）离线就能判，不需要设备。
-    add_executable(wifi_test tests/wifi_test.cpp)
+    add_executable(wifi_test tests/wifi_test.cpp tests/pair_setup_reply_test.cpp)
     target_link_libraries(wifi_test PRIVATE scrctl_core)
     add_test(NAME wifi COMMAND wifi_test)
 

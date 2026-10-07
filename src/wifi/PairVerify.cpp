@@ -53,6 +53,11 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
     // 也未验证其中的设备标识、长期公钥或签名。设备接受主机签名不能替代该身份校验。
     std::string tlv_err;
     const std::map<uint8_t, Bytes> second = tlv_parse(*reply1, tlv_err);
+    if (!tlv_err.empty()) {
+        err = SCRCTL_TR("PV-Msg02 TLV decode incomplete: ") + tlv_err;
+        result.error = err;
+        return result;
+    }
     // M2 已含 Error 时不再发送 PV-Msg03，返回 NotPaired，并按选项尽力通知失败。
     // 已测设备在此继续接收 Msg03 会关闭连接，兼容约束见 docs §25.6。
     if (tlv_get(second, TlvType::Error) != nullptr) {
@@ -66,10 +71,15 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
         result.error = err;
         return result;
     }
+    const Bytes *second_state = tlv_get(second, TlvType::State);
+    if (second_state == nullptr || second_state->size() != 1 || (*second_state)[0] != 0x02) {
+        err = SCRCTL_TR("PV-Msg02 response has invalid State (expected 2)");
+        result.error = err;
+        return result;
+    }
     const Bytes *peer_pub = tlv_get(second, TlvType::PublicKey);
     if (peer_pub == nullptr || peer_pub->size() != 32) {
-        err = SCRCTL_TR("PV-Msg02 missing 32-byte public key") +
-              (tlv_err.empty() ? std::string() : std::string("：") + tlv_err);
+        err = SCRCTL_TR("PV-Msg02 missing 32-byte public key");
         result.error = err;
         return result;
     }
@@ -114,9 +124,13 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
         return result;
     }
     std::string final_err;
-    // 当前未检查 final_err 或 State，仅以不存在 Error TLV 继续；Paired 的判断
-    // 范围受此实现约束，不表示已验证最终消息的完整格式。
+    // 完整解码后区分设备拒绝与成功状态；只有精确的单字节 State=4 才安装主密钥。
     const std::map<uint8_t, Bytes> final_fields = tlv_parse(*reply3, final_err);
+    if (!final_err.empty()) {
+        err = SCRCTL_TR("PV-Msg04 TLV decode incomplete: ") + final_err;
+        result.error = err;
+        return result;
+    }
     if (tlv_get(final_fields, TlvType::Error) != nullptr) {
         // 设备返回配对错误，按选项发送 pairVerifyFailed 并返回 NotPaired。
         // 调用方可据此检查本地记录与设备信任状态，不应将此结果等同于网络超时。
@@ -127,6 +141,12 @@ PairVerifyResult pair_verify(Rppairing &channel, const PairRecord &host, std::st
         }
         err = SCRCTL_TR("Device does not recognize this pairing record (not paired or pairing removed)");
         result.outcome = VerifyOutcome::NotPaired;
+        result.error = err;
+        return result;
+    }
+    const Bytes *final_state = tlv_get(final_fields, TlvType::State);
+    if (final_state == nullptr || final_state->size() != 1 || (*final_state)[0] != 0x04) {
+        err = SCRCTL_TR("PV-Msg04 response has invalid State (expected 4)");
         result.error = err;
         return result;
     }

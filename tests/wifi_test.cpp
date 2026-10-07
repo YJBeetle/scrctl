@@ -33,6 +33,8 @@
 #include "wifi/Rppairing.h"
 #include "wifi/Tlv.h"
 
+void run_pair_setup_reply_tests(void (*check)(bool, const char *));
+
 namespace {
 
 using scrctl::wifi::Bytes;
@@ -720,7 +722,7 @@ void test_pair_verify_shape() {
         std::string err;
         const scrctl::wifi::PairVerifyResult result = scrctl::wifi::pair_verify(channel, record, err);
         check(result.outcome == scrctl::wifi::VerifyOutcome::Paired,
-              "回信里没有 ERROR 就该判成已配对");
+              "有效 STATE=4 且没有 ERROR 时判成已配对");
         check(result.shared_secret.size() == 32, "共享密钥 32 字节");
         check(scrctl::json::find(result.device_handshake, "wireProtocolVersion") != nullptr &&
                   scrctl::json::as_int_or(*scrctl::json::find(result.device_handshake, "wireProtocolVersion"), 0) == 26,
@@ -748,6 +750,9 @@ void test_pair_verify_shape() {
         check(scrctl::wifi::tlv_state(fields) == 0x01, "第一步的 STATE 是 1");
         const Bytes *our_pub = scrctl::wifi::tlv_get(fields, scrctl::wifi::TlvType::PublicKey);
         check(our_pub != nullptr && our_pub->size() == 32, "第一步要带 32 字节的临时公钥");
+        std::string encrypted_err;
+        channel.encrypted_roundtrip(j_obj({}), encrypted_err);
+        check(!io.written.empty(), "成功后主密钥允许发送加密请求");
     }
 
     {
@@ -768,6 +773,90 @@ void test_pair_verify_shape() {
         const std::string sent = io.take_written();
         check(sent.find(R"JSON("event":{"_0":{"pairVerifyFailed":{}}})JSON") != std::string::npos,
               "要补一句 pairVerifyFailed 让设备把会话收干净");
+    }
+
+    // 完整帧中的 TLV 仍可能缺字段或被截断。通过生产 API 判结果，并检查失败后
+    // 不能发出加密请求；不暴露私有密钥状态，也不借助真实设备。
+    const Bytes valid_m4 = scrctl::wifi::tlv_build(
+        {{scrctl::wifi::TlvType::State, Bytes{0x04}}});
+    const auto rejected_reply = [&](const Bytes &m2, const Bytes &m4, bool rejected_at_m2,
+                                    const char *name) {
+        MemStream io;
+        scrctl::wifi::FramedCarrier carrier(io);
+        scrctl::wifi::Rppairing channel(carrier);
+        io.feed(device_frame(handshake_reply));
+        io.feed(reply_with(m2));
+        io.feed(reply_with(m4));
+        std::string err;
+        const auto result = scrctl::wifi::pair_verify(channel, record, err, false);
+        check(result.outcome == scrctl::wifi::VerifyOutcome::TransportFailure, name);
+        check(!err.empty() && result.error == err, "无效回复保留具体失败原因");
+        check(channel.sequence() == (rejected_at_m2 ? 2 : 3),
+              "M2 被拒后不发送 Msg03；M4 被拒时已完成三条明文请求");
+        const std::string written_before = io.written;
+        std::string key_err;
+        const auto encrypted = channel.encrypted_roundtrip(j_obj({}), key_err);
+        check(!encrypted && !key_err.empty() && io.written == written_before,
+              "拒绝回复后没有安装主密钥，也不发送加密请求");
+    };
+    Bytes truncated_m2 = msg02;
+    truncated_m2.push_back(0xFF);
+    const std::vector<std::pair<const char *, Bytes>> invalid_m2 = {
+        {"M2 拒绝空 TLV", {}},
+        {"M2 拒绝缺失 State", scrctl::wifi::tlv_build(
+             {{scrctl::wifi::TlvType::PublicKey, peer_pub}})},
+        {"M2 拒绝错误 State", scrctl::wifi::tlv_build(
+             {{scrctl::wifi::TlvType::State, Bytes{0x03}},
+              {scrctl::wifi::TlvType::PublicKey, peer_pub}})},
+        {"M2 拒绝多字节 State", scrctl::wifi::tlv_build(
+             {{scrctl::wifi::TlvType::State, Bytes{0x02, 0x00}},
+              {scrctl::wifi::TlvType::PublicKey, peer_pub}})},
+        {"M2 拒绝有效前缀后的截断 TLV", truncated_m2},
+    };
+    for (const auto &[name, m2] : invalid_m2) {
+        rejected_reply(m2, valid_m4, true, name);
+    }
+    Bytes truncated_m4 = valid_m4;
+    truncated_m4.push_back(0xFF);
+    const std::vector<std::pair<const char *, Bytes>> invalid_m4 = {
+        {"M4 拒绝空 TLV", {}},
+        {"M4 拒绝缺失 State", scrctl::wifi::tlv_build(
+             {{scrctl::wifi::TlvType::Identifier, scrctl::wifi::bytes_of("peer")}})},
+        {"M4 拒绝错误 State", scrctl::wifi::tlv_build(
+             {{scrctl::wifi::TlvType::State, Bytes{0x06}}})},
+        {"M4 拒绝多字节 State", scrctl::wifi::tlv_build(
+             {{scrctl::wifi::TlvType::State, Bytes{0x04, 0x00}}})},
+        {"M4 拒绝有效前缀后的截断 TLV", truncated_m4},
+    };
+    for (const auto &[name, m4] : invalid_m4) {
+        rejected_reply(msg02, m4, false, name);
+    }
+
+    // 完整 Error 回复保持既有分类；State=6 不应使设备拒绝变成传输失败。
+    const Bytes denied = scrctl::wifi::tlv_build(
+        {{scrctl::wifi::TlvType::State, Bytes{0x06}},
+         {scrctl::wifi::TlvType::Error, Bytes{0x02}}});
+    for (const bool error_at_m2 : {true, false}) {
+        for (const bool announce_failure : {true, false}) {
+            MemStream io;
+            scrctl::wifi::FramedCarrier carrier(io);
+            scrctl::wifi::Rppairing channel(carrier);
+            io.feed(device_frame(handshake_reply));
+            io.feed(reply_with(error_at_m2 ? denied : msg02));
+            io.feed(reply_with(error_at_m2 ? valid_m4 : denied));
+            std::string err;
+            const auto result = scrctl::wifi::pair_verify(channel, record, err, announce_failure);
+            check(result.outcome == scrctl::wifi::VerifyOutcome::NotPaired,
+                  "M2/M4 的显式 Error 保持 NotPaired 分类");
+            check(!err.empty() && result.error == err, "设备拒绝保留失败原因");
+            check((io.written.find("pairVerifyFailed") != std::string::npos) == announce_failure,
+                  "设备拒绝按 announce_failure 决定是否通知");
+            const std::string written_before = io.written;
+            std::string key_err;
+            const auto encrypted = channel.encrypted_roundtrip(j_obj({}), key_err);
+            check(!encrypted && !key_err.empty() && io.written == written_before,
+                  "显式 Error 后没有安装主密钥，也不发送加密请求");
+        }
     }
 }
 
@@ -1117,6 +1206,7 @@ int main() {
     test_rppairing();
     test_pair_verify_shape();
     test_pair_setup();
+    run_pair_setup_reply_tests(check);
     test_record_listing();
     test_pairing_xpc();
     std::printf("%d 条判据，%d 条不通过\n", checks, failures);

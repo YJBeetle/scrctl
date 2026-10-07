@@ -14,7 +14,7 @@ scrctl 是独立产品，也是设备协议与恢复行为的验证项目。MaaF
 | IPv6 / TCP / UDP 用户态栈 | 已使用 lwIP；删除旧 TCP 和手工 UDP 收发 | USB / Wi-Fi 视频、截图切换已通过；物理断线、多设备及长时间运行待验证 |
 | HTTP/2 | 已完成 nghttp2 第一轮评估，生产仍自实现 | 控制流和内联大回复兼容；偶数文件流存在限制，真机 FileTransfer 子流尚未触发 |
 | 基础资源管理 | Base64 使用 OpenSSL；SDL 和系统 TCP 建连已收敛 | 本轮系统 socket 建连不替代隧道内 TCP 栈 |
-| 配对密码运算 | HKDF 使用 OpenSSL，SRP 摘要改用 EVP 并检查运算结果 | Apple SRP 编码和公式保留；本轮 SRP 尚缺新建配对的真机回归 |
+| 配对密码运算 | HKDF 使用 OpenSSL，SRP 摘要改用 EVP；配对回复阶段和 TLV 校验已补 | Apple SRP 编码和公式保留；设备长期身份签名未校验，新建配对待真机回归 |
 | 恢复策略和旧 review 问题 | 可追溯旧项已逐项复查，线程信息和剪贴板边界本轮补修 | 长时间、物理断线和真实无线重连仍待验证，具体结论见下表 |
 | 注释与命令行文案 | 应用、媒体、解码、网络栈、RTP、对象编码及 RemoteXPC / HTTP/2 主要注释已整理；应用和核心输出支持中英文 | 配对等其余注释、tools 独立输出与历史文档继续整理 |
 | MaaFramework | 按用户安排暂缓 | 后续参考 scrctl 验证过的实现，当前未修改 MaaFramework |
@@ -32,7 +32,7 @@ XPC、OPACK、Apple 配对和控制语义、SRP 的 Apple 适配、Deflate 小�
 | 视频会话重建失败后访问空指针 | worker 在 session 为空时重试并跳过后续访问；实际 restart 的失败与快照夹具通过 | 真机持续重建失败仍待测 |
 | 退出未停止设备流 | FramePump 析构先 join，再显式 stop；本轮 USB 限时退出正常 | 尚未验证所有中断下的设备残留会话 |
 | copy / paste 有参数但无执行路径 | 独立 Commands 已执行并退出；本轮补修显式空写入、结果持有及完整字节输出 | 新空文本命令的设备落地待读回复验 |
-| 无 libav 时解码器空指针 | FramePump 在建媒体前检查构建能力；FileSource 在调用前检查 decoder | 本轮完整包均含 libav，未另跑无后端构建 |
+| 无 libav 时解码器空指针 | FramePump 和 FileSource 保留能力/空指针检查；macOS 关闭 libav 的实际构建及媒体/语言检查通过 | macOS 仍有平台解码器，非 Apple 无视频后端的运行路径待测 |
 | FramePump 线程启动与会话信息竞争 | 先完成录制与时钟初始化再启动；getter 使用锁保护快照，失败/并发 TSan 通过 | 不泛化为全部线程无竞争 |
 | SIGPIPE 导致进程退出 | socket 与 TLS 路径的现有防护保留，传输回归通过 | 进程级策略对未来宿主嵌入的影响仍待评估 |
 | 第二次截图源使用旧序号 | 安装新 ScreenshotState 时重置序号和统计基线，反复强制切换已测 | 真实断线后的切换仍待测 |
@@ -564,3 +564,29 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
   源码还通过关闭下载、关闭 FFmpeg 的实际项目配置。
 - 本地源码不执行下载和更新的行为见
   [CMake FetchContent 说明](https://cmake.org/cmake/help/latest/module/FetchContent.html#variable:FETCHCONTENT_SOURCE_DIR_%3CuppercaseName%3E)。
+- macOS 实际关闭 FFmpeg 构建成功，media / i18n 两项通过，链接依赖中没有 FFmpeg。
+  此构建仍含 Apple 平台后端，不能作为 Linux / Windows 完全无视频后端的验证。
+
+## 第四十三轮：配对回复的完整性与阶段校验
+
+- PairVerify 的 M2/M4 先检查 TLV 完整性，非错误回复必须有精确单字节 State=2/4；
+  只有通过 M4 才安装主密钥。显式 Error 保持 NotPaired 分类和原通知选项，
+  不将错误回复中的其他 State 当作成功阶段。
+- PairSetup 同样校验 M2/M4/M6 和 verify 探测的阶段；修复 verify-M2 的 Error
+  被解析器提前拦截、无法继续 setup 的分支。M6 密文即使能认证解密，内部 TLV
+  截断也会失败，不发布记录或安装主密钥。
+- 真实生产配对 API 的内存流夹具包含 SRP 服务端证明，保留正常成功对照。
+  PairVerify 旧版 31 项失败，修复后 276/276；独立 PairSetup 旧版 52 项失败，
+  修复后 99/99。两组在 Release 和 Debug + ASan/UBSan 下通过，合并进既有
+  wifi_test 后为 375/375，不新增 CTest 目标。
+- 以上是消息完整性和流程校验。PV-Msg02 的设备身份密文、M6 的设备长期签名仍未
+  验证，记录也未绑定设备长期公钥；阶段通过不能证明这部分认证已完成。
+  需结合实际设备身份格式和可信密钥来源继续实现，再验证已有记录和新建配对。
+
+## 第四十四轮：显示订阅重连失败
+
+- 重订阅失败会留下空连接，旧 loop 下轮直接读取该连接而崩溃。空连接现在继续
+  进入断流后的退避和重订分支，保留连续失败上限、成功时清零、停止与快照策略。
+- 旧生产 loop 的 ASan 复现崩溃；链接设备 I/O 替身的同一实际 loop 修复后通过
+  12 项检查，覆盖连接/订阅失败后恢复、连续失败、成功后重置计数、退避期间停止
+  及保留快照。夹具在仓库外，不是新增 CI 测试目标；真机断线重订仍待验证。
