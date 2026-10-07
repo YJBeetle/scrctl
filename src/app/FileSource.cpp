@@ -14,7 +14,7 @@ bool FileSource::next(scrctl::Frame &out, int timeout_ms) {
     std::string err;
     while (frames_.empty() && !done_ && !pump_bytes(err)) {
         if (!err.empty()) {
-            std::fprintf(stderr, "%s\n", err.c_str());
+            error_ = std::move(err);
             done_ = true;
             return false;
         }

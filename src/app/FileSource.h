@@ -20,6 +20,10 @@ class FileSource final : public FrameSource {
     bool next(scrctl::Frame &out, int timeout_ms) override;
 
     [[nodiscard]] bool finished() const override { return done_ && frames_.empty(); }
+    [[nodiscard]] bool failed() const override { return !error_.empty(); }
+    [[nodiscard]] std::string end_reason() const override {
+        return failed() ? error_ : FrameSource::end_reason();
+    }
     [[nodiscard]] bool paces_itself() const override { return true; }
 
   private:
@@ -35,6 +39,7 @@ class FileSource final : public FrameSource {
     static constexpr std::size_t kMaxQueued = 8;
 
     std::string path_;
+    std::string error_;
     std::vector<uint8_t> buffer_;
     std::deque<scrctl::Frame> frames_;
     std::unique_ptr<scrctl::Decoder> decoder_;

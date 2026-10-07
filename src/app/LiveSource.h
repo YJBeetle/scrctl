@@ -43,6 +43,7 @@ class LiveSource final : public FrameSource {
     /// 依据 Stack::pump_error() 判断传输失败，不匹配具体错误文本。普通读超时
     /// 不会停止隧道。该会话不负责重新建立已终止的设备连接。
     [[nodiscard]] bool finished() const override;
+    [[nodiscard]] bool failed() const override { return finished(); }
     [[nodiscard]] std::string end_reason() const override;
 
     [[nodiscard]] bool has_audio() const { return audio_ != nullptr; }

@@ -17,6 +17,8 @@ class FrameSource {
     virtual bool next(scrctl::Frame &out, int timeout_ms) = 0;
 
     [[nodiscard]] virtual bool finished() const { return false; }
+    /// 已结束的源是否遇到不可恢复的错误；文件正常读完与用户停止不算失败。
+    [[nodiscard]] virtual bool failed() const { return false; }
     /// 源结束时提供原因。实时源应区分设备断开和暂时的取帧失败。
     [[nodiscard]] virtual std::string end_reason() const { return SCRCTL_TR("Source ended"); }
     /// 文件回放要自己按标称帧率追节拍；实时流的到达节奏就是设备的节奏。

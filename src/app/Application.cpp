@@ -183,6 +183,7 @@ int run(int argc, char **argv) {
     const Uint64 start = SDL_GetTicks64();
     Uint64 last_stats_at = SDL_GetTicks64();
     bool quit = false;
+    int exit_code = 0;
 
     /// 将窗口的按下、移动和抬起事件转换为设备触摸。
     /// 注入失败后停止重试，仅输出一次错误，避免每次鼠标移动重复报错。
@@ -230,7 +231,8 @@ int run(int argc, char **argv) {
         // 最多等待 50 ms，之后处理窗口事件，限制关闭和移动操作的响应延迟。
         if (!source->next(f, 50)) {
             if (source->finished()) {
-                std::printf("%s\n", source->end_reason().c_str());
+                exit_code = source->failed() ? 1 : 0;
+                std::fprintf(exit_code == 0 ? stdout : stderr, "%s\n", source->end_reason().c_str());
                 break;
             }
             // 等待下一帧时也需要处理窗口事件，避免窗口失去响应。
@@ -318,6 +320,9 @@ int run(int argc, char **argv) {
 
     if (presenter != nullptr) {
         presenter->release_touch(on_touch);
+    }
+    if (exit_code != 0) {
+        return exit_code;
     }
     if (o.verify_at > 0 && rendered < o.verify_at) {
         std::fprintf(stderr,

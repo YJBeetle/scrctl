@@ -1,5 +1,6 @@
 #include "app/Application.h"
 #include "app/SdlRuntime.h"
+#include "decode/Decoder.h"
 
 #include <SDL.h>
 #include <chrono>
@@ -65,11 +66,15 @@ int main() {
          std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".hevc");
     std::ofstream(path, std::ios::binary).close();
     SDL_setenv("SDL_VIDEODRIVER", "scrctl-invalid-driver", 1);
+    check(run({"scrctl", "--play", path.string() + ".missing", "--no-window", "--no-audio"}) == 1,
+          "missing playback file reports failure without a verify request");
+    check(SDL_WasInit(0) == 0, "file open failure cleans SDL");
     check(run({"scrctl", "--play", path.string(), "--no-audio"}) == 1,
           "application reports SDL initialization failure");
     check(SDL_WasInit(0) == 0, "failed initialization cleans partially started SDL subsystems");
-    check(run({"scrctl", "--play", path.string(), "--no-window", "--no-audio"}) == 0,
-          "headless playback does not require video initialization");
+    check(run({"scrctl", "--play", path.string(), "--no-window", "--no-audio"}) ==
+              (scrctl::kHaveDecoder ? 0 : 1),
+          "headless EOF succeeds with a decoder; missing decoder reports failure");
     check(SDL_WasInit(0) == 0, "normal application return cleans SDL");
     SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);
     const auto readback_path = path.parent_path() / (path.stem().string() + ".bmp");
