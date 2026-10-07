@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 15:04+0800\n"
+"POT-Creation-Date: 2026-10-07 15:34+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -906,12 +906,12 @@ msgstr ""
 msgid "Frame length too large: "
 msgstr ""
 
-#: src/http2/Framing.cpp:155 src/remote/RemoteXpc.cpp:574
-#: src/remote/RemoteXpc.cpp:660 src/xpc/XpcValue.cpp:649
+#: src/http2/Framing.cpp:155 src/remote/RemoteXpc.cpp:580
+#: src/remote/RemoteXpc.cpp:666 src/xpc/XpcValue.cpp:633
 msgid " bytes"
 msgstr ""
 
-#: src/http2/Framing.cpp:155 src/xpc/XpcValue.cpp:649
+#: src/http2/Framing.cpp:155 src/xpc/XpcValue.cpp:633
 msgid "Missing "
 msgstr ""
 
@@ -1026,147 +1026,147 @@ msgid ""
 "expires): %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:150
+#: src/media/FramePump.cpp:156
 #, c-format
 msgid "Failed to stop previous video session (still attempting restart): %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:176
+#: src/media/FramePump.cpp:190
 #, c-format
 msgid "Video session recreated, receive port=%u\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:237
+#: src/media/FramePump.cpp:251
 #, c-format
 msgid "Failed to send PLI: %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:257
+#: src/media/FramePump.cpp:271
 #, c-format
 msgid ""
 "Sequence gap or discarded fragment detected: requesting keyframe, wait limit "
 "%d ms\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:287
+#: src/media/FramePump.cpp:301
 #, c-format
 msgid "Decoder switched to %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:325
+#: src/media/FramePump.cpp:339
 #, c-format
 msgid ""
 "After %d restarts, NALs still exceed the decoder limit. Video is "
 "unavailable; retrying every %llu seconds. Callers can use screenshots.\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:379
+#: src/media/FramePump.cpp:393
 #, c-format
 msgid "Test: injected keyframe decode failure (%s)\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:380
+#: src/media/FramePump.cpp:394
 msgid "further PLI disabled"
 msgstr ""
 
-#: src/media/FramePump.cpp:381
+#: src/media/FramePump.cpp:395
 msgid "PLI continues"
 msgstr ""
 
-#: src/media/FramePump.cpp:471
+#: src/media/FramePump.cpp:485
 #, c-format
 msgid ""
 "%s: no data for %llu ms; device reports session alive, continuing to wait\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:476
+#: src/media/FramePump.cpp:490
 #, c-format
 msgid "%s: no data for %llu ms, %s; recreating video session\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:479
+#: src/media/FramePump.cpp:493
 msgid "device session ended"
 msgstr ""
 
-#: src/media/FramePump.cpp:480 src/media/ScreenshotSource.cpp:72
-#: src/net/Stack.cpp:355 src/net/TcpStream.cpp:41 src/net/TcpStream.cpp:118
-#: src/net/TcpStream.cpp:122 src/net/UdpSocket.cpp:104
-#: src/net/UdpSocket.cpp:130 src/remote/Rsd.cpp:232
+#: src/media/FramePump.cpp:494 src/media/ScreenshotSource.cpp:72
+#: src/net/Stack.cpp:359 src/net/TcpStream.cpp:44 src/net/TcpStream.cpp:122
+#: src/net/TcpStream.cpp:126 src/net/UdpSocket.cpp:109
+#: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:232
 #: src/transport/Socket.cpp:114 src/wifi/RemotePairing.cpp:35
 msgid ")"
 msgstr ""
 
-#: src/media/FramePump.cpp:480
+#: src/media/FramePump.cpp:494
 msgid "session status query failed ("
 msgstr ""
 
-#: src/media/FramePump.cpp:483 src/media/FramePump.cpp:496
+#: src/media/FramePump.cpp:497 src/media/FramePump.cpp:510
 #, c-format
 msgid "Failed to recreate video session: %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:511
+#: src/media/FramePump.cpp:525
 #, c-format
 msgid ""
 "%s: no data for %llu ms; recovery threshold exceeded, recreating video "
 "session\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:532
+#: src/media/FramePump.cpp:546
 #, c-format
 msgid "Failed to recreate video session: %s (retry in 1 second)\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:562
+#: src/media/FramePump.cpp:576
 #, c-format
 msgid "Failed to send RTCP keepalive: %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:567
+#: src/media/FramePump.cpp:581
 msgid "Input or frame request"
 msgstr ""
 
-#: src/media/FramePump.cpp:575
+#: src/media/FramePump.cpp:589
 #, c-format
 msgid "Video fallback active for %llu seconds; retrying video session\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:582
+#: src/media/FramePump.cpp:596
 #, c-format
 msgid "%s; recreating video session to obtain a keyframe\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:583
+#: src/media/FramePump.cpp:597
 msgid "Scheduled video retry after fallback"
 msgstr ""
 
-#: src/media/FramePump.cpp:584
+#: src/media/FramePump.cpp:598
 msgid "NAL exceeds platform decoder length limit"
 msgstr ""
 
-#: src/media/FramePump.cpp:620
+#: src/media/FramePump.cpp:634
 #, c-format
 msgid "Keyframe wait reached %d ms; recreating video session\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:635
+#: src/media/FramePump.cpp:649
 #, c-format
 msgid ""
 "No keyframe output after %llu seconds; recreating video session (%d/%d)\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:643
+#: src/media/FramePump.cpp:657
 #, c-format
 msgid ""
 "No keyframe output after %d restarts. Video is unavailable; callers can use "
 "screenshots. Retrying every %llu seconds.\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:666
+#: src/media/FramePump.cpp:680
 msgid "Receive silence timeout"
 msgstr ""
 
-#: src/media/FramePump.cpp:705
+#: src/media/FramePump.cpp:719
 #, c-format
 msgid "Test: dropped video packet %d to inject a sequence gap\n"
 msgstr ""
@@ -1220,148 +1220,148 @@ msgstr ""
 msgid "getmediastreamserverstatus response missing sessions array"
 msgstr ""
 
-#: src/net/Stack.cpp:144
+#: src/net/Stack.cpp:147
 msgid ""
 "Cannot start tunnel stack: invalid address or stack already started/stopped"
 msgstr ""
 
-#: src/net/Stack.cpp:147
+#: src/net/Stack.cpp:150
 msgid "Tunnel MTU is below the IPv6 minimum"
 msgstr ""
 
-#: src/net/Stack.cpp:162
+#: src/net/Stack.cpp:165
 msgid "Failed to register lwIP tunnel interface"
 msgstr ""
 
-#: src/net/Stack.cpp:167
+#: src/net/Stack.cpp:170
 msgid "Failed to start tunnel thread: "
 msgstr ""
 
-#: src/net/Stack.cpp:187
+#: src/net/Stack.cpp:190
 msgid "Tunnel stopped"
 msgstr ""
 
-#: src/net/Stack.cpp:228
+#: src/net/Stack.cpp:235
 msgid "Tunnel stopped or send queue full"
 msgstr ""
 
-#: src/net/Stack.cpp:283
+#: src/net/Stack.cpp:292
 msgid "Tunnel processing failed: "
 msgstr ""
 
-#: src/net/Stack.cpp:288
+#: src/net/Stack.cpp:297
 msgid "Tunnel read failed"
 msgstr ""
 
-#: src/net/Stack.cpp:349
+#: src/net/Stack.cpp:353
 msgid "beyond source address scope"
 msgstr ""
 
-#: src/net/Stack.cpp:349
+#: src/net/Stack.cpp:353
 msgid "communication administratively prohibited"
 msgstr ""
 
-#: src/net/Stack.cpp:349
+#: src/net/Stack.cpp:353
 msgid "no route to destination"
 msgstr ""
 
-#: src/net/Stack.cpp:350
+#: src/net/Stack.cpp:354
 msgid "address unreachable"
 msgstr ""
 
-#: src/net/Stack.cpp:350
+#: src/net/Stack.cpp:354
 msgid "port unreachable"
 msgstr ""
 
-#: src/net/Stack.cpp:350
+#: src/net/Stack.cpp:354
 msgid "source address failed ingress/egress policy"
 msgstr ""
 
-#: src/net/Stack.cpp:351
+#: src/net/Stack.cpp:355
 msgid "route to destination rejected"
 msgstr ""
 
-#: src/net/Stack.cpp:355
+#: src/net/Stack.cpp:359
 msgid "("
 msgstr ""
 
-#: src/net/Stack.cpp:357
+#: src/net/Stack.cpp:361
 msgid " (packet too big)"
 msgstr ""
 
-#: src/net/Stack.cpp:359
+#: src/net/Stack.cpp:363
 msgid " (hop limit exceeded)"
 msgstr ""
 
-#: src/net/Stack.cpp:361
+#: src/net/Stack.cpp:365
 msgid " (parameter problem)"
 msgstr ""
 
-#: src/net/Stack.cpp:363
+#: src/net/Stack.cpp:367
 msgid " (echo reply)"
 msgstr ""
 
-#: src/net/Stack.cpp:363
+#: src/net/Stack.cpp:367
 msgid " (echo request)"
 msgstr ""
 
-#: src/net/Stack.cpp:377
+#: src/net/Stack.cpp:380
 msgid " inner nh="
 msgstr ""
 
-#: src/net/Stack.cpp:381
+#: src/net/Stack.cpp:384
 msgid " ports "
 msgstr ""
 
-#: src/net/TcpStream.cpp:41
+#: src/net/TcpStream.cpp:44
 msgid "TCP connection terminated (lwIP "
 msgstr ""
 
-#: src/net/TcpStream.cpp:118
+#: src/net/TcpStream.cpp:122
 msgid "TCP connect failed (lwIP "
 msgstr ""
 
-#: src/net/TcpStream.cpp:122
+#: src/net/TcpStream.cpp:126
 msgid "Cannot create TCP connection (lwIP "
 msgstr ""
 
-#: src/net/TcpStream.cpp:130
+#: src/net/TcpStream.cpp:134
 msgid "TCP connect timed out or connection closed"
 msgstr ""
 
-#: src/net/TcpStream.cpp:168
+#: src/net/TcpStream.cpp:174
 msgid "TCP send failed (connection closed or network error)"
 msgstr ""
 
-#: src/net/TcpStream.cpp:176
+#: src/net/TcpStream.cpp:182
 msgid "TCP send timed out"
 msgstr ""
 
-#: src/net/TcpStream.cpp:189
+#: src/net/TcpStream.cpp:195
 msgid "TCP connection not established"
 msgstr ""
 
-#: src/net/TcpStream.cpp:207
+#: src/net/TcpStream.cpp:213
 msgid "TCP read timed out"
 msgstr ""
 
-#: src/net/TcpStream.cpp:211
+#: src/net/TcpStream.cpp:217
 msgid "TCP peer or local endpoint closed"
 msgstr ""
 
-#: src/net/UdpSocket.cpp:74
+#: src/net/UdpSocket.cpp:79
 msgid "UDP endpoint closed"
 msgstr ""
 
-#: src/net/UdpSocket.cpp:104
+#: src/net/UdpSocket.cpp:109
 msgid "UDP bind failed (lwIP "
 msgstr ""
 
-#: src/net/UdpSocket.cpp:130
+#: src/net/UdpSocket.cpp:136
 msgid "UDP send failed (lwIP "
 msgstr ""
 
-#: src/net/UdpSocket.cpp:141
+#: src/net/UdpSocket.cpp:147
 msgid "UDP receive timed out"
 msgstr ""
 
@@ -1752,8 +1752,8 @@ msgstr ""
 msgid "Failed to read peer_info: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:258 src/remote/RemoteXpc.cpp:602
-#: src/remote/RemoteXpc.cpp:772 src/remote/RemoteXpc.cpp:788
+#: src/remote/RemoteXpc.cpp:258 src/remote/RemoteXpc.cpp:608
+#: src/remote/RemoteXpc.cpp:778 src/remote/RemoteXpc.cpp:794
 msgid "Connection terminated"
 msgstr ""
 
@@ -1765,7 +1765,7 @@ msgid ""
 "      "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:322 src/remote/RemoteXpc.cpp:514
+#: src/remote/RemoteXpc.cpp:322 src/remote/RemoteXpc.cpp:520
 msgid "RemoteXPC connection input exceeds 64 MiB"
 msgstr ""
 
@@ -1795,116 +1795,116 @@ msgstr ""
 msgid "RST_STREAM must use a nonzero stream"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:459
+#: src/remote/RemoteXpc.cpp:458
 msgid "RemoteXPC stream reset: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:465
+#: src/remote/RemoteXpc.cpp:464
 msgid "DATA must use a nonzero stream"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:478 src/remote/RemoteXpc.cpp:681
-#: src/remote/RemoteXpc.cpp:697
+#: src/remote/RemoteXpc.cpp:477 src/remote/RemoteXpc.cpp:687
+#: src/remote/RemoteXpc.cpp:703
 msgid "RemoteXPC file stream limit exceeded (100)"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:486 src/remote/RemoteXpc.cpp:705
+#: src/remote/RemoteXpc.cpp:492 src/remote/RemoteXpc.cpp:711
 msgid "RemoteXPC file stream cannot be reused: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:492 src/remote/RemoteXpc.cpp:709
+#: src/remote/RemoteXpc.cpp:498 src/remote/RemoteXpc.cpp:715
 msgid "RemoteXPC file data exceeds declared size or 32 MiB limit"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:498 src/remote/RemoteXpc.cpp:654
-#: src/remote/RemoteXpc.cpp:713
+#: src/remote/RemoteXpc.cpp:504 src/remote/RemoteXpc.cpp:660
+#: src/remote/RemoteXpc.cpp:719
 msgid "RemoteXPC file ended before its declared size"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:504
+#: src/remote/RemoteXpc.cpp:510
 msgid "Unsupported RemoteXPC message stream: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:509
+#: src/remote/RemoteXpc.cpp:515
 msgid "RemoteXPC message stream input exceeds 32 MiB plus wrapper"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:527
+#: src/remote/RemoteXpc.cpp:533
 msgid "Device set END_STREAM on message channel; connection ended"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:543
+#: src/remote/RemoteXpc.cpp:549
 msgid "Failed to replenish connection receive window: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:552
+#: src/remote/RemoteXpc.cpp:558
 msgid "Failed to replenish stream receive window: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:573
+#: src/remote/RemoteXpc.cpp:579
 msgid "Peer did not replenish flow-control window; sent "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:578
+#: src/remote/RemoteXpc.cpp:584
 msgid "Disconnected while waiting for flow-control window: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:589
+#: src/remote/RemoteXpc.cpp:595
 msgid "Failed to send DATA: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:608
+#: src/remote/RemoteXpc.cpp:614
 msgid "XPC encoding failed (depth or length limit exceeded)"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:648
+#: src/remote/RemoteXpc.cpp:654
 msgid "Failed to accept file stream: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:659
+#: src/remote/RemoteXpc.cpp:665
 msgid " has received "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:659
+#: src/remote/RemoteXpc.cpp:665
 msgid "File receive timed out: stream "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:664
+#: src/remote/RemoteXpc.cpp:670
 msgid "Disconnected while receiving file: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:689
+#: src/remote/RemoteXpc.cpp:695
 msgid "RemoteXPC reply attachments exceed 32 MiB"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:723
+#: src/remote/RemoteXpc.cpp:729
 #, c-format
 msgid "    Receiving file: %llu bytes on stream %u\n"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:740
+#: src/remote/RemoteXpc.cpp:746
 msgid " contains malformed message: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:740
+#: src/remote/RemoteXpc.cpp:746
 msgid "Stream "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:747
+#: src/remote/RemoteXpc.cpp:753
 #, c-format
 msgid "    Stream %u message incomplete: %s\n"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:755
+#: src/remote/RemoteXpc.cpp:761
 #, c-format
 msgid "    => stream %u id=%llu %s\n"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:784
+#: src/remote/RemoteXpc.cpp:790
 msgid "Timed out waiting for device reply"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:793
+#: src/remote/RemoteXpc.cpp:799
 msgid "Disconnected while waiting for device reply: "
 msgstr ""
 
@@ -2027,7 +2027,7 @@ msgid ""
 "button input may still be available; see docs/coredevice.md section 23)"
 msgstr ""
 
-#: src/rt/RtpHevc.cpp:85
+#: src/rt/RtpHevc.cpp:84
 msgid "Not an RTP packet"
 msgstr ""
 
@@ -2151,56 +2151,61 @@ msgstr ""
 msgid "Failed to parse private key PEM"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:148 src/transport/TlsChannel.cpp:225
+#: src/transport/TlsChannel.cpp:154 src/transport/TlsChannel.cpp:242
 msgid "SSL_CTX_new failed"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:161
+#: src/transport/TlsChannel.cpp:158 src/transport/TlsChannel.cpp:247
+msgid "Failed to configure TLS protocol version"
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:168 src/transport/TlsChannel.cpp:198
 msgid "Failed to add root certificate"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:185
+#: src/transport/TlsChannel.cpp:183
 msgid "Failed to load client certificate"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:188
+#: src/transport/TlsChannel.cpp:186
 msgid "Failed to load client private key"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:191
+#: src/transport/TlsChannel.cpp:189
 msgid "Client certificate does not match private key"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:196 src/transport/TlsChannel.cpp:241
+#: src/transport/TlsChannel.cpp:204 src/transport/TlsChannel.cpp:259
 msgid "SSL_new failed"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:202 src/transport/TlsChannel.cpp:249
+#: src/transport/TlsChannel.cpp:209 src/transport/TlsChannel.cpp:212
+#: src/transport/TlsChannel.cpp:266 src/transport/TlsChannel.cpp:269
 msgid "SSL_set_fd failed"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:208
+#: src/transport/TlsChannel.cpp:220
 msgid "TLS handshake failed, ssl_err="
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:219
+#: src/transport/TlsChannel.cpp:234
 msgid "PSK is empty"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:231
+#: src/transport/TlsChannel.cpp:250
 msgid ""
 "TLS backend has no PSK cipher suite; use an OpenSSL build with PSK support"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:244
+#: src/transport/TlsChannel.cpp:262
 msgid "Failed to attach PSK to TLS channel"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:256
+#: src/transport/TlsChannel.cpp:278
 msgid "PSK handshake failed, ssl_err="
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:258
+#: src/transport/TlsChannel.cpp:280
 msgid ""
 " (device tunnel listener rejected the PSK; check pair-verify key derivation)"
 msgstr ""
@@ -2382,51 +2387,52 @@ msgstr ""
 msgid "HKDF-SHA512 derivation failed"
 msgstr ""
 
-#: src/wifi/Opack.cpp:90
+#: src/wifi/Opack.cpp:91
 msgid "OPACK encoder does not support negative integers"
 msgstr ""
 
-#: src/wifi/Opack.cpp:151
+#: src/wifi/Opack.cpp:152
 msgid "OPACK encode: unknown value type"
 msgstr ""
 
-#: src/wifi/Opack.cpp:182
-msgid "OPACK decode: unknown length form"
-msgstr ""
-
-#: src/wifi/Opack.cpp:186
+#: src/wifi/Opack.cpp:164 src/wifi/Opack.cpp:170 src/wifi/Opack.cpp:175
+#: src/wifi/Opack.cpp:180 src/wifi/Opack.cpp:193
 msgid "OPACK decode: payload exceeds buffer"
 msgstr ""
 
-#: src/wifi/Opack.cpp:196
+#: src/wifi/Opack.cpp:188
+msgid "OPACK decode: unknown length form"
+msgstr ""
+
+#: src/wifi/Opack.cpp:207
 msgid "OPACK decode: nesting too deep"
 msgstr ""
 
-#: src/wifi/Opack.cpp:201
+#: src/wifi/Opack.cpp:212
 msgid "OPACK decode: missing type byte"
 msgstr ""
 
-#: src/wifi/Opack.cpp:205
+#: src/wifi/Opack.cpp:216
 msgid "OPACK decode: terminator in value position"
 msgstr ""
 
-#: src/wifi/Opack.cpp:258
+#: src/wifi/Opack.cpp:269
 msgid "OPACK decode: terminator in fixed-length array"
 msgstr ""
 
-#: src/wifi/Opack.cpp:280
+#: src/wifi/Opack.cpp:291
 msgid "OPACK decode: terminator in fixed-length dictionary"
 msgstr ""
 
-#: src/wifi/Opack.cpp:295
+#: src/wifi/Opack.cpp:306
 msgid "OPACK decode: unknown type byte 0x"
 msgstr ""
 
-#: src/wifi/Opack.cpp:327
+#: src/wifi/Opack.cpp:338
 msgid " trailing bytes"
 msgstr ""
 
-#: src/wifi/Opack.cpp:327
+#: src/wifi/Opack.cpp:338
 msgid "OPACK decode: "
 msgstr ""
 
@@ -2690,94 +2696,94 @@ msgstr ""
 msgid "TLV length exceeds buffer"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:187
+#: src/xpc/XpcValue.cpp:177
 msgid "u32 read out of bounds"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:197
+#: src/xpc/XpcValue.cpp:187
 msgid "u64 read out of bounds"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:209
+#: src/xpc/XpcValue.cpp:199
 msgid "Fixed-length byte read out of bounds"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:232
+#: src/xpc/XpcValue.cpp:219
 msgid "Key has no NUL terminator in this segment"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:245
+#: src/xpc/XpcValue.cpp:231
 msgid "Length prefix exceeds remaining bytes"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:267
+#: src/xpc/XpcValue.cpp:253
 msgid "XPC nesting too deep"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:327
+#: src/xpc/XpcValue.cpp:313
 msgid "Invalid string length"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:348
+#: src/xpc/XpcValue.cpp:334
 msgid " bytes, limit "
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:348
+#: src/xpc/XpcValue.cpp:334
 msgid "Invalid data length: declared "
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:393
+#: src/xpc/XpcValue.cpp:379
 msgid "Container length cannot hold count field"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:412
+#: src/xpc/XpcValue.cpp:397
 msgid "Entry count does not match container size"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:431
+#: src/xpc/XpcValue.cpp:416
 msgid "Container entry decode failed"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:438
+#: src/xpc/XpcValue.cpp:423
 msgid "Unsupported XPC type marker 0x"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:590
+#: src/xpc/XpcValue.cpp:575
 msgid "Buffer too large"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:596
+#: src/xpc/XpcValue.cpp:581
 msgid "Decode failed"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:630
+#: src/xpc/XpcValue.cpp:614
 msgid "Envelope shorter than 24 bytes"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:636
+#: src/xpc/XpcValue.cpp:620
 msgid "Wrapper magic mismatch: 0x"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:644
+#: src/xpc/XpcValue.cpp:628
 msgid "Invalid message length: "
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:663
+#: src/xpc/XpcValue.cpp:647
 msgid "Payload magic mismatch: 0x"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:668
+#: src/xpc/XpcValue.cpp:652
 msgid "Cannot read protocol version"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:672
+#: src/xpc/XpcValue.cpp:656
 msgid "Unsupported XPC protocol version: 0x"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:677
+#: src/xpc/XpcValue.cpp:661
 msgid "Payload decode failed"
 msgstr ""
 
-#: src/xpc/XpcValue.cpp:718
+#: src/xpc/XpcValue.cpp:702
 msgid ", received "
 msgstr ""

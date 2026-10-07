@@ -139,6 +139,7 @@ int main() {
     io_lifecycle();
     interruption();
     tls_psk();
+    scrctl_test::tls_failures(check);
     scrctl_test::tls_psk_moves(check);
     return failures ? 1 : 0;
 }

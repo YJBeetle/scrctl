@@ -174,6 +174,7 @@ int main() {
     tls_write_path();
     still_works_as_a_socket();
     readable_wait_results();
+    scrctl_test::tls_failures(check);
     scrctl_test::tls_psk_moves(check);
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;

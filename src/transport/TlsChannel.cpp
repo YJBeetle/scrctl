@@ -112,7 +112,9 @@ TlsChannel &TlsChannel::operator=(TlsChannel &&other) noexcept {
 
 void TlsChannel::release() {
     if (ssl_ != nullptr) {
-        SSL_shutdown(ssl_);
+        if (SSL_is_init_finished(ssl_)) {
+            SSL_shutdown(ssl_);
+        }
         SSL_free(ssl_);
         ssl_ = nullptr;
     }
@@ -143,113 +145,133 @@ void ignore_sigpipe_once() {}
 bool TlsChannel::handshake(Socket &sock, const PemIdentity &id, std::string &err) {
     ignore_sigpipe_once();
     release();
-    ctx_ = SSL_CTX_new(TLS_client_method());
-    if (ctx_ == nullptr) {
+    ERR_clear_error();
+    err.clear();
+    // 候选对象只在握手成功后交给通道；失败路径直接释放，不对半成品发送 close_notify。
+    auto ctx = std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)>(
+        SSL_CTX_new(TLS_client_method()), SSL_CTX_free);
+    if (!ctx) {
         return err = openssl_error(SCRCTL_TR("SSL_CTX_new failed")), false;
     }
     // 设备侧 lockdown 仍接受很旧的 TLS，且需要允许不带 SNI 的裸 IP 连接。
-    SSL_CTX_set_min_proto_version(ctx_, TLS1_VERSION);
-    SSL_CTX_set_options(ctx_, SSL_OP_LEGACY_SERVER_CONNECT);
+    if (SSL_CTX_set_min_proto_version(ctx.get(), TLS1_VERSION) != 1) {
+        return err = openssl_error(SCRCTL_TR("Failed to configure TLS protocol version")), false;
+    }
+    SSL_CTX_set_options(ctx.get(), SSL_OP_LEGACY_SERVER_CONNECT);
 
-    X509 *root = read_cert_pem(id.root_cert, err);
-    if (root == nullptr) {
+    auto root = std::unique_ptr<X509, decltype(&X509_free)>(
+        read_cert_pem(id.root_cert, err), X509_free);
+    if (!root) {
         return false;
     }
-    const int added = X509_STORE_add_cert(SSL_CTX_get_cert_store(ctx_), root);
-    X509_free(root);
-    if (added != 1) {
-        return err = SCRCTL_TR("Failed to add root certificate"), false;
+    if (X509_STORE_add_cert(SSL_CTX_get_cert_store(ctx.get()), root.get()) != 1) {
+        return err = openssl_error(SCRCTL_TR("Failed to add root certificate")), false;
     }
-    SSL_CTX_set_verify(ctx_, SSL_VERIFY_PEER, verify_accept_peer);
+    SSL_CTX_set_verify(ctx.get(), SSL_VERIFY_PEER, verify_accept_peer);
 
-    X509 *host_cert = read_cert_pem(id.host_cert, err);
-    if (host_cert == nullptr) {
+    auto host_cert = std::unique_ptr<X509, decltype(&X509_free)>(
+        read_cert_pem(id.host_cert, err), X509_free);
+    if (!host_cert) {
         return false;
     }
-    EVP_PKEY *host_key = read_key_pem(id.host_key, err);
-    if (host_key == nullptr) {
-        X509_free(host_cert);
+    auto host_key = std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)>(
+        read_key_pem(id.host_key, err), EVP_PKEY_free);
+    if (!host_key) {
         return false;
     }
-    const int use_cert = SSL_CTX_use_certificate(ctx_, host_cert);
-    const int use_key = SSL_CTX_use_PrivateKey(ctx_, host_key);
-    const int match = SSL_CTX_check_private_key(ctx_);
-    // 把根证书一并作为链的一部分出示，部分 iOS 版本会要求完整链。
-    X509 *root_for_chain = read_cert_pem(id.root_cert, err);
-    if (root_for_chain != nullptr) {
-        SSL_CTX_add_extra_chain_cert(ctx_, root_for_chain);
-    }
-    X509_free(host_cert);
-    EVP_PKEY_free(host_key);
-    if (use_cert != 1) {
+    if (SSL_CTX_use_certificate(ctx.get(), host_cert.get()) != 1) {
         return err = openssl_error(SCRCTL_TR("Failed to load client certificate")), false;
     }
-    if (use_key != 1) {
+    if (SSL_CTX_use_PrivateKey(ctx.get(), host_key.get()) != 1) {
         return err = openssl_error(SCRCTL_TR("Failed to load client private key")), false;
     }
-    if (match != 1) {
+    if (SSL_CTX_check_private_key(ctx.get()) != 1) {
         return err = SCRCTL_TR("Client certificate does not match private key"), false;
     }
+    // 把根证书一并作为链的一部分出示，部分 iOS 版本会要求完整链。
+    auto root_for_chain = std::unique_ptr<X509, decltype(&X509_free)>(
+        read_cert_pem(id.root_cert, err), X509_free);
+    if (!root_for_chain) {
+        return false;
+    }
+    if (SSL_CTX_add_extra_chain_cert(ctx.get(), root_for_chain.get()) != 1) {
+        return err = openssl_error(SCRCTL_TR("Failed to add root certificate")), false;
+    }
+    root_for_chain.release();  // 成功后根证书由 SSL_CTX 持有。
 
-    ssl_ = SSL_new(ctx_);
-    if (ssl_ == nullptr) {
-        return err = SCRCTL_TR("SSL_new failed"), false;
+    auto ssl = std::unique_ptr<SSL, decltype(&SSL_free)>(SSL_new(ctx.get()), SSL_free);
+    if (!ssl) {
+        return err = openssl_error(SCRCTL_TR("SSL_new failed")), false;
     }
     // 不校验设备证书身份；证书兼容策略见 verify_accept_peer。
-    // OpenSSL 的 socket BIO 接口使用 int；拒绝无法无损表示的本机句柄。
-    if (sock.fd() > static_cast<NativeSocket>(INT_MAX) ||
-        SSL_set_fd(ssl_, static_cast<int>(sock.fd())) != 1) {
+    // OpenSSL 的 socket BIO 接口使用 int；拒绝无效或无法无损表示的本机句柄。
+    if (!sock.valid() || sock.fd() > static_cast<NativeSocket>(INT_MAX)) {
         return err = SCRCTL_TR("SSL_set_fd failed"), false;
     }
-    if (SSL_connect(ssl_) != 1) {
-        const int ssl_err = SSL_get_error(ssl_, -1);
+    if (SSL_set_fd(ssl.get(), static_cast<int>(sock.fd())) != 1) {
+        return err = openssl_error(SCRCTL_TR("SSL_set_fd failed")), false;
+    }
+    ERR_clear_error();
+    const int connected = SSL_connect(ssl.get());
+    if (connected != 1) {
+        const int ssl_err = SSL_get_error(ssl.get(), connected);
         char buf[256] = {0};
         ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
         err = SCRCTL_TR("TLS handshake failed, ssl_err=") + std::to_string(ssl_err) + " " + buf;
-        release();
         return false;
     }
+    ctx_ = ctx.release();
+    ssl_ = ssl.release();
     return true;
 }
 
 bool TlsChannel::handshake_psk(Socket &sock, const std::vector<uint8_t> &psk, std::string &err) {
     ignore_sigpipe_once();
     release();
+    ERR_clear_error();
+    err.clear();
     if (psk.empty()) {
         err = SCRCTL_TR("PSK is empty");
         return false;
     }
-    psk_ = std::make_unique<std::vector<uint8_t>>(psk);
-    ctx_ = SSL_CTX_new(TLS_client_method());
-    if (ctx_ == nullptr) {
+    // SSL ex_data 指向这份独立存储；成功后仅转移所有权，回调使用的地址不变。
+    auto stored_psk = std::make_unique<std::vector<uint8_t>>(psk);
+    auto ctx = std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)>(
+        SSL_CTX_new(TLS_client_method()), SSL_CTX_free);
+    if (!ctx) {
         return err = openssl_error(SCRCTL_TR("SSL_CTX_new failed")), false;
     }
     // 使用已验证的 TLS 1.2 PSK 路径，未接入 TLS 1.3 external PSK。
-    SSL_CTX_set_min_proto_version(ctx_, TLS1_2_VERSION);
-    SSL_CTX_set_max_proto_version(ctx_, TLS1_2_VERSION);
-    if (SSL_CTX_set_cipher_list(ctx_, "PSK") != 1) {
+    if (SSL_CTX_set_min_proto_version(ctx.get(), TLS1_2_VERSION) != 1 ||
+        SSL_CTX_set_max_proto_version(ctx.get(), TLS1_2_VERSION) != 1) {
+        return err = openssl_error(SCRCTL_TR("Failed to configure TLS protocol version")), false;
+    }
+    if (SSL_CTX_set_cipher_list(ctx.get(), "PSK") != 1) {
         err = SCRCTL_TR("TLS backend has no PSK cipher suite; use an OpenSSL build with PSK support");
-        release();
         return false;
     }
     // 不使用证书认证；双方通过共享密钥完成认证。
-    SSL_CTX_set_verify(ctx_, SSL_VERIFY_NONE, nullptr);
-    SSL_CTX_set_psk_client_callback(ctx_, psk_client_callback);
+    SSL_CTX_set_verify(ctx.get(), SSL_VERIFY_NONE, nullptr);
+    SSL_CTX_set_psk_client_callback(ctx.get(), psk_client_callback);
 
-    ssl_ = SSL_new(ctx_);
-    if (ssl_ == nullptr) {
-        return err = SCRCTL_TR("SSL_new failed"), false;
+    auto ssl = std::unique_ptr<SSL, decltype(&SSL_free)>(SSL_new(ctx.get()), SSL_free);
+    if (!ssl) {
+        return err = openssl_error(SCRCTL_TR("SSL_new failed")), false;
     }
-    if (SSL_set_ex_data(ssl_, psk_ex_index(), psk_.get()) != 1) {
-        return err = SCRCTL_TR("Failed to attach PSK to TLS channel"), false;
+    if (SSL_set_ex_data(ssl.get(), psk_ex_index(), stored_psk.get()) != 1) {
+        return err = openssl_error(SCRCTL_TR("Failed to attach PSK to TLS channel")), false;
     }
-    // OpenSSL 的 socket BIO 接口使用 int；拒绝无法无损表示的本机句柄。
-    if (sock.fd() > static_cast<NativeSocket>(INT_MAX) ||
-        SSL_set_fd(ssl_, static_cast<int>(sock.fd())) != 1) {
+    // OpenSSL 的 socket BIO 接口使用 int；拒绝无效或无法无损表示的本机句柄。
+    if (!sock.valid() || sock.fd() > static_cast<NativeSocket>(INT_MAX)) {
         return err = SCRCTL_TR("SSL_set_fd failed"), false;
     }
-    if (SSL_connect(ssl_) != 1) {
-        const int ssl_err = SSL_get_error(ssl_, -1);
+    if (SSL_set_fd(ssl.get(), static_cast<int>(sock.fd())) != 1) {
+        return err = openssl_error(SCRCTL_TR("SSL_set_fd failed")), false;
+    }
+    ERR_clear_error();
+    const int connected = SSL_connect(ssl.get());
+    if (connected != 1) {
+        const int ssl_err = SSL_get_error(ssl.get(), connected);
         char buf[256] = {0};
         ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
         // PSK 拒绝可能来自 pair-verify 派生结果；保留 OpenSSL 原始原因供排查。
@@ -257,9 +279,11 @@ bool TlsChannel::handshake_psk(Socket &sock, const std::vector<uint8_t> &psk, st
               (std::strstr(buf, "psk") != nullptr
                    ? SCRCTL_TR(" (device tunnel listener rejected the PSK; check pair-verify key derivation)")
                    : "");
-        release();
         return false;
     }
+    ctx_ = ctx.release();
+    ssl_ = ssl.release();
+    psk_ = std::move(stored_psk);
     return true;
 }
 

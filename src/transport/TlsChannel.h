@@ -34,9 +34,11 @@ public:
     TlsChannel(const TlsChannel &) = delete;
     TlsChannel &operator=(const TlsChannel &) = delete;
 
+    /// 仅成功握手后持有 TLS 句柄；再次握手失败会清空原连接和候选状态。
     [[nodiscard]] bool valid() const { return ssl_ != nullptr; }
     [[nodiscard]] SSL *handle() const { return ssl_; }
 
+    /// 借用 sock，不取得 socket 所有权；返回 false 时 handle() 为 nullptr。
     bool handshake(Socket &sock, const PemIdentity &id, std::string &err);
 
     /// 使用 pair-verify 派生的共享密钥建立 TLS 1.2 PSK 通道，身份为空字符串。
