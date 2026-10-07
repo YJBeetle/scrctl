@@ -48,10 +48,17 @@ GitHub Actions 的 macOS 作业在离线自检后执行同样的安装、记录�
 本机验证目标；旧 macOS 26 runner 产物的主程序及库均声明最低 26.0，应按这个要求
 处理，不能用此前的 `--help` / `--version` 成功当成 macOS 15 分发验证。
 
-2026-10-07 下载的 [03c2f41 CI 包](https://github.com/YJBeetle/scrctl/actions/runs/37585863387/artifacts/11467220946)
-在本机 macOS 15.8 完成搬移检查：程序及包内所有库的最低要求均为 15.0，实际加载
-来自搬移目录，签名、权限、符号链接、中英文和自动语言选择通过。此结果不覆盖
-macOS 14 或更旧系统，也没有额外连接设备。
+本轮验证的源码提交为 `8efbfdddcbb39f653586377f022d313bd1bf63f4`，
+[CI run 37596738733](https://github.com/YJBeetle/scrctl/actions/runs/37596738733) 的 macOS
+离线自检 23/23 通过，并下载了真实
+[scrctl-macos artifact 11471017781](https://github.com/YJBeetle/scrctl/actions/runs/37596738733/artifacts/11471017781)。
+包内元数据、提交记录及源码 tar 的提交标记一致。该 arm64 包在本机 macOS 15.8
+解压、整体搬移后通过检查：程序与全部 23 个 dylib 条目的实际最低要求均为 15.0，
+架构和库 SHA256 与元数据吻合；程序权限 `0755`、5 个相对符号链接、ad hoc 签名与
+install name 通过。脱离 CI 构建翻译目录后，dyld 的非系统依赖及动态 SDL3 均从
+搬移目录加载，英文、中文、默认 auto 和 `--version`（`scrctl 0.1.0`）通过。
+此结果仅覆盖离线测试和包启动，不覆盖设备媒体或长期运行、macOS 14 及更旧系统，
+也不包含 Developer ID、公证或 Gatekeeper 分发检查。
 
 包内还记录实际 dylib 来源与 SHA256、架构、源码提交、Homebrew keg 版本、原始安装
 receipt 与 formula，以及 keg 提供的许可正文。本项目静态依赖的许可见

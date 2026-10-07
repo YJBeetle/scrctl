@@ -155,16 +155,38 @@ Windows 音频、输入控制、新建配对及 DDI 的完整初始安装流程�
 
 ## CI 产物
 
-GitHub Actions 的 `windows-arm64` 作业使用 `windows-11-arm` 和 MSYS2 CLANGARM64，
+GitHub Actions 的 `Windows ARM64` 作业使用 `windows-11-arm` 和 MSYS2 CLANGARM64，
 执行构建、离线测试、安装及独立启动检查。产物名为 `scrctl-windows-arm64`，
-测试日志另外保存。[提交 cacaac7 的 Windows 作业](https://github.com/YJBeetle/scrctl/actions/runs/37578978108/job/112654115639)
-已完成构建、24 项回归、安装检查与上传；下载的真实 Release 包也在 Windows ARM64 VM
-上通过仅含系统目录 PATH 的版本、中英文帮助和 LANG 自动选择检查。
+测试日志另外保存。[提交 8efbfdd 的 Windows 作业](https://github.com/YJBeetle/scrctl/actions/runs/37596738733/job/112711112940)
+已完成构建、离线测试、安装检查与上传；下载的实际 artifact ID 为 `11472035027`。
+包内 `source-commit.txt` 与 `scrctl-source.tar` 的归档提交均为
+`8efbfdddcbb39f653586377f022d313bd1bf63f4`。
+
+2026-10-08，将该包复制到 Windows ARM64 VM 的
+`C:\Workspace\scrctl\ci-artifacts\8efbfdd`，完成了五次独立进程启动。每个子进程的
+PATH 仅含 `C:\Windows\System32;C:\Windows`，工作目录为 `C:\Windows`，并清除
+`LC_ALL`、`LC_MESSAGES`、`LANGUAGE` 和 `SCRCTL_LOCALEDIR`：
+
+| 参数 | LANG | 预期输出 | 退出码 |
+| --- | --- | --- | --- |
+| `--version` | `C` | `scrctl 0.1.0` | 0 |
+| `--lang=en --help` | `zh_CN.UTF-8` | 英文帮助 | 0 |
+| `--lang=zh-CN --help` | `en_US.UTF-8` | 中文帮助 | 0 |
+| `--help`（默认 auto） | `en_US.UTF-8` | 英文帮助 | 0 |
+| `--help`（默认 auto） | `zh_CN.UTF-8` | 中文帮助 | 0 |
+
+下载包、VM 复制后及启动结束后的 exe SHA256 均为
+`c80acdd1385ff19cfd5109de38003e0886d07f75fb753d3c71d859927526b5f8`。
+83 个 DLL、五份来源记录（包含源码归档）及中文 `scrctl.mo` 的复制前后哈希全部一致。
+随包记录包含 272 条已安装包版本和 160 份依赖许可文件；没有逐 DLL 到包的来源映射，
+不以 VM 中另一套工具链的包信息推断 CI 来源。
 
 下载 artifact 后整体解压，保留 `bin` 和 `share` 的相对位置，运行 `bin\scrctl.exe`。
 `bin` 内应包含 exe 及其 DLL；`share` 内含翻译和构建记录。只复制 exe 会导致
 `libssl-3-arm64.dll` 等依赖找不到。构建目录中的 exe 依赖开发环境，不能单独分发。
-上述启动检查没有连接设备；USB 真机结果见前文。
+这次检查覆盖实际安装包的启动、DLL 加载、版本和语言选择，没有连接设备；本提交的
+USB、Wi-Fi、音频及真实媒体采集或显示未由这五次启动验证。前文 Apple 组件、USB 镜像
+及截图恢复的数据来自此前真机实验，保留其原有环境和有限时长边界。
 
 CI 包包含 DLL、翻译目录、已安装包版本、FFmpeg 构建配置、依赖许可文件和本项目源码快照。
 MSYS2 当前 FFmpeg 包启用了 GPL 和 version3，属于 GPL-3.0-or-later 构建，不能将其标为
