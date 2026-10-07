@@ -19,7 +19,9 @@ jobs:
       matrix:
         include:
           - name: macOS
-            os: macos-latest
+            # 标准 macos-15 runner 是 ARM64；固定系统，避免 latest 升到 26
+            # 后把主程序和 Homebrew bottles 的最低系统要求一起提升。
+            os: macos-15
           - name: Ubuntu
             os: ubuntu-latest
     # 两个平台都必须成功；构建、测试和可执行文件启动分别检查。

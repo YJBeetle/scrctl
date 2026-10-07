@@ -2,11 +2,14 @@
 import argparse
 import os
 from pathlib import Path
+import platform
 import re
 import shutil
 import subprocess
 import tempfile
 import uuid
+
+from record_macos_package import macos_version_tuple, minimum_macos
 
 
 def checked(command, **kwargs):
@@ -52,9 +55,20 @@ def main():
             libraries = sorted((moved / "bin/lib").rglob("*.dylib"))
             if not libraries:
                 raise RuntimeError("Package has no bundled dylibs")
+            host_macos = platform.mac_ver()[0]
+            host_version = macos_version_tuple(host_macos)
+            minimum_versions = {}
             for binary in [executable, *libraries]:
                 if not inside(binary, moved):
                     raise RuntimeError(f"Library symlink escapes package: {binary}")
+                # dyld 可能让高于当前系统的二进制先跑到 --help，仍不能据此
+                # 宣称支持当前系统。直接按每个 Mach-O 的真实最低要求拒绝。
+                commands = checked(["/usr/bin/otool", "-l", str(binary)]).stdout
+                minimum = minimum_macos(binary, commands)
+                if macos_version_tuple(minimum) > host_version:
+                    raise RuntimeError(f"Unsupported macOS version for {binary.relative_to(moved)}: "
+                                       f"requires {minimum}, host is {host_macos}")
+                minimum_versions[str(binary.relative_to(moved))] = minimum
                 checked(["/usr/bin/codesign", "--verify", "--strict", str(binary)])
                 # otool 第一行是文件名；dylib 的第一条引用还包含自身的 install ID。
                 linked = checked(["/usr/bin/otool", "-L", str(binary)]).stdout
@@ -67,7 +81,6 @@ def main():
                     target = executable.parent / dependency[len("@executable_path/"):]
                     if not target.is_file() or not inside(target, moved):
                         raise RuntimeError(f"Missing bundled dependency for {binary}: {dependency}")
-                commands = checked(["/usr/bin/otool", "-l", str(binary)]).stdout
                 if "LC_RPATH" in commands:
                     raise RuntimeError(f"Unremoved runtime search path in {binary}")
 
@@ -104,8 +117,12 @@ def main():
                               env={**environment, "LC_ALL": "C"}, cwd=temporary)
             if not version.stdout.strip().startswith("scrctl "):
                 raise RuntimeError(f"Unexpected installed version: {version.stdout}")
-            report = (f"Relocated macOS install: {len(libraries)} dylibs, signatures, install names, "
+            package_minimum = max(minimum_versions.values(), key=macos_version_tuple)
+            report = (f"Relocated macOS install: {len(libraries)} dylibs, minimum macOS "
+                      f"{package_minimum} <= host {host_macos}, signatures, install names, "
                       "dyld paths, English/Chinese/auto and version passed\n" + version.stdout +
+                      "\nMinimum macOS by file:\n" + "\n".join(
+                          f"{path}: {minimum}" for path, minimum in sorted(minimum_versions.items())) +
                       "\nLoaded libraries:\n" + "\n".join(sorted(all_loaded)) + "\n")
             (install / "share/doc/scrctl/install-check.txt").write_text(report, encoding="utf-8")
             print(report.splitlines()[0])
