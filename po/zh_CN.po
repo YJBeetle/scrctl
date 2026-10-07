@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 04:28+0800\n"
+"POT-Creation-Date: 2026-10-08 05:12+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -158,7 +158,7 @@ msgstr ""
 "鼠标左键映射为触摸；方向不支持 flip，录制保留原始码流。\n"
 "无线需要先配对；--help / --version 不连接设备。"
 
-#: src/app/Cli.cpp:23 tools/screenshot_probe.cpp:52 tools/wifi_probe.cpp:670
+#: src/app/Cli.cpp:23 tools/screenshot_probe.cpp:52 tools/wifi_probe.cpp:646
 msgid "Show help"
 msgstr "显示帮助"
 
@@ -1607,7 +1607,7 @@ msgstr " 台）。请检查所选 UDID 与 USB 连接。"
 msgid "lockdown pairing session"
 msgstr "lockdown 配对 session"
 
-#: src/remote/Device.cpp:136
+#: src/remote/Device.cpp:136 tools/wifi_probe.cpp:352
 msgid "Failed to establish lockdown session: "
 msgstr "lockdown 会话建立失败: "
 
@@ -1617,6 +1617,7 @@ msgstr "启动 CoreDeviceProxy"
 
 #: src/remote/Device.cpp:142 src/remote/Rsd.cpp:152 src/remote/Rsd.cpp:355
 #: src/transport/Usbmux.cpp:92 src/wifi/PairRecord.cpp:313
+#: tools/wifi_probe.cpp:357
 msgid " failed: "
 msgstr " 失败: "
 
@@ -2959,7 +2960,8 @@ msgstr "有"
 msgid "absent"
 msgstr "不存在"
 
-#: tools/rr_keepalive_probe.cpp:254
+#: tools/rr_keepalive_probe.cpp:254 tools/wifi_probe.cpp:494
+#: tools/wifi_probe.cpp:495
 msgid "present"
 msgstr "存在"
 
@@ -3143,7 +3145,7 @@ msgstr ""
 "未指定 --help 或 --dump-packets 时，本探针将连接 USB 设备。"
 
 #: tools/rr_keepalive_probe.cpp:462 tools/screenshot_probe.cpp:69
-#: tools/wifi_probe.cpp:766
+#: tools/wifi_probe.cpp:742
 #, c-format
 msgid "Invalid arguments: %s\n"
 msgstr "参数无效：%s\n"
@@ -3656,11 +3658,261 @@ msgstr "保存 %s 失败：%s\n"
 msgid "Saved to %s\n"
 msgstr "已保存到 %s\n"
 
-#: tools/wifi_probe.cpp:665
+#: tools/wifi_probe.cpp:72
+msgid "Foreign pairing record is not a valid plist"
+msgstr "外部配对记录不是有效的 plist"
+
+#: tools/wifi_probe.cpp:79
+msgid "Foreign pairing record requires private_key and public_key Data fields"
+msgstr "外部配对记录需包含 private_key 和 public_key 两个 Data 字段"
+
+#: tools/wifi_probe.cpp:92
+#, c-format
+msgid "  Device wireProtocolVersion = %lld\n"
+msgstr "  设备 wireProtocolVersion = %lld\n"
+
+#: tools/wifi_probe.cpp:109
+#, c-format
+msgid "  Device identifier on this channel = %s\n"
+msgstr "  设备在当前通道上的 identifier = %s\n"
+
+#: tools/wifi_probe.cpp:110
+msgid "(not provided)"
+msgstr "（未提供）"
+
+#: tools/wifi_probe.cpp:123
+#, c-format
+msgid "  Send %zu bytes:"
+msgstr "  发送 %zu 字节："
+
+#: tools/wifi_probe.cpp:137
+#, c-format
+msgid "  Receive %zu bytes:"
+msgstr "  接收 %zu 字节："
+
+#: tools/wifi_probe.cpp:162
+msgid "TLS write failed (SSL_get_error="
+msgstr "TLS 写入失败 (SSL_get_error="
+
+#: tools/wifi_probe.cpp:174
+msgid "TLS read failed (SSL_get_error="
+msgstr "TLS 读取失败 (SSL_get_error="
+
+#: tools/wifi_probe.cpp:272
+msgid "Failed to connect to usbmuxd: "
+msgstr "连接 usbmuxd 失败："
+
+#: tools/wifi_probe.cpp:290
+msgid "No USB device found"
+msgstr "未找到 USB 设备"
+
+#: tools/wifi_probe.cpp:290
+msgid "No device matches --udid"
+msgstr "未找到与 --udid 匹配的设备"
+
+#: tools/wifi_probe.cpp:294
+msgid " devices; select one with --udid"
+msgstr " 台设备；请用 --udid 指定一台"
+
+#: tools/wifi_probe.cpp:294
+msgid "Found "
+msgstr "找到 "
+
+#: tools/wifi_probe.cpp:298
+#, c-format
+msgid "Device %s (%s)\n"
+msgstr "设备 %s（%s）\n"
+
+#: tools/wifi_probe.cpp:357
+msgid "Start service "
+msgstr "启动服务 "
+
+#: tools/wifi_probe.cpp:364
+msgid "Failed to establish tunnel: "
+msgstr "建立隧道失败："
+
+#: tools/wifi_probe.cpp:371
+msgid "Failed to start network stack inside tunnel: "
+msgstr "启动隧道内网络栈失败："
+
+#: tools/wifi_probe.cpp:377
+msgid "host_id is not a valid UUID"
+msgstr "host_id 不是有效的 UUID"
+
+#: tools/wifi_probe.cpp:383
+msgid "Failed to open RSD: "
+msgstr "打开 RSD 失败："
+
+#: tools/wifi_probe.cpp:406
+msgid " (use --usb-services to list the directory)"
+msgstr "（可用 --usb-services 列出完整目录）"
+
+#: tools/wifi_probe.cpp:406
+msgid "RSD service not found: "
+msgstr "RSD 目录中没有服务："
+
+#: tools/wifi_probe.cpp:410
+msgid ""
+" is not a RemoteXPC service (UsesRemoteXPC=false); cannot use this carrier"
+msgstr " 不是 RemoteXPC 服务（UsesRemoteXPC=false），不能使用当前载体"
+
+#: tools/wifi_probe.cpp:413
+#, c-format
+msgid "  Pairing service %s, port %u\n"
+msgstr "  配对服务 %s，端口 %u\n"
+
+#: tools/wifi_probe.cpp:425
+#, c-format
+msgid "  Initial device message: %s\n"
+msgstr "  设备初始消息：%s\n"
+
+#: tools/wifi_probe.cpp:427
+#, c-format
+msgid "  No initial version message (%s); proceeding with handshake\n"
+msgstr "  未收到初始版本消息（%s），继续发送 handshake\n"
+
+#: tools/wifi_probe.cpp:448
+#, c-format
+msgid "Failed to obtain local hostname\n"
+msgstr "获取本机主机名失败\n"
+
+#: tools/wifi_probe.cpp:463
+#, c-format
+msgid "Failed to derive host identifier\n"
+msgstr "生成主机标识符失败\n"
+
+#: tools/wifi_probe.cpp:466
+#, c-format
+msgid "Host identifier = %s (%s)\n"
+msgstr "主机标识符 = %s（%s）\n"
+
+#: tools/wifi_probe.cpp:467
+msgid "provided on command line"
+msgstr "由命令行指定"
+
+#: tools/wifi_probe.cpp:467
+msgid "uuid3(hostname + \".scrctl\")"
+msgstr "uuid3(主机名 + \".scrctl\")"
+
+#: tools/wifi_probe.cpp:471
+#, c-format
+msgid "Failed to connect to pairing channel: %s\n"
+msgstr "连接配对通道失败：%s\n"
+
+#: tools/wifi_probe.cpp:475
+#, c-format
+msgid "  · %.*s\n"
+msgstr "  · %.*s\n"
+
+#: tools/wifi_probe.cpp:483
+#, c-format
+msgid "Pairing kind = %s\n"
+msgstr "配对 kind = %s\n"
+
+#: tools/wifi_probe.cpp:487
+#, c-format
+msgid "Pair setup failed: %s\n"
+msgstr "建立配对失败：%s\n"
+
+#: tools/wifi_probe.cpp:490
+#, c-format
+msgid "Pair setup completed\n"
+msgstr "配对流程已完成\n"
+
+#: tools/wifi_probe.cpp:492
+#, c-format
+msgid ""
+"  Host private/public key lengths: %zu/%zu bytes; peer altIRK: %s; remote "
+"unlock key: %s\n"
+msgstr "  主机私钥/公钥长度：%zu/%zu 字节；设备 altIRK：%s；远程解锁密钥：%s\n"
+
+#: tools/wifi_probe.cpp:494 tools/wifi_probe.cpp:495
+msgid "missing"
+msgstr "未获取"
+
+#: tools/wifi_probe.cpp:501
+#, c-format
+msgid "Failed to save pairing record: %s\n"
+msgstr "保存配对记录失败：%s\n"
+
+#: tools/wifi_probe.cpp:504
+#, c-format
+msgid "Pairing record saved to %s\n"
+msgstr "配对记录已保存到 %s\n"
+
+#: tools/wifi_probe.cpp:508
+#, c-format
+msgid "Reconnecting to verify the new pairing record\n"
+msgstr "重新连接，验证新配对记录\n"
+
+#: tools/wifi_probe.cpp:511
+#, c-format
+msgid "Failed to reconnect to pairing channel: %s\n"
+msgstr "重新连接配对通道失败：%s\n"
+
+#: tools/wifi_probe.cpp:517
+#, c-format
+msgid "  New record pair-verify failed: %s\n"
+msgstr "  新配对记录的 pair-verify 失败：%s\n"
+
+#: tools/wifi_probe.cpp:520
+#, c-format
+msgid "  New record pair-verify completed; device accepted the host key\n"
+msgstr "  新配对记录的 pair-verify 已完成，设备已接受主机密钥\n"
+
+#: tools/wifi_probe.cpp:546
+#, c-format
+msgid "Failed to establish lockdown session: %s\n"
+msgstr "建立 lockdown 会话失败：%s\n"
+
+#: tools/wifi_probe.cpp:552
+#, c-format
+msgid "Failed to start service %s: %s\n"
+msgstr "启动服务 %s 失败：%s\n"
+
+#: tools/wifi_probe.cpp:555
+#, c-format
+msgid "Pairing channel port %u (TLS: %s)\n"
+msgstr "配对通道端口 %u（TLS：%s）\n"
+
+#: tools/wifi_probe.cpp:556
+msgid "not required"
+msgstr "不需要"
+
+#: tools/wifi_probe.cpp:556
+msgid "required"
+msgstr "需要"
+
+#: tools/wifi_probe.cpp:572
+#, c-format
+msgid "Using connected USB device %s as the pairing record identifier\n"
+msgstr "使用已连接 USB 设备 %s 的标识符保存配对记录\n"
+
+#: tools/wifi_probe.cpp:575
+#, c-format
+msgid "Wi-Fi pairing requires --udid when no USB device is selected\n"
+msgstr "未选中 USB 设备时，Wi-Fi 配对需指定 --udid\n"
+
+#: tools/wifi_probe.cpp:579
+#, c-format
+msgid "Pairing channel %s:%d (Wi-Fi manual pairing)\n"
+msgstr "配对通道 %s:%d（Wi-Fi 手动配对）\n"
+
+#: tools/wifi_probe.cpp:597
+#, c-format
+msgid "Carrier = RemoteXPC (%s)\n"
+msgstr "载体 = RemoteXPC（%s）\n"
+
+#: tools/wifi_probe.cpp:613
+#, c-format
+msgid "USB tunnel RSD directory: %zu services\n"
+msgstr "USB 隧道内 RSD 目录：%zu 个服务\n"
+
+#: tools/wifi_probe.cpp:641
 msgid "Inspect RemotePairing connections and USB pairing services"
 msgstr "检查 RemotePairing 连接和 USB 配对服务"
 
-#: tools/wifi_probe.cpp:667
+#: tools/wifi_probe.cpp:643
 msgid ""
 "By default, verify an existing record over Wi-Fi using --address and either "
 "--record or --pmd3-record. --pair-setup uses a byte stream over USB, or Wi-"
@@ -3671,76 +3923,76 @@ msgstr ""
 "录。--pair-setup 使用 USB 字节流；指定 --address 时改用 Wi-Fi。--pair-setup-"
 "xpc 使用 USB RemoteXPC。--help 不连接设备。"
 
-#: tools/wifi_probe.cpp:672
+#: tools/wifi_probe.cpp:648
 msgid "Device address for Wi-Fi verification or byte-stream pairing"
 msgstr "用于 Wi-Fi 验证或字节流配对的设备地址"
 
-#: tools/wifi_probe.cpp:674
+#: tools/wifi_probe.cpp:650
 msgid "Wi-Fi RemotePairing port (1..65535; default: 49152)"
 msgstr "Wi-Fi RemotePairing 端口（1..65535；默认：49152）"
 
-#: tools/wifi_probe.cpp:677
+#: tools/wifi_probe.cpp:653
 msgid "scrctl pairing record for Wi-Fi verification"
 msgstr "用于 Wi-Fi 验证的 scrctl 配对记录"
 
-#: tools/wifi_probe.cpp:679
+#: tools/wifi_probe.cpp:655
 msgid "pymobiledevice3 plist record; requires --host-id"
 msgstr "pymobiledevice3 的 plist 配对记录；需指定 --host-id"
 
-#: tools/wifi_probe.cpp:681
+#: tools/wifi_probe.cpp:657
 msgid "Host identifier for pairing setup or a pymobiledevice3 record"
 msgstr "建立配对或使用 pymobiledevice3 记录时的主机标识符"
 
-#: tools/wifi_probe.cpp:683
+#: tools/wifi_probe.cpp:659
 msgid ""
 "USB device filter, or device identifier for Wi-Fi pairing and foreign records"
 msgstr "USB 设备筛选条件，或 Wi-Fi 配对和外部记录所用的设备标识符"
 
-#: tools/wifi_probe.cpp:684
+#: tools/wifi_probe.cpp:660
 msgid "Print connection and pairing details"
 msgstr "显示连接和配对详情"
 
-#: tools/wifi_probe.cpp:686
+#: tools/wifi_probe.cpp:662
 msgid "Establish the tunnel after Wi-Fi verification"
 msgstr "Wi-Fi 验证通过后建立隧道"
 
-#: tools/wifi_probe.cpp:688
+#: tools/wifi_probe.cpp:664
 msgid "Read the tunnel RSD service directory (implies --tunnel)"
 msgstr "读取隧道内的 RSD 服务目录（同时启用 --tunnel）"
 
-#: tools/wifi_probe.cpp:690
+#: tools/wifi_probe.cpp:666
 msgid "Create a pairing record over USB or the given Wi-Fi address"
 msgstr "通过 USB 或指定的 Wi-Fi 地址建立配对记录"
 
-#: tools/wifi_probe.cpp:692
+#: tools/wifi_probe.cpp:668
 msgid "Create a pairing record over USB RemoteXPC"
 msgstr "通过 USB RemoteXPC 建立配对记录"
 
-#: tools/wifi_probe.cpp:694
+#: tools/wifi_probe.cpp:670
 msgid "RemoteXPC pairing service (only with --pair-setup-xpc)"
 msgstr "RemoteXPC 配对服务（仅用于 --pair-setup-xpc）"
 
-#: tools/wifi_probe.cpp:696
+#: tools/wifi_probe.cpp:672
 msgid "List services in the USB tunnel RSD directory"
 msgstr "列出 USB 隧道内 RSD 目录中的服务"
 
-#: tools/wifi_probe.cpp:698
+#: tools/wifi_probe.cpp:674
 msgid "Do not save the new pairing record (pairing setup only)"
 msgstr "不保存新配对记录（仅用于建立配对）"
 
-#: tools/wifi_probe.cpp:700
+#: tools/wifi_probe.cpp:676
 msgid "Skip the initial verification attempt (pairing setup only)"
 msgstr "跳过开始时的验证尝试（仅用于建立配对）"
 
-#: tools/wifi_probe.cpp:702
+#: tools/wifi_probe.cpp:678
 msgid "Override the pairing host name (pairing setup only)"
 msgstr "指定配对时使用的主机名（仅用于建立配对）"
 
-#: tools/wifi_probe.cpp:704
+#: tools/wifi_probe.cpp:680
 msgid "Override the pairingData kind (pairing setup only)"
 msgstr "指定 pairingData 的 kind（仅用于建立配对）"
 
-#: tools/wifi_probe.cpp:727
+#: tools/wifi_probe.cpp:703
 msgid ""
 "--no-save, --no-verify-probe, --host-name and --pairing-kind require --pair-"
 "setup or --pair-setup-xpc"
@@ -3748,39 +4000,193 @@ msgstr ""
 "--no-save、--no-verify-probe、--host-name 和 --pairing-kind 需与 --pair-"
 "setup 或 --pair-setup-xpc 一起使用"
 
-#: tools/wifi_probe.cpp:733
+#: tools/wifi_probe.cpp:709
 msgid ""
 "--record, --pmd3-record, --tunnel and --rsd are only for Wi-Fi verification"
 msgstr "--record、--pmd3-record、--tunnel 和 --rsd 仅用于 Wi-Fi 验证"
 
-#: tools/wifi_probe.cpp:737
+#: tools/wifi_probe.cpp:713
 msgid "--address cannot be combined with --pair-setup-xpc or --usb-services"
 msgstr "--address 不能与 --pair-setup-xpc 或 --usb-services 一起使用"
 
-#: tools/wifi_probe.cpp:740
+#: tools/wifi_probe.cpp:716
 msgid "--port requires a Wi-Fi --address"
 msgstr "--port 需要同时指定 Wi-Fi 设备地址 --address"
 
-#: tools/wifi_probe.cpp:744
+#: tools/wifi_probe.cpp:720
 msgid "--host-id requires pairing setup or --pmd3-record"
 msgstr "--host-id 仅用于建立配对或 --pmd3-record"
 
-#: tools/wifi_probe.cpp:748
+#: tools/wifi_probe.cpp:724
 msgid ""
 "--udid is only used with USB modes, Wi-Fi pairing setup or --pmd3-record"
 msgstr "--udid 仅用于 USB 模式、通过 Wi-Fi 建立配对或 --pmd3-record"
 
-#: tools/wifi_probe.cpp:751
+#: tools/wifi_probe.cpp:727
 msgid "Wi-Fi verification requires --address"
 msgstr "Wi-Fi 验证需指定 --address"
 
-#: tools/wifi_probe.cpp:755
+#: tools/wifi_probe.cpp:731
 msgid "Wi-Fi verification requires --record or --pmd3-record"
 msgstr "Wi-Fi 验证需指定 --record 或 --pmd3-record"
 
-#: tools/wifi_probe.cpp:758
+#: tools/wifi_probe.cpp:734
 msgid "--pmd3-record requires a nonempty --host-id"
 msgstr "--pmd3-record 需要同时指定非空的 --host-id"
+
+#: tools/wifi_probe.cpp:767
+#, c-format
+msgid "Failed to load pairing record: %s\n"
+msgstr "读取配对记录失败：%s\n"
+
+#: tools/wifi_probe.cpp:774
+#, c-format
+msgid "Failed to open %s\n"
+msgstr "打开 %s 失败\n"
+
+#: tools/wifi_probe.cpp:778
+#, c-format
+msgid "Foreign record does not store a host identifier; provide --host-id\n"
+msgstr "外部记录未保存主机标识符，请指定 --host-id\n"
+
+#: tools/wifi_probe.cpp:784
+#, c-format
+msgid "Failed to load foreign pairing record: %s\n"
+msgstr "读取外部配对记录失败：%s\n"
+
+#: tools/wifi_probe.cpp:790
+#, c-format
+msgid "Provide --record or --pmd3-record\n"
+msgstr "请指定 --record 或 --pmd3-record\n"
+
+#: tools/wifi_probe.cpp:794
+#, c-format
+msgid ""
+"Pairing record incomplete (udid=%s host_identifier=%s private key: %zu "
+"bytes, public key: %zu bytes)\n"
+msgstr ""
+"配对记录不完整（udid=%s host_identifier=%s，私钥：%zu 字节，公钥：%zu 字"
+"节）\n"
+
+#: tools/wifi_probe.cpp:795 tools/wifi_probe.cpp:796
+msgid "(empty)"
+msgstr "（为空）"
+
+#: tools/wifi_probe.cpp:801
+#, c-format
+msgid "Connecting to %s:%d (record %s)\n"
+msgstr "正在连接 %s:%d（记录 %s）\n"
+
+#: tools/wifi_probe.cpp:802
+msgid "(unknown device)"
+msgstr "（未知设备）"
+
+#: tools/wifi_probe.cpp:805
+#, c-format
+msgid "  Connection failed: %s\n"
+msgstr "  连接失败：%s\n"
+
+#: tools/wifi_probe.cpp:816
+msgid "device rejected the pairing record"
+msgstr "设备拒绝当前配对记录"
+
+#: tools/wifi_probe.cpp:817
+msgid "verification did not complete"
+msgstr "验证未完成"
+
+#: tools/wifi_probe.cpp:818
+#, c-format
+msgid "  Pair-verify failed (%s): %s\n"
+msgstr "  pair-verify 失败（%s）：%s\n"
+
+#: tools/wifi_probe.cpp:821
+#, c-format
+msgid "  Pair-verify completed; device accepted the host key\n"
+msgstr "  pair-verify 已完成，设备已接受主机密钥\n"
+
+#: tools/wifi_probe.cpp:823
+#, c-format
+msgid ""
+"  Shared secret: %zu bytes (key derivation and tunnel PSK; contents hidden)\n"
+msgstr "  共享密钥：%zu 字节（用于密钥派生和隧道 PSK，不显示内容）\n"
+
+#: tools/wifi_probe.cpp:839
+#, c-format
+msgid "  createListener failed: %s\n"
+msgstr "  createListener 失败：%s\n"
+
+#: tools/wifi_probe.cpp:845
+#, c-format
+msgid "  Response missing createListener.port; actual fields:"
+msgstr "  回复中没有 createListener.port，实际字段："
+
+#: tools/wifi_probe.cpp:852
+#, c-format
+msgid "  createListener port = %lld\n"
+msgstr "  createListener 端口 = %lld\n"
+
+#: tools/wifi_probe.cpp:858
+#, c-format
+msgid "  Listener port connection: %s\n"
+msgstr "  监听端口连接结果：%s\n"
+
+#: tools/wifi_probe.cpp:858
+msgid "connected"
+msgstr "已连接"
+
+#: tools/wifi_probe.cpp:867
+#, c-format
+msgid "  Failed to connect to tunnel port %u: %s\n"
+msgstr "  连接隧道端口 %u 失败：%s\n"
+
+#: tools/wifi_probe.cpp:870
+#, c-format
+msgid ""
+"  Connected to tunnel port %u; starting TLS-PSK and CDTunnel handshakes\n"
+msgstr "  已连接隧道端口 %u，开始 TLS-PSK 和 CDTunnel 握手\n"
+
+#: tools/wifi_probe.cpp:875
+#, c-format
+msgid "  Failed to establish tunnel: %s\n"
+msgstr "  建立隧道失败：%s\n"
+
+#: tools/wifi_probe.cpp:879
+#, c-format
+msgid "  Tunnel established: local %s / device %s / RSD port %u / MTU %u\n"
+msgstr "  隧道已建立：本机 %s / 设备 %s / RSD 端口 %u / MTU %u\n"
+
+#: tools/wifi_probe.cpp:889
+#, c-format
+msgid "  Failed to parse tunnel addresses\n"
+msgstr "  解析隧道内地址失败\n"
+
+#: tools/wifi_probe.cpp:893
+#, c-format
+msgid "  Failed to start tunnel packet pump: %s\n"
+msgstr "  启动隧道收包线程失败：%s\n"
+
+#: tools/wifi_probe.cpp:901
+#, c-format
+msgid "  Host identifier is not a valid UUID: %s\n"
+msgstr "  主机标识符不是有效的 UUID：%s\n"
+
+#: tools/wifi_probe.cpp:908
+#, c-format
+msgid "  Failed to open RSD: %s\n"
+msgstr "  打开 RSD 失败：%s\n"
+
+#: tools/wifi_probe.cpp:911
+#, c-format
+msgid "  RSD directory: %zu services\n"
+msgstr "  RSD 目录：%zu 个服务\n"
+
+#: tools/wifi_probe.cpp:916
+msgid "available"
+msgstr "可用"
+
+#: tools/wifi_probe.cpp:916
+msgid "not available"
+msgstr "不可用"
 
 #, c-format
 #~ msgid "Device clipboard (%zu bytes): %s\n"

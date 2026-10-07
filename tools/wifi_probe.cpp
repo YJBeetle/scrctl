@@ -1,15 +1,8 @@
-// M5-a 探针：用**我们自己的实现**对设备的 RemotePairing 端口走一遍握手。
-//
-// 这一段是 M5 的判据所在：pair-verify 成不成、`createListener` 给不给端口。
-// 需要设备在同一网络上，且已经有一条远程配对记录。
-//
-// 记录有两个来源：
-//   --record <我们的 .pair>         产品格式，正常路径
-//   --pmd3-record <plist> --host-id <ID>
-//       与参考实现**互操作**用：那套工具建的记录里不存 host identifier（它是按
-//       主机名现算的），所以必须显式给 --host-id，否则签名缓冲就对不上。
-//
-// 输出的 UDID 一律打码，不打印任何密钥字节。
+// RemotePairing 研究探针：验证已有记录、检查 Wi-Fi 隧道，或通过 USB/字节流建立配对。
+// 默认验证路径需要可达的设备地址和已有记录；独立模式由命令行帮助说明。
+// --record 读取 scrctl 格式；--pmd3-record 用于与外部 plist 记录互操作，需明确提供
+// host identifier，因为该格式没有保存这一字段，而签名计算必须使用原配对时的值。
+// 标识符使用 mask 遮蔽，密钥摘要只显示长度与是否存在；verbose 保留协议字节跟踪。
 #include <unistd.h>
 
 #include <CLI/CLI.hpp>
@@ -70,41 +63,42 @@ scrctl::json::Value j_arr(std::vector<scrctl::json::Value> items) {
     return scrctl::json::Value(std::move(items));
 }
 
-/// 读另一套实现的配对记录（只为互操作判据，产品里不会走这条路）。
+/// 将外部 plist 配对记录转换成探针使用的记录结构；产品连接路径不调用此适配器。
 std::optional<scrctl::wifi::PairRecord> from_foreign_record(const std::string &text,
                                                            std::string_view host_id,
                                                            std::string &err) {
     const std::optional<scrctl::plist::Value> parsed = scrctl::plist::parse(text);
     if (!parsed) {
-        err = "那份记录不是能读的 plist";
+        err = SCRCTL_TR("Foreign pairing record is not a valid plist");
         return std::nullopt;
     }
     const scrctl::plist::Value *priv = parsed->find("private_key");
     const scrctl::plist::Value *pub = parsed->find("public_key");
     if (priv == nullptr || pub == nullptr || priv->kind != scrctl::plist::Kind::Data ||
         pub->kind != scrctl::plist::Kind::Data) {
-        err = "记录里没有 private_key/public_key 两块 data";
+        err = SCRCTL_TR("Foreign pairing record requires private_key and public_key Data fields");
         return std::nullopt;
     }
     scrctl::wifi::PairRecord record;
     record.host_private_key = priv->data;
     record.host_public_key = pub->data;
     record.host_identifier = host_id;
-    // 文件名里的 UDID 由调用方给（这套格式的记录本身不记它是谁）。
+    // 此格式未保存 UDID；调用方须提供设备标识符，再决定记录文件名。
     return record;
 }
 
 void print_handshake(const scrctl::json::Value &device_handshake) {
     const scrctl::json::Value *version = scrctl::json::find(device_handshake, "wireProtocolVersion");
-    std::printf("  设备报的 wireProtocolVersion = %lld\n",
+    std::printf(SCRCTL_TR("  Device wireProtocolVersion = %lld\n"),
                 static_cast<long long>(version != nullptr ? scrctl::json::as_int_or(*version, 0) : 0));
     const scrctl::json::Value *options = scrctl::json::find(device_handshake, "deviceOptions");
     if (options != nullptr) {
+        // 字段名和布尔值保留协议形式，避免语言选择改变结构化诊断的含义。
         std::printf("  deviceOptions:");
         for (const auto &key : options->items()) {
             std::printf(" %s=%s", key.key().c_str(),
                         key.value().is_boolean()
-                            ? (key.value().get<bool>() ? "是" : "否")
+                            ? (key.value().get<bool>() ? "true" : "false")
                             : "?");
         }
         std::printf("\n");
@@ -112,12 +106,13 @@ void print_handshake(const scrctl::json::Value &device_handshake) {
     const scrctl::json::Value *peer = scrctl::json::find(device_handshake, "peerDeviceInfo");
     if (peer != nullptr) {
         const scrctl::json::Value *identifier = scrctl::json::find(*peer, "identifier");
-        std::printf("  设备在这条面上自报的 identifier = %s\n",
-                    identifier != nullptr ? mask(scrctl::json::as_string_or(*identifier)).c_str() : "(没给)");
+        std::printf(SCRCTL_TR("  Device identifier on this channel = %s\n"),
+                    identifier != nullptr ? mask(scrctl::json::as_string_or(*identifier)).c_str() : SCRCTL_TR("(not provided)"));
     }
 }
 
-/// 一帧一帧打字的字节流：M5 这条路第一次对真机时，"我们发的到底是什么"不能靠推理。
+/// 记录字节流每次读写的长度和前 400 字节的可打印 ASCII。
+/// 跟踪仅用于观察线上的原始内容，不解码或翻译协议字段。
 class TracingStream final : public scrctl::wifi::ByteStream {
 public:
     TracingStream(scrctl::wifi::ByteStream &inner, bool verbose) : inner_(inner), verbose_(verbose) {}
@@ -125,7 +120,7 @@ public:
     bool write_all(const void *data, size_t len, std::string &err) override {
         if (verbose_) {
             const auto *p = static_cast<const uint8_t *>(data);
-            std::fprintf(stderr, "  → %zu 字节:", len);
+            std::fprintf(stderr, SCRCTL_TR("  Send %zu bytes:"), len);
             for (size_t i = 0; i < len && i < 400; ++i) {
                 std::fputc(p[i] >= 0x20 && p[i] < 0x7F ? p[i] : '.', stderr);
             }
@@ -139,7 +134,7 @@ public:
         }
         if (verbose_) {
             const auto *p = static_cast<const uint8_t *>(data);
-            std::fprintf(stderr, "  ← %zu 字节:", len);
+            std::fprintf(stderr, SCRCTL_TR("  Receive %zu bytes:"), len);
             for (size_t i = 0; i < len && i < 400; ++i) {
                 std::fputc(p[i] >= 0x20 && p[i] < 0x7F ? p[i] : '.', stderr);
             }
@@ -153,8 +148,8 @@ private:
     bool verbose_ = false;
 };
 
-/// lockdown 服务连接上的字节流（可能带 TLS）。RPPairing 只要求"写全 / 读够"，
-/// 所以底下是普通 socket 还是 SSL 都由这一层吃掉。
+/// 将 lockdown 服务的 TLS 连接适配为完整读写字节流。
+/// RPPairing 不处理 SSL 的分段读写，这里负责累计到请求的字节数。
 class TlsByteStream final : public scrctl::wifi::ByteStream {
 public:
     TlsByteStream(SSL *ssl, scrctl::transport::Socket &sock) : ssl_(ssl), sock_(sock) {}
@@ -164,7 +159,7 @@ public:
         for (size_t off = 0; off < len;) {
             const int n = SSL_write(ssl_, p + off, static_cast<int>(len - off));
             if (n <= 0) {
-                err = "TLS 写失败（SSL_get_error=" + std::to_string(SSL_get_error(ssl_, n)) + "）";
+                err = SCRCTL_TR("TLS write failed (SSL_get_error=") + std::to_string(SSL_get_error(ssl_, n)) + ")";
                 return false;
             }
             off += static_cast<size_t>(n);
@@ -176,7 +171,7 @@ public:
         for (size_t off = 0; off < len;) {
             const int n = SSL_read(ssl_, p + off, static_cast<int>(len - off));
             if (n <= 0) {
-                err = "TLS 读断了（SSL_get_error=" + std::to_string(SSL_get_error(ssl_, n)) + "）";
+                err = SCRCTL_TR("TLS read failed (SSL_get_error=") + std::to_string(SSL_get_error(ssl_, n)) + ")";
                 return false;
             }
             off += static_cast<size_t>(n);
@@ -185,7 +180,7 @@ public:
     }
 
     bool wait_readable(int ms, std::string &err) override {
-        // 已解出但还没被读走的字节也算"可读"，否则会把缓冲里的回信等丢。
+        // SSL 已解密到内部缓冲的字节也算可读，不能只等待底层 socket 产生新数据。
         if (SSL_pending(ssl_) > 0) {
             return true;
         }
@@ -197,28 +192,27 @@ private:
     scrctl::transport::Socket &sock_;
 };
 
-/// USB 那条 `remotepairingdeviced.lockdown` 控制面。
+/// USB lockdown 上的 RemotePairing 字节流服务。
 constexpr char kPairingService[] = "com.apple.dt.remotepairingdeviced.lockdown";
 constexpr char kCoreDeviceProxy[] = "com.apple.internal.devicecompute.CoreDeviceProxy";
-/// pair-setup 在 RemoteXPC 载体上的入口（docs §25.8）。名字来自隧道内 RSD 服务表实测。
+/// 从所测设备的隧道内 RSD 服务表取得的 RemoteXPC 配对入口；记录见 docs §25.8。
 constexpr char kXpcPairingService[] = "com.apple.internal.dt.coredevice.untrusted.tunnelservice";
 
-/// 一条控制面连接。设备在配对结束后会**关掉**它（实测，与参考实现注释一致），
-/// 所以这是一次性对象：要再说话就重开一条。
+/// 一条字节流配对连接及其底层资源。
+/// 所测设备在配对结束后关闭连接，后续验证需要重新建立连接。
 struct PairingPlane {
     scrctl::transport::Socket sock;
     scrctl::transport::TlsChannel tls;
-    /// 真正干活的那层（socket 或 TLS）。`stream` 可能是套在它外面的 TracingStream。
+    /// socket/TLS 字节流；开启跟踪时 stream 引用它，故 inner 须先声明、后析构。
     std::unique_ptr<scrctl::wifi::ByteStream> inner;
     std::unique_ptr<scrctl::wifi::ByteStream> stream;
-    /// 信封载体。声明顺序在 channel 之前：析构按声明逆序，channel 先走，
-    /// 它引用的载体才不会先没。
+    /// channel 引用 carrier；按声明逆序析构，先销毁 channel，再释放载体。
     std::unique_ptr<scrctl::wifi::FramedCarrier> carrier;
     std::unique_ptr<scrctl::wifi::Rppairing> channel;
 };
 
-/// 一条控制面怎么开：给了 address 走普通 TCP（Wi-Fi 手动配对面），否则走 usbmux
-/// 转发（USB lockdown 面，可能要 TLS）。两条面说的都是同一套 RPPairing 帧。
+/// 配对连接参数：address 非空时使用 Wi-Fi TCP，否则经 usbmux 连接 USB 服务。
+/// USB 服务是否使用 TLS 由 lockdown 响应决定；两种路径共用 RPPairing 帧格式。
 struct PlaneSpec {
     std::string address;
     uint32_t device_id = 0;
@@ -250,8 +244,8 @@ bool open_plane(const PlaneSpec &spec, bool verbose, PairingPlane &out, std::str
         }
         out.sock = std::move(*sock);
     }
-    // 设备掐连接时可能不发 FIN（USB 面实测），没有读超时这里会永久挂住，症状像
-    // 我们卡死。配对要等人点「信任」，给两分钟。
+    // 所测 USB 连接失效时未必及时收到 FIN，读超时避免永久等待。
+    // 同时配对流程可能等待设备上的用户确认，因此保留两分钟的等待上限。
     if (!out.sock.set_read_timeout(120000, err)) {
         return false;
     }
@@ -270,12 +264,12 @@ bool open_plane(const PlaneSpec &spec, bool verbose, PairingPlane &out, std::str
     return true;
 }
 
-/// 挑一台设备。给了 udid 就按它找，否则要求"插着的正好一台 USB 设备"。
+/// 有 UDID 时按标识符匹配；未指定时只选择 USB 设备，并要求候选设备唯一。
 bool pick_usb_device(const std::string &udid_filter, scrctl::transport::DeviceRecord &out,
                      std::string &err) {
     auto mux = scrctl::transport::Usbmux::open(err);
     if (!mux) {
-        err = "连不上 usbmuxd: " + err;
+        err = SCRCTL_TR("Failed to connect to usbmuxd: ") + err;
         return false;
     }
     std::vector<scrctl::transport::DeviceRecord> devices;
@@ -293,27 +287,23 @@ bool pick_usb_device(const std::string &udid_filter, scrctl::transport::DeviceRe
         }
     }
     if (candidates.empty()) {
-        err = udid_filter.empty() ? "没找到 USB 设备" : "没找到 --udid 指的那台设备";
+        err = udid_filter.empty() ? SCRCTL_TR("No USB device found") : SCRCTL_TR("No device matches --udid");
         return false;
     }
     if (candidates.size() > 1) {
-        err = "插着 " + std::to_string(candidates.size()) + " 台，得用 --udid 指一台";
+        err = SCRCTL_TR("Found ") + std::to_string(candidates.size()) + SCRCTL_TR(" devices; select one with --udid");
         return false;
     }
     out = *candidates.front();
-    std::printf("设备 %s（%s）\n", mask(out.udid, 8).c_str(), out.connection_type.c_str());
+    std::printf(SCRCTL_TR("Device %s (%s)\n"), mask(out.udid, 8).c_str(), out.connection_type.c_str());
     return true;
 }
 
-/// 一条开好的配对通道，连着它底下那些必须活着的东西。
-///
-/// 为什么交给 finish_pair_setup 的是"每次开一条"这个动作而不是一条现成的通道：设备在
-/// 配对结束后会**关掉**这条连接（实测，与参考实现注释一致），验收那一步必须重开；而
-/// 两种载体底下的东西完全不同（一边是 socket/TLS，一边是整条隧道 + RSD + 服务连接），
-/// 要共用同一套 pair-setup 流程就只能把"怎么开"抽出来。
-///
-/// owner 用 shared_ptr<void> 类型擦除，底下那些对象的析构顺序由具体结构体内部的声明
-/// 顺序保证；carrier/channel 声明在它之后，所以先于它析构。
+/// 配对通道及维持其有效所需的资源。
+/// finish_pair_setup 接收连接工厂，是因为所测设备在 setup 后关闭连接，verify
+/// 必须重连。字节流路径持有 socket/TLS；RemoteXPC 路径还持有隧道、网络栈和服务连接。
+/// owner 擦除具体资源类型，实际依赖顺序由对应结构体保证。这里 channel 先析构，
+/// 再释放 carrier，最后释放 owner，避免载体引用的底层连接提前销毁。
 struct OpenChannel {
     std::shared_ptr<void> owner;
     std::unique_ptr<scrctl::wifi::EnvelopeCarrier> carrier;
@@ -322,10 +312,10 @@ struct OpenChannel {
 
 using ChannelOpener = std::function<std::unique_ptr<OpenChannel>(std::string &err)>;
 
-/// 配对通道上的等待上限。中间要等人在屏幕上点「信任」，给两分钟。
+/// 配对通道等待上限，包含设备上用户确认所需的时间。
 constexpr int kPairingTimeoutMs = 120000;
 
-/// 字节流载体（Wi-Fi 手动配对面 / USB lockdown 服务）。
+/// 为 Wi-Fi 手动配对或 USB lockdown 服务创建新的字节流载体。
 ChannelOpener byte_opener(const PlaneSpec &spec, bool verbose) {
     return [spec, verbose](std::string &err) -> std::unique_ptr<OpenChannel> {
         auto plane = std::make_shared<PairingPlane>();
@@ -340,12 +330,10 @@ ChannelOpener byte_opener(const PlaneSpec &spec, bool verbose) {
     };
 }
 
-/// USB 那条：lockdown → CoreDeviceProxy → 包隧道 → 用户态栈 → RSD 目录。
-///
-/// 声明顺序**就是**依赖顺序，因为析构按逆序走：rsd 里的服务连接持有引用栈的
-/// TcpStream，必须先于 stack 析构，否则它注销端点时锁的是一个已经销毁的 mutex
-///（真机现场：`mutex lock failed: Invalid argument` 直接 abort）。同理 stack 先于
-/// tunnel、tunnel 先于 lockdown。
+/// USB 服务目录路径：lockdown → CoreDeviceProxy → 包隧道 → 用户态网络栈 → RSD。
+/// 成员按依赖顺序声明、按逆序析构：RSD 的 TcpStream 引用 stack，stack 引用 tunnel，
+/// tunnel 使用 lockdown 的连接身份。若先销毁 stack，TcpStream 注销端点时会访问
+/// 已销毁的同步对象；此前真机曾在该错误顺序下触发 mutex 异常。
 struct UsbTunnelPlane {
     scrctl::transport::DeviceRecord device;
     std::optional<scrctl::transport::Lockdown> lockdown;
@@ -361,45 +349,44 @@ bool open_usb_rsd(const std::string &udid_filter, UsbTunnelPlane &out, std::stri
     out.lockdown = scrctl::transport::Lockdown::establish(out.device.device_id, out.device.udid,
                                                           err);
     if (!out.lockdown) {
-        err = "lockdown 建立失败: " + err;
+        err = SCRCTL_TR("Failed to establish lockdown session: ") + err;
         return false;
     }
     const auto endpoint = out.lockdown->start_service(kCoreDeviceProxy, err);
     if (!endpoint) {
-        err = std::string("起 ") + kCoreDeviceProxy + " 失败: " + err;
+        err = std::string(SCRCTL_TR("Start service ")) + kCoreDeviceProxy + SCRCTL_TR(" failed: ") + err;
         return false;
     }
     out.tunnel = scrctl::transport::PacketTunnel::establish(
         out.device.device_id, endpoint->port, out.lockdown->identity(), endpoint->requires_tls,
         err);
     if (!out.tunnel) {
-        err = "隧道建立失败: " + err;
+        err = SCRCTL_TR("Failed to establish tunnel: ") + err;
         return false;
     }
     const auto params = out.tunnel->params();
     out.stack = std::make_unique<scrctl::net::Stack>(*out.tunnel, params.client_address,
                                                      params.server_address);
     if (!out.stack->addresses_ok() || !out.stack->start_pump(err)) {
-        err = "隧道内栈失败: " + err;
+        err = SCRCTL_TR("Failed to start network stack inside tunnel: ") + err;
         return false;
     }
     scrctl::remote::PeerIdentity identity;
     const auto uuid = scrctl::remote::parse_uuid_text(out.lockdown->host_id());
     if (!uuid) {
-        err = "host_id 不是能用的 UUID";
+        err = SCRCTL_TR("host_id is not a valid UUID");
         return false;
     }
     identity.uuid = *uuid;
     out.rsd = scrctl::remote::Rsd::open(*out.stack, *out.tunnel, identity, err);
     if (!out.rsd) {
-        err = "RSD 打不开: " + err;
+        err = SCRCTL_TR("Failed to open RSD: ") + err;
         return false;
     }
     return true;
 }
 
-/// RemoteXPC 载体：RSD 目录里的配对服务连接 + 信封载体。
-/// 同样按依赖顺序声明：conn 引用 base 里的栈，必须先析构。
+/// RemoteXPC 服务连接与其 USB 隧道资源。conn 引用 base 内的网络栈，须先析构。
 struct XpcPairPlane {
     std::unique_ptr<UsbTunnelPlane> base;
     std::unique_ptr<scrctl::remote::ServiceConnection> conn;
@@ -416,28 +403,28 @@ ChannelOpener xpc_opener(const std::string &service_name, const std::string &udi
         }
         const auto service = plane->base->rsd->service(service_name);
         if (!service) {
-            err = "RSD 目录里没有 " + service_name + "（--usb-services 能打整张表）";
+            err = SCRCTL_TR("RSD service not found: ") + service_name + SCRCTL_TR(" (use --usb-services to list the directory)");
             return nullptr;
         }
         if (!service->uses_remote_xpc) {
-            err = service_name + " 不是 RemoteXPC 服务（UsesRemoteXPC=false），这条载体走不了";
+            err = service_name + SCRCTL_TR(" is not a RemoteXPC service (UsesRemoteXPC=false); cannot use this carrier");
             return nullptr;
         }
-        std::printf("  配对服务 %s 端口 %u\n", service->name.c_str(),
+        std::printf(SCRCTL_TR("  Pairing service %s, port %u\n"), service->name.c_str(),
                     static_cast<unsigned>(service->port));
         plane->conn = scrctl::remote::ServiceConnection::open(*plane->base->stack, *service, err,
                                                              verbose);
         if (plane->conn == nullptr) {
             return nullptr;
         }
-        // 设备在这条通道上说的第一句是 ServiceVersion（参考实现按这个顺序读）。读不到
-        // 不致命：接下来的 handshake 自己会把话说明白，别在这儿就把整趟判死。
+        // 所测设备先发送 ServiceVersion，再处理配对握手，故先消费初始消息。
+        // 未收到时保留原有行为：继续握手，由后续响应决定连接能否用于配对。
         scrctl::xpc::Value first;
         if (plane->conn->wait_message(first, 5000, err) ==
             scrctl::remote::Channel::Wait::Message) {
-            std::printf("  设备第一句: %s\n", scrctl::xpc::describe(first).c_str());
+            std::printf(SCRCTL_TR("  Initial device message: %s\n"), scrctl::xpc::describe(first).c_str());
         } else {
-            std::printf("  设备没先自报版本（%s），直接发 handshake\n", err.c_str());
+            std::printf(SCRCTL_TR("  No initial version message (%s); proceeding with handshake\n"), err.c_str());
             err.clear();
         }
         auto out = std::make_unique<OpenChannel>();
@@ -449,45 +436,43 @@ ChannelOpener xpc_opener(const std::string &service_name, const std::string &udi
     };
 }
 
-/// pair-setup 本体：建配对、落盘、再开一条面用新记录 pair-verify 验收。
-///
-/// 验收这一步不能省：pair-setup 全程我们自己算 SRP/签名，"算对了"只有设备认这把
-/// 密钥才算数；而设备认不认，只有拿落盘的记录再握一次手才问得出来。
+/// 建立配对、按需保存记录，再重新连接并验证设备是否接受生成的主机密钥。
+/// setup 和 verify 使用同一连接工厂，保持所选载体一致；验证使用内存中的新记录，
+/// 不以文件写入成功替代协议验证，也不把主机密钥被接受等同于已校验设备长期身份。
 int finish_pair_setup(const ChannelOpener &open, std::string udid,
                       const std::string &host_id_override, bool save, bool probe_verify_first,
                       const std::string &host_name_override, const std::string &pairing_kind) {
     std::string err;
     std::string hostname = scrctl::wifi::local_hostname();
     if (hostname.empty()) {
-        std::fprintf(stderr, "取不到本机主机名\n");
+        std::fprintf(stderr, SCRCTL_TR("Failed to obtain local hostname\n"));
         return 1;
     }
     if (!host_name_override.empty()) {
-        // sendingHost 是设备做"同一主机"判定的名字（docs §25）：换一个新名字可以绕开
-        // 按主机名的冷却/撤销策略，也是把这条策略单独 isolating 出来的判据。
+        // sendingHost 是握手中的主机名元信息；覆盖它用于协议对照，
+        // 不能仅凭这一字段推断设备按主机名采取了冷却或撤销策略。
         hostname = host_name_override;
     }
-    // identifier 默认**不**用苹果那个 uuid3(hostname)。理由值得记一句：identifier 相同
-    // 在设备那边就是同一条配对记录，pair-setup 会把 Xcode/macOS 自己那把 Ed25519 顶掉
-    //（症状是无线调试忽然要重新配对）。加个后缀就多一条属于 scrctl 的记录，谁也不动谁。
-    // 要跟参考实现的记录互操作时用 --host-id 显式给。
+    // 默认用 hostname + ".scrctl" 派生 identifier，将探针记录与 Xcode/macOS 区分。
+    // 已有设备会在相同 identifier 的 setup 中替换该主机密钥，因此显式覆盖时必须
+    // 使用目标记录原来的 identifier；与外部记录互操作时由 --host-id 提供。
     const std::string identifier = host_id_override.empty()
                                        ? scrctl::wifi::host_identifier_uuid3(hostname + ".scrctl")
                                        : host_id_override;
     if (identifier.empty()) {
-        std::fprintf(stderr, "算不出 host identifier\n");
+        std::fprintf(stderr, SCRCTL_TR("Failed to derive host identifier\n"));
         return 1;
     }
-    std::printf("host identifier = %s（%s）\n", mask(identifier, 8).c_str(),
-                host_id_override.empty() ? "uuid3(主机名 + \".scrctl\")" : "命令行给的");
+    std::printf(SCRCTL_TR("Host identifier = %s (%s)\n"), mask(identifier, 8).c_str(),
+                host_id_override.empty() ? SCRCTL_TR("uuid3(hostname + \".scrctl\")") : SCRCTL_TR("provided on command line"));
 
     auto plane = open(err);
     if (plane == nullptr) {
-        std::fprintf(stderr, "连控制面失败: %s\n", err.c_str());
+        std::fprintf(stderr, SCRCTL_TR("Failed to connect to pairing channel: %s\n"), err.c_str());
         return 1;
     }
     const scrctl::wifi::ProgressFn progress = [](std::string_view msg) {
-        std::printf("  · %.*s\n", static_cast<int>(msg.size()), msg.data());
+        std::printf(SCRCTL_TR("  · %.*s\n"), static_cast<int>(msg.size()), msg.data());
         std::fflush(stdout);
     };
     scrctl::wifi::PairSetupOptions setup_options;
@@ -495,57 +480,51 @@ int finish_pair_setup(const ChannelOpener &open, std::string udid,
     if (!pairing_kind.empty()) {
         setup_options.pairing_kind = pairing_kind;
     }
-    std::printf("pairing kind = %s\n", setup_options.pairing_kind.c_str());
+    std::printf(SCRCTL_TR("Pairing kind = %s\n"), setup_options.pairing_kind.c_str());
     const scrctl::wifi::PairSetupResult setup = scrctl::wifi::pair_setup(
         *plane->channel, identifier, hostname, udid, progress, setup_options, err);
     if (!setup.ok) {
-        std::fprintf(stderr, "pair-setup 失败: %s\n", setup.error.c_str());
+        std::fprintf(stderr, SCRCTL_TR("Pair setup failed: %s\n"), setup.error.c_str());
         return 1;
     }
-    std::printf("pair-setup 走通了\n");
+    std::printf(SCRCTL_TR("Pair setup completed\n"));
     print_handshake(setup.device_handshake);
-    std::printf("  host 密钥 %zu/%zu 字节，peer altIRK %s，远程解锁密钥 %s\n",
+    std::printf(SCRCTL_TR("  Host private/public key lengths: %zu/%zu bytes; peer altIRK: %s; remote unlock key: %s\n"),
                 setup.record.host_private_key.size(), setup.record.host_public_key.size(),
-                setup.record.peer_alt_irk.size() == 16 ? "拿到了" : "没有",
-                setup.record.remote_unlock_host_key.empty() ? "没有" : "拿到了");
+                setup.record.peer_alt_irk.size() == 16 ? SCRCTL_TR("present") : SCRCTL_TR("missing"),
+                setup.record.remote_unlock_host_key.empty() ? SCRCTL_TR("missing") : SCRCTL_TR("present"));
 
     if (save) {
         const std::string path =
             scrctl::wifi::record_path(scrctl::wifi::default_record_dir(), udid);
         if (!scrctl::wifi::save_record(path, setup.record, err)) {
-            std::fprintf(stderr, "写记录失败: %s\n", err.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to save pairing record: %s\n"), err.c_str());
             return 1;
         }
-        std::printf("记录写到 %s\n", path.c_str());
+        std::printf(SCRCTL_TR("Pairing record saved to %s\n"), path.c_str());
     }
 
-    // 设备在配对结束后会关掉那条连接，所以验收要重开一条。
-    std::printf("重开一条控制面，用新记录走 pair-verify\n");
+    // 所测设备在 setup 完成后关闭连接；verify 使用新连接和刚生成的记录。
+    std::printf(SCRCTL_TR("Reconnecting to verify the new pairing record\n"));
     auto verify_plane = open(err);
     if (verify_plane == nullptr) {
-        std::fprintf(stderr, "重连控制面失败: %s\n", err.c_str());
+        std::fprintf(stderr, SCRCTL_TR("Failed to reconnect to pairing channel: %s\n"), err.c_str());
         return 1;
     }
     const scrctl::wifi::PairVerifyResult verified =
         scrctl::wifi::pair_verify(*verify_plane->channel, setup.record, err);
     if (verified.outcome != scrctl::wifi::VerifyOutcome::Paired) {
-        std::fprintf(stderr, "  新记录 pair-verify 没过: %s\n", verified.error.c_str());
+        std::fprintf(stderr, SCRCTL_TR("  New record pair-verify failed: %s\n"), verified.error.c_str());
         return 1;
     }
-    std::printf("  新记录 pair-verify 通过（设备认这把密钥了）\n");
+    std::printf(SCRCTL_TR("  New record pair-verify completed; device accepted the host key\n"));
     print_handshake(verified.device_handshake);
     return 0;
 }
 
-/// `--pair-setup`：把配对**从零建起来**，然后用新记录当场 pair-verify 验收。跑通这条，
-/// M5 就不再需要"先用参考实现配一次对"这个前置条件。
-///
-/// 两条控制面：
-///   给了 --address —— 设备 mDNS 广播的那个手动配对端口（Wi-Fi 面）。pair-setup 的
-///       正路：设备会弹「信任」框，点了才继续。
-///   没给 —— USB 那条 `remotepairingdeviced.lockdown` 面。iOS 27 上实测**不收**
-///       pair-setup：M1 一到就被 `Invalidating control channel` 掐掉（设备 oslog 量
-///       出来的，见 docs），所以这条路只用来复现那个症状。
+/// 字节流配对入口。指定 address 时连接 Wi-Fi 手动配对端口，否则使用 USB lockdown。
+/// 设备是否接受 setup、是否要求用户确认取决于控制面和 pairing kind；已有 iOS 27
+/// 字节流样本在 M1 后关闭通道，不能将该样本外推为所有设备或所有载体的规则。
 int run_pair_setup(const std::string &address, int port, const std::string &udid_filter,
                    const std::string &host_id_override, bool verbose, bool save,
                    bool probe_verify_first, const std::string &host_name_override,
@@ -564,17 +543,17 @@ int run_pair_setup(const std::string &address, int port, const std::string &udid
         std::optional<scrctl::transport::Lockdown> lockdown =
             scrctl::transport::Lockdown::establish(device.device_id, device.udid, err);
         if (!lockdown) {
-            std::fprintf(stderr, "lockdown 建立失败: %s\n", err.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to establish lockdown session: %s\n"), err.c_str());
             return 1;
         }
         const std::optional<scrctl::transport::Lockdown::ServiceEndpoint> endpoint =
             lockdown->start_service(kPairingService, err);
         if (!endpoint) {
-            std::fprintf(stderr, "起 %s 失败: %s\n", kPairingService, err.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to start service %s: %s\n"), kPairingService, err.c_str());
             return 1;
         }
-        std::printf("控制面端口 %u（TLS %s）\n", endpoint->port,
-                    endpoint->requires_tls ? "要" : "不要");
+        std::printf(SCRCTL_TR("Pairing channel port %u (TLS: %s)\n"), endpoint->port,
+                    endpoint->requires_tls ? SCRCTL_TR("required") : SCRCTL_TR("not required"));
         spec.device_id = device.device_id;
         spec.port = endpoint->port;
         spec.use_tls = endpoint->requires_tls;
@@ -583,31 +562,28 @@ int run_pair_setup(const std::string &address, int port, const std::string &udid
                                  save, probe_verify_first, host_name_override, pairing_kind);
     }
 
-    // Wi-Fi 面：连接本身不带 UDID，落盘的文件名要它——插着一台 USB 设备就当是它
-    //（这台 iPhone 正是我们要配的），否则让命令行给。
+    // Wi-Fi 连接本身不提供保存记录所需的 UDID。沿用探针行为：未显式指定时，
+    // 尝试取唯一 USB 候选的 UDID；这里只借用标识符，不证明它与 Wi-Fi 地址是同一设备。
     std::string udid = udid_filter;
     if (udid.empty()) {
         scrctl::transport::DeviceRecord plugged;
         if (pick_usb_device("", plugged, err)) {
             udid = plugged.udid;
-            std::printf("记录按插着的这台设备落盘（%s）\n", mask(udid, 8).c_str());
+            std::printf(SCRCTL_TR("Using connected USB device %s as the pairing record identifier\n"), mask(udid, 8).c_str());
         }
         if (udid.empty()) {
-            std::fprintf(stderr, "Wi-Fi 面不知道设备是谁，得给 --udid\n");
+            std::fprintf(stderr, SCRCTL_TR("Wi-Fi pairing requires --udid when no USB device is selected\n"));
             return 2;
         }
     }
-    std::printf("控制面 %s:%d（Wi-Fi 手动配对面）\n", address.c_str(), port);
+    std::printf(SCRCTL_TR("Pairing channel %s:%d (Wi-Fi manual pairing)\n"), address.c_str(), port);
     return finish_pair_setup(byte_opener(spec, verbose), udid, host_id_override, save,
                              probe_verify_first, host_name_override, pairing_kind);
 }
 
-/// `--pair-setup-xpc`：同一套 pair-setup，走 RemoteXPC 载体。
-///
-/// 为什么要多这一条：iOS 27 上字节流载体（Wi-Fi 手动口 49152、USB lockdown 的
-/// remotepairingdeviced）一律 M1 即 `Invalidating control channel`，而 Xcode 成功那趟
-/// 设备侧的通道名是 `remotexpc-8`（docs §25.6/§25.8）——门在传输层，不在字段上。
-/// 所以把那十一条已否证的字段假设全部原样保留，只换载体，才是干净的判据。
+/// USB RemoteXPC 配对入口，与字节流路径复用同一套 setup/verify 流程。
+/// 该载体在已有 iOS 27 样本中通过了配对，而部分字节流入口关闭了通道；
+/// 具体控制面、kind 和确认流程的实测记录见 docs §25.6、§25.8。
 int run_pair_setup_xpc(const std::string &service_name, const std::string &udid_filter,
                        const std::string &host_id_override, bool verbose, bool save,
                        bool probe_verify_first, const std::string &host_name_override,
@@ -618,7 +594,7 @@ int run_pair_setup_xpc(const std::string &service_name, const std::string &udid_
         std::fprintf(stderr, "%s\n", err.c_str());
         return 1;
     }
-    std::printf("载体 = RemoteXPC（%s）\n", service_name.c_str());
+    std::printf(SCRCTL_TR("Carrier = RemoteXPC (%s)\n"), service_name.c_str());
     return finish_pair_setup(xpc_opener(service_name, udid_filter, verbose), device.udid,
                              host_id_override, save, probe_verify_first, host_name_override,
                              pairing_kind);
@@ -626,8 +602,7 @@ int run_pair_setup_xpc(const std::string &service_name, const std::string &udid_
 
 }  // namespace
 
-/// 把 USB CoreDeviceProxy 隧道里那张 RSD 服务表整张打出来：pair-setup 的 RemoteXPC
-/// 入口（docs §25.7）如果存在，就该在这张表里。
+/// 输出 USB CoreDeviceProxy 隧道中的完整 RSD 服务目录，便于查找配对入口。
 int run_usb_services(bool verbose, const std::string &udid_filter) {
     std::string err;
     UsbTunnelPlane plane;
@@ -635,8 +610,9 @@ int run_usb_services(bool verbose, const std::string &udid_filter) {
         std::fprintf(stderr, "%s\n", err.c_str());
         return 1;
     }
-    std::printf("隧道内 RSD 服务共 %zu 个：\n", plane.rsd->services().size());
+    std::printf(SCRCTL_TR("USB tunnel RSD directory: %zu services\n"), plane.rsd->services().size());
     for (const auto &svc : plane.rsd->services()) {
+        // 服务名、能力列和 entitlement 均来自协议目录，按原值输出。
         std::printf("  %-60s port=%-5u remotexpc=%d tls=%d%s%s\n", svc.name.c_str(),
                     static_cast<unsigned>(svc.port), svc.uses_remote_xpc ? 1 : 0,
                     svc.encrypt_socket_data ? 1 : 0,
@@ -788,45 +764,45 @@ int main(int argc, char **argv) {
         const std::optional<scrctl::wifi::PairRecord> loaded =
             scrctl::wifi::load_record(record_path, err);
         if (!loaded) {
-            std::fprintf(stderr, "读配对记录失败: %s\n", err.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to load pairing record: %s\n"), err.c_str());
             return 1;
         }
         record = *loaded;
     } else if (!foreign_path.empty()) {
         const std::optional<std::string> text = read_file(foreign_path);
         if (!text) {
-            std::fprintf(stderr, "打不开 %s\n", foreign_path.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to open %s\n"), foreign_path.c_str());
             return 1;
         }
         if (host_id.empty()) {
-            std::fprintf(stderr, "那种格式不存 host identifier，必须给 --host-id\n");
+            std::fprintf(stderr, SCRCTL_TR("Foreign record does not store a host identifier; provide --host-id\n"));
             return 2;
         }
         const std::optional<scrctl::wifi::PairRecord> loaded =
             from_foreign_record(*text, host_id, err);
         if (!loaded) {
-            std::fprintf(stderr, "读那份记录失败: %s\n", err.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to load foreign pairing record: %s\n"), err.c_str());
             return 1;
         }
         record = *loaded;
         record.udid = udid;
     } else {
-        std::fprintf(stderr, "要 --record 或 --pmd3-record 之一\n");
+        std::fprintf(stderr, SCRCTL_TR("Provide --record or --pmd3-record\n"));
         return 2;
     }
     if (!record.complete()) {
-        std::fprintf(stderr, "记录不完整（udid=%s host_identifier=%s 私钥 %zu 字节 公钥 %zu 字节）\n",
-                     record.udid.empty() ? "(空)" : mask(record.udid, 8).c_str(),
-                     record.host_identifier.empty() ? "(空)" : mask(record.host_identifier, 8).c_str(),
+        std::fprintf(stderr, SCRCTL_TR("Pairing record incomplete (udid=%s host_identifier=%s private key: %zu bytes, public key: %zu bytes)\n"),
+                     record.udid.empty() ? SCRCTL_TR("(empty)") : mask(record.udid, 8).c_str(),
+                     record.host_identifier.empty() ? SCRCTL_TR("(empty)") : mask(record.host_identifier, 8).c_str(),
                      record.host_private_key.size(), record.host_public_key.size());
         return 1;
     }
 
-    std::printf("连 %s:%d（记录 %s）\n", address.c_str(), port,
-                record.udid.empty() ? "(未知设备)" : mask(record.udid, 8).c_str());
+    std::printf(SCRCTL_TR("Connecting to %s:%d (record %s)\n"), address.c_str(), port,
+                record.udid.empty() ? SCRCTL_TR("(unknown device)") : mask(record.udid, 8).c_str());
     auto sock = scrctl::transport::connect_tcp(address, static_cast<uint16_t>(port), 5000, err);
     if (!sock) {
-        std::fprintf(stderr, "  连接失败: %s\n", err.c_str());
+        std::fprintf(stderr, SCRCTL_TR("  Connection failed: %s\n"), err.c_str());
         return 1;
     }
     scrctl::wifi::SocketStream raw_stream(*sock);
@@ -837,17 +813,18 @@ int main(int argc, char **argv) {
     const scrctl::wifi::PairVerifyResult verified = scrctl::wifi::pair_verify(channel, record, err);
     if (verified.outcome != scrctl::wifi::VerifyOutcome::Paired) {
         const char *tag = verified.outcome == scrctl::wifi::VerifyOutcome::NotPaired
-                              ? "设备答了但不认这条记录"
-                              : "没答上";
-        std::fprintf(stderr, "  pair-verify 未通过（%s）: %s\n", tag, verified.error.c_str());
+                              ? SCRCTL_TR("device rejected the pairing record")
+                              : SCRCTL_TR("verification did not complete");
+        std::fprintf(stderr, SCRCTL_TR("  Pair-verify failed (%s): %s\n"), tag, verified.error.c_str());
         return 1;
     }
-    std::printf("  pair-verify 通过：设备认了我们的 host 密钥\n");
+    std::printf(SCRCTL_TR("  Pair-verify completed; device accepted the host key\n"));
     print_handshake(verified.device_handshake);
-    std::printf("  共享密钥 %zu 字节（既做主密钥的输入，也做隧道 PSK；字节不打印）\n",
+    std::printf(SCRCTL_TR("  Shared secret: %zu bytes (key derivation and tunnel PSK; contents hidden)\n"),
                 verified.shared_secret.size());
 
-    // createListener：设备据此开一个隧道监听端口。TCP 那条要把共享密钥原样当 PSK 发过去。
+    // createListener 请求设备创建隧道监听端口。key 字段和后续 TCP TLS-PSK
+    // 握手使用同一共享密钥；这里只打印长度，不输出密钥内容。
     const scrctl::json::Value peer_info = j_arr({j_obj({{"owningPID", j_int(static_cast<int64_t>(
                                                    ::getpid()))},
                                                {"owningProcessName", j_str("CoreDeviceService")}})});
@@ -859,85 +836,84 @@ int main(int argc, char **argv) {
         j_obj({{"request", j_obj({{"_0", j_obj({{"createListener", listener}})}})}});
     const std::optional<scrctl::json::Value> reply = channel.encrypted_roundtrip(request, err);
     if (!reply) {
-        std::fprintf(stderr, "  createListener 失败: %s\n", err.c_str());
+        std::fprintf(stderr, SCRCTL_TR("  createListener failed: %s\n"), err.c_str());
         return 1;
     }
     const scrctl::json::Value *created = scrctl::json::find(*reply, "createListener");
     const scrctl::json::Value *listener_port = created != nullptr ? scrctl::json::find(*created, "port") : nullptr;
     if (listener_port == nullptr) {
-        std::fprintf(stderr, "  回信里没有 createListener.port，实际字段：");
+        std::fprintf(stderr, SCRCTL_TR("  Response missing createListener.port; actual fields:"));
         for (const auto &kv : reply->items()) {
             std::fprintf(stderr, " %s", kv.key().c_str());
         }
         std::fprintf(stderr, "\n");
         return 1;
     }
-    std::printf("  createListener 给了端口 %lld\n",
+    std::printf(SCRCTL_TR("  createListener port = %lld\n"),
                 static_cast<long long>(scrctl::json::as_int_or(*listener_port, 0)));
 
     if (!want_tunnel) {
         const auto probe = scrctl::transport::connect_tcp(
             address, static_cast<uint16_t>(scrctl::json::as_int_or(*listener_port, 0)), 3000, err);
-        std::printf("  那个端口连得上吗: %s\n", probe ? "连得上" : err.c_str());
+        std::printf(SCRCTL_TR("  Listener port connection: %s\n"), probe ? SCRCTL_TR("connected") : err.c_str());
         return 0;
     }
 
-    // --tunnel：真的把隧道起起来。这一步同时是 pair-verify 那把共享密钥的判据——
-    // 隧道监听器只认这把 PSK，密钥派生错一个字节就握不上。
+    // --tunnel 完成 TLS-PSK 与 CDTunnel 握手，用于检查派生的共享密钥能否建立隧道。
+    // 监听端口的 TCP 可连接性本身不能证明密钥有效，因此两步结果分别输出。
     const uint16_t tunnel_port = static_cast<uint16_t>(scrctl::json::as_int_or(*listener_port, 0));
     auto tunnel_sock = scrctl::transport::connect_tcp(address, tunnel_port, 5000, err);
     if (!tunnel_sock) {
-        std::fprintf(stderr, "  连隧道端口 %u 失败: %s\n", tunnel_port, err.c_str());
+        std::fprintf(stderr, SCRCTL_TR("  Failed to connect to tunnel port %u: %s\n"), tunnel_port, err.c_str());
         return 1;
     }
-    std::printf("  连上隧道端口 %u，开始 TLS-PSK + CDTunnel 握手\n", tunnel_port);
+    std::printf(SCRCTL_TR("  Connected to tunnel port %u; starting TLS-PSK and CDTunnel handshakes\n"), tunnel_port);
     auto tunnel =
         scrctl::transport::PacketTunnel::establish_psk(std::move(*tunnel_sock),
                                                       verified.shared_secret, err);
     if (!tunnel) {
-        std::fprintf(stderr, "  隧道建立失败: %s\n", err.c_str());
+        std::fprintf(stderr, SCRCTL_TR("  Failed to establish tunnel: %s\n"), err.c_str());
         return 1;
     }
     const auto &p = tunnel->params();
-    std::printf("  隧道通了：本机 %s / 设备 %s / 隧道内 RSD 端口 %u / MTU %u\n",
+    std::printf(SCRCTL_TR("  Tunnel established: local %s / device %s / RSD port %u / MTU %u\n"),
                 p.client_address.c_str(), p.server_address.c_str(), p.rsd_port, p.mtu);
     if (!want_rsd) {
         return 0;
     }
 
-    // --rsd：复用隧道内那套用户态 IPv6+TCP 栈，读 RSD 目录。这一段跑通，Wi-Fi
-    // 那条路就与 USB 那条在同一个层次上了（后面的起流是同一份代码）。
+    // --rsd 在已建立的 Wi-Fi 隧道内启动用户态 IPv6/TCP 栈并读取服务目录。
+    // 目录访问与后续媒体服务使用相同传输接口，但不能替代起流或长期恢复的验证。
     scrctl::net::Stack stack(*tunnel, p.client_address, p.server_address);
     if (!stack.addresses_ok()) {
-        std::fprintf(stderr, "  隧道内地址解析失败\n");
+        std::fprintf(stderr, SCRCTL_TR("  Failed to parse tunnel addresses\n"));
         return 1;
     }
     if (!stack.start_pump(err)) {
-        std::fprintf(stderr, "  起泵失败: %s\n", err.c_str());
+        std::fprintf(stderr, SCRCTL_TR("  Failed to start tunnel packet pump: %s\n"), err.c_str());
         return 1;
     }
     scrctl::remote::PeerIdentity identity;
-    // peer UUID 要**稳定**：设备每条隧道只留一个 RSD 连接，UUID 一变它就把这台机器
-    // 重新 attach、并关掉已公布的服务端口（见 remote/Device.cpp 里那段注释）。
-    // Wi-Fi 这条用我们自己 host identifier 的那个 UUID。
+    // 使用记录中的 host identifier 作为稳定的 RSD peer UUID。
+    // 已有设备在 UUID 变化时重新 attach 并关闭旧服务端口；相关约束见 remote/Device.cpp。
     const auto uuid = scrctl::remote::parse_uuid_text(record.host_identifier);
     if (!uuid) {
-        std::fprintf(stderr, "  host identifier 不是一个能用的 UUID: %s\n",
+        std::fprintf(stderr, SCRCTL_TR("  Host identifier is not a valid UUID: %s\n"),
                      mask(record.host_identifier, 8).c_str());
         return 1;
     }
     identity.uuid = *uuid;
     const auto rsd = scrctl::remote::Rsd::open(stack, *tunnel, identity, err);
     if (!rsd) {
-        std::fprintf(stderr, "  RSD 打不开: %s\n", err.c_str());
+        std::fprintf(stderr, SCRCTL_TR("  Failed to open RSD: %s\n"), err.c_str());
         return 1;
     }
-    std::printf("  RSD 目录共 %zu 个服务\n", rsd->services().size());
+    std::printf(SCRCTL_TR("  RSD directory: %zu services\n"), rsd->services().size());
     for (const char *name : {"com.apple.coredevice.displayservice",
                              "com.apple.coredevice.screencaptureservice",
                              "com.apple.coredevice.hid.indigo",
                              "com.apple.coredevice.appservice"}) {
-        std::printf("    %-46s %s\n", name, rsd->has_service(name) ? "在" : "不在");
+        std::printf("    %-46s %s\n", name, rsd->has_service(name) ? SCRCTL_TR("available") : SCRCTL_TR("not available"));
     }
     return 0;
 }
