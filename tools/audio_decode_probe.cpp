@@ -194,18 +194,7 @@ int main(int argc, char **argv) {
     app.add_option("CHANNELS", channels,
         SCRCTL_N_("Channel count (1-32767; default: 2)"))->check(CLI::Range(1, 32767));
     scrctl::i18n::CliLanguage language(app);
-    try {
-        app.parse(argc, argv);
-        if (!language.select()) return 2;
-    } catch (const CLI::CallForHelp &) {
-        if (!language.select()) return 2;
-        std::printf("%s", language.help().c_str());
-        return 0;
-    } catch (const CLI::ParseError &error) {
-        if (language.select())
-            std::fprintf(stderr, SCRCTL_TR("Invalid arguments: %s\n"), error.what());
-        return 2;
-    }
+    if (auto code = language.parse(argc, argv)) return *code;
     // 16 位 PCM 的 blockAlign 已由声道上限保证；byteRate 的 32 位边界还需要
     // 联合检查采样率和声道数。使用 64 位乘法，且在打开输入文件前拒绝越界参数。
     if (static_cast<uint64_t>(rate) * channels * 2 > std::numeric_limits<uint32_t>::max()) {

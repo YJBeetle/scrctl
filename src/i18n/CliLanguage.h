@@ -3,11 +3,13 @@
 #include "i18n/Translation.h"
 #include <CLI/CLI.hpp>
 #include <cstdio>
+#include <optional>
 #include <string>
 
 namespace scrctl::i18n {
 
-/// CLI11 入口共用的语言选项与帮助翻译。参数解析和退出状态仍由入口决定。
+/// CLI11 入口共用的语言选项、帮助翻译与简单探针解析入口。
+/// 入口仍负责业务校验和实际退出；特殊错误码可继续使用 select() 和 help()。
 class CliLanguage {
   public:
     explicit CliLanguage(CLI::App &app) : app_(app) {
@@ -20,6 +22,24 @@ class CliLanguage {
     // CLI11 的选项绑定 requested_；对象地址需保持不变直到解析和帮助处理完成。
     CliLanguage(const CliLanguage &) = delete;
     CliLanguage &operator=(const CliLanguage &) = delete;
+
+    /// 用于参数错误固定返回 2 的入口。nullopt 表示继续执行；返回 0 或 2 时，
+    /// 帮助或错误已输出，调用方应返回该退出码。解析异常之外的异常仍交给调用方。
+    std::optional<int> parse(int argc, char **argv) {
+        try {
+            app_.parse(argc, argv);
+            if (!select()) return 2;
+        } catch (const CLI::CallForHelp &) {
+            if (!select()) return 2;
+            std::printf("%s", help().c_str());
+            return 0;
+        } catch (const CLI::ParseError &error) {
+            if (select())
+                std::fprintf(stderr, SCRCTL_TR("Invalid arguments: %s\n"), error.what());
+            return 2;
+        }
+        return std::nullopt;
+    }
 
     /// CLI11 收集完参数后才抛出帮助请求；从原始 results 选择语言，
     /// 使 --help 前后的 --lang 均有效，包括尚未执行值转换的帮助路径。

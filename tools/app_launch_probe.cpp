@@ -38,18 +38,7 @@ int main(int argc, char **argv) {
     app.add_option("UDID", udids, SCRCTL_N_("Device identifier (optional; last value is used)"))
         ->expected(-1);
     scrctl::i18n::CliLanguage language(app);
-    try {
-        app.parse(argc, argv);
-        if (!language.select()) return 2;
-    } catch (const CLI::CallForHelp &) {
-        if (!language.select()) return 2;
-        std::printf("%s", language.help().c_str());
-        return 0;
-    } catch (const CLI::ParseError &error) {
-        if (language.select())
-            std::fprintf(stderr, SCRCTL_TR("Invalid arguments: %s\n"), error.what());
-        return 2;
-    }
+    if (auto code = language.parse(argc, argv)) return *code;
     if (keep_running) terminate_existing = false;
     // UDID 必须由字符串持有；多个位置 UDID 仍取最后一个。
     if (!udids.empty()) udid = udids.back();

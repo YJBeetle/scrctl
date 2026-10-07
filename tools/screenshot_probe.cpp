@@ -57,19 +57,7 @@ int main(int argc, char **argv) {
     // 位置参数只有 UDID；多个 UDID 必须报错，不能静默选择最后一个。
     app.add_option("UDID", udid, SCRCTL_N_("Device UDID"));
     scrctl::i18n::CliLanguage language(app);
-    try {
-        app.parse(argc, argv);
-        if (!language.select()) return 2;
-    } catch (const CLI::CallForHelp &) {
-        if (!language.select()) return 2;
-        std::printf("%s", language.help().c_str());
-        return 0;
-    } catch (const CLI::ParseError &e) {
-        if (language.select()) {
-            std::fprintf(stderr, SCRCTL_TR("Invalid arguments: %s\n"), e.what());
-        }
-        return 2;
-    }
+    if (auto code = language.parse(argc, argv)) return *code;
 
     std::string err;
     auto dev = scrctl::remote::Device::establish(udid, err, verbose);
