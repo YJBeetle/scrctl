@@ -40,7 +40,7 @@ std::optional<PairRecord> parse_record(std::string_view text, std::string &err);
 /// 设为 0700；Windows 为文件和新建叶子目录设置当前进程用户 SID 的受保护 DACL。
 /// 已有目录和上级目录权限不在此调整。失败返回 false 并填 err，尽量移除临时文件。
 bool save_record(const std::string &path, const PairRecord &record, std::string &err);
-/// 读取文本后检查 16 KiB 上限，再解析记录；此上限不是读取前的内存分配限制。
+/// 最多读取 16 KiB 加一个检测字节，拒绝超限或读取失败，然后解析完整文本。
 std::optional<PairRecord> load_record(const std::string &path, std::string &err);
 
 /// 非空 XDG_DATA_HOME 优先，目录为其下的 scrctl；否则 Windows 尝试

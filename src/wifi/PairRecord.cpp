@@ -23,7 +23,7 @@ namespace scrctl::wifi {
 namespace {
 
 constexpr char kHeader[] = "scrctl-pair-record 1";
-// 文本读取完成后的大小校验值，不限制 ifstream/ostringstream 的读取分配。
+// 最多读取上限加一个检测字节，避免超大文件在大小校验前占用大量内存。
 constexpr size_t kMaxRecordText = 16384;
 
 std::string hex(const Bytes &data) {
@@ -133,13 +133,18 @@ std::optional<std::string> read_file(const std::string &path, std::string &err) 
         err = SCRCTL_TR("Cannot open ") + path;
         return std::nullopt;
     }
-    std::ostringstream ss;
-    ss << in.rdbuf();
-    std::string text = ss.str();
-    if (text.size() > kMaxRecordText) {
+    std::string text(kMaxRecordText + 1, '\0');
+    in.read(text.data(), static_cast<std::streamsize>(text.size()));
+    const auto count = static_cast<size_t>(in.gcount());
+    if (in.bad() || (in.fail() && !in.eof())) {
+        err = SCRCTL_TR("Failed to read pairing record file ") + path;
+        return std::nullopt;
+    }
+    if (count > kMaxRecordText) {
         err = SCRCTL_TR("Pairing record file too large");
         return std::nullopt;
     }
+    text.resize(count);
     return text;
 }
 

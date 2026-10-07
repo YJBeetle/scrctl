@@ -839,3 +839,12 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
 - 前一批功能提交 `1e57dc7dc49cdd5d1d554daca40a8fbd2885b167` 的
   [CI run 37679973014](https://github.com/YJBeetle/scrctl/actions/runs/37679973014)
   中，Ubuntu、macOS、Windows ARM64、ASan + UBSan 四个作业全部通过。
+
+## 第六十二轮：配对记录的有界读取
+
+- load_record 最多读取 16 KiB 加一个检测字节，在解析前拒绝超限和 I/O 失败。
+  原先先将整份文件复制进 ostringstream，再检查大小，无法限制读取时的分配。
+  记录格式、大小上限及未知字段处理保持原有约定。
+- 现有 wifi 测试覆盖 16383 / 16384 字节记录的完整读取、16385 字节拒绝，以及
+  把目录作为文件读取时的失败。Release 和 ASan/UBSan 的 wifi、i18n 两项回归
+  各通过 2/2，gettext 检查通过。

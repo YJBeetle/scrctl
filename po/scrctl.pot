@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 04:19+0800\n"
+"POT-Creation-Date: 2026-10-08 04:28+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1581,7 +1581,7 @@ msgid "Start CoreDeviceProxy"
 msgstr ""
 
 #: src/remote/Device.cpp:142 src/remote/Rsd.cpp:152 src/remote/Rsd.cpp:355
-#: src/transport/Usbmux.cpp:92 src/wifi/PairRecord.cpp:308
+#: src/transport/Usbmux.cpp:92 src/wifi/PairRecord.cpp:313
 msgid " failed: "
 msgstr ""
 
@@ -2513,7 +2513,7 @@ msgstr ""
 msgid "Cannot open temporary file "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:109 src/wifi/PairRecord.cpp:260
+#: src/wifi/PairRecord.cpp:109 src/wifi/PairRecord.cpp:265
 #: src/wifi/PairRecordWindows.cpp:47
 msgid "Failed to set record file permissions"
 msgstr ""
@@ -2532,38 +2532,42 @@ msgid "Cannot open "
 msgstr ""
 
 #: src/wifi/PairRecord.cpp:140
+msgid "Failed to read pairing record file "
+msgstr ""
+
+#: src/wifi/PairRecord.cpp:144
 msgid "Pairing record file too large"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:185
+#: src/wifi/PairRecord.cpp:190
 msgid "Invalid scrctl pairing record header"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:192
+#: src/wifi/PairRecord.cpp:197
 msgid "Record line is not key=value"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:203
+#: src/wifi/PairRecord.cpp:208
 msgid " requires "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:203
+#: src/wifi/PairRecord.cpp:208
 msgid "Incorrect field length: "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:204
+#: src/wifi/PairRecord.cpp:209
 msgid " bytes; got "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:235
+#: src/wifi/PairRecord.cpp:240
 msgid "Record missing host_private_key"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:250
+#: src/wifi/PairRecord.cpp:255
 msgid "Failed to create directory "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:308
+#: src/wifi/PairRecord.cpp:313
 msgid "Reading directory "
 msgstr ""
 

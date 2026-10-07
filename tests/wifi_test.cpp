@@ -1173,6 +1173,26 @@ void test_record_listing() {
         check(scrctl::wifi::save_record(deep_path, rec, err), "已有记录可原子替换");
         const auto updated = scrctl::wifi::load_record(deep_path, err);
         check(updated && updated->host_private_key == rec.host_private_key, "替换后读取新记录");
+        // 文件读取边界：未知字段可被忽略，但整份文本的大小限制必须生效。
+        const auto bounded_path = deep / "bounded.pair";
+        const auto text = scrctl::wifi::format_record(rec) + "padding=";
+        for (const size_t size : {size_t{16383}, size_t{16384}, size_t{16385}}) {
+            {
+                std::ofstream out(bounded_path, std::ios::binary);
+                out << text << std::string(size - text.size(), 'x');
+            }
+            err.clear();
+            const auto bounded = scrctl::wifi::load_record(bounded_path.string(), err);
+            if (size <= 16384) {
+                check(bounded && bounded->host_private_key == rec.host_private_key,
+                      "Pairing record at or below the 16 KiB boundary loads completely");
+            } else {
+                check(!bounded && !err.empty(), "Pairing record one byte over 16 KiB is rejected");
+            }
+        }
+        err.clear();
+        check(!scrctl::wifi::load_record(deep.string(), err) && !err.empty(),
+              "Reading a directory as a pairing record fails with a reason");
 #ifdef _WIN32
         check(private_record_acl(deep_path), "记录文件只授权当前用户且不继承宽松 ACL");
         check(private_record_acl(deep), "新建叶子目录只授权当前用户");
