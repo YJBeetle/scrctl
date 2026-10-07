@@ -25,8 +25,7 @@ std::vector<uint8_t> unescape_nal(const uint8_t *data, std::size_t len) {
     std::vector<uint8_t> out;
     out.reserve(len);
     for (std::size_t i = 0; i < len; ++i) {
-        // 只有 00 00 03 后面跟着 0x00..0x03 时那个 03 才是插进来的防 emulation 字节；
-        // 光看 00 00 03 就删，会在截断的 NAL 上删掉真实码流。
+        // 仅删除完整 00 00 03 xx（xx<=0x03）中的 EPB，截断模式保持原样。
         if (i + 3 < len && data[i] == 0 && data[i + 1] == 0 && data[i + 2] == 3 &&
             data[i + 3] <= 3) {
             out.push_back(0);
@@ -47,7 +46,7 @@ void AnnexBParser::feed(const uint8_t *data, std::size_t len) {
         if (pending_[i] == 0 && pending_[i + 1] == 0 && pending_[i + 2] == 1) {
             std::size_t end = i;
             if (end > nal_begin_ && pending_[end - 1] == 0) {
-                --end;  // 4 字节起始码，末尾那个 0 属于起始码
+                --end;  // 四字节起始码，前一个 0 也属于起始码
             }
             emit_range(end);
             nal_begin_ = i + 3;
@@ -57,7 +56,7 @@ void AnnexBParser::feed(const uint8_t *data, std::size_t len) {
         ++i;
     }
 
-    // 保留可能横跨 feed 边界的最后 2 字节（半个起始码）
+    // 从最后两字节继续扫描，以识别跨 feed 边界的 00 00 01
     scan_from_ = std::max(nal_begin_, pending_.size() >= 2 ? pending_.size() - 2 : 0);
 
     if (nal_begin_ > 0) {
@@ -88,14 +87,9 @@ void AnnexBParser::on_nal(std::vector<uint8_t> &&nal) {
     if (nal.size() < 3) {
         return;
     }
-    // 这里**不**去 emulation prevention 字节。曾经去过，代价很隐蔽：
-    // VideoToolbox 的长度前缀样本要求 NAL 字节与 Annex-B 里起始码之后的原样一致
-    // （含 00 00 03），hvcC 里的参数集同理（与 avcC 同一套规则），去掉之后解码器
-    // 读到的是另一串东西。实测同一台机器、同一份 SPS，两份录屏一份"看起来正常"
-    // 一份整片噪声——因为去掉 EPB 后 RBSP 里会出现 00 00 01，是否踩到取决于码流
-    // 内容，所以是概率性出错。
-    // 判类型与 first_slice_segment_in_pic_flag 都不受影响：EPB 需要前面有两个
-    // 零字节，不可能出现在 NAL 头或 RBSP 的第一个字节上。
+    // NAL、解码样本和参数集缓存都保留原始 EPB；仅语法解析时另行转换为 RBSP。
+    // 类型标记在两字节 NAL 头中，first_slice_segment_in_pic_flag 是其后第一个 bit，
+    // 读取这两项不需要去除 EPB。
     const uint8_t type = nal_type_of(nal);
 
     if (type == static_cast<uint8_t>(NalType::Vps)) {
@@ -107,16 +101,15 @@ void AnnexBParser::on_nal(std::vector<uint8_t> &&nal) {
     }
 
     if (is_vcl(type)) {
-        // 参数集是紧随其后的图像帧的前缀，必须留在同一个 AU 里。
-        // 因此只有当前 AU 已经含图像数据时，新图像开始才意味着收尾；
-        // 否则把已攒下的 VPS/SPS/PPS 带进这一帧。
+        // 新图像开始且当前 AU 已含 VCL 时提交前一 AU。
+        // 尚未包含 VCL 的 VPS/SPS/PPS 前缀与本图像合并。
         const bool new_pic = starts_new_picture(nal);
         if (new_pic) {
             if (au_has_vcl_) {
                 close_au();
             }
         } else if (!au_open_) {
-            return;  // 中途接入流，丢弃首个完整帧之前的残留 slice
+            return;  // 尚未建立 AU，丢弃没有图像起始标志的残留 slice
         }
         au_open_ = true;
         au_has_vcl_ = true;
@@ -128,8 +121,8 @@ void AnnexBParser::on_nal(std::vector<uint8_t> &&nal) {
     }
 
     if (is_param_set(type)) {
-        // 参数集是下一个 AU 的前缀：只有当前 AU 已有图像数据才收尾，
-        // 否则继续把它们累积在同一组前缀里。
+        // 参数集作为下一 AU 的前缀；当前 AU 已含 VCL 时先提交，
+        // 否则继续累积同一组参数集。
         if (au_has_vcl_) {
             close_au();
         }

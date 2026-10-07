@@ -48,9 +48,8 @@ bool parse_rtp_header(std::span<const uint8_t> d, PacketInfo &out) {
         }
         pos += csrc;
     }
-    // 有扩展头时必须按它自己声明的长度跳，否则后面整段偏移都错，且错得毫无征兆。
-    // 这条流每个包都带 X=1 的 8 字节扩展头，它**就是**那 8 字节——曾被当成 RTP
-    // 之外的"苹果私有子头"，于是按长度跳过之后又多跳了 8 字节。
+    // 扩展长度以 32 位字计，不含扩展头自身的 4 字节；按声明长度跳过整个扩展。
+    // 不再额外跳过固定长度的私有头。
     if ((d[0] & 0x10) != 0) {
         if (d.size() < pos + 4) {
             return false;
@@ -86,15 +85,12 @@ bool HevcRtpDepacketizer::push(std::span<const uint8_t> datagram, std::vector<ui
         return false;
     }
     if (info.payload_type != video_pt_) {
-        // RTCP 或别的复用流：整包跳过，且**不**参与序号统计——它的序号是
-        // 自己那条流的，混进来会造出假的丢包。
+        // 非视频 PT 整包跳过，不参与当前视频流的序号统计。
         ++stats_.other_payload;
         return true;
     }
     ++stats_.packets;
-    // 序号连续性：见 `rt/RtpSeq`。这里以前是本地两份裸变量，把"迟到的包"也算进水位，
-    // 于是乱序到达会造出**假的丢包**——而 `seq_gaps` 在视频这条腿上是发 PLI、甚至
-    // 重起整条会话的理由，账错一次就白重起一次。
+    // 由 RtpSeq 按模 2^16 跟踪序号，迟到包不改变当前最高序号。
     switch (seq_.observe(info.sequence)) {
     case RtpSeq::Verdict::kGap:
         ++stats_.seq_gaps;
@@ -106,7 +102,7 @@ bool HevcRtpDepacketizer::push(std::span<const uint8_t> datagram, std::vector<ui
     case RtpSeq::Verdict::kInOrder:
         break;
     }
-    // 取的是 `RtpSeq` 的累计值而不是本地累加：迟到补齐要能冲销，本地 `+=` 只会单向虚增。
+    // 直接读取当前缺口数，保留窗口内迟到补齐带来的减少。
     stats_.seq_lost = seq_.lost();
     std::span<const uint8_t> body = datagram.subspan(info.payload_offset);
 
@@ -121,7 +117,7 @@ bool HevcRtpDepacketizer::push(std::span<const uint8_t> datagram, std::vector<ui
                 const std::size_t len = be16(body.data());
                 body = body.subspan(2);
                 if (len == 0 || len > body.size()) {
-                    break;  // 剩下的放不下，当尾部噪声丢掉
+                    break;  // 长度为零或超过剩余载荷，停止解析此聚合包
                 }
                 append_annexb(out, body.data(), len);
                 body = body.subspan(len);
@@ -143,22 +139,22 @@ bool HevcRtpDepacketizer::push(std::span<const uint8_t> datagram, std::vector<ui
 
             if (start) {
                 if (!partial_.empty()) {
-                    // 上一片没等到结尾就来了新片的开头：说明中间丢了包。
+                    // 新起始分片到达时，前一个 NAL 仍未完成，计为丢弃。
                     ++stats_.dropped_fragments;
                 }
                 partial_.clear();
                 partial_type_ = inner_type;
                 partial_ts_ = info.timestamp;
             } else if (partial_.empty()) {
-                // 中间/结尾分片先到、起始分片没到：这个 NAL 拼不出来，丢掉。
+                // 没有已缓存的起始分片，无法重组中间或结尾分片。
                 ++stats_.dropped_fragments;
                 break;
             }
-            // 这里**不跳 DONL**：见头文件里那段说明，跳了每个分片都少 2 字节真码流。
+            // 当前适配不含 DONL，FU 头后全部字节均作为分片数据。
             partial_.insert(partial_.end(), body.begin(), body.end());
             if (end) {
-                // 重组：起始分片声明的 TU 还原成 2 字节 NAL 头，后面接所有分片数据
-                // （含本片——上面已经把本片载荷插进 partial_ 了）。
+                // 使用起始分片的 TU 构造两字节 NAL 头，随后连接全部缓存分片数据。
+                // 当前实现写入 layer_id=0、temporal_id_plus1=1。
                 const uint8_t header[2] = {static_cast<uint8_t>((partial_type_ << 1) & 0x7E),
                                            0x01};
                 append_start_code(out);

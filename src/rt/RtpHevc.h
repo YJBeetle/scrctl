@@ -10,11 +10,11 @@
 
 namespace scrctl::rt {
 
-/// CoreDevice 视频流的 RTP 载荷拆包。
+/// CoreDevice 视频流的 HEVC RTP 载荷拆包，按当前适配的无 DONL 形态处理。
 ///
-/// 载荷是 RFC 7798 的 HEVC RTP 格式。每个包的 RTP 头之后是一个 8 字节的 RTP
-/// 扩展头（X=1，profile 0x9011，长度 1 个 32 位字；内容语义未记录，按它自己声明
-/// 的长度跳开即可），再往后才是 HEVC 载荷：
+/// 已观察的视频包带 X=1 的 RTP 扩展头：profile 0x9011，扩展数据长度为一个
+/// 32 位字，连同扩展头自身共 8 字节。解析器按包内声明长度跳过扩展，不依赖此固定值。
+/// 扩展之后的 HEVC 载荷按 RFC 7798 的类型标记分派：
 ///
 /// ```text
 ///   2 字节 NAL 头，type = (b0 >> 1) & 0x3F
@@ -23,22 +23,12 @@ namespace scrctl::rt {
 ///     其它 单一 NAL，剩下整个载荷就是它
 /// ```
 ///
-/// 那 8 字节一度被记成"苹果在 RTP 载荷前多塞的私有子头"，于是代码里按扩展头长度
-/// 跳了一遍、又固定多跳 8 字节——每个 NAL 都从中间开始，解出来的类型全是 63、92
-/// 这种不存在的值。手工构造的测试包是 X=0 + 8 字节子头，跟这个错误假设正好自洽，
-/// 所以测试全绿而真机全废。现在测试也照真机的样子构造（X=1 + 扩展头）。
-///
-/// **没有 DONL 字段。** 这一条值得单独说：S=1 的分片头后面那 2 字节看起来极像
-/// RFC 7798 里可选的 DONL（同一帧里几个分片的这两字节值还相同），按规范把它
-/// 跳过后，画面能解出 NAL 结构、类型全对，但解码器一帧都不出——因为每个分片
-/// 都少了 2 字节真实码流。留着它才正常。规范里"允许"的字段，这条流里没有。
+/// 当前设备流不含 DONL，FU 头后直接连接分片数据；该约束不能推广到所有 HEVC RTP 流。
 class HevcRtpDepacketizer {
 public:
-    /// 只处理这个 PT 的包。RTCP 与视频共用同一个 UDP 端口，而且它是**裸 RTCP**：
-    /// 那条 SR 开头是 `81 c8`，`0xc8` 是 RTCP 的 PT=200，而 RTP 的 PT 字段只有
-    /// 7 位，`0xc8 & 0x7f` 正好是 72——所以它一度被记成"混在视频包里的 PT=72"。
-    /// 不过滤就会把 RTCP 当 HEVC 载荷解，产出类型 0 之类
-    /// 的假 NAL 混进码流——而这条流不周期发 IDR，一个假 NAL 就把参考链永久打断。
+    /// 仅处理指定的视频 PT，其他 PT 不进入 HEVC 载荷解析及视频序号统计。
+    /// 当前设备的裸 RTCP 与 RTP 共用 UDP 端口，SR 的开头为 81 c8；若按 RTP
+    /// 的 7 位 PT 解读，0xc8 会得到 72。上层需先区分 RTCP，避免非视频数据进入参考链。
     explicit HevcRtpDepacketizer(uint8_t video_payload_type = 100)
         : video_pt_(video_payload_type) {}
 
@@ -48,10 +38,10 @@ public:
         /// 因分片不完整而丢弃的 NAL 数（丢包或中途 reset）。
         uint64_t dropped_fragments = 0;
         uint64_t malformed = 0;
-        /// `seq_gaps` 是序号**往前跳的事件**数，`seq_lost` 是**真正没到的包**数（迟到
-        /// 补齐会把它冲回去，所以它只反映"现在看缺几个"，不是历史峰值）。这是"画面为什么
-        /// 糊"的第一个要看的数：丢一个分片就废一整帧，而且没有 IDR 就一直废下去。
-        /// 两者不等号说明这条链路在乱序——`reordered` 会同时跟着涨。
+        /// seq_gaps 统计向前跳过序号的事件数，一次事件可以涉及多个缺失包。
+        /// seq_lost 是 RtpSeq 当前未补齐的缺口数，窗口内迟到补齐会使其减少。
+        /// reordered 包含迟到包和重复包；不能只凭前两项是否相等判断乱序。
+        /// 分片缺失可能使图像不完整或破坏参考链，上层据此判断是否需要请求刷新或重建会话。
         uint64_t seq_gaps = 0;
         uint64_t seq_lost = 0;
         uint64_t reordered = 0;
@@ -59,17 +49,18 @@ public:
         uint64_t other_payload = 0;
     };
 
-    /// 吃一个 UDP 数据报，把里面完整的 NAL 以 Annex-B（4 字节起始码）追加到 out。
-    /// 返回 false 表示这个包连 RTP 头都不是（err 给出原因）。
+    /// 处理一个 UDP 数据报，将重组完成的 NAL 以 Annex-B 四字节起始码追加到 out。
+    /// false 表示 RTP 头解析失败，err 给出原因；true 不保证本包产生 NAL。
+    /// 分片或聚合载荷异常可能仅计入统计或丢弃。
     bool push(std::span<const uint8_t> datagram, std::vector<uint8_t> &out, std::string &err);
 
-    /// 丢掉未完成的分片。切换显示、停止流、或（M2.7 里）决定放弃当前帧时用。
+    /// 丢弃未完成的分片，用于切换显示、停止流或放弃当前图像。
+    /// 不清空序号跟踪和累计统计。
     void reset();
 
     [[nodiscard]] const Stats &stats() const { return stats_; }
-    /// 见过的**最高**视频包 RTP 序号（一个都没收到则 0）。
-    /// 回 RTCP 的 RR 里"highest sequence number"那一位要的就是它——注意不是"最后
-    /// **收到**的那个"：乱序到达时两者不同，而设备拿这个数对它的发送计数。
+    /// 按模 2^16 顺序跟踪的视频包最高序号，尚未收到视频包时为 0。
+    /// 迟到包不使其回退；此值为 16 位序号，不包含回绕次数。
     [[nodiscard]] uint16_t last_sequence() const { return seq_.high(); }
     /// 是否有还没收完的分片。
     [[nodiscard]] bool mid_fragment() const { return !partial_.empty(); }
@@ -77,7 +68,7 @@ public:
 
 private:
     uint8_t video_pt_;
-    /// 序号水位与缺口判定都在这一个对象里（为什么不用两个裸变量：见 `rt/RtpSeq.h`）。
+    /// 统一跟踪序号进展、缺口和迟到补齐，统计规则见 RtpSeq。
     RtpSeq seq_;
     std::vector<uint8_t> partial_;
     uint32_t partial_ts_ = 0;
@@ -95,7 +86,8 @@ struct PacketInfo {
     std::size_t payload_offset = 0;  ///< 跳掉 RTP 固定头、CSRC 与扩展头之后的起点
 };
 
-/// 校验 RTP 版本与最小长度。失败时不要碰返回值。
+/// 校验 RTP v2、12 字节固定头、CSRC/扩展声明长度，以及至少 2 字节剩余载荷。
+/// 失败时 out 可能只被部分填写，调用方不得使用。
 [[nodiscard]] bool parse_rtp_header(std::span<const uint8_t> datagram, PacketInfo &out);
 
 }  // namespace scrctl::rt

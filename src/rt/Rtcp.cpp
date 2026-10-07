@@ -15,7 +15,7 @@ void put32(std::vector<uint8_t> &v, uint32_t x) {
     v.push_back(static_cast<uint8_t>(x));
 }
 
-/// SDES 的公共部分：头 + SSRC + 那个 CNAME 块 + END，长度字段按实际字数写。
+/// 构造 SDES 的 SSRC、CNAME 和 END，补齐到 32 位字后写入公共头长度。
 std::vector<uint8_t> sdes_with_cname(uint32_t sender_ssrc, std::string_view cname) {
     std::vector<uint8_t> body;
     put32(body, sender_ssrc);
@@ -43,11 +43,11 @@ std::vector<uint8_t> build_rr(uint32_t sender_ssrc, uint32_t media_ssrc, uint32_
     put16(v, 7);        // 长度以 4 字节为单位，不含第一个字
     put32(v, sender_ssrc);
     put32(v, media_ssrc);
-    put32(v, 0);          // 分数丢包 1 + 累积丢包 3：这条流我们不重传，报 0
+    put32(v, 0);          // 丢包比例 1 字节 + 累计丢包 3 字节，当前未填接收统计
     put32(v, ext_high);   // 扩展最高序号
     put32(v, 0);          // 抖动
-    put32(v, 0);          // LSR / DLSR：老实报 0，不假装算过
-    put32(v, 0);
+    put32(v, 0);          // LSR，当前未记录对端 SR 时间
+    put32(v, 0);          // DLSR，当前未计算接收 SR 后的延迟
     return v;
 }
 
@@ -57,7 +57,7 @@ std::vector<uint8_t> build_sr(uint32_t sender_ssrc, uint32_t packets, uint32_t o
     v.push_back(200);   // PT = SR
     put16(v, 6);        // 头之后还有 6 个字
     put32(v, sender_ssrc);
-    put32(v, 0);        // NTP 时间戳高位：不假装算过
+    put32(v, 0);        // NTP 时间戳高位，当前固定为 0
     put32(v, 0);        // NTP 低位
     put32(v, 0);        // RTP 时间戳
     put32(v, packets);
@@ -77,8 +77,8 @@ bool is_rtcp_sr(std::span<const uint8_t> datagram) {
 
 std::vector<uint8_t> build_pli(uint32_t sender_ssrc, uint32_t media_ssrc) {
     std::vector<uint8_t> v;
-    v.push_back(0x81);  // V=2, FMT=1（Generic NACK 之外，PLI 用的就是 1）
-    v.push_back(206);   // PT = RTPFB
+    v.push_back(0x81);  // V=2, FMT=1（PLI）
+    v.push_back(206);   // PT = PSFB
     put16(v, 2);        // 头之后两个字：发送者 SSRC + 媒体 SSRC
     put32(v, sender_ssrc);
     put32(v, media_ssrc);
@@ -87,14 +87,14 @@ std::vector<uint8_t> build_pli(uint32_t sender_ssrc, uint32_t media_ssrc) {
 
 std::vector<uint8_t> build_fir(uint32_t sender_ssrc, uint8_t fir_seq, uint32_t target_ssrc) {
     std::vector<uint8_t> v;
-    v.push_back(0x84);  // V=2, FMT=4（TFFB 里的 FIR）
-    v.push_back(206);   // PT = RTPFB
-    put16(v, 5);        // 发送者 SSRC + FIR 序号 + FCI(4+8 字节 = 3 个字)
+    v.push_back(0x84);  // V=2, FMT=4（FIR）
+    v.push_back(206);   // PT = PSFB
+    put16(v, 5);        // 先前布局的 length=5，标准单项 FIR 应为 4，待修
     put32(v, sender_ssrc);
-    put32(v, fir_seq);  // 只有低字节有效，高 24 位按 RFC 5104 留 0
+    put32(v, fir_seq);  // 先前把请求序号写入公共媒体 SSRC，标准应写 0，待修
     put32(v, target_ssrc);
-    put32(v, 0);  // FCI 的"已发 RTP 包序号"：我们一个都没发过
-    put32(v, 0);
+    put32(v, 0);  // 标准此处应为 8 位请求序号及 24 位保留位，待修
+    put32(v, 0);  // 先前多写的一个字，待修
     return v;
 }
 

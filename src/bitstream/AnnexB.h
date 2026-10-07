@@ -7,8 +7,8 @@
 
 namespace scrctl {
 
-/// 一个 NAL，含 2 字节 HEVC NAL header，字节与 Annex-B 里起始码之后的部分
-/// **原样一致**（也就是保留 emulation prevention byte）。
+/// 一个 NAL，包含两字节 HEVC NAL 头，字节保持与 Annex-B 起始码之后的载荷一致。
+/// 保留 emulation prevention byte（EPB），便于将原始 NAL 传给解码器。
 using Nal = std::vector<uint8_t>;
 
 enum class NalType : uint8_t {
@@ -20,8 +20,8 @@ enum class NalType : uint8_t {
 
 /// 流式 Annex-B -> Access Unit 解析器。
 ///
-/// 帧边界靠 slice segment header 的第一个 bit（first_slice_segment_in_pic_flag）
-/// 判定，而不是猜 NAL type —— 后者在有多个 slice 的帧上会错。
+/// 根据 slice segment header 的 first_slice_segment_in_pic_flag 判断新图像，
+/// 同一图像中的后续 slice 继续合并；不能仅凭 NAL 类型划分多 slice 的 AU。
 class AnnexBParser {
 public:
     using AuHandler = std::function<void(std::vector<Nal> &&au, bool keyframe)>;
@@ -49,21 +49,17 @@ private:
 
     std::vector<Nal> cur_au_;
     bool au_open_ = false;
-    /// cur_au_ 是否已含 VCL NAL。只有含 VCL 的 AU 才值得收尾——否则会把
-    /// VPS/SPS/PPS 单独切成一个空 AU，真正的图像帧反倒丢了参数集前缀。
+    /// cur_au_ 是否包含 VCL NAL。仅在包含图像数据时提交 AU，
+    /// VPS/SPS/PPS 前缀继续保留，与随后到达的图像组成同一 AU。
     bool au_has_vcl_ = false;
     bool au_keyframe_ = false;
 
     Nal vps_, sps_, pps_;
 };
 
-/// 去掉 NAL 中的 emulation prevention byte（00 00 03 xx, xx<=0x03 -> 00 00 xx），
-/// 得到 RBSP。只在**读语法元素**时用：SPS 的 conformance window、profile/tier
-/// 这些要按 RBSP 位流解析。
-///
-/// 不要把结果喂给解码器。长度前缀样本与 hvcC 里的参数集都要求原样保留 EPB
-/// （与 avcC 同一套规则），去掉了就不是那段码流的字节了——去掉之后 RBSP 里还
-/// 可能凭空出现 00 00 01，是否踩到取决于内容，所以错得是概率性的。
+/// 将完整的 00 00 03 xx（xx<=0x03）转换为 00 00 xx，保留截断或不符合该模式的字节。
+/// 返回的 RBSP 仅用于读取语法元素，例如 SPS 的 conformance window 和 profile/tier。
+/// 本项目的解码样本及 hvcC 参数集使用原始 NAL，保留 EPB；不要用 RBSP 替换这些输入。
 std::vector<uint8_t> unescape_nal(const uint8_t *data, std::size_t len);
 
 }  // namespace scrctl
