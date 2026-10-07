@@ -59,6 +59,38 @@ jobs:
       - name: 离线自检
         run: ctest --test-dir build --output-on-failure
 
+      - name: 安装 macOS 产物并记录实际依赖
+        if: runner.os == 'macOS'
+        run: |
+          cmake --install build --prefix dist-macos
+          python3 tools/record_macos_package.py dist-macos --source-commit "$GITHUB_SHA"
+          ffmpeg -version > dist-macos/share/doc/scrctl/ffmpeg-build.txt
+          git archive --format=tar HEAD > dist-macos/share/doc/scrctl/scrctl-source.tar
+
+      - name: 检查搬移后的 macOS 安装包
+        if: runner.os == 'macOS'
+        run: python3 tools/test_macos_install.py dist-macos build
+
+      - name: 上传 macOS 测试日志
+        if: always() && runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-test-logs
+          path: build/Testing/Temporary/*.log
+          if-no-files-found: ignore
+
+      # tar 保留可执行权限和依赖符号链接，upload-artifact 的裸目录不会保留权限。
+      - name: 归档 macOS 安装包
+        if: runner.os == 'macOS'
+        run: tar -czf "scrctl-macos-$(uname -m).tar.gz" -C dist-macos .
+
+      - name: 上传 macOS 产物
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: scrctl-macos
+          path: scrctl-macos-*.tar.gz
+
   windows-arm64:
     name: Windows ARM64
     runs-on: windows-11-arm
