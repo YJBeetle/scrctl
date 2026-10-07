@@ -910,9 +910,8 @@ int main(int argc, char **argv) {
             // rctl 这一组是本轮的重点，理由见 build_rctl 上面那段：把 RFC 3550 那几种包
             // 的字节、SSRC、端口全对上了仍然 20.0 秒死，而 Apple 客户端在视频端口上灌的
             // 是这种 PT=204 的厂商 APP 包，"Xcode sends this and no PLIs"。
-            // pli / fir 两臂：关键帧请求。它们在**租期已经能续上**的前提下才有意义
-            // （否则 20 秒整会话就没了，"没等到 IDR"分不清是请求无效还是流已死），
-            // 所以这两个臂同时按 `--hz` 发着 RR——它们是在产品那条基线上加一个变量。
+            // pli/fir 使用与 rrsrc 相同的 RR、协商 SSRC 和 SourcePort，
+            // 在这条保活基线上分别增加 PLI 或标准 FIR 请求。
             const bool send_pli = base == "pli";
             const bool send_fir = base == "fir";
             const bool send_rr = base.rfind("rr", 0) == 0 || send_pli || send_fir;
@@ -924,11 +923,12 @@ int main(int argc, char **argv) {
             const bool mine_ssrc =
                 base == "rrmine" || base == "rrminep1" || base == "rrminesr" ||
                 base == "rrminesd" || base == "rrminecname" || base == "rrsrc" ||
-                base == "rrsrcsd" || base == "rctl" || base == "rctlrr";
+                base == "rrsrcsd" || base == "rctl" || base == "rctlrr" || send_pli || send_fir;
             // 发到 streamConfig.SourcePort（pymobiledevice3 用的就是它），而不是
             // connection.sender.port。RCTL 那两臂没有别的选项——按抓包它就是这个目的。
             const bool to_source_port =
-                base == "rrsrc" || base == "rrsrcsd" || base == "rctl" || base == "rctlrr";
+                base == "rrsrc" || base == "rrsrcsd" || base == "rctl" || base == "rctlrr" ||
+                send_pli || send_fir;
             const bool send_sr = base == "rrnegsr" || base == "rrminesr";
             const bool port_plus_one =
                 base == "rrp1" || base == "rrall" || base == "rrnegp1" || base == "rrminep1";
@@ -1424,15 +1424,11 @@ int main(int argc, char **argv) {
                         ++rtcp_sent;
                     }
                 }
-                // **关键帧请求**：画面已经静止（或一个视频包都没来）满 kPliQuietMs 之后，
-                // 每秒发一次 PLI 或 FIR，看设备会不会补一个 IDR 过来。
-                //
-                // 为什么静止才算：这条流在画面动的时候每秒发几百个包，那时"后面出现一个
-                // IDR"根本归不到请求头上。只有静默里凭空冒出来的 IDR 才是答案。
-                // 参考实现的抓包笔记说过两句互相冲突的话——"the device ignores RTCP PLI for
-                // refresh" 和 "it honors **FIR (PT=206 FMT=4, requires allowRTCPFB)**"，而
-                // 那两句话所依据的实验发出去的 UDP 一个都没到设备（docs §13 的那个拼装 bug），
-                // 所以两句都还没被真正测过。今天才是第一次。
+                // 按 quiet/request_always 条件及请求周期发送 PLI 或标准 FIR。
+                // 标准 FIR 在 2026-10-07 单轮观察中，29 次请求期间出现 26 个 IDR，
+                // 首次计时请求后 32ms 观察到 IDR，并在同时发送 RR 的情况下存活 30 秒。
+                // 当轮没有同期 none/PLI 对照，不能据此比较优劣或判断单独的保活作用；
+                // 实验范围与后续对照见 docs/coredevice.md。
                 if ((send_pli || send_fir) && media_ssrc != 0) {
                     const uint64_t n = now_ms();
                     const uint64_t quiet = last_video != 0 ? n - last_video : n - t0;
@@ -1453,11 +1449,9 @@ int main(int argc, char **argv) {
                             arm.note = "关键帧请求发送失败: " + serr;
                         } else {
                             ++arm.requests_sent;
-                            // 起流后 3 秒之内的请求不参与"请求->IDR 延迟"的计时：那条流
-                            // 开头必然有一个 IDR，撞上它就把会话自己的第一个关键帧记成
-                            // 请求的功劳（实测第二次跑就给出了"+1ms"这种不可能的数）。
-                            // 判 PLI 有没有用主要看**IDR 个数**（29 次请求 -> 28 个 IDR），
-                            // 这个延迟只是补充。
+                            // 起流后 3 秒内的请求不计入首次请求到 IDR 的延迟，
+                            // 减少起流 IDR 对计时的影响；IDR 计数仍覆盖本轮接收窗口。
+                            // 请求后出现 IDR 是时间相关性，需结合对照臂判断请求效果。
                             if (arm.first_request_ms == 0 && n - t0 >= 3000) {
                                 arm.first_request_ms = n;
                                 std::printf("  %s 第一次发出（画面已静止 %llums，之后每秒一次）\n",

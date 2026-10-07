@@ -1,51 +1,23 @@
-// 探针：静止画面上主动请设备给一个 IDR，它给不给。
+// 研究探针：比较 none、PLI、标准 FIR、NACK 和 RR 等实验臂，记录请求与 IRAP 的时间关系。
 //
-// 为什么当时问这个：那一轮寿命实验报出的是"画面全程有变化时会话活了 45 秒，静止 6.9
-// 秒就被结束"，于是推断设备那个空闲计时器盯的是**它自己有没有媒体可发**。
+// 标准 FIR 使用 RFC 5104 §4.3.1 的 PT=206/PSFB、FMT=4、20 字节单项 FCI，
+// 由 scrctl::rt::build_fir 构造。fir205 仅将同一布局的 PT 改为 205，是非标准实验臂。
+// 旧版探针的 16 字节 FIR 和旧公共构造器的 24 字节 FIR 均不是标准布局，
+// 这些包得到的负面结果不能作为标准 FIR 无效的证据。
 //
-// **这两个数后来都被推翻了**：那个"45 秒"来自一个静默什么都不做的坏探针（秒表基准写错，
-// 既不按键喂画面也不打每秒那一列，见 lifetime_probe 里的说明），而 6.9 秒是拿一个样本
-// 当间隔——同一个数据里另一次是视频 7.07 秒停、会话仍在 20.0 秒消失。当时据此立的模型是
-// **"起流后约 20 秒的硬租期"，喂画面、回 RTCP 都不能延长**（docs §13）。这个模型后来也
-// 塌了：那 20 秒是我们在 `startmediastream` 请求里自己报的 `timeout`，报多长活多长。
-// 对本探针的影响是好消息——它意味着观察窗不必再赶在拆流之前，"发了没反应"从此不能再拿
-// "会话其实已经没了"当解释。FIR/NACK 设备理不理这件事与租期模型无关。
-// 那么能喂活这条流的办法就是让静止画面上也产出帧，而这件事标准协议里有现成的请求：
+// 2026-10-07 的单设备标准 FIR 观察中，29 次请求期间出现 26 个 IDR，首次计时请求后
+// 32ms 观察到 IDR；同时发送 RR 时会话存活 30 秒，跨过协商的 20 秒空闲超时。
+// 当轮 allowRTCPFB=0，没有同窗口 none/PLI 对照，不能据此判断 FIR 比 PLI 更有效，
+// 或把存活归因于 FIR 单独保活。详细验证范围及后续对照见 docs/coredevice.md。
 //
-//   PLI  (RFC 4585 §6.3.1, PT=206 FMT=1) —— "参考画面坏了，给个关键帧"。
-//        已经试过，设备不理（docs §13）——**但那一次有两个变量没控住**：两个 SSRC 位置
-//        都填了设备自己那条流的号（发送者应当填 answer 给我们分配的 `RemoteSSRC`），而且
-//        offer 里 `allowRTCPFB=0`。所以"不理"这个结论的适用范围是"那种填法 + 那一位为 0"。
-//   FIR  (RFC 5104 §4.3,   RTPFB=205 FMT=4；抓包用的是 206) —— "强制立刻发一个 IDR"。
-//        **没试过。** 和 PLI 的区别不是措辞：FIR 带序列号、要求发送端必须响应，
-//        而 PLI 允许发送端自己判断。之前只试了 PLI 就下结论"关键帧请求这条路不通"，
-//        是试了一个而漏了另一个。而且参考实现的抓包笔记写着这一种**要求 offer 里
-//        allowRTCPFB=1** 才被受理："the device ignores RTCP PLI for refresh; it honors
-//        FIR (PT=206 FMT=4, requires allowRTCPFB) and emits IDRs on request"。
-//        如果这一条在真机上也成立，意义比"保活"还大：这条流不周期发 IDR，我们现在是靠
-//        **重起整个会话**（约 300ms、且设备一次只容一条流）来拿到干净关键帧的，FIR 能
-//        把它换成一个 16 字节的包。
-//   NACK (RFC 4585 §6.2.1, PT=205 FMT=1) —— 重传指定包。没试过，顺带一起看。
-//   RR   (RFC 3550 §6.4.2) —— 接收报告。上次 A/B 里"发到视频端口就不再有结束事件"
-//        这个现象一直没解释，一并复测一遍（这次的包每个字段都算过字节数，见 build_rr）。
+// 本探针先观察 3 秒，再每 2 秒发送一次请求，发送阶段总计 12 秒；分别记录前置观察期
+// 的 IRAP 和请求后 1.5 秒内的 IRAP。前置观察用于减少起流 IDR 残留对请求计时的影响。
+// IRAP 类型 19/20 为 IDR、21 为 CRA；时间相关性仍需结合相同配置的 none 对照解释。
+// PLI 表示图像数据丢失，发送端可选择刷新；FIR 请求解码刷新点，不应保证某种 IDR 形态。
 //
-// 判据：**先空观察 3 秒（前摇），然后每 2 秒发一次请求，总共 12 秒**，数两种 IRAP
-// （NAL type 19/20/21 = IDR/CRA/BLI）：前摇里来的（与我们无关），和"跟在我们某一次发送
-// 之后 1.5 秒内"来的。只有后者非 0、而且对照行 `none` 的后者为 0，才是"设备受理了这种
-// 请求"。
-//
-// 为什么不是"看有没有 IRAP"，也不是"画面静止时一个包都不来"：
-//   - 只看"有没有 IRAP"会被**起流自带的那个 IDR**污染。它有几十上百个分片，阶段 1 在第
-//     一个分片就判定成功并 break，剩下的分片随后几毫秒内组装完成——于是连从不发包的对照
-//     臂都会报"IRAP 在 +1ms 到"。上一版就是这么把五个臂全读成"被受理"的（前摇那一列就是
-//     为了把这个假象挡在判据外面）。
-//   - 指望"静止画面上本来一个包都不来"当对照前提，在这次跑图上根本不成立：无边记看板上有
-//     东西一直在动，六个臂每 6 秒都是 3600 个视频包上下。相关性判据不依赖画面静止。
-//   - 会话是 20 秒硬租期那件事也已经不成立了（那是我们自己报的 `timeout`，见 docs §13），
-//     所以现在可以让整个观察窗拉到十几秒而不必赶在拆流之前。
-//
-// 用法：fir_probe [--what none,plim,plim+fb,fir205m,fir205m+fb,fir205m+fb+ltrp] [--attempts N] [--verbose]
-// 臂名后缀 `m' = 用 answer 分配的 SSRC 角色；`+fb'/`+ltrp' = 改 offer 里那两个开关。
+// 用法：fir_probe [--what none,plim,plim+fb,firm,firm+fb,fir205m] [--attempts N] [--verbose]
+// 后缀 m 使用 answer 的协商 SSRC 角色；+fb/+ltrp 分别修改 offer 的对应开关。
+// 标准 FIR 臂也需正确的 SSRC 和目的端口，不能只凭字段合法推定设备收到或受理了请求。
 #include <chrono>
 #include <cstdio>
 #include <set>
@@ -57,6 +29,7 @@
 #include "hid/Hid.h"
 #include "media/StreamSession.h"
 #include "remote/Device.h"
+#include "rt/Rtcp.h"
 #include "rt/RtpHevc.h"
 
 namespace {
@@ -94,21 +67,6 @@ std::vector<uint8_t> build_pli(uint32_t sender, uint32_t media) {
     rtcp_header(v, 1, 206, 2);
     put32(v, sender);
     put32(v, media);
-    return v;
-}
-
-/// FIR（RFC 5104 §4.3）：FCI 类型放在 RC 位（=4），头 + sender + media + 序列号，
-/// "对所有源"时不再带 per-SSRC 条目，所以整包 16 字节 = 4 字，长度字段 = 3。
-///
-/// PT 要能换：标准里 FIR 是 **RTPFB=205** FMT=4（RFC 4585 把 205 给通用反馈、206 给
-/// 载荷相关反馈），而参考实现抓包用的是 **206** FMT=4。两个都得发一遍，因为"设备不理 FIR"
-/// 那个旧结论用的是 206 + offer 的 allowRTCPFB=0，等于两个变量都没控住。
-std::vector<uint8_t> build_fir(uint32_t sender, uint32_t media, uint16_t seq, uint8_t pt = 206) {
-    std::vector<uint8_t> v;
-    rtcp_header(v, 4, pt, 3);
-    put32(v, sender);
-    put32(v, media);
-    put32(v, seq);
     return v;
 }
 
@@ -252,16 +210,19 @@ int main(int argc, char **argv) {
     for (int round = 0; round < attempts; ++round) {
         for (const std::string &w : arms_to_run) {
             // 臂名形如 `<请求>[m][+<offer 开关>]'：
-            //   请求   none | pli | pli1 | fir | nack | rr
+            //   请求   none | pli | pli1 | fir | fir205（非标准改 PT 实验）| nack | rr
             //   m      发送者 SSRC 用 answer 给我们分配的 `RemoteSSRC`、被请求的流填
             //          设备的 `LocalSSRC`（不带 m 的臂沿用老写法，两边都填设备的流号，
             //          留着当"填错人"的对照）
-            //   +fb    offer 里申报 allowRTCPFB=1 —— 参考实现记着 FIR 要求这一位为 1
+            //   +fb    offer 里申报 allowRTCPFB=1，用于与未启用该位的实验臂对照
             const auto plus = w.find('+');
             std::string base = plus == std::string::npos ? w : w.substr(0, plus);
             const std::string flags = plus == std::string::npos ? "" : w.substr(plus + 1);
             const bool fb = flags.find("fb") != std::string::npos;
             const bool ltrp = flags.find("ltrp") != std::string::npos;
+            if (base == "fir205" || base == "fir205m") {
+                std::printf("[%s] 非标准实验臂：标准 FIR 布局的 PT 从 206 改为 205\n", w.c_str());
+            }
             const bool mine_ssrc = !base.empty() && base.back() == 'm';
             if (mine_ssrc) {
                 base.pop_back();
@@ -323,17 +284,9 @@ int main(int argc, char **argv) {
             std::printf("\n[%s] 已拿到起流 IDR（媒体 SSRC=%08x），等画面静止…\n", w.c_str(),
                         media_ssrc);
 
-            // 阶段 2：尽量等到静默（不碰设备，画面自然停下来）。
-            //
-            // 这一步现在是"能等到更好、等不到也继续"：静止画面上一个视频包都不来，对照
-            // 组的读数最干净；而现在的判据是**相关性**（IRAP 是否跟在我们的请求后面 1.5 秒
-            // 内到），它在画面动着的时候同样成立。所以这里只留 8 秒——等到静止就用最干净的
-            // 判据，等不到别白等。
-            //
-            // 顺带把这一段的历史记清楚：以前这个等待必须卡在起流后 14 秒以内，因为租期只有
-            // 20 秒，等满再发请求就落在会话已经没了的时刻，测到的只是"流死了当然不理"——
-            // 加上阶段 1 最多 6 秒、阶段 3 要 6 秒，那时这条探针的时间预算根本不够。
-            // **这正是"设备不理 PLI/FIR"那个旧结论最可疑的地方。**
+            // 阶段 2：最多等待 8 秒，尝试获得视频静默窗口，超时后仍继续观察。
+            // 请求后 IRAP 的时间关系需结合对照判断；画面活动和会话存活分别记录，
+            // 旧版非标准 FIR 的结果不用于推定当前标准请求是否受理。
             const uint64_t quiet_deadline = now_ms() + 8000;
             while (now_ms() < quiet_deadline && now_ms() - last_video < 2500) {
                 while (session->next_packet(packet, peer, 200, err)) {
@@ -361,7 +314,7 @@ int main(int argc, char **argv) {
                             static_cast<unsigned long long>(now_ms() - session_t0));
             }
 
-            // 阶段 3：发一次请求，观察 4 秒。
+            // 阶段 3：确定协商 SSRC 后发送请求，并观察 IRAP 的时间关系。
             // 请求里的两个 SSRC。answer 的 `LocalSSRC` 是设备自己那条流（实测与 RTP 头里
             // 那个数相等），`RemoteSSRC` 是设备给我们这端分配的——所以"填对自己"的写法是
             // 发送者=RemoteSSRC、被请求的流=LocalSSRC。不带 m 的臂两个位置都填设备的流号，
@@ -377,22 +330,13 @@ int main(int argc, char **argv) {
             std::printf("[%s] SSRC 角色：%s（发送者=%08x 被请求的流=%08x）\n", w.c_str(),
                         roles_ok ? "用 answer 分配的" : "两个位置都填设备的流号（对照）",
                         sender_ssrc, target_ssrc);
-            // 阶段 3 的时间轴：**先空观察 3 秒，再每 2 秒发一次请求，总共 12 秒。**
-            //
-            // 这个前摇不是可有可无的。上一版从"拿到起流 IDR"直接接进阶段 3 并且**立刻**
-            // 发第一个包，结果五个臂（包括从不发包的 none）全都报出"IRAP 在 +1~2ms 到"，
-            // 看起来像是 FIR 被受理了，其实那一个是起流自带的那个 IDR 的**尾巴**：一个
-            // IDR 由几十上百个 UDP 包组成，阶段 1 在它的第一个分片就 break 了，剩下的
-            // 分片在阶段 3 的头几毫秒里被组装完成，于是每一臂都"收到一个 IRAP"。发请求
-            // 恰好也在 +0ms，相关性就是这么造出来的。
-            //
-            // 判据因此是"前摇那 3 秒里一个 IRAP 都没有" + "只有发过请求的臂在后面出现
-            // 跟发的时刻 1.5 秒之内的 IRAP"。前摇非 0 就说明这条流自己在产 IDR，
-            // 那一轮的相关性读数不作数（画面在动时本来就该怀疑这件事）。
+            // 阶段 3：先观察 3 秒，再按 2 秒周期发请求，总观察窗口为 12 秒。
+            // 记录前置窗口 IRAP，减少起流 IDR 被误计为请求效果的机会。
             constexpr uint64_t kPreRollMs = 3000;
             constexpr uint64_t kWindowMs = 12000;
             constexpr uint64_t kSendEveryMs = 2000;
-            uint16_t fir_seq = 1;
+            uint8_t fir_seq = 1;
+
             const uint64_t t0 = now_ms();
             uint64_t next_send = t0 + kPreRollMs;
             uint64_t last_send_ms = 0;
@@ -404,9 +348,11 @@ int main(int argc, char **argv) {
                     if (base == "pli" || base == "pli1") {
                         msg = build_pli(sender_ssrc, target_ssrc);
                     } else if (base == "fir") {
-                        msg = build_fir(sender_ssrc, target_ssrc, fir_seq++);
+                        msg = scrctl::rt::build_fir(sender_ssrc, fir_seq++, target_ssrc);
                     } else if (base == "fir205") {
-                        msg = build_fir(sender_ssrc, target_ssrc, fir_seq++, 205);
+                        // 非标准实验：保留标准 FCI 布局，仅修改 PT。
+                        msg = scrctl::rt::build_fir(sender_ssrc, fir_seq++, target_ssrc);
+                        msg[1] = 205;
                     } else if (base == "nack") {
                         msg = build_nack(sender_ssrc, target_ssrc,
                                          static_cast<uint16_t>(highest_seq + 1), 0);

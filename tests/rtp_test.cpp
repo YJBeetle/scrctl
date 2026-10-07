@@ -392,19 +392,33 @@ void test_rtcp_shapes() {
     check(pli.size() == std::size_t(4 + 2 * 4), "PLI 长度字段与真实字节数自洽");
     check(pli[4] == 0x11 && pli[11] == 0x88, "PLI 后面是发送者 SSRC + 媒体 SSRC");
 
-    const auto fir = scrctl::rt::build_fir(our, 7, media);
-    check(fir.size() == 24, "FIR 是 24 字节: " + std::to_string(fir.size()));
-    check(fir[0] == 0x84 && fir[1] == 206, "FIR 首两字节 0x84（FMT=4）PT=206");
-    check((fir[2] << 8 | fir[3]) == 5, "FIR 长度字段=5");
-    check(fir.size() == std::size_t(4 + 5 * 4), "FIR 长度字段与真实字节数自洽");
-    // 布局：0-3 公共头 / 4-7 发送者 SSRC / 8-11 序号（低 8 位有效）/ 12-15 FCI 目标 SSRC
-    // / 16-23 FCI 的 8 字节媒体序号。别按"第 8 字节"想它——第 8 字节是那个字的开头。
-    check(fir[11] == 7 && fir[8] == 0 && fir[9] == 0 && fir[10] == 0,
-          "FIR 序号在那个字（偏移 8 起）的低字节");
-    check(fir[4] == 0x11, "FIR 的发送者 SSRC 在偏移 4");
-    check(fir[12] == 0x55 && fir[15] == 0x88, "FCI 里指认的目标 SSRC 在偏移 12");
-    const auto fir2 = scrctl::rt::build_fir(our, 8, media);
-    check(fir2[11] == 8 && fir.size() == fir2.size(), "序号每请求加一（重复序号不会换来新 IDR）");
+    // RFC 5104 §4.3.1.1：单项 FCI 为目标 SSRC、8 位请求序号和 24 位保留位。
+    // 公共媒体 SSRC 为零；整个包 20 字节，length=2+2*N=4。
+    for (const uint8_t seq : {uint8_t(0), uint8_t(7), uint8_t(255)}) {
+        const std::vector<uint8_t> expected = {
+            0x84, 0xce, 0x00, 0x04,
+            0x11, 0x22, 0x33, 0x44,
+            0x00, 0x00, 0x00, 0x00,
+            0x55, 0x66, 0x77, 0x88,
+            seq, 0x00, 0x00, 0x00,
+        };
+        const auto fir = scrctl::rt::build_fir(our, seq, media);
+        check(fir == expected, "FIR 与 RFC 5104 单项 FCI 字节序列一致，序号=" + std::to_string(seq));
+        check(fir.size() == 20, "FIR 单项 FCI 共 20 字节");
+        if (fir.size() < 20) continue;
+        check(fir[0] == 0x84 && fir[1] == 206, "FIR 使用 FMT=4、PT=206（PSFB）");
+        const auto length = static_cast<std::size_t>(fir[2] << 8 | fir[3]);
+        check(length == 4 && fir.size() == (length + 1) * 4,
+              "FIR 长度字段为 4，与真实包长一致");
+        check(std::all_of(fir.begin() + 8, fir.begin() + 12, [](uint8_t b) { return b == 0; }),
+              "FIR 公共媒体 SSRC 为 0，不用于承载请求序号");
+        check(fir[12] == 0x55 && fir[13] == 0x66 && fir[14] == 0x77 && fir[15] == 0x88,
+              "FIR FCI 目标 SSRC 在偏移 12，按网络字节序编码");
+        check(fir[16] == seq && fir[17] == 0 && fir[18] == 0 && fir[19] == 0,
+              "FIR FCI 请求序号在偏移 16，随后 24 位保留位为 0");
+        check(scrctl::rt::build_fir(our, seq, media) == fir,
+              "FIR 重发保持调用方给定的请求序号和字节序列");
+    }
 }
 
 void test_sequence_reordering() {

@@ -25,7 +25,7 @@ public:
         uint32_t display_id = 1;
         /// 发往设备的 timeout，单位为秒，是 RTCP 空闲超时，不是等待起流 RPC 回复的时限。
         /// 已测设备在 answer 的 RTCPTimeoutInterval 中回显此值；有效 RR 可重置计时器。
-        /// UDP 发送修复后的续期对照见 [CoreDevice §13](../../docs/coredevice.md#修好之后第一次真测租期能续pli-有效fir-有害)。
+        /// UDP 发送修复后的续期对照见 [CoreDevice §13](../../docs/coredevice.md#udp-修复后的反馈对照)。
         ///
         /// 默认 3600 供未实现周期 RTCP 的一次性调用方使用。产品 FramePump 和 AudioPump
         /// 显式使用 20 秒，并每秒发送 RR。默认值、保留起流连接或查询状态都不能替代 RTCP。

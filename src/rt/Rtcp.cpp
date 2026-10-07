@@ -89,12 +89,11 @@ std::vector<uint8_t> build_fir(uint32_t sender_ssrc, uint8_t fir_seq, uint32_t t
     std::vector<uint8_t> v;
     v.push_back(0x84);  // V=2, FMT=4（FIR）
     v.push_back(206);   // PT = PSFB
-    put16(v, 5);        // 先前布局的 length=5，标准单项 FIR 应为 4，待修
+    put16(v, 4);       // RFC 5104：length=2+2*N，单项 FCI 时 N=1
     put32(v, sender_ssrc);
-    put32(v, fir_seq);  // 先前把请求序号写入公共媒体 SSRC，标准应写 0，待修
+    put32(v, 0);       // FIR 的公共媒体 SSRC 不使用，固定为 0
     put32(v, target_ssrc);
-    put32(v, 0);  // 标准此处应为 8 位请求序号及 24 位保留位，待修
-    put32(v, 0);  // 先前多写的一个字，待修
+    put32(v, static_cast<uint32_t>(fir_seq) << 24);  // 8 位请求序号 + 24 位保留零
     return v;
 }
 

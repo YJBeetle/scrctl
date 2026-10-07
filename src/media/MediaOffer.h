@@ -45,9 +45,10 @@ struct Offer {
 
     /// VideoSettings.f2（allowRTCPFB），当前默认 false，字段的完整作用尚未确认。
     /// 修正 UDP 发送后，已测设备在默认值 false 下可通过 RR 续期并响应 PLI。
-    /// 对照中切换此位未改变 RR 续期或 FIR 失败的结果；不能将它解释为所有 RTCP 的总开关。
-    /// 当前产品使用 RR 和 PLI，不发送会使已测会话无法续期的 FIR。
-    /// 实验范围见 [CoreDevice §13 的 UDP 修复后对照](../../docs/coredevice.md#修好之后第一次真测租期能续pli-有效fir-有害)。
+    /// 对照中切换此位未改变 RR 续期；不能将它解释为所有 RTCP 的总开关。
+    /// 旧 FIR 失败使用了非标准包，不能据此判断此位控制标准 FIR。格式修正后已观察到响应。
+    /// 当前产品使用 RR 和 PLI；标准 FIR 尚未纳入恢复策略。
+    /// 实验范围见 [CoreDevice §13 的 UDP 修复后对照](../../docs/coredevice.md#udp-修复后的反馈对照)。
     bool allow_rtcp_fb = false;
     /// VideoSettings.f7，即 ltrpEnabled（长期参考图）。当前默认关闭。
     /// 已测设备会在 answer 的 IsltrpEnabled 中回显此位；参考实现的对照中，

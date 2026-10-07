@@ -47,9 +47,10 @@ namespace scrctl::rt {
 [[nodiscard]] std::vector<uint8_t> build_pli(uint32_t sender_ssrc, uint32_t media_ssrc);
 
 /// FIR（RFC 5104 §4.3.1，PT=206/PSFB、FMT=4）请求解码刷新点。
-/// 标准单项 FCI 为目标 SSRC、8 位请求序号及 24 位保留位，整个包应为 20 字节，length=4。
-/// 新请求序号按模 256 加一，重发同一请求保持序号；公共媒体 SSRC 按标准应为 0。
-/// 当前实现仍有先前的非标准 24 字节布局，待单独修复；尚无真机标准 FIR 响应证据。
+/// 构造单项 FCI：目标 SSRC、8 位请求序号及 24 位保留零，共 20 字节，length=4。
+/// 公共媒体 SSRC 固定为 0。调用方对新请求按模 256 增加序号，重发同一请求保持序号。
+/// 当前产品恢复路径使用 PLI；标准 FIR 已有单设备单轮请求后出现 IDR 的观察，
+/// 同配置 PLI/FIR 的重复比较仍未完成。验证范围见 docs/coredevice.md。
 [[nodiscard]] std::vector<uint8_t> build_fir(uint32_t sender_ssrc, uint8_t fir_seq,
                                              uint32_t target_ssrc);
 
