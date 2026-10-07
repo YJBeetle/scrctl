@@ -12,6 +12,7 @@
 // 输出的 UDID 一律打码，不打印任何密钥字节。
 #include <unistd.h>
 
+#include <CLI/CLI.hpp>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -22,6 +23,8 @@
 #include <string>
 #include <vector>
 
+#include "i18n/CliLanguage.h"
+#include "i18n/Translation.h"
 #include "json/Json.h"
 #include "net/Stack.h"
 #include "remote/PairingChannel.h"
@@ -657,56 +660,116 @@ int main(int argc, char **argv) {
     std::string host_name_override;
     std::string pairing_kind;
     int port = 49152;
-    for (int i = 1; i < argc; ++i) {
-        auto next = [&](std::string &dst) {
-            if (i + 1 >= argc) {
-                std::fprintf(stderr, "%s 缺参数\n", argv[i]);
-                std::exit(2);
-            }
-            dst = argv[++i];
-        };
-        if (std::strcmp(argv[i], "--address") == 0) {
-            next(address);
-        } else if (std::strcmp(argv[i], "--port") == 0) {
-            std::string value;
-            next(value);
-            port = std::atoi(value.c_str());
-        } else if (std::strcmp(argv[i], "--record") == 0) {
-            next(record_path);
-        } else if (std::strcmp(argv[i], "--pmd3-record") == 0) {
-            next(foreign_path);
-        } else if (std::strcmp(argv[i], "--host-id") == 0) {
-            next(host_id);
-        } else if (std::strcmp(argv[i], "--udid") == 0) {
-            next(udid);
-        } else if (std::strcmp(argv[i], "--verbose") == 0) {
-            verbose = true;
-        } else if (std::strcmp(argv[i], "--tunnel") == 0) {
-            want_tunnel = true;
-        } else if (std::strcmp(argv[i], "--rsd") == 0) {
-            want_tunnel = true;
-            want_rsd = true;
-        } else if (std::strcmp(argv[i], "--pair-setup") == 0) {
-            want_pair_setup = true;
-        } else if (std::strcmp(argv[i], "--pair-setup-xpc") == 0) {
-            want_pair_setup_xpc = true;
-        } else if (std::strcmp(argv[i], "--xpc-service") == 0) {
-            next(xpc_service);
-        } else if (std::strcmp(argv[i], "--usb-services") == 0) {
-            want_usb_services = true;
-        } else if (std::strcmp(argv[i], "--no-save") == 0) {
-            save_record_to_disk = false;
-        } else if (std::strcmp(argv[i], "--no-verify-probe") == 0) {
-            probe_verify_first = false;
-        } else if (std::strcmp(argv[i], "--host-name") == 0) {
-            next(host_name_override);
-        } else if (std::strcmp(argv[i], "--pairing-kind") == 0) {
-            next(pairing_kind);
-        } else {
-            std::fprintf(stderr, "未知参数 %s\n", argv[i]);
-            return 2;
-        }
+    bool no_save = false;
+    bool no_verify_probe = false;
+    CLI::App app{SCRCTL_N_("Inspect RemotePairing connections and USB pairing services")};
+    app.footer(SCRCTL_N_(
+        "By default, verify an existing record over Wi-Fi using --address and either --record "
+        "or --pmd3-record. --pair-setup uses a byte stream over USB, or Wi-Fi when --address is "
+        "given. --pair-setup-xpc uses USB RemoteXPC. --help does not connect to a device."));
+    app.set_help_flag("-h,--help", SCRCTL_N_("Show help"));
+    auto *address_option = app.add_option("--address", address,
+        SCRCTL_N_("Device address for Wi-Fi verification or byte-stream pairing"));
+    auto *port_option = app.add_option("--port", port,
+        SCRCTL_N_("Wi-Fi RemotePairing port (1..65535; default: 49152)"))
+        ->check(CLI::Range(1, 65535));
+    auto *record_option = app.add_option("--record", record_path,
+        SCRCTL_N_("scrctl pairing record for Wi-Fi verification"));
+    auto *foreign_option = app.add_option("--pmd3-record", foreign_path,
+        SCRCTL_N_("pymobiledevice3 plist record; requires --host-id"));
+    auto *host_id_option = app.add_option("--host-id", host_id,
+        SCRCTL_N_("Host identifier for pairing setup or a pymobiledevice3 record"));
+    auto *udid_option = app.add_option("--udid", udid,
+        SCRCTL_N_("USB device filter, or device identifier for Wi-Fi pairing and foreign records"));
+    app.add_flag("-v,--verbose", verbose, SCRCTL_N_("Print connection and pairing details"));
+    auto *tunnel_option = app.add_flag("--tunnel", want_tunnel,
+        SCRCTL_N_("Establish the tunnel after Wi-Fi verification"));
+    auto *rsd_option = app.add_flag("--rsd", want_rsd,
+        SCRCTL_N_("Read the tunnel RSD service directory (implies --tunnel)"));
+    auto *setup_option = app.add_flag("--pair-setup", want_pair_setup,
+        SCRCTL_N_("Create a pairing record over USB or the given Wi-Fi address"));
+    auto *xpc_option = app.add_flag("--pair-setup-xpc", want_pair_setup_xpc,
+        SCRCTL_N_("Create a pairing record over USB RemoteXPC"));
+    auto *xpc_service_option = app.add_option("--xpc-service", xpc_service,
+        SCRCTL_N_("RemoteXPC pairing service (only with --pair-setup-xpc)"));
+    auto *services_option = app.add_flag("--usb-services", want_usb_services,
+        SCRCTL_N_("List services in the USB tunnel RSD directory"));
+    auto *no_save_option = app.add_flag("--no-save", no_save,
+        SCRCTL_N_("Do not save the new pairing record (pairing setup only)"));
+    auto *no_verify_option = app.add_flag("--no-verify-probe", no_verify_probe,
+        SCRCTL_N_("Skip the initial verification attempt (pairing setup only)"));
+    auto *host_name_option = app.add_option("--host-name", host_name_override,
+        SCRCTL_N_("Override the pairing host name (pairing setup only)"));
+    auto *kind_option = app.add_option("--pairing-kind", pairing_kind,
+        SCRCTL_N_("Override the pairingData kind (pairing setup only)"));
+    // 保留原解析器对重复标量选项取最后一个值的行为。
+    for (auto *option : {address_option, port_option, record_option, foreign_option,
+                         host_id_option, udid_option, xpc_service_option,
+                         host_name_option, kind_option}) {
+        option->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
     }
+    setup_option->excludes(xpc_option)->excludes(services_option);
+    xpc_option->excludes(services_option);
+    record_option->excludes(foreign_option);
+    xpc_service_option->needs(xpc_option);
+    foreign_option->needs(host_id_option);
+    scrctl::i18n::CliLanguage language(app);
+    try {
+        app.parse(argc, argv);
+        if (!language.select()) return 2;
+        const bool setup = want_pair_setup || want_pair_setup_xpc;
+        const bool verification = !setup && !want_usb_services;
+        // 验证显式传入的选项，避免把其他模式的参数静默忽略。
+        // 所有检查都在文件读取、USB 枚举和网络连接之前完成。
+        if (!setup && (no_save_option->count() || no_verify_option->count() ||
+                       host_name_option->count() || kind_option->count())) {
+            throw CLI::ValidationError(SCRCTL_TR(
+                "--no-save, --no-verify-probe, --host-name and --pairing-kind require "
+                "--pair-setup or --pair-setup-xpc"));
+        }
+        if (!verification && (record_option->count() || foreign_option->count() ||
+                              tunnel_option->count() || rsd_option->count())) {
+            throw CLI::ValidationError(SCRCTL_TR(
+                "--record, --pmd3-record, --tunnel and --rsd are only for Wi-Fi verification"));
+        }
+        if ((want_pair_setup_xpc || want_usb_services) && address_option->count()) {
+            throw CLI::ValidationError(SCRCTL_TR(
+                "--address cannot be combined with --pair-setup-xpc or --usb-services"));
+        }
+        if (port_option->count() && (want_pair_setup_xpc || want_usb_services || address.empty())) {
+            throw CLI::ValidationError(SCRCTL_TR("--port requires a Wi-Fi --address"));
+        }
+        if (host_id_option->count() && !setup && !foreign_option->count()) {
+            throw CLI::ValidationError(SCRCTL_TR(
+                "--host-id requires pairing setup or --pmd3-record"));
+        }
+        if (udid_option->count() && verification && !foreign_option->count()) {
+            throw CLI::ValidationError(SCRCTL_TR(
+                "--udid is only used with USB modes, Wi-Fi pairing setup or --pmd3-record"));
+        }
+        if (verification && address.empty()) {
+            throw CLI::ValidationError(SCRCTL_TR("Wi-Fi verification requires --address"));
+        }
+        if (verification && record_path.empty() && foreign_path.empty()) {
+            throw CLI::ValidationError(SCRCTL_TR(
+                "Wi-Fi verification requires --record or --pmd3-record"));
+        }
+        if (foreign_option->count() && host_id.empty()) {
+            throw CLI::ValidationError(SCRCTL_TR("--pmd3-record requires a nonempty --host-id"));
+        }
+    } catch (const CLI::CallForHelp &) {
+        if (!language.select()) return 2;
+        std::printf("%s", language.help().c_str());
+        return 0;
+    } catch (const CLI::ParseError &e) {
+        if (language.select()) {
+            std::fprintf(stderr, SCRCTL_TR("Invalid arguments: %s\n"), e.what());
+        }
+        return 2;
+    }
+    want_tunnel = want_tunnel || want_rsd;
+    save_record_to_disk = !no_save;
+    probe_verify_first = !no_verify_probe;
     if (want_usb_services) {
         return run_usb_services(verbose, udid);
     }
@@ -717,15 +780,6 @@ int main(int argc, char **argv) {
     if (want_pair_setup) {
         return run_pair_setup(address, port, udid, host_id, verbose, save_record_to_disk,
                               probe_verify_first, host_name_override, pairing_kind);
-    }
-    if (address.empty()) {
-        std::fprintf(stderr,
-                     "用法: wifi_probe --address <ip> [--port 49152] "
-                     "(--record <pair> | --pmd3-record <plist> --host-id <ID> [--udid <UDID>])\n"
-                     "      wifi_probe --pair-setup [--udid <UDID>] [--host-id <ID>] [--no-save]\n"
-                     "      wifi_probe --pair-setup-xpc [--xpc-service <名>] [--udid <UDID>]\n"
-                     "      wifi_probe --usb-services [--udid <UDID>]\n");
-        return 2;
     }
 
     std::string err;

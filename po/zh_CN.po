@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 04:12+0800\n"
+"POT-Creation-Date: 2026-10-08 04:19+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -158,7 +158,7 @@ msgstr ""
 "鼠标左键映射为触摸；方向不支持 flip，录制保留原始码流。\n"
 "无线需要先配对；--help / --version 不连接设备。"
 
-#: src/app/Cli.cpp:23 tools/screenshot_probe.cpp:52
+#: src/app/Cli.cpp:23 tools/screenshot_probe.cpp:52 tools/wifi_probe.cpp:670
 msgid "Show help"
 msgstr "显示帮助"
 
@@ -3139,6 +3139,7 @@ msgstr ""
 "未指定 --help 或 --dump-packets 时，本探针将连接 USB 设备。"
 
 #: tools/rr_keepalive_probe.cpp:462 tools/screenshot_probe.cpp:69
+#: tools/wifi_probe.cpp:766
 #, c-format
 msgid "Invalid arguments: %s\n"
 msgstr "参数无效：%s\n"
@@ -3650,6 +3651,132 @@ msgstr "保存 %s 失败：%s\n"
 #, c-format
 msgid "Saved to %s\n"
 msgstr "已保存到 %s\n"
+
+#: tools/wifi_probe.cpp:665
+msgid "Inspect RemotePairing connections and USB pairing services"
+msgstr "检查 RemotePairing 连接和 USB 配对服务"
+
+#: tools/wifi_probe.cpp:667
+msgid ""
+"By default, verify an existing record over Wi-Fi using --address and either "
+"--record or --pmd3-record. --pair-setup uses a byte stream over USB, or Wi-"
+"Fi when --address is given. --pair-setup-xpc uses USB RemoteXPC. --help does "
+"not connect to a device."
+msgstr ""
+"默认使用 --address 和 --record 或 --pmd3-record 通过 Wi-Fi 验证已有配对记"
+"录。--pair-setup 使用 USB 字节流；指定 --address 时改用 Wi-Fi。--pair-setup-"
+"xpc 使用 USB RemoteXPC。--help 不连接设备。"
+
+#: tools/wifi_probe.cpp:672
+msgid "Device address for Wi-Fi verification or byte-stream pairing"
+msgstr "用于 Wi-Fi 验证或字节流配对的设备地址"
+
+#: tools/wifi_probe.cpp:674
+msgid "Wi-Fi RemotePairing port (1..65535; default: 49152)"
+msgstr "Wi-Fi RemotePairing 端口（1..65535；默认：49152）"
+
+#: tools/wifi_probe.cpp:677
+msgid "scrctl pairing record for Wi-Fi verification"
+msgstr "用于 Wi-Fi 验证的 scrctl 配对记录"
+
+#: tools/wifi_probe.cpp:679
+msgid "pymobiledevice3 plist record; requires --host-id"
+msgstr "pymobiledevice3 的 plist 配对记录；需指定 --host-id"
+
+#: tools/wifi_probe.cpp:681
+msgid "Host identifier for pairing setup or a pymobiledevice3 record"
+msgstr "建立配对或使用 pymobiledevice3 记录时的主机标识符"
+
+#: tools/wifi_probe.cpp:683
+msgid ""
+"USB device filter, or device identifier for Wi-Fi pairing and foreign records"
+msgstr "USB 设备筛选条件，或 Wi-Fi 配对和外部记录所用的设备标识符"
+
+#: tools/wifi_probe.cpp:684
+msgid "Print connection and pairing details"
+msgstr "显示连接和配对详情"
+
+#: tools/wifi_probe.cpp:686
+msgid "Establish the tunnel after Wi-Fi verification"
+msgstr "Wi-Fi 验证通过后建立隧道"
+
+#: tools/wifi_probe.cpp:688
+msgid "Read the tunnel RSD service directory (implies --tunnel)"
+msgstr "读取隧道内的 RSD 服务目录（同时启用 --tunnel）"
+
+#: tools/wifi_probe.cpp:690
+msgid "Create a pairing record over USB or the given Wi-Fi address"
+msgstr "通过 USB 或指定的 Wi-Fi 地址建立配对记录"
+
+#: tools/wifi_probe.cpp:692
+msgid "Create a pairing record over USB RemoteXPC"
+msgstr "通过 USB RemoteXPC 建立配对记录"
+
+#: tools/wifi_probe.cpp:694
+msgid "RemoteXPC pairing service (only with --pair-setup-xpc)"
+msgstr "RemoteXPC 配对服务（仅用于 --pair-setup-xpc）"
+
+#: tools/wifi_probe.cpp:696
+msgid "List services in the USB tunnel RSD directory"
+msgstr "列出 USB 隧道内 RSD 目录中的服务"
+
+#: tools/wifi_probe.cpp:698
+msgid "Do not save the new pairing record (pairing setup only)"
+msgstr "不保存新配对记录（仅用于建立配对）"
+
+#: tools/wifi_probe.cpp:700
+msgid "Skip the initial verification attempt (pairing setup only)"
+msgstr "跳过开始时的验证尝试（仅用于建立配对）"
+
+#: tools/wifi_probe.cpp:702
+msgid "Override the pairing host name (pairing setup only)"
+msgstr "指定配对时使用的主机名（仅用于建立配对）"
+
+#: tools/wifi_probe.cpp:704
+msgid "Override the pairingData kind (pairing setup only)"
+msgstr "指定 pairingData 的 kind（仅用于建立配对）"
+
+#: tools/wifi_probe.cpp:727
+msgid ""
+"--no-save, --no-verify-probe, --host-name and --pairing-kind require --pair-"
+"setup or --pair-setup-xpc"
+msgstr ""
+"--no-save、--no-verify-probe、--host-name 和 --pairing-kind 需与 --pair-"
+"setup 或 --pair-setup-xpc 一起使用"
+
+#: tools/wifi_probe.cpp:733
+msgid ""
+"--record, --pmd3-record, --tunnel and --rsd are only for Wi-Fi verification"
+msgstr "--record、--pmd3-record、--tunnel 和 --rsd 仅用于 Wi-Fi 验证"
+
+#: tools/wifi_probe.cpp:737
+msgid "--address cannot be combined with --pair-setup-xpc or --usb-services"
+msgstr "--address 不能与 --pair-setup-xpc 或 --usb-services 一起使用"
+
+#: tools/wifi_probe.cpp:740
+msgid "--port requires a Wi-Fi --address"
+msgstr "--port 需要同时指定 Wi-Fi 设备地址 --address"
+
+#: tools/wifi_probe.cpp:744
+msgid "--host-id requires pairing setup or --pmd3-record"
+msgstr "--host-id 仅用于建立配对或 --pmd3-record"
+
+#: tools/wifi_probe.cpp:748
+msgid ""
+"--udid is only used with USB modes, Wi-Fi pairing setup or --pmd3-record"
+msgstr "--udid 仅用于 USB 模式、通过 Wi-Fi 建立配对或 --pmd3-record"
+
+#: tools/wifi_probe.cpp:751
+msgid "Wi-Fi verification requires --address"
+msgstr "Wi-Fi 验证需指定 --address"
+
+#: tools/wifi_probe.cpp:755
+msgid "Wi-Fi verification requires --record or --pmd3-record"
+msgstr "Wi-Fi 验证需指定 --record 或 --pmd3-record"
+
+#: tools/wifi_probe.cpp:758
+msgid "--pmd3-record requires a nonempty --host-id"
+msgstr "--pmd3-record 需要同时指定非空的 --host-id"
 
 #, c-format
 #~ msgid "Device clipboard (%zu bytes): %s\n"

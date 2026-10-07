@@ -80,7 +80,7 @@ XPC、OPACK、Apple 配对和控制语义、SRP 的 Apple 适配、Deflate 小�
 
 | 剩余项 | 类型 | 下一步 |
 | --- | --- | --- |
-| tools 的输出和语言选择 | 文本 / 功能 | screenshot_probe、rr_keepalive_probe 已接入 en / zh-CN / auto；其余探针继续逐项整理 |
+| tools 的输出和语言选择 | 文本 / 功能 | screenshot_probe、rr_keepalive_probe 输出及 wifi_probe 帮助/参数错误已接入 en / zh-CN / auto；其余探针和 Wi-Fi 协议输出继续整理 |
 | 零散注释与历史文档 | 文本 | 保留必要的详细协议说明，整理重复、过时和口语化表述；主要模块及配对注释已完成首轮 |
 | HTTP/2 库方案 | 功能 / 验证 | 生产继续保留当前帧层；后续获得实际 FileTransfer 子流证据后，再评估偶数文件流的适配 |
 | 设备长期身份认证 | 功能 / 验证 | 补齐 PairVerify / PairSetup 中设备长期公钥、标识和签名的校验，并验证已有记录及新建配对 |
@@ -822,3 +822,20 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
 - 该运行使用 --no-window 和 --no-audio-playback；未建立桌面窗口或声卡输出。
   有限音频缓冲区会丢弃未消费的旧样本，不能据此判断可听质量、扬声器播放、
   输入、物理断线或 Wi-Fi。详细命令与身份见 [设备验证 30.6](coredevice.md#306-启用音频接收的来源切换)。
+
+## 第六十一轮：Wi-Fi 探针的参数校验
+
+- wifi_probe 的入口解析改用 CLI11 和共用语言处理；帮助及参数错误支持
+  en / zh-CN / auto，新增 28 条中文译文。各 run_* 函数及记录读取后的协议代码
+  保持原样，协议阶段的旧输出仍待逐项整理。
+- 端口要求整数且位于 1..65535；USB 服务枚举、字节流配对和 USB RemoteXPC
+  配对三种模式互斥，显式传入但在所选模式无效的参数直接报错。以前这些参数
+  可能被静默忽略。所有检查先于文件读取、USB 枚举和网络连接。
+- 保留 --pair-setup --address 的无线字节流配对、重复标量取最后一个值，以及
+  --rsd 隐含 --tunnel。独立的无副作用参数分发夹具覆盖 12 种合法组合。
+- 真实探针的 87 项离线 CLI 检查通过；额外禁网络沙箱下再次通过 87 项。
+  完整 Release 与启用遇错终止的 Debug + ASan/UBSan 各通过 26/26，gettext
+  检查通过。本轮参数重构没有新增真机配对或无线连接证据。
+- 前一批功能提交 `1e57dc7dc49cdd5d1d554daca40a8fbd2885b167` 的
+  [CI run 37679973014](https://github.com/YJBeetle/scrctl/actions/runs/37679973014)
+  中，Ubuntu、macOS、Windows ARM64、ASan + UBSan 四个作业全部通过。

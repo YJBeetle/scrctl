@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 04:12+0800\n"
+"POT-Creation-Date: 2026-10-08 04:19+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -157,7 +157,7 @@ msgid ""
 "device."
 msgstr ""
 
-#: src/app/Cli.cpp:23 tools/screenshot_probe.cpp:52
+#: src/app/Cli.cpp:23 tools/screenshot_probe.cpp:52 tools/wifi_probe.cpp:670
 msgid "Show help"
 msgstr ""
 
@@ -3085,6 +3085,7 @@ msgid ""
 msgstr ""
 
 #: tools/rr_keepalive_probe.cpp:462 tools/screenshot_probe.cpp:69
+#: tools/wifi_probe.cpp:766
 #, c-format
 msgid "Invalid arguments: %s\n"
 msgstr ""
@@ -3583,4 +3584,125 @@ msgstr ""
 #: tools/screenshot_probe.cpp:133
 #, c-format
 msgid "Saved to %s\n"
+msgstr ""
+
+#: tools/wifi_probe.cpp:665
+msgid "Inspect RemotePairing connections and USB pairing services"
+msgstr ""
+
+#: tools/wifi_probe.cpp:667
+msgid ""
+"By default, verify an existing record over Wi-Fi using --address and either "
+"--record or --pmd3-record. --pair-setup uses a byte stream over USB, or Wi-"
+"Fi when --address is given. --pair-setup-xpc uses USB RemoteXPC. --help does "
+"not connect to a device."
+msgstr ""
+
+#: tools/wifi_probe.cpp:672
+msgid "Device address for Wi-Fi verification or byte-stream pairing"
+msgstr ""
+
+#: tools/wifi_probe.cpp:674
+msgid "Wi-Fi RemotePairing port (1..65535; default: 49152)"
+msgstr ""
+
+#: tools/wifi_probe.cpp:677
+msgid "scrctl pairing record for Wi-Fi verification"
+msgstr ""
+
+#: tools/wifi_probe.cpp:679
+msgid "pymobiledevice3 plist record; requires --host-id"
+msgstr ""
+
+#: tools/wifi_probe.cpp:681
+msgid "Host identifier for pairing setup or a pymobiledevice3 record"
+msgstr ""
+
+#: tools/wifi_probe.cpp:683
+msgid ""
+"USB device filter, or device identifier for Wi-Fi pairing and foreign records"
+msgstr ""
+
+#: tools/wifi_probe.cpp:684
+msgid "Print connection and pairing details"
+msgstr ""
+
+#: tools/wifi_probe.cpp:686
+msgid "Establish the tunnel after Wi-Fi verification"
+msgstr ""
+
+#: tools/wifi_probe.cpp:688
+msgid "Read the tunnel RSD service directory (implies --tunnel)"
+msgstr ""
+
+#: tools/wifi_probe.cpp:690
+msgid "Create a pairing record over USB or the given Wi-Fi address"
+msgstr ""
+
+#: tools/wifi_probe.cpp:692
+msgid "Create a pairing record over USB RemoteXPC"
+msgstr ""
+
+#: tools/wifi_probe.cpp:694
+msgid "RemoteXPC pairing service (only with --pair-setup-xpc)"
+msgstr ""
+
+#: tools/wifi_probe.cpp:696
+msgid "List services in the USB tunnel RSD directory"
+msgstr ""
+
+#: tools/wifi_probe.cpp:698
+msgid "Do not save the new pairing record (pairing setup only)"
+msgstr ""
+
+#: tools/wifi_probe.cpp:700
+msgid "Skip the initial verification attempt (pairing setup only)"
+msgstr ""
+
+#: tools/wifi_probe.cpp:702
+msgid "Override the pairing host name (pairing setup only)"
+msgstr ""
+
+#: tools/wifi_probe.cpp:704
+msgid "Override the pairingData kind (pairing setup only)"
+msgstr ""
+
+#: tools/wifi_probe.cpp:727
+msgid ""
+"--no-save, --no-verify-probe, --host-name and --pairing-kind require --pair-"
+"setup or --pair-setup-xpc"
+msgstr ""
+
+#: tools/wifi_probe.cpp:733
+msgid ""
+"--record, --pmd3-record, --tunnel and --rsd are only for Wi-Fi verification"
+msgstr ""
+
+#: tools/wifi_probe.cpp:737
+msgid "--address cannot be combined with --pair-setup-xpc or --usb-services"
+msgstr ""
+
+#: tools/wifi_probe.cpp:740
+msgid "--port requires a Wi-Fi --address"
+msgstr ""
+
+#: tools/wifi_probe.cpp:744
+msgid "--host-id requires pairing setup or --pmd3-record"
+msgstr ""
+
+#: tools/wifi_probe.cpp:748
+msgid ""
+"--udid is only used with USB modes, Wi-Fi pairing setup or --pmd3-record"
+msgstr ""
+
+#: tools/wifi_probe.cpp:751
+msgid "Wi-Fi verification requires --address"
+msgstr ""
+
+#: tools/wifi_probe.cpp:755
+msgid "Wi-Fi verification requires --record or --pmd3-record"
+msgstr ""
+
+#: tools/wifi_probe.cpp:758
+msgid "--pmd3-record requires a nonempty --host-id"
 msgstr ""
