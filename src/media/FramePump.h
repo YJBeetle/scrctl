@@ -163,7 +163,8 @@ public:
 
     [[nodiscard]] uint64_t serial() const;
     [[nodiscard]] Stats stats() const;
-    /// 协商到的视频 payload type，HID 之外的调试用得上。
+    /// 协商到的视频 payload type，HID 之外的调试用得上；重建或失败时为 0。
+    /// getter 只读取 mutex_ 保护的标量快照，不访问 worker 正在替换的会话。
     [[nodiscard]] uint8_t payload_type() const;
     [[nodiscard]] uint16_t receiver_port() const;
     /// 最近一帧的尺寸（还没出帧时为 0）。
@@ -188,7 +189,7 @@ private:
     /// 解析器仅由后台线程访问，每次重建会话时替换。
     std::unique_ptr<AnnexBParser> parser_;
 
-    /// 下列帧、尺寸及统计由 mutex_ 保护；原子状态另行声明。
+    /// 下列帧、尺寸、会话信息及统计由 mutex_ 保护；原子状态另行声明。
     /// 尺寸保留独立快照，查询宽高不需要复制像素。
     mutable std::mutex mutex_;
     std::condition_variable cv_;
@@ -201,6 +202,9 @@ private:
     bool stopping_ = false;
     int width_ = 0;
     int height_ = 0;
+    /// session_ 只由 worker 管理；外部读取这两个快照，避免重建时借用已销毁对象。
+    uint8_t payload_type_ = 0;
+    uint16_t receiver_port_ = 0;
     Stats stats_;
     /// 最近收到数据报的时刻，用于检测完全无包；不能仅依赖序号缺口。
     uint64_t last_packet_ms_ = 0;

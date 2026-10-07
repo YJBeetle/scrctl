@@ -142,6 +142,12 @@ FramePump::~FramePump() {
 bool FramePump::restart(std::string &err) {
     /// 开始重建时标记恢复中，新会话首帧输出后清除，供调用方区分恢复和静止。
     reviving_ = true;
+    {
+        // 先撤销旧会话信息，再做耗时的停流和起流 RPC；网络 I/O 不持有此锁。
+        std::lock_guard<std::mutex> lock(mutex_);
+        payload_type_ = 0;
+        receiver_port_ = 0;
+    }
 
     if (session_ != nullptr) {
         std::string stop_err;
@@ -163,6 +169,14 @@ bool FramePump::restart(std::string &err) {
         return false;
     }
     last_packet_ms_ = now_ms();
+
+    {
+        // 会话创建成功后一次发布两个标量。session_ 仍只由起流线程/worker 使用，
+        // getter 无需借用其生命周期，也不会在 RPC 期间阻塞。
+        std::lock_guard<std::mutex> lock(mutex_);
+        payload_type_ = session_->started().payload_type;
+        receiver_port_ = session_->receiver_port();
+    }
 
     // 首次启动时 worker 尚未运行，不计入重建次数，也不输出重建提示。
     // 线程创建由 start() 统一管理。
@@ -768,11 +782,13 @@ FramePump::Stats FramePump::stats() const {
 }
 
 uint8_t FramePump::payload_type() const {
-    return session_ != nullptr ? session_->started().payload_type : 0;
+    std::lock_guard<std::mutex> lock(mutex_);
+    return payload_type_;
 }
 
 uint16_t FramePump::receiver_port() const {
-    return session_ != nullptr ? session_->receiver_port() : 0;
+    std::lock_guard<std::mutex> lock(mutex_);
+    return receiver_port_;
 }
 
 void FramePump::size(int &width, int &height) const {
