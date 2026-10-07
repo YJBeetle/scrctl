@@ -52,8 +52,8 @@ uint16_t l4_checksum(const uint8_t src[16], const uint8_t dst[16],
   uint32_t sum = 0;
   sum = fold_sum(sum, src, 16);
   sum = fold_sum(sum, dst, 16);
-  // 伪头：上层长度(4) + 3 字节零 + next header。与 L4 一起连续累加，才等价于
-  // 分两段各算一半再相加。
+  // IPv6 伪头包含 4 字节上层长度、3 字节零和 next header；与 L4 数据
+  // 连续累加，最后统一折叠进位并取反。
   const uint8_t pseudo[8] = {
       static_cast<uint8_t>(len >> 24),
       static_cast<uint8_t>(len >> 16),
@@ -73,6 +73,7 @@ struct Stack::Impl {
   netif nic{};
   bool registered = false;
   Stack *owner;
+  // 只有出站队列跨核心线程与隧道线程；netif、端点表和关闭记录由核心线程独占。
   std::mutex queue_mutex;
   std::deque<std::vector<uint8_t>> outgoing;
   size_t queued_bytes = 0;
@@ -90,6 +91,7 @@ struct Stack::Impl {
       std::vector<uint8_t> packet(p->tot_len);
       if (pbuf_copy_partial(p, packet.data(), p->tot_len, 0) != p->tot_len)
         return ERR_BUF;
+      // output 回调不能阻塞在 TLS 写入，只复制并提交包；队列满时反馈 ERR_MEM。
       return self.owner->enqueue(std::move(packet)) ? ERR_OK : ERR_MEM;
     } catch (const std::bad_alloc &) {
       return ERR_MEM;
@@ -132,6 +134,7 @@ void Stack::close_tcp(tcp_pcb *pcb) {
   impl_->closing.insert(pcb);
   tcp_ext_arg_set(pcb, id, record.release());
   tcp_ext_arg_set_callbacks(pcb, id, &callbacks);
+  // 端点即将销毁，先解绑其回调。扩展参数仍跟踪 PCB，直到正常关闭或 abort 释放。
   tcp_arg(pcb, nullptr);
   tcp_recv(pcb, nullptr);
   tcp_err(pcb, nullptr);
@@ -186,11 +189,14 @@ void Stack::stop_pump() {
     if (pump_err_.empty())
       pump_err_ = SCRCTL_TR("Tunnel stopped");
   }
-  tunnel_.shutdown(); // 中断阻塞的 TLS/包读取；fd 在线程退出之后才释放。
+  // 先取消隧道等待，再通知端点失败；fd 由拥有者在线程退出后释放。
+  // 此时不持有错误锁或队列锁，避免核心任务和隧道线程互相等待。
+  tunnel_.shutdown();
   fail_endpoints(pump_error());
   if (pump_.joinable())
     pump_.join();
   pumping_ = false;
+  // 隧道线程已退出，不会再向 netif 提交输入；核心线程收尾后才释放出站队列。
   LwipRuntime::instance().call([&] {
     while (!impl_->closing.empty())
       tcp_abort(*impl_->closing.begin());
@@ -216,6 +222,7 @@ bool Stack::enqueue(std::vector<uint8_t> packet) {
   packet[3] = static_cast<uint8_t>(label);
   std::lock_guard lock(impl_->queue_mutex);
   constexpr size_t max_bytes = 4u << 20;
+  // 限制待写入隧道的总字节数；慢隧道不能让核心线程持续积压包或等待 I/O。
   if (impl_->queued_bytes + packet.size() > max_bytes)
     return false;
   const auto size = packet.size();
@@ -232,7 +239,7 @@ void Stack::pump_loop() {
   std::string error;
   try {
     while (!stopping_) {
-      // 限制每轮发包数量，持续出站时仍给入站 ACK / 媒体留出处理机会。
+      // 每轮最多发送 64 个包，持续出站时仍给入站 ACK 和媒体包留出处理机会。
       for (unsigned n = 0; n < 64 && !stopping_; ++n) {
         std::vector<uint8_t> packet;
         {
@@ -243,6 +250,7 @@ void Stack::pump_loop() {
           impl_->outgoing.pop_front();
           impl_->queued_bytes -= packet.size();
         }
+        // 出队后释放队列锁，再进入可能阻塞的隧道写入。
         if (!tunnel_.send_ipv6(packet.data(), packet.size(), error))
           break;
       }
@@ -259,7 +267,8 @@ void Stack::pump_loop() {
         break;
       if (packet.size() < 40 || packet.size() > 65535 || packet[0] >> 4 != 6)
         continue;
-      // 诊断计数保留；有效包仍由 lwIP 处理扩展头、TCP、UDP 和 ICMP。
+      // 这里只记录直接位于 IPv6 头之后的协议诊断；完整扩展头、TCP、UDP
+      // 和 ICMP 处理仍交给 lwIP，诊断计数不会替代协议校验或拦截输入。
       const uint8_t protocol = packet[6];
       if ((protocol == 6 || protocol == 17) && packet.size() >= 48 &&
           l4_checksum(packet.data() + 8, packet.data() + 24, packet.data() + 40,
@@ -312,8 +321,8 @@ std::string Stack::icmp_last() const {
 }
 
 bool Stack::send_echo_request(uint16_t ident, uint16_t seq, std::string &err) {
-  // ICMPv6 的报文格式：type / code / 校验和(2)，回音请求再跟 id / seq / 数据。
-  // 算校验和时该字段置 0，伪头用 next header = 58。
+  // ICMPv6 头包含 type、code 和 2 字节校验和；回显请求再附带 id、seq 和数据。
+  // 计算时将校验和字段置零，IPv6 伪头的 next header 使用 58。
   std::vector<uint8_t> msg = {128,
                               0,
                               0,
@@ -331,20 +340,15 @@ bool Stack::send_echo_request(uint16_t ident, uint16_t seq, std::string &err) {
   return send(wrap(msg, 58), err);
 }
 
-/// 把 ICMPv6 头部（以及错误消息里带的那个内层 IPv6 包头）记下来。
-///
-/// 不校验它的 L4 校验和：上面那段只对 next=6/17
-/// 验和，而这一位是"设备有没有答话"的
-/// 存在性证据，验和失败也不该把它当成没发生。
+/// 记录 ICMPv6 头及错误消息引用的内层 IPv6 包，供诊断对端回复及触发报文。
+/// 此处不验证 ICMPv6 校验和；记录到回复只表示观察到报文，协议有效性由 lwIP 判断。
 void Stack::observe_icmpv6(const uint8_t *icmp, std::size_t len) {
   if (len < 4) {
     return;
   }
   const uint8_t type = icmp[0];
   const uint8_t code = icmp[1];
-  // ICMPv6 的 type=1 码表和 ICMPv4 的**不一样**，别照抄：v4 的"端口不可达"是
-  // code 3， v6 的是 code 4（照 v4
-  // 抄会把金丝雀那条读成"地址不可达"，意思整个反了）。
+  // ICMPv6 type=1 的端口不可达为 code=4；ICMPv4 使用 code=3，不能共用码表。
   static constexpr const char *kCodes[] = {
       SCRCTL_N_("no route to destination"),    SCRCTL_N_("communication administratively prohibited"), SCRCTL_N_("beyond source address scope"),
       SCRCTL_N_("address unreachable"),        SCRCTL_N_("port unreachable"),         SCRCTL_N_("source address failed ingress/egress policy"),
@@ -362,10 +366,9 @@ void Stack::observe_icmpv6(const uint8_t *icmp, std::size_t len) {
   } else if (type == 128 || type == 129) {
     line += type == 128 ? SCRCTL_TR(" (echo request)") : SCRCTL_TR(" (echo reply)");
   }
-  // 错误消息（type 1..4）在第 8 字节之后回带触发它的那个包：内层 IPv6 头 40
-  // 字节， 再往后是触发包 L4 头的前 8 字节——对 UDP 来说刚好是
-  // 源端口/目的端口/长度/校验和。 这一串才是分界线："设备回过端口不可达的那个 4
-  // 元组，是不是我们发 RTCP 的那个"。
+  // 错误消息 type=1..4 在 8 字节 ICMPv6 头之后引用触发报文：先是 40 字节
+  // IPv6 头，再是 L4 数据。UDP 头前 8 字节包含端口、长度和校验和，用于
+  // 将端口不可达回复与发出的 RTCP 等数据报对应起来。
   if (type <= 4 && len >= 8 + 40 + 8) {
     const uint8_t *inner = icmp + 8;
     const std::size_t rest = len - 8;

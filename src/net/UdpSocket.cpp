@@ -17,7 +17,8 @@ struct UdpSocket::Impl {
   };
   Stack &stack;
   uint16_t port;
-  udp_pcb *pcb = nullptr;
+  udp_pcb *pcb = nullptr; // 仅由 lwIP 核心线程及其回调访问。
+  // mutex 保护应用可见的队列和错误；持锁期间不等待核心线程。
   mutable std::mutex mutex;
   std::condition_variable cv;
   std::deque<Packet> queue;
@@ -25,6 +26,7 @@ struct UdpSocket::Impl {
   std::string failure;
   Impl(Stack &s, uint16_t p) : stack(s), port(p) {}
   void fail(const std::string &why) {
+    // 核心线程先移除 PCB，再发布失败；已缓存的数据报仍可由 recv 取走。
     if (pcb) {
       udp_remove(pcb);
       pcb = nullptr;
@@ -40,6 +42,7 @@ struct UdpSocket::Impl {
     auto &self = *static_cast<Impl *>(arg);
     ip_addr_t peer{};
     ipaddr_aton(self.stack.peer_text().c_str(), &peer);
+    // 隧道可能传入其它地址的数据报，应用端点只接收协商的对端地址。
     if (!ip_addr_cmp(address, &peer)) {
       pbuf_free(p);
       return;
@@ -49,6 +52,7 @@ struct UdpSocket::Impl {
       try {
         std::vector<uint8_t> data(p->tot_len);
         pbuf_copy_partial(p, data.data(), p->tot_len, 0);
+        // 保留较新的媒体数据，丢弃队头；UDP 无接收窗口，不在回调里等待消费者。
         while (!self.queue.empty() &&
                (self.queue.size() >= 4096 ||
                 self.bytes + data.size() > (16u << 20))) {
@@ -71,6 +75,7 @@ UdpSocket::UdpSocket(Stack &s, uint16_t port)
 UdpSocket::~UdpSocket() {
   auto s = impl_;
   LwipRuntime::instance().call([s] {
+    // 移除 PCB 并解除注册，在同一个核心操作中完成；之后不再有引用 Impl 的协议回调。
     s->fail(SCRCTL_TR("UDP endpoint closed"));
     s->stack.detach_endpoint(s.get());
   });
@@ -112,6 +117,7 @@ bool UdpSocket::send(const std::vector<uint8_t> &payload, uint16_t port,
     auto *nic = s->stack.network_interface();
     if (!nic || !s->pcb || !port)
       return ERR_CONN;
+    // 为 IPv6 头和 UDP 头预留 40+8 字节，拒绝超过隧道 MTU 的数据报。
     if (payload.size() > nic->mtu - 48u)
       return ERR_VAL;
     pbuf *p = pbuf_alloc(PBUF_TRANSPORT, static_cast<u16_t>(payload.size()),

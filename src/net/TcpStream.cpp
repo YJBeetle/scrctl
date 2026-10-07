@@ -12,6 +12,8 @@ namespace scrctl::net {
 struct TcpStream::Impl {
   Stack &stack;
   tcp_pcb *pcb = nullptr; // 只在核心线程访问。
+  // mutex 保护应用可见的状态和接收缓存，send_mutex 只串行化应用发送。
+  // 持有 mutex 时不能同步调用核心线程；核心回调也需要取得这把锁。
   std::mutex mutex, send_mutex;
   std::condition_variable cv;
   bool started = false, established = false, eof = false, closed = false;
@@ -20,6 +22,7 @@ struct TcpStream::Impl {
   std::vector<uint8_t> received;
   explicit Impl(Stack &s) : stack(s) {}
   void fail(const std::string &reason) {
+    // 从核心线程撤销 PCB，再发布失败并唤醒等待者；解绑回调后 abort，避免重复访问。
     auto *p = pcb;
     pcb = nullptr;
     {
@@ -37,7 +40,7 @@ struct TcpStream::Impl {
   }
   static void error(void *arg, err_t code) {
     auto &self = *static_cast<Impl *>(arg);
-    self.pcb = nullptr; // 此时 lwIP 已释放 PCB。
+    self.pcb = nullptr; // 错误回调执行前 lwIP 已释放 PCB，不能再次 abort。
     self.fail(SCRCTL_TR("TCP connection terminated (lwIP ") + std::to_string(code) + SCRCTL_TR(")"));
   }
   static err_t connected(void *arg, tcp_pcb *, err_t code) {
@@ -59,6 +62,7 @@ struct TcpStream::Impl {
       if (!p)
         self.eof = true;
       else {
+        // 接收缓存最多 4 MiB；拒绝本次交付时不释放 pbuf，由 lwIP 保留处理。
         if (self.received.size() + p->tot_len > (4u << 20))
           return ERR_MEM;
         try {
@@ -70,7 +74,7 @@ struct TcpStream::Impl {
         }
         self.stack.note_tcp_recv(p->tot_len);
         pbuf_free(p);
-        // 应用取走字节后再 tcp_recved；慢读者会收紧 TCP 接收窗口。
+        // 应用取走字节后才调用 tcp_recved；慢读者通过接收窗口形成背压。
       }
       ++self.progress;
     }
@@ -128,6 +132,7 @@ bool TcpStream::connect(uint16_t port, std::string &err) {
   if (ready && s->established)
     return true;
   err = s->failure.empty() ? SCRCTL_TR("TCP connect timed out or connection closed") : s->failure;
+  // 失败收尾需要进入核心线程，先释放应用状态锁，避免与 fail() 的锁形成等待环。
   lock.unlock();
   LwipRuntime::instance().call([s, why = err] { s->fail(why); });
   return false;
@@ -151,6 +156,7 @@ bool TcpStream::send(std::string_view data, std::string &err) {
         if (s->closed || !s->established || !s->failure.empty() || !s->pcb)
           return std::pair<size_t, err_t>{0, ERR_CONN};
       }
+      // 每次最多提交 16 KiB，并复制数据到 lwIP 缓冲；已提交片段不再引用应用缓冲。
       const auto count = static_cast<u16_t>(
           std::min<size_t>({data.size() - offset, tcp_sndbuf(s->pcb), 16384}));
       err_t code = count ? tcp_write(s->pcb, data.data() + offset, count,
@@ -212,6 +218,7 @@ bool TcpStream::recv(std::vector<uint8_t> &out, int timeout_ms,
            false;
   out.swap(s->received);
   lock.unlock();
+  // 已交付应用的字节才归还接收窗口；PCB 可能已关闭，因此在核心线程重新检查。
   LwipRuntime::instance().call([s, count = out.size()] {
     if (!s->pcb)
       return;
@@ -234,6 +241,7 @@ void TcpStream::close() {
       ++s->progress;
     }
     s->cv.notify_all();
+    // 正常关闭交给 Stack 跟踪 FIN/ACK；Impl 注册随后解除，回调不会再引用本端点。
     if (s->pcb) {
       auto *p = s->pcb;
       s->pcb = nullptr;
