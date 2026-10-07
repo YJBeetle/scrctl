@@ -9,8 +9,8 @@ scrctl 是独立产品，也是设备协议与恢复行为的验证项目。MaaF
 | --- | --- | --- |
 | JSON | 已使用 nlohmann/json，删除 jsonlite | 通用解析替换已完成，保留输入限制和协议取值辅助 |
 | CLI | 已使用 CLI11，触摸和按键校验前移 | crop、颜色、测试时刻表等领域规则仍由项目处理 |
-| main 职责拆分 | 主要拆分已完成，入口 5 行 | Application 的应用命令、LiveSource 的统计仍可继续收敛 |
-| XML / binary plist | XML 已使用 pugixml，binary 仍自实现 | 库方案已评估；libplist 会截断 NUL，PlistCpp 不支持 Unicode，暂保留并修复边界 |
+| main 职责拆分 | 入口 5 行，独立命令与应用启动已拆入 Commands | LiveSource 的统计职责仍可继续收敛 |
+| XML / binary plist | XML 使用 pugixml；起流改为 XML，通用 binary 编解码已删除 | macOS USB 视频/音频对照通过；其他设备系统版本仍需回归 |
 | IPv6 / TCP / UDP 用户态栈 | 已使用 lwIP；删除旧 TCP 和手工 UDP 收发 | USB / Wi-Fi 视频、截图切换已通过；物理断线、多设备及长时间运行待验证 |
 | HTTP/2 | 已完成 nghttp2 第一轮评估，生产仍自实现 | 控制流和内联大回复兼容；偶数文件流存在限制，真机 FileTransfer 子流尚未触发 |
 | 基础资源管理 | Base64 使用 OpenSSL；SDL 和系统 TCP 建连已收敛 | 本轮系统 socket 建连不替代隧道内 TCP 栈 |
@@ -27,7 +27,8 @@ XPC、OPACK、Apple 配对和控制语义、SRP 的 Apple 适配、Deflate 小�
 | 模块 | 职责 |
 | --- | --- |
 | `main.cpp` | 调用应用入口 |
-| `Application` | 处理命令、组装源、协调事件循环和退出 |
+| `Application` | 组装源、协调事件循环和退出 |
+| `Commands` | 独立命令、应用名称解析和启动 |
 | `Options` / `Cli` | 参数值、CLI11 声明与校验、生成帮助 |
 | `DeviceConnection` | USB / Wi-Fi 连接选择与配对记录选择 |
 | `Presenter` | SDL 窗口、渲染、回读和鼠标坐标映射 |
@@ -38,7 +39,7 @@ XPC、OPACK、Apple 配对和控制语义、SRP 的 Apple 适配、Deflate 小�
 
 `src/app` 内这些类型是应用实现，不承诺外部接口稳定。
 媒体恢复状态机继续由 FramePump / ScreenshotSource 承担，模块拆分保留其调用顺序、
-退避、线程回收和停止逻辑。LiveSource 的恢复编排和 Application 的命令分支仍可继续细化。
+退避、线程回收和停止逻辑。LiveSource 的恢复编排与统计职责仍可继续细化。
 
 ## 通用解析
 
@@ -320,3 +321,39 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
 - 沿用已有设备信任和 DDI。NCM 网络接口仍有驱动错误，Apple Devices 界面仍未发现设备；
   这两项没有阻断已测 scrctl usbmux 隧道路径，但未验证热点 / 直接 NCM 联网及该应用全部功能。
   安装方法和排查步骤见 [Windows 说明](WINDOWS.md)。
+
+## 第二十四轮：Windows 工作区、工具链与真实 CI 包
+
+- Windows 开发文件迁移到 `C:\Workspace\scrctl`；winget 安装 MSYS2 到
+  `C:\opt\msys64`，使用 CLANGARM64 重建。24/24 离线测试、独立安装检查和
+  USB 15 秒强制截图往返通过，输出 442 帧。成功验证后已删除旧构建及工具链。
+- Windows CI 补齐 MSYS Git；[cacaac7 的 Windows 作业](https://github.com/YJBeetle/scrctl/actions/runs/37578978108/job/112654115639)
+  完成构建、24/24 回归、安装检查与上传。真实 Release artifact 下载到 VM 后，
+  在仅有系统目录 PATH 的环境通过版本、中英文帮助和 LANG 自动选择，exe 哈希一致。
+- 安装包保留完整 `bin` / `share` 结构；裸构建 exe 的 DLL 缺失问题及安装方法见
+  [Windows 说明](WINDOWS.md)。本轮下载包的启动检查不作为额外设备测试。
+
+## 第二十五轮：应用命令与 macOS 安装包
+
+- 将版本、设备/应用列表、剪贴板命令与应用启动解析拆入 `Commands`；保留命令优先级、
+  退出码、gettext 文本以及在媒体启动后、SDL 初始化前执行应用启动的顺序。
+- macOS 使用 CMake BundleUtilities 递归收集并修复非系统 dylib，补充
+  sdl2-compat 通过 dlopen 加载的 SDL3，移除外部 rpath，并重新签署包内副本。
+- 本机独立安装、带空格路径搬移及 tar 压缩/解压检查通过：25 个 dylib 条目，
+  19 个真实库文件，15 个 Homebrew 包；签名、install name、dyld 实际加载及
+  英文/中文/auto、版本均通过。记录实际依赖版本、来源、SHA256、许可及源码提交。
+- CI 增加相同检查和 `scrctl-macos` 压缩产物上传。发布和使用方法见
+  [macOS 说明](MACOS.md)。签名为 ad hoc，本轮没有 Developer ID 签名或公证。
+
+## 第二十六轮：XML 起流与 Linux 语言回退
+
+- macOS USB 对同内容视频/音频做 binary → XML → binary 对照，全部起流并收包；
+  生产起流改用现有 XML 写入器，删除 672 行 binary 编解码和 300 行测试。
+  未新增 plist 库，详细对照与验证范围见 [格式记录](BPLIST_COMPATIBILITY.md)。
+- XML 生产路径 45 秒输出 2230 帧，强制截图降级恢复成功，音频持续解码；
+  解码失败和截图失败为 0，两条媒体均跨 20 秒租期并正常退出。
+- macOS 完整回归 23/23；比此前少一项是删除了不再需要的 binary 编解码测试，
+  媒体测试继续验证 XML 字段、压缩载荷和视频/音频参数。
+- 旧 CI 的 Ubuntu 仅 i18n 失败：glibc 将 C.UTF-8 视为 C 消息 locale，忽略 LANGUAGE。
+  修改为优先可用的中英文 UTF-8 locale；glibc 只有 C 类 locale 时正常使用英文。
+  默认 auto 仍跟随 LC_ALL / LC_MESSAGES / LANG；显式语言覆盖规则不变。

@@ -5,7 +5,15 @@
 
 ## 构建
 
-安装 [MSYS2](https://www.msys2.org/)，打开 **CLANGARM64** 终端。不要在 MINGW64、UCRT64
+使用 winget 安装 [MSYS2](https://www.msys2.org/)；本次 VM 验证的安装位置是
+`C:\opt\msys64`，项目及构建目录放在 `C:\Workspace\scrctl`：
+
+```powershell
+winget install --id MSYS2.MSYS2 --exact --source winget --silent `
+  --accept-source-agreements --accept-package-agreements --location C:\opt\msys64
+```
+
+打开 **CLANGARM64** 终端。不要在 MINGW64、UCRT64
 或普通 MSYS 终端混用下面的依赖；CLANGARM64 生成原生 ARM64 程序。
 
 ```bash
@@ -148,8 +156,15 @@ Windows 音频、输入控制、新建配对及 DDI 的完整初始安装流程�
 ## CI 产物
 
 GitHub Actions 的 `windows-arm64` 作业使用 `windows-11-arm` 和 MSYS2 CLANGARM64，
-执行构建、24 项离线测试、安装及独立启动检查。产物名为 `scrctl-windows-arm64`，
-测试日志另外保存。当前配置在 VM 上完成了对应本地验证，尚未推送取得远端运行结果。
+执行构建、离线测试、安装及独立启动检查。产物名为 `scrctl-windows-arm64`，
+测试日志另外保存。[提交 cacaac7 的 Windows 作业](https://github.com/YJBeetle/scrctl/actions/runs/37578978108/job/112654115639)
+已完成构建、24 项回归、安装检查与上传；下载的真实 Release 包也在 Windows ARM64 VM
+上通过仅含系统目录 PATH 的版本、中英文帮助和 LANG 自动选择检查。
+
+下载 artifact 后整体解压，保留 `bin` 和 `share` 的相对位置，运行 `bin\scrctl.exe`。
+`bin` 内应包含 exe 及其 DLL；`share` 内含翻译和构建记录。只复制 exe 会导致
+`libssl-3-arm64.dll` 等依赖找不到。构建目录中的 exe 依赖开发环境，不能单独分发。
+上述启动检查没有连接设备；USB 真机结果见前文。
 
 CI 包包含 DLL、翻译目录、已安装包版本、FFmpeg 构建配置、依赖许可文件和本项目源码快照。
 MSYS2 当前 FFmpeg 包启用了 GPL 和 version3，属于 GPL-3.0-or-later 构建，不能将其标为

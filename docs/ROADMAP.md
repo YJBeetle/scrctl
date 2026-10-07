@@ -9,9 +9,9 @@
 ### 1. 平台与真实网络验证
 
 - Linux：构建和离线测试已有 CI 作业，仍需 Linux 机器上的设备连接、DDI、镜像、输入
-  及断线退出验证。本轮本机结果来自 macOS，尚未推送取得新 CI 结果。
-- Windows：ARM64 构建、24 项离线回归及 USB / Wi-Fi 镜像、截图切换已通过，新增 ARM64 CI
-  及安装检查尚未取得远端结果。音频、输入控制、新建配对、DDI 初始安装、x64 和 MSVC
+  及断线退出验证。本轮补修了 Ubuntu CI 发现的 glibc 语言回退问题；CI 不覆盖设备运行。
+- Windows：ARM64 构建、24 项离线回归及 USB / Wi-Fi 镜像、截图切换已通过，ARM64 CI
+  构建、安装检查及下载的真实 Release 包独立启动已通过。音频、输入控制、新建配对、DDI 初始安装、x64 和 MSVC
   待验证，见 [Windows 说明](WINDOWS.md)。发布产物还需完善对应第三方源码及分发材料。
 - lwIP：离线模拟已覆盖丢包、重传、多个连接 / 网络接口和取消等待；USB / Wi-Fi
   真机短测及三分钟强制截图往返已通过。真实弱网、物理拔插、多台设备及长时间运行待测。
@@ -23,10 +23,9 @@
 - HTTP/2：nghttp2 可用于已验证的控制流，但偶数文件流不符合其客户端会话模型。
   当前保留帧子集；文件子流映射和真机 FileTransfer 尚缺验证，见
   [适配记录](NGHTTP2_COMPATIBILITY.md)。后续还需复审输入缓冲与流状态边界。
-- binary plist：继续保留并维护受限实现。libplist 的内嵌 NUL 和 PlistCpp 的 Unicode
-  兼容性尚不能满足现有数据；输入、展开和编码边界已有离线判据，见
-  [评估记录](BPLIST_COMPATIBILITY.md)。
-- 应用：继续收敛 Application 命令分支和 LiveSource 统计职责，并对照旧 review
+- plist：起流已改用 XML，通用 binary 编解码删除；macOS USB 视频和音频对照通过，
+  其他 iOS / iPadOS 版本的 XML 协商需要设备回归，见 [格式记录](BPLIST_COMPATIBILITY.md)。
+- 应用：命令分支已拆入 Commands，继续收敛 LiveSource 统计职责，并对照旧 review
   逐项确认仍有效的问题；模块拆分不等于所有生命周期路径已经验证。
 - 库嵌入：TLS 当前使用进程级 SIGPIPE 忽略策略，会影响宿主信号处理。MaaFramework
   接入暂缓，后续需要在宿主场景中评估这一行为；当前不建立公共 SDK 或稳定 C ABI。
