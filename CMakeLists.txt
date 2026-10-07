@@ -196,6 +196,7 @@ endif()
 # ----------------------------------------------------------------- app ------
 add_library(scrctl_app STATIC
         src/app/Application.cpp
+    src/app/Commands.cpp
         src/app/SdlRuntime.cpp
         src/app/Presenter.cpp
         src/app/AudioOut.cpp
