@@ -122,8 +122,8 @@ msgstr "未执行窗口回读：要求第 %d 帧，实际显示了 %d 帧\n"
 
 #: src/app/Application.cpp:333
 #, c-format
-msgid "Finished: rendered %d frames\n"
-msgstr "完成：渲染 %d 帧\n"
+msgid "Finished: processed %d frames\n"
+msgstr "完成：处理 %d 帧\n"
 
 #: src/app/AudioOut.cpp:39
 #, c-format

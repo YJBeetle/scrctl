@@ -330,7 +330,7 @@ int run(int argc, char **argv) {
                      o.verify_at, rendered);
         return 1;
     }
-    std::printf(SCRCTL_TR("Finished: rendered %d frames\n"), rendered);
+    std::printf(SCRCTL_TR("Finished: processed %d frames\n"), rendered);
     return 0;
 }
 
