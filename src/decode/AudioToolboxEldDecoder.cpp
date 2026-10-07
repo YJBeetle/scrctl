@@ -1,5 +1,5 @@
 #include "i18n/Translation.h"
-// AAC-ELD 的 AudioToolbox 后端。见 AudioDecoder.h 上那段"为什么只能走这里"。
+// 当前 Apple 构建的 AAC-ELD 后端，输入与输出约定见 AudioDecoder.h。
 #include "decode/AudioDecoder.h"
 
 #include <AudioToolbox/AudioToolbox.h>
@@ -18,7 +18,7 @@ namespace {
            static_cast<UInt32>(static_cast<unsigned char>(s[3]));
 }
 
-/// OSStatus 常常本身就是一个四字符码（'!dat'、'fmt?'），打十进制没人看得懂。
+/// 格式化 OSStatus；四个字节均可打印时附加四字符码，便于诊断 AudioToolbox 错误。
 std::string osstatus_text(OSStatus st) {
     const auto u = static_cast<UInt32>(st);
     const char raw[4] = {static_cast<char>((u >> 24) & 0xFF), static_cast<char>((u >> 16) & 0xFF),
@@ -36,8 +36,9 @@ std::string osstatus_text(OSStatus st) {
     return text;
 }
 
-/// 一次解码的输入状态。AudioConverter 是"我要数据你来给"的拉模型，所以喂一包就得
-/// 给一个只认这一包的上下文，第二次被问要说"没了"。
+/// 一次 FillComplexBuffer 调用的输入状态。frame 内存由调用方拥有，Input 仅借用，
+/// 生命周期覆盖该同步调用。回调首次提供一包，后续请求返回零包，不重复提交载荷；
+/// packet description 存在 Input 内，和本次回调上下文具有相同生命周期。
 struct Input {
     const uint8_t *data = nullptr;
     UInt32 size = 0;
@@ -65,11 +66,14 @@ OSStatus input_proc(AudioConverterRef, UInt32 *io_number_packets, AudioBufferLis
     return noErr;
 }
 
+/// 实例拥有 AudioConverter 和复用的输出缓冲。同一实例的 decode 与销毁需要串行。
+/// PCM 在 FillComplexBuffer 成功后才追加到调用方 vector，返回后不借用 out_。
 class AudioToolboxEldDecoder final : public AudioDecoder {
 public:
     AudioToolboxEldDecoder(AudioConverterRef conv, int channels, int frame_length)
         : conv_(conv), channels_(channels), frame_length_(frame_length) {
-        // 一次最多可能出两帧（转换器攒着 priming 那一帧时会连着给），按两倍留。
+        // 输出缓冲按两帧交织 PCM 的字节数预留，供转换器使用；每次调用请求的
+        // 输出采样数仍为 frame_length，实际追加数量以返回的 frames 为准。
         out_.resize(static_cast<std::size_t>(frame_length) * 2 *
                     static_cast<std::size_t>(channels) * sizeof(int16_t));
     }
@@ -92,8 +96,8 @@ public:
         in.data = frame.data();
         in.size = static_cast<UInt32>(frame.size());
 
-        // AudioBufferList 的尾部数组必须变长分配：sizeof 它只含一个槽，
-        // 而 mNumberBuffers 说的是里面有几个。
+        // 当前目标为交织 PCM，只需一个 AudioBuffer 槽。按尾部数组布局分配
+        // AudioBufferList；其数据指针借用实例拥有的 out_，不是额外分配的样本。
         auto *list = static_cast<AudioBufferList *>(
             std::malloc(offsetof(AudioBufferList, mBuffers) + sizeof(AudioBuffer)));
         if (list == nullptr) {
@@ -136,13 +140,13 @@ std::unique_ptr<AudioDecoder> create_audio_decoder(int sample_rate, int channels
                                                    int frame_length, std::string &err) {
     AudioStreamBasicDescription src {};
     src.mSampleRate = static_cast<Float64>(sample_rate);
-    // 'aace' = kAudioFormatMPEG4AAC。ELD 不靠 format ID 区分，靠的就是
-    // mFramesPerPacket=480 这一位——1024 才是 LC。
+    // 'aace' 是 kAudioFormatMPEG4AAC_ELD；格式码指定 ELD，协商的
+    // frame_length 指定每包每声道采样数。已有设备配置为 480，不能仅据此区分编码。
     src.mFormatID = fourcc("aace");
     src.mFramesPerPacket = static_cast<UInt32>(frame_length);
     src.mChannelsPerFrame = static_cast<UInt32>(channels);
-    // mBytesPerPacket 留 0 = 变长包。这条流一包一帧而每包尺寸都不同（实测 246~400
-    // 字节），写成一个定值会让转换器按定长切。
+    // mBytesPerPacket 保持 0 表示变长包。当前一包一帧的设备载荷长度并不固定，
+    // 实际字节数由 input_proc 的 AudioStreamPacketDescription 提供。
 
     AudioStreamBasicDescription dst {};
     dst.mSampleRate = static_cast<Float64>(sample_rate);
@@ -160,11 +164,10 @@ std::unique_ptr<AudioDecoder> create_audio_decoder(int sample_rate, int channels
         err = SCRCTL_TR("AudioConverterNew failed: ") + osstatus_text(st);
         return nullptr;
     }
-    // 这里**不设** kAudioConverterDecompressionMagicCookie（'dmgc'）。试过：这台
-    // macOS 上 SetProperty('dmgc') 无论塞规范拼的 ASC 还是苹果自己那份 cookie 都回
-    // '!dat'，而不塞照样 1406/1406 全解出来、每帧正好 480 采样（docs §17.1）。
-    // 也就是说 ELD 的档位信息 ASBD 里已经有了，多设一次只会把一个不重要的错误
-    // 变成"看起来像失败"。
+    // 当前适配器不设置 kAudioConverterDecompressionMagicCookie，以上述 ASBD
+    // 创建转换器。已有 macOS/设备样本在未设置 cookie 时解出 1406/1406 帧，
+    // 每帧每声道 480 个采样；同次设置 cookie 的尝试返回 '!dat'。这仅说明已测
+    // 配置可按当前路径解码，不代表其他 ELD 配置或平台都不需要 cookie（docs §17.1）。
     return std::make_unique<AudioToolboxEldDecoder>(conv, channels, frame_length);
 }
 

@@ -18,17 +18,10 @@ void store_be16(uint8_t *p, uint16_t v) {
     p[1] = uint8_t(v);
 }
 
-/// 一次提交对应一个输出槽，槽必须活得比回调久。
-///
-/// 为什么要有这个结构体：回调可能在 DecodeFrame 返回**之后**才跑。之前直接把
-/// 栈上 `CVPixelBufferRef` 的地址传进去，函数返回后那块栈就作废，而下一次
-/// decode() 以同样的调用深度进来、同一个地址又被复用，于是上一帧的图像被写进
-/// 这一帧的槽里。症状是画面偶发整片噪声、且时好时坏（同一份录屏一份正常、隔
-/// 40 分钟再录的那份第 1 帧就是噪声），用 libav 解同一份文件却是干净的，这才把
-/// 范围收到解码器头上。
-///
-/// 现在每次提交后等 `WaitForAsynchronousFrames` 返回，保证所有已提交帧的回调都
-/// 跑完了，槽才离开作用域——这样栈上放就够了，不需要堆分配。
+/// 一次提交对应一个输出槽，通过 source_frame_ref_con 传给输出回调。
+/// 回调可能晚于 DecodeFrame 返回，槽必须覆盖回调的生命周期。当前成功提交路径
+/// 调用 WaitForAsynchronousFrames 后才读取和释放槽；同一实例由调用方串行使用。
+/// 回调 retain 输出像素缓冲，decode 在复制到 Frame 后负责 release。
 struct OutputSlot {
     CVPixelBufferRef pb = nullptr;
 };
@@ -67,8 +60,8 @@ public:
             return false;
         }
 
-        // 属性字典的值必须是真正的 CFNumber——CoreVideo 按 CFNumber 解引用，
-        // 直接塞裸 uint32_t* 会当场 SIGBUS。
+        // 属性值使用 CFNumber 对象。字典通过 CF 类型回调保留该对象，创建字典后
+        // 可释放本地引用；不能把整数地址当作 CFNumberRef 传入。
         const uint32_t bgra = kCVPixelFormatType_32BGRA;
         CFNumberRef bgra_num = CFNumberCreate(nullptr, kCFNumberSInt32Type, &bgra);
         if (bgra_num == nullptr) {
@@ -103,8 +96,8 @@ public:
             return false;
         }
 
-        // 样本里只放 VCL NAL。参数集已在 format description（hvcC）里，
-        // 再内联一份会被判为 bad data。
+        // 当前适配器仅将 VCL NAL 写入样本，参数集来自 configure 的 format
+        // description。已有样本中重复内联参数集会导致 bad data，不外推其他配置。
         std::vector<const Nal *> slices;
         slices.reserve(au.size());
         size_t total = 0;
@@ -129,9 +122,9 @@ public:
 
         std::vector<uint8_t> buf;
         buf.reserve(total);
-        // NAL 按原样拷贝，含 emulation prevention 字节：长度前缀与样本字节数必须
-        // 对得上，解码器只按长度读、不会替你去 unescape（去掉了反而会让 RBSP 里
-        // 冒出 00 00 01，见 AnnexB.h 里 `Nal` 的语义）。
+        // 每个 VCL NAL 前写两字节大端长度，长度仅计 NAL 本身，不含前缀。
+        // NAL 保留 emulation prevention 字节，不能先转成去转义的 RBSP；长度和
+        // 样本内容均按 AnnexB.h 中原始 Nal 的语义提交。
         for (const Nal *n : slices) {
             uint8_t len[2];
             store_be16(len, static_cast<uint16_t>(n->size()));
@@ -139,6 +132,7 @@ public:
             buf.insert(buf.end(), n->begin(), n->end());
         }
 
+        // CoreMedia 分配独立存储，再将 buf 复制进去；样本不引用局部 vector 的内存。
         CMBlockBufferRef bb = nullptr;
         OSStatus st = CMBlockBufferCreateWithMemoryBlock(
             nullptr, nullptr, buf.size(), kCFAllocatorDefault, nullptr, 0, buf.size(),
@@ -161,6 +155,7 @@ public:
         CMSampleBufferRef sb = nullptr;
         st = CMSampleBufferCreateReady(nullptr, bb, format_desc_, 1, 1, &timing, 1, &sample_size,
                                        &sb);
+        // 成功创建的 sample buffer 保留 block buffer，本地引用可在此释放。
         CFRelease(bb);
         if (st != noErr || sb == nullptr) {
             return false;
@@ -175,8 +170,8 @@ public:
             }
             return false;
         }
-        // 等所有已提交帧的回调跑完，之后才允许 slot 离开作用域。代价是不做流水
-        // （一次只提交一帧，本来也不需要更深）。
+        // 等待已提交帧的异步回调完成，之后才读取 slot 并结束其栈上生命周期。
+        // 当前适配器每次提交后等待，不在多个 decode 调用之间建立异步流水。
         VTDecompressionSessionWaitForAsynchronousFrames(session_);
         if (slot.pb == nullptr) {
             return false;
@@ -189,7 +184,7 @@ public:
 
     [[nodiscard]] const char *backend_name() const override { return "VideoToolbox"; }
 
-    /// 2 字节长度前缀的硬上限。超过就得换软解，不是这里能救的。
+    /// 当前两字节 NAL 长度前缀的表示上限；调用方可据此选择软件后端。
     [[nodiscard]] size_t max_nal_size() const override { return kMaxNalSize; }
 
 private:
@@ -219,6 +214,8 @@ private:
         }
     }
 
+    /// 锁定像素缓冲后按源行跨度读取，复制为紧凑 BGRA；Frame 拥有复制后的像素。
+    /// 锁定失败或源数据无效时不更新 out，调用方不能将旧内容视为本次新输出。
     static void copy_out(CVPixelBufferRef pb, Frame &out) {
         if (CVPixelBufferLockBaseAddress(pb, kCVPixelBufferLock_ReadOnly) != kCVReturnSuccess) {
             return;

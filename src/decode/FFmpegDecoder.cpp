@@ -1,8 +1,7 @@
 #include "i18n/Translation.h"
 #include "decode/Decoder.h"
 
-// libav 的头是 C 头，自己不带 extern "C"，不包一层就会按 C++ 原型去找符号，
-// 链接时报 "symbol not found"（而 dylib 里明明有）。
+// 以 C 链接约定声明 libav 接口，与其库导出的符号一致。
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/imgutils.h>
@@ -16,20 +15,16 @@ extern "C" {
 namespace scrctl {
 namespace {
 
-/// libav 的错误码是人话，但要先转一次才看得到。
+/// 将 libav 错误码转换为诊断文本。
 std::string av_strerr(int st) {
     char buf[AV_ERROR_MAX_STRING_SIZE] = {0};
     av_strerror(st, buf, sizeof(buf));
     return buf;
 }
 
-/// 软解后端（libavcodec）。
-///
-/// 为什么必须有它：VideoToolbox 只接受 2 字节的 NAL 长度前缀，而这条真机流的
-/// 关键帧能长到 70101 字节（主屏壁纸实测）。开头那个 IDR 一丢，因为流不周期发
-/// IDR，画面就永久灰掉——平台后端在这条码流面前是**能力不足**，不是调参能解决的。
-///
-/// 另外 Linux/Windows 上没有 VideoToolbox，这个后端就是唯一的出路。
+/// libavcodec HEVC 软件后端。输入转换为 Annex-B，输出经 swscale 转为 CPU BGRA。
+/// 当前项目将其用于非 Apple 平台，以及超出 VideoToolbox 适配器 NAL 上限的码流。
+/// ctx_、frame_、sws_ 和参数集缓存由实例拥有，同一实例不提供并发调用保护。
 class FFmpegDecoder final : public Decoder {
 public:
     ~FFmpegDecoder() override { teardown(); }
@@ -46,13 +41,12 @@ public:
         if (ctx_ == nullptr) {
             return false;
         }
-        // 逐帧出图，不要解码器攒帧。这条流 has_b_frames=0（ffprobe 实测），
-        // 攒帧只会白加延迟——镜像里延迟就是手感。
+        // 请求低延迟解码；已有设备样本未观察到 B 帧。此标志不保证每次提交
+        // 都产生输出，也不能替代解码器自身的参考帧和线程调度要求。
         ctx_->flags |= AV_CODEC_FLAG_LOW_DELAY;
-        // 多线程默认就行：软解 2.8 兆像素的帧，单线程只有十几 fps。
+        // 由 libavcodec 自动选择线程数；这是库内部并行，不允许调用方并发操作 ctx_。
         ctx_->thread_count = 0;
-        // 参数集另外存一份，跟在没带参数集的 AU 前面一起送进去（见 decode()），
-        // 所以要在这之前把 open 做完——open 之后才允许 send_packet。
+        // 打开解码上下文后才允许提交 packet；参数集将在 decode 中随 AU 提交。
         const int open_st = avcodec_open2(ctx_, codec, nullptr);
         if (open_st < 0) {
             std::fprintf(stderr, SCRCTL_TR("Failed to open FFmpeg HEVC decoder: %s\n"),
@@ -61,7 +55,7 @@ public:
             return false;
         }
 
-        // 参数集另外存一份，跟在**每个** AU 前面一起送进去（见 decode()）。
+        // 保存 configure 的参数集，用于 AU 未携带任何 VPS/SPS/PPS 时补充输入。
         sets_.clear();
         append_nal(sets_, vps);
         append_nal(sets_, sps);
@@ -81,21 +75,21 @@ public:
         }
         std::vector<uint8_t> annexb;
         if (!has_parameter_sets(au)) {
-            annexb = sets_;  // 这个 AU 不带参数集，补上建会话时那份
+            annexb = sets_;  // 未发现 VPS/SPS/PPS，先添加 configure 时缓存的参数集
         }
         for (const auto &n : au) {
             append_nal(annexb, n);
         }
         if (annexb.empty()) {
-            return false;  // 一个 NAL 都没有
+            return false;  // 未形成可提交的 Annex-B 输入
         }
 
         AVPacket *pkt = av_packet_alloc();
         if (pkt == nullptr) {
             return false;
         }
-        // 必须走 av_new_packet：libav 要求输入缓冲后面有 AV_INPUT_BUFFER_PADDING_SIZE
-        // 的零填充，位读取器会读到填充区去。直接指着自己的 vector 是未定义行为。
+        // av_new_packet 分配 packet 自有数据及 AV_INPUT_BUFFER_PADDING_SIZE 零填充，
+        // 满足 libav 位读取器对输入尾部的要求。annexb 的 vector 无需保留到解码结束。
         if (av_new_packet(pkt, static_cast<int>(annexb.size())) < 0) {
             av_packet_free(&pkt);
             return false;
@@ -116,7 +110,7 @@ public:
         av_frame_unref(frame_);
         const int st = avcodec_receive_frame(ctx_, frame_);
         if (st < 0) {
-            return false;  // EAGAIN：攒着，下一个 AU 再出
+            return false;  // 包括 EAGAIN（暂时无帧）及其他接收错误，接口均返回 false
         }
         return to_frame(frame_, out);
     }
@@ -136,10 +130,9 @@ private:
         return false;
     }
 
-    /// 参数集要跟在"没带参数集的 AU"前面送：建会话那次只 configure 了参数集、
-    /// 没送载荷，而**下一次被喂的 AU 有可能不带参数集**（非关键帧就是，实测每
-    /// 400 帧才有一个关键帧）。AU 自己带了就照原样送——那才是当前有效的那份，
-    /// 拿旧 SPS 去覆盖会解错。
+    /// 添加四字节 Annex-B 起始码及原始 NAL，保留 emulation prevention 字节。
+    /// decode 仅在 AU 不含任何 VPS/SPS/PPS 时添加缓存；一旦发现其中任一种参数集，
+    /// 就按 AU 原样提交，不用缓存补齐或覆盖。此判断不验证三类参数集是否齐全。
     static void append_nal(std::vector<uint8_t> &out, const Nal &n) {
         const uint8_t sc[4] = {0, 0, 0, 1};
         out.insert(out.end(), sc, sc + 4);
@@ -160,8 +153,8 @@ private:
         }
 
         const auto row_bytes = static_cast<uint32_t>(w) * 4;
-        // 只在尺寸变了的时候 resize。原来这里是 `assign(n, 0)`：每帧先 memset 掉
-        // 11MB，而紧接着 sws_scale 会把每个像素都写一遍——那次清零纯属白给。
+        // 输出缓冲按紧凑 BGRA 行布局分配，仅在所需字节数变化时 resize。
+        // 同尺寸帧复用已有存储，由 sws_scale 写入像素。
         const size_t need = static_cast<size_t>(row_bytes) * static_cast<size_t>(h);
         if (out.pixels.size() != need) {
             out.pixels.resize(need);
@@ -207,10 +200,9 @@ private:
 }  // namespace
 
 std::unique_ptr<Decoder> create_software_decoder() {
-    // 这条流的码流标志是"全范围 420p"，libav 现在仍按废弃像素格式 yuvj420p 报出来，
-    // swscale 每帧为此刷一行 "deprecated pixel format used"。它按全范围处理是**对的**
-    // （换掉就得自己搬 range 细节，反而容易错），所以只把它的日志级别压到 error：
-    // 本文件的诊断一律走 fprintf，不受影响。
+    // 将 libav 的进程级日志阈值设为 error，抑制已测全范围 yuvj420p 输入的重复
+    // 像素格式警告。这不改变颜色转换配置，也会影响进程内其他 libav 使用者。
+    // 本文件直接写 stderr 的诊断不受此阈值影响。
     static bool log_quieted = false;
     if (!log_quieted) {
         av_log_set_level(AV_LOG_ERROR);

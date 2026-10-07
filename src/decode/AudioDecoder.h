@@ -18,6 +18,8 @@ public:
     virtual ~AudioDecoder() = default;
 
     /// 解码一帧，将输出采样追加到 pcm，不清空已有内容。
+    /// frame 内存由调用方拥有，需保持到调用返回；输出 PCM 由 pcm 自身拥有。
+    /// 当前后端不提供实例内并发保护，decode 与销毁需由调用方串行执行。
     /// frame_length 按每声道采样数定义；实际输出数量以 pcm 的增量为准。
     /// 返回 true 不保证追加了 PCM，例如空输入可以成功但无输出；核验后端时需同时检查
     /// 采样数量和内容。返回 false 表示本次解码失败，err 提供原因，后续处理由调用方决定。
@@ -36,11 +38,11 @@ std::unique_ptr<AudioDecoder> create_audio_decoder(int sample_rate, int channels
 
 /// 本构建是否编入音频解码后端，可用于在起流前判断能力；true 不保证初始化成功。
 ///
-/// 当前后端为 macOS AudioToolbox。已测试的 FFmpeg 原生 AAC 解码器不能正确处理
-/// 本项目测试设备的 AAC-ELD 配置，不能由此推断所有 FFmpeg 版本或其他实现都不支持 ELD。
-/// AAC-ELD 并非 Apple 私有格式；FDK AAC 提供 ELD 解码，但尚未验证本项目的设备载荷和配置。
+/// 当前接入的后端为 macOS AudioToolbox。已有 FFmpeg 原生 AAC 解码器对照未能
+/// 正确处理所测设备配置，结论仅适用于该版本和样本，不能排除其他版本或实现。
+/// 接入新后端需检查协商配置，并以同一份载荷比较 PCM 的采样数和内容。
 /// 测试样本与对照见 [CoreDevice §17.1](../../docs/coredevice.md#171-音频解码后端只能选-audiotoolbox实测同一份-dump-四路对照)，
-/// 后端扩展计划见 [ROADMAP](../../docs/ROADMAP.md)。接入新后端前需用同一份 dump 比较 PCM。
+/// 后端扩展计划见 [ROADMAP](../../docs/ROADMAP.md)。
 #if defined(__APPLE__)
 inline constexpr bool kHaveAudioDecoder = true;
 #else

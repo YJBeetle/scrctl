@@ -1,5 +1,5 @@
-// 非 Apple 平台的音频后端：没有。理由与实测数字写在 AudioDecoder.h 的
-// kHaveAudioDecoder 上面，这里只负责把那句话在运行期也说一遍。
+// 当前非 Apple 构建未接入音频解码后端；工厂返回空结果并提供共用提示。
+// 这是本构建的能力限制，不代表该平台或其他库不能解码 AAC-ELD。
 #include <string>
 
 #include "decode/AudioDecoder.h"
