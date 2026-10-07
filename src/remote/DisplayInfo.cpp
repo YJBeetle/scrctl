@@ -262,7 +262,10 @@ void DisplayWatcher::loop() {
     int failures = 0;
     while (!stop_.load()) {
         std::string err;
-        const auto event = conn_->next_batch(batch, kPollMs, err);
+        // 重订失败会留下空连接；沿断流分支继续退避重订，不读取不存在的连接。
+        const auto event = conn_ != nullptr
+            ? conn_->next_batch(batch, kPollMs, err)
+            : ServiceConnection::StreamEvent::Broken;
         if (event == ServiceConnection::StreamEvent::Batch) {
             failures = 0;
             for (const auto &element : batch) {
