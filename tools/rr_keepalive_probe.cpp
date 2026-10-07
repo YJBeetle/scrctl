@@ -19,11 +19,7 @@
 //
 // 对照组 `none` 什么都不发。两臂**交替**各跑若干轮：单次对照不算对照（docs §13）。
 //
-// 用法：rr_keepalive_probe [--seconds N] [--attempts N] [--what none,rr,poll,poll5]
-//                          [--timeout N] [--hold] [--event-channel] [--avc-features STR]
-//                          [--audio-leg] [--audio-rr] [--display-subscribe] [--hid-attach]
-//                          [--offer FILE] [--dump-packets] [--dump-status] [--audio-out FILE]
-//                          [--verbose]
+// 完整参数见 rr_keepalive_probe --help；帮助和 --dump-packets 均不会连接设备。
 //
 // 第二轮加的 `poll` 臂是因为第一批数据把"空闲超时"这个模型打掉了：四臂里最后一个视频
 // 包分别落在 +11.1s / +7.1s / +7.1s / +7.1s，而**每一臂都是 +20.0s 整**停止收 SR 并在
@@ -38,10 +34,13 @@
 //
 // 存活信号仍然用设备自己每秒一个的 SR（被动、不引入流量）；`poll` 臂会引入 RPC，所以
 // 它的对照意义是"这一臂能不能活过 20 秒"，而不是"SR 数说明什么"。
+#include <CLI/CLI.hpp>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -543,64 +542,87 @@ int main(int argc, char **argv) {
     bool dump_status = false;
     std::string what = "none,rrsrc,rrsrcsd";
     bool verbose = false;
-    for (int i = 1; i < argc; ++i) {
-        const std::string a = argv[i];
-        if (a == "--seconds" && i + 1 < argc) {
-            seconds = std::stoi(argv[++i]);
-        } else if (a == "--hz" && i + 1 < argc) {
-            hz = std::stod(argv[++i]);
-        } else if (a == "--dump-status") {
-            dump_status = true;
-        } else if (a == "--timeout" && i + 1 < argc) {
-            timeout_seconds = static_cast<uint32_t>(std::stoul(argv[++i]));
-        } else if (a == "--no-timeout-key") {
-            no_timeout_key = true;
-        } else if (a == "--dump-packets") {
-            dump_packets = true;
-        } else if (a == "--audio-out" && i + 1 < argc) {
-            audio_out = argv[++i];
-        } else if (a == "--hid-attach") {
-            hid_attach = true;
-        } else if (a == "--ping6") {
-            ping6 = true;
-        } else if (a == "--udp-mdns") {
-            udp_mdns = true;
-        } else if (a == "--flow-label") {
-            flow_label = true;
-        } else if (a == "--request-always") {
-            request_always = true;
-        } else if (a == "--udp-canary") {
-            udp_canary = true;
-            if (i + 1 < argc && argv[i + 1][0] != '-') {
-                canary_port = static_cast<uint16_t>(std::stoul(argv[++i]));
+    CLI::App cli{"Compare RTCP keepalive and keyframe request strategies over USB"};
+    cli.set_help_flag("-h,--help", "Show help and exit without connecting to a device");
+    cli.option_defaults()->take_last();
+    // --hold 的等待时间以 int 毫秒保存，参数上限同时保护现有的加法和乘法。
+    cli.add_option("--seconds", seconds, "Observation seconds per arm (default: 30)")
+        ->check(CLI::Range(1, std::numeric_limits<int>::max() / 1000 - 30));
+    cli.add_option("--attempts", attempts, "Number of rounds (default: 2)")
+        ->check(CLI::PositiveNumber);
+    cli.add_option("--hz", hz, "RR and keyframe request frequency in Hz (default: 1)")
+        ->check(CLI::Validator([](std::string &value) {
+            double frequency = 0;
+            if (!CLI::detail::lexical_cast(value, frequency) || !std::isfinite(frequency) ||
+                frequency <= 0 ||
+                1000.0 / frequency >= static_cast<double>(std::numeric_limits<long long>::max())) {
+                return std::string("must be a finite positive frequency with a representable millisecond period");
             }
-        } else if (a == "--event-channel") {
-            event_channel = true;
-        } else if (a == "--hold") {
-            hold_connection = true;
-        } else if (a == "--hold-idle") {
-            hold_idle = true;
-        } else if (a == "--hold-no-poll") {
-            hold_no_poll = true;
-        } else if (a == "--audio-leg") {
-            audio_leg = true;
-        } else if (a == "--audio-rr") {
-            audio_leg = true;
-            audio_rr = true;
-        } else if (a == "--offer" && i + 1 < argc) {
-            raw_offer_path = argv[++i];
-        } else if (a == "--display-subscribe") {
-            display_subscribe = true;
-        } else if (a == "--avc-features" && i + 1 < argc) {
-            avc_features = argv[++i];
-        } else if (a == "--attempts" && i + 1 < argc) {
-            attempts = std::stoi(argv[++i]);
-        } else if (a == "--what" && i + 1 < argc) {
-            what = argv[++i];
-        } else if (a == "-v" || a == "--verbose") {
-            verbose = true;
-        }
+            return std::string{};
+        }, "FINITE POSITIVE"));
+    cli.add_option("--timeout", timeout_seconds, "Negotiation timeout in seconds (default: 20)");
+    cli.add_option("--what", what, "Comma-separated arms (default: none,rrsrc,rrsrcsd)")
+        ->check(CLI::Validator([](std::string &value) {
+            static const std::set<std::string> bases = {
+                "none", "poll", "poll5", "rr", "rrsame", "rrsdes", "rrp1", "rrall",
+                "rrneg", "rrnegp1", "rrnegsr", "rrmine", "rrminep1", "rrminesr",
+                "rrminesd", "rrminecname", "rrsrc", "rrsrcsd", "rctl", "rctlrr", "pli", "fir"};
+            if (value.empty()) return std::string("must contain at least one arm");
+            std::size_t pos = 0;
+            do {
+                const auto comma = value.find(',', pos);
+                auto arm = value.substr(pos, comma == std::string::npos ? comma : comma - pos);
+                while (!arm.empty() && arm.front() == ' ') arm.erase(arm.begin());
+                const auto plus = arm.find('+');
+                if (bases.count(arm.substr(0, plus)) == 0)
+                    return std::string("unknown arm: ") + arm;
+                auto flag_pos = plus;
+                while (flag_pos != std::string::npos) {
+                    const auto next = arm.find('+', flag_pos + 1);
+                    const auto flag = arm.substr(flag_pos + 1,
+                        next == std::string::npos ? next : next - flag_pos - 1);
+                    if (flag != "fb" && flag != "ltrp")
+                        return std::string("unknown arm flag: ") + flag;
+                    flag_pos = next;
+                }
+                if (comma == std::string::npos) break;
+                pos = comma + 1;
+            } while (pos <= value.size());
+            return std::string{};
+        }, "ARMS"));
+    cli.add_flag("--no-timeout-key", no_timeout_key, "Omit the timeout key from the request");
+    cli.add_flag("--dump-packets", dump_packets, "Print packet bytes and exit without connecting");
+    cli.add_flag("--dump-status", dump_status, "Print the full final session status");
+    cli.add_option("--audio-out", audio_out, "Write length-prefixed audio RTP packets to FILE");
+    cli.add_flag("--audio-leg", audio_leg, "Start audio with the same client session ID as video");
+    cli.add_flag("--audio-rr", audio_rr, "Start audio and send RR+SDES on its port at 1 Hz");
+    cli.add_option("--offer", raw_offer_path, "Use FILE bytes as the negotiator offer");
+    cli.add_option("--avc-features", avc_features, "AVConference feature string (default: FLS;SW:1;)");
+    cli.add_flag("--event-channel", event_channel, "Include a session event channel UUID");
+    cli.add_flag("--hold", hold_connection, "Keep the stream-start connection open and service it");
+    cli.add_flag("--hold-idle", hold_idle, "Keep a display connection open without starting media");
+    cli.add_flag("--hold-no-poll", hold_no_poll, "Disable status polling on the held connection");
+    cli.add_flag("--display-subscribe", display_subscribe, "Subscribe to display updates before starting");
+    cli.add_flag("--hid-attach", hid_attach, "Attach HID before starting, without sending input");
+    cli.add_flag("--ping6", ping6, "Send five ICMPv6 echo requests before starting");
+    cli.add_flag("--udp-mdns", udp_mdns, "Send a unicast DNS query to device port 5353");
+    auto *canary = cli.add_option("--udp-canary", canary_port,
+        "Send three UDP datagrams to optional PORT (default: 47891)")
+        ->expected(0, 1)->default_str("47891")->type_name("PORT");
+    cli.add_flag("--flow-label", flow_label, "Set a random nonzero IPv6 flow label");
+    cli.add_flag("--request-always", request_always, "Request keyframes even while video is arriving");
+    cli.add_flag("-v,--verbose", verbose, "Print verbose protocol logging");
+    cli.footer("Arms: none, poll, poll5, rr, rrsame, rrsdes, rrp1, rrall, rrneg, rrnegp1,\n"
+               "rrnegsr, rrmine, rrminep1, rrminesr, rrminesd, rrminecname, rrsrc, rrsrcsd,\n"
+               "rctl, rctlrr, pli, fir. Append +fb and/or +ltrp to enable offer flags.\n"
+               "Without --help or --dump-packets, this probe connects to the USB device.");
+    try {
+        cli.parse(argc, argv);
+    } catch (const CLI::ParseError &e) {
+        return cli.exit(e);
     }
+    udp_canary = canary->count() != 0;
+    audio_leg = audio_leg || audio_rr;
 
     // 后面所有打印都走这两个，免得某一处还按"我们一定发了 timeout"来印数字。
     const std::optional<uint32_t> lease =
