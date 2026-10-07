@@ -36,7 +36,7 @@ bool read_u8(const Bytes &in, size_t &pos, uint8_t &v) {
 }
 
 bool read_be(const Bytes &in, size_t &pos, int width, uint64_t &v) {
-    if (pos + static_cast<size_t>(width) > in.size()) {
+    if (pos > in.size() || static_cast<size_t>(width) > in.size() - pos) {
         return false;
     }
     v = 0;
@@ -47,7 +47,7 @@ bool read_be(const Bytes &in, size_t &pos, int width, uint64_t &v) {
 }
 
 bool read_le(const Bytes &in, size_t &pos, int width, uint64_t &v) {
-    if (pos + static_cast<size_t>(width) > in.size()) {
+    if (pos > in.size() || static_cast<size_t>(width) > in.size() - pos) {
         return false;
     }
     v = 0;
@@ -161,19 +161,23 @@ bool decode_payload(const Bytes &in, size_t &pos, uint8_t type, Bytes &payload, 
     if (type == 0x61 || type == 0x91) {
         uint8_t l = 0;
         if (!read_u8(in, pos, l)) {
+            err = SCRCTL_TR("OPACK decode: payload exceeds buffer");
             return false;
         }
         len = l;
     } else if (type == 0x62 || type == 0x92) {
         if (!read_be(in, pos, 2, len)) {
+            err = SCRCTL_TR("OPACK decode: payload exceeds buffer");
             return false;
         }
     } else if (type == 0x63 || type == 0x93) {
         if (!read_be(in, pos, 4, len)) {
+            err = SCRCTL_TR("OPACK decode: payload exceeds buffer");
             return false;
         }
     } else if (type == 0x64 || type == 0x94) {
         if (!read_be(in, pos, 8, len)) {
+            err = SCRCTL_TR("OPACK decode: payload exceeds buffer");
             return false;
         }
     } else if (type >= 0x40 && type <= 0x60) {
@@ -184,12 +188,16 @@ bool decode_payload(const Bytes &in, size_t &pos, uint8_t type, Bytes &payload, 
         err = SCRCTL_TR("OPACK decode: unknown length form");
         return false;
     }
-    if (pos + len > in.size()) {
+    // 先比较剩余长度，避免不可信的 64 位声明长度与 pos 相加回绕。
+    if (pos > in.size() || len > in.size() - pos) {
         err = SCRCTL_TR("OPACK decode: payload exceeds buffer");
         return false;
     }
-    payload.assign(in.begin() + static_cast<long>(pos), in.begin() + static_cast<long>(pos + len));
-    pos += len;
+    const auto end = pos + static_cast<size_t>(len);  // 上述检查保证 end 位于输入内。
+    // 使用迭代器自身的差值类型，避免 Windows 的 32 位 long 截断位置。
+    payload.assign(in.begin() + static_cast<Bytes::difference_type>(pos),
+                   in.begin() + static_cast<Bytes::difference_type>(end));
+    pos = end;
     return true;
 }
 

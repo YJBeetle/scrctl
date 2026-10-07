@@ -8,6 +8,7 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -359,6 +360,60 @@ void test_opack() {
     Bytes truncated(nested.begin(), nested.end() - 5);
     scrctl::wifi::OpackValue t;
     check(!scrctl::wifi::opack_decode(truncated, t, err), "截断的 OPACK 要报错，不能解出半截");
+    // 只经公开 API 验证长度边界，格式错误应返回 false 和错误信息，而非抛出异常。
+    const auto reject_length = [](const Bytes &input, const char *what) {
+        scrctl::wifi::OpackValue value;
+        std::string error;
+        bool threw = false;
+        bool ok = true;
+        try {
+            ok = scrctl::wifi::opack_decode(input, value, error);
+        } catch (const std::exception &) {
+            threw = true;
+        }
+        check(!threw && !ok && error.find("payload exceeds buffer") != std::string::npos, what);
+    };
+    const auto length_form = [](uint8_t tag, int width, uint64_t length) {
+        Bytes input{tag};
+        for (int shift = (width - 1) * 8; shift >= 0; shift -= 8) {
+            input.push_back(static_cast<uint8_t>(length >> shift));
+        }
+        return input;
+    };
+    for (uint8_t tag : {uint8_t(0x64), uint8_t(0x94)}) {
+        // 长度字段读完后 pos=9；MAX-8 是 pos+len 首次回绕为 0 的临界值。
+        for (uint64_t length : {UINT64_MAX, UINT64_MAX - 7, UINT64_MAX - 8,
+                                UINT64_MAX - 9, uint64_t(0x80000000), uint64_t(0x100000000)}) {
+            reject_length(length_form(tag, 8, length), "OPACK 超长声明及回绕边界返回明确错误且不抛异常");
+        }
+    }
+    for (uint8_t base : {uint8_t(0x60), uint8_t(0x90)}) {
+        for (int width : {1, 2, 4, 8}) {
+            const auto tag = static_cast<uint8_t>(base + (width == 1 ? 1 : width == 2 ? 2 : width == 4 ? 3 : 4));
+            // 接受合法的长长度形态，包括非最短表示和零长度；不新增格式限制。
+            for (uint64_t length : {uint64_t(0), uint64_t(40)}) {
+                auto input = length_form(tag, width, length);
+                input.insert(input.end(), static_cast<size_t>(length), 'x');
+                scrctl::wifi::OpackValue value;
+                std::string error;
+                const bool ok = scrctl::wifi::opack_decode(input, value, error);
+                check(ok && error.empty() && (base == 0x60
+                          ? value.kind == scrctl::wifi::OpackValue::Kind::kString && value.str == std::string(length, 'x')
+                          : value.kind == scrctl::wifi::OpackValue::Kind::kBytes && value.bytes == Bytes(length, 'x')),
+                      "OPACK 正常长形态和零长度保持兼容");
+            }
+            const auto header = length_form(tag, width, 40);
+            // 枚举长度字段的每个截断位置，覆盖 read_u8/read_be 辅助读取边界。
+            for (size_t cut = 1; cut < header.size(); ++cut) {
+                reject_length(Bytes(header.begin(), header.begin() + static_cast<Bytes::difference_type>(cut)),
+                              "OPACK 截断长度字段返回明确错误");
+            }
+            auto short_payload = header;
+            short_payload.insert(short_payload.end(), 39, 'x');
+            reject_length(short_payload, "OPACK 已声明的载荷缺少一字节时明确失败");
+        }
+    }
+
 }
 
 /// ---- 2. TLV ----
