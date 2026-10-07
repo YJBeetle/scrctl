@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 05:31+0800\n"
+"POT-Creation-Date: 2026-10-08 06:05+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -157,9 +157,10 @@ msgid ""
 "device."
 msgstr ""
 
-#: src/app/Cli.cpp:23 tools/audio_pump_probe.cpp:85
-#: tools/screenshot_probe.cpp:52 tools/stall_probe.cpp:59
-#: tools/wifi_probe.cpp:642
+#: src/app/Cli.cpp:23 tools/applist_probe.cpp:34
+#: tools/audio_decode_probe.cpp:189 tools/audio_pump_probe.cpp:85
+#: tools/feature_probe.cpp:61 tools/screenshot_probe.cpp:52
+#: tools/stall_probe.cpp:59 tools/wifi_probe.cpp:642
 msgid "Show help"
 msgstr ""
 
@@ -1246,7 +1247,7 @@ msgstr ""
 msgid "Screenshot response missing image data"
 msgstr ""
 
-#: src/media/StreamSession.cpp:127 src/remote/App.cpp:226
+#: src/media/StreamSession.cpp:127 src/remote/App.cpp:218
 #: src/transport/TcpConnect.cpp:27
 msgid ": "
 msgstr ""
@@ -1476,40 +1477,40 @@ msgstr ""
 msgid "plist root must contain a single value"
 msgstr ""
 
-#: src/remote/App.cpp:105
+#: src/remote/App.cpp:100
 #, c-format
 msgid ""
 "Launching %s: previous process has not exited (attempt %d); retry in 500 ms\n"
 msgstr ""
 
-#: src/remote/App.cpp:133
+#: src/remote/App.cpp:127
 msgid ""
 "Device appservice does not advertise streamapplist; large listapps fallback "
 "is disabled"
 msgstr ""
 
-#: src/remote/App.cpp:192
+#: src/remote/App.cpp:186
 msgid "Device has no app with bundle ID "
 msgstr ""
 
-#: src/remote/App.cpp:205
+#: src/remote/App.cpp:198
 #, c-format
 msgid "stop_app(%s): app is not running\n"
 msgstr ""
 
-#: src/remote/App.cpp:226 src/remote/App.cpp:231
+#: src/remote/App.cpp:218 src/remote/App.cpp:223
 msgid " process "
 msgstr ""
 
-#: src/remote/App.cpp:226 src/remote/App.cpp:231
+#: src/remote/App.cpp:218 src/remote/App.cpp:223
 msgid "Failed to terminate "
 msgstr ""
 
-#: src/remote/App.cpp:232
+#: src/remote/App.cpp:224
 msgid "; no reply after three attempts: "
 msgstr ""
 
-#: src/remote/App.cpp:253
+#: src/remote/App.cpp:244
 #, c-format
 msgid ""
 "stop_app(%s): signal sent, but process is still listed (exit may be "
@@ -2975,6 +2976,219 @@ msgstr ""
 msgid ", received "
 msgstr ""
 
+#: tools/applist_probe.cpp:30
+msgid "Inspect device processes or installed apps"
+msgstr ""
+
+#: tools/applist_probe.cpp:32
+msgid ""
+"Shows up to three processes by default. --grep shows all matching processes; "
+"--list shows every installed app and ignores --grep. --help does not connect "
+"to a device."
+msgstr ""
+
+#: tools/applist_probe.cpp:35
+msgid "Print connection and request details"
+msgstr ""
+
+#: tools/applist_probe.cpp:36
+msgid "List installed apps instead of processes"
+msgstr ""
+
+#: tools/applist_probe.cpp:37
+msgid "Show processes containing TEXT; ignored with --list"
+msgstr ""
+
+#: tools/applist_probe.cpp:40 tools/audio_pump_probe.cpp:105
+#: tools/feature_probe.cpp:65
+msgid "Device identifier (optional; last value is used)"
+msgstr ""
+
+#: tools/applist_probe.cpp:52 tools/audio_decode_probe.cpp:206
+#: tools/audio_pump_probe.cpp:117 tools/feature_probe.cpp:77
+#: tools/rr_keepalive_probe.cpp:462 tools/screenshot_probe.cpp:69
+#: tools/stall_probe.cpp:88 tools/wifi_probe.cpp:742
+#, c-format
+msgid "Invalid arguments: %s\n"
+msgstr ""
+
+#: tools/applist_probe.cpp:62 tools/audio_pump_probe.cpp:125
+#: tools/feature_probe.cpp:100 tools/rr_keepalive_probe.cpp:554
+#: tools/screenshot_probe.cpp:77 tools/stall_probe.cpp:133
+#, c-format
+msgid "Failed to establish device session: %s\n"
+msgstr ""
+
+#: tools/applist_probe.cpp:65
+#, c-format
+msgid "Device session ready: %s / iOS %s\n"
+msgstr ""
+
+#: tools/applist_probe.cpp:74
+#, c-format
+msgid "Failed to list device processes: %s\n"
+msgstr ""
+
+#: tools/applist_probe.cpp:79
+#, c-format
+msgid "Reply: %s\n"
+msgstr ""
+
+#: tools/applist_probe.cpp:83
+#, c-format
+msgid "Process tokens: %zu\n"
+msgstr ""
+
+#: tools/applist_probe.cpp:100
+#, c-format
+msgid "Processes matching %s: %d\n"
+msgstr ""
+
+#: tools/applist_probe.cpp:107
+#, c-format
+msgid "Failed to list installed apps: %s\n"
+msgstr ""
+
+#: tools/applist_probe.cpp:110
+#, c-format
+msgid "Installed apps: %zu\n"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:28
+msgid "Cannot open input file: "
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:34
+msgid "Failed to close input file: "
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:41 tools/audio_decode_probe.cpp:56
+msgid "Cannot seek input file: "
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:49
+msgid "Cannot determine input file size: "
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:65
+msgid "Failed to read input file: "
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:70
+msgid "Input file ended before its measured size was read"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:132
+msgid "PCM data is too large for a RIFF/WAV file"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:151
+msgid "Cannot open output file: "
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:158
+msgid "Failed to write WAV header: "
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:163
+msgid "Failed to write PCM samples: "
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:169
+msgid "Failed to close output file: "
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:183
+msgid "Decode a recorded AAC-ELD audio dump to a WAV file"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:185
+msgid ""
+"Input records are a 16-bit big-endian length followed by a UDP datagram, as "
+"saved by rr_keepalive_probe --audio-out. Only RTP payload type 101 is "
+"decoded, using 480 samples per channel per frame. Output is interleaved 16-"
+"bit PCM. Numeric limits protect WAV fields; they do not guarantee codec "
+"support. --help does not read or write files."
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:190
+msgid "Recorded audio dump path"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:191
+msgid "Output WAV path"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:192
+msgid "Sample rate in Hz (positive integer; default: 48000)"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:195
+msgid "Channel count (1-32767; default: 2)"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:213
+msgid ""
+"Invalid arguments: sample rate and channel count exceed the WAV byte-rate "
+"limit"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:220
+msgid "Input dump contains no complete datagrams"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:221
+#, c-format
+msgid "Failed to load '%s': %s\n"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:224
+#, c-format
+msgid "Loaded %zu datagrams; target format: %d Hz, %d channels\n"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:229
+#, c-format
+msgid "Failed to create audio decoder: %s\n"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:232
+#, c-format
+msgid "Audio decoder: %s\n"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:255
+#, c-format
+msgid "  Decode failed after %llu output frames (%zu bytes): %s\n"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:286
+#, c-format
+msgid ""
+"Output frames: %llu; decode failures: %llu; empty payloads: %llu; other "
+"payload types: %llu\n"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:290
+#, c-format
+msgid "PCM samples: %zu (%.2f seconds); peak: %lld / 32767; quarter peaks:"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:298
+#, c-format
+msgid "Average samples per channel per frame: %.1f (expected: 480)\n"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:302
+#, c-format
+msgid "Failed to write WAV '%s': %s\n"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:305
+#, c-format
+msgid "Saved WAV: %s\n"
+msgstr ""
+
 #: tools/audio_pump_probe.cpp:44
 #, c-format
 msgid ""
@@ -3033,23 +3247,6 @@ msgstr ""
 msgid ""
 "Delay PCM consumption by N seconds in --realtime mode (nonnegative; default: "
 "0)"
-msgstr ""
-
-#: tools/audio_pump_probe.cpp:105
-msgid "Device identifier (optional; last value is used)"
-msgstr ""
-
-#: tools/audio_pump_probe.cpp:117 tools/rr_keepalive_probe.cpp:462
-#: tools/screenshot_probe.cpp:69 tools/stall_probe.cpp:88
-#: tools/wifi_probe.cpp:742
-#, c-format
-msgid "Invalid arguments: %s\n"
-msgstr ""
-
-#: tools/audio_pump_probe.cpp:125 tools/rr_keepalive_probe.cpp:554
-#: tools/screenshot_probe.cpp:77 tools/stall_probe.cpp:133
-#, c-format
-msgid "Failed to establish device session: %s\n"
 msgstr ""
 
 #: tools/audio_pump_probe.cpp:133
@@ -3140,10 +3337,109 @@ msgid ""
 "final_window_peak=%zu (16-bit PCM) restarts=%llu\n"
 msgstr ""
 
-#: tools/rr_keepalive_probe.cpp:121 tools/rr_keepalive_probe.cpp:122
-#: tools/rr_keepalive_probe.cpp:1004 tools/rr_keepalive_probe.cpp:1005
-#: tools/rr_keepalive_probe.cpp:1010
+#: tools/feature_probe.cpp:20
+#, c-format
+msgid "  %-46s not found in service directory\n"
+msgstr ""
+
+#: tools/feature_probe.cpp:24
+#, c-format
+msgid "  %-46s port=%u RemoteXPC=%s encrypted=%s\n"
+msgstr ""
+
+#: tools/feature_probe.cpp:26 tools/feature_probe.cpp:27
+#: tools/rr_keepalive_probe.cpp:249 tools/rr_keepalive_probe.cpp:307
+msgid "no"
+msgstr ""
+
+#: tools/feature_probe.cpp:26 tools/feature_probe.cpp:27
+#: tools/rr_keepalive_probe.cpp:249 tools/rr_keepalive_probe.cpp:307
+msgid "yes"
+msgstr ""
+
+#: tools/feature_probe.cpp:39
+#, c-format
+msgid ""
+"\n"
+"Querying %s\n"
+msgstr ""
+
+#: tools/feature_probe.cpp:41
+#, c-format
+msgid "  Query failed: %s\n"
+msgstr ""
+
+#: tools/feature_probe.cpp:45
+#, c-format
+msgid ""
+"  Query succeeded; formatted reply is %zu bytes:\n"
+"    %s\n"
+msgstr ""
+
+#: tools/feature_probe.cpp:57
+msgid "Inspect CoreDevice services and query media support"
+msgstr ""
+
+#: tools/feature_probe.cpp:59
+msgid ""
+"Lists connected devices and queries media support and stream status. --help "
+"does not connect to a device."
+msgstr ""
+
+#: tools/feature_probe.cpp:63
+msgid "Print connection details and the raw service entry"
+msgstr ""
+
+#: tools/feature_probe.cpp:64
+msgid "Also list every service name in the RSD directory"
+msgstr ""
+
+#: tools/feature_probe.cpp:87
+msgid "No connected devices"
+msgstr ""
+
+#: tools/feature_probe.cpp:89
+#, c-format
+msgid "Failed to list connected devices: %s\n"
+msgstr ""
+
+#: tools/feature_probe.cpp:94
+#, c-format
+msgid "Connected device: DeviceID=%u %s UDID=%s\n"
+msgstr ""
+
+#: tools/feature_probe.cpp:103
+#, c-format
+msgid ""
+"\n"
+"Device session ready: %s / %s / iOS %s (UDID %s)\n"
+msgstr ""
+
+#: tools/feature_probe.cpp:106
+#, c-format
+msgid "RSD directory: %zu services; showing relevant entries below:\n"
+msgstr ""
+
+#: tools/feature_probe.cpp:130
+#, c-format
+msgid ""
+"\n"
+"Raw service entry (displayservice):\n"
+"  %s\n"
+msgstr ""
+
+#: tools/feature_probe.cpp:132 tools/rr_keepalive_probe.cpp:121
+#: tools/rr_keepalive_probe.cpp:122 tools/rr_keepalive_probe.cpp:1004
+#: tools/rr_keepalive_probe.cpp:1005 tools/rr_keepalive_probe.cpp:1010
 msgid "(missing)"
+msgstr ""
+
+#: tools/feature_probe.cpp:145
+msgid "Both media queries succeeded"
+msgstr ""
+
+#: tools/feature_probe.cpp:146
+msgid "One or more media queries failed"
 msgstr ""
 
 #: tools/rr_keepalive_probe.cpp:188
@@ -3164,14 +3460,6 @@ msgstr ""
 msgid ""
 "  [%s] video received=%s IDRs=%llu last video +%llums last SR +%llums SRs "
 "during video quiet periods=%llu session at end=%s"
-msgstr ""
-
-#: tools/rr_keepalive_probe.cpp:249 tools/rr_keepalive_probe.cpp:307
-msgid "no"
-msgstr ""
-
-#: tools/rr_keepalive_probe.cpp:249 tools/rr_keepalive_probe.cpp:307
-msgid "yes"
 msgstr ""
 
 #: tools/rr_keepalive_probe.cpp:254

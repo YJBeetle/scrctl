@@ -1,38 +1,75 @@
-// 探针：把音频腿的 dump 解成 WAV，判"这条流到底解不解得开、解出来是不是 480 一帧"。
+// 离线读取 rr_keepalive_probe --audio-out 保存的音频数据报，提取 PT 101 的 RTP
+// 载荷并交给 AAC-ELD 后端，最后保存为交织、16 位整数 PCM 的 WAV。
 //
-// 为什么先做这一步再接产品：音频这条路上有三个可能各自错的环节——后端认不认这份
-// 参数、"一包一帧"这个假设、以及输出采样格式。三个串起来之后"没声"这件事完全没有
-// 信息量。所以先在离线把前两个判掉：输入是一份**录下来的** dump，输出是一个 WAV。
-//
-// 判据为什么是"数量"：ELD 一帧固定 480 采样/声道，所以 N 个包必然解出约 N*480*声道
-// 个采样。参数错一档（比如被当成 LC 的 1024）在数字上是两倍的差，不是"听起来有点不对"。
-//
-// 用法：audio_decode_probe IN.rtp OUT.wav [采样率] [声道]
+// 当前设备配置按每帧每声道 480 个采样解码。帧数、平均采样数和分段峰值用于核对
+// 这份录制的解码结果；它们不能单独证明其他设备或 ELD 配置也使用相同帧长。
+// 默认采样率为 48000 Hz、双声道；参数和离线 dump 格式见 --help。
+#include <CLI/CLI.hpp>
+#include <cerrno>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
+#include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
 #include "decode/AudioDecoder.h"
+#include "i18n/CliLanguage.h"
+#include "i18n/Translation.h"
 
 namespace {
 
-/// dump 的形状：`[u16 大端长度][整条 UDP 数据报原文]` 顺序排
-/// （rr_keepalive_probe 的 --audio-out 就是这么写的）。
+/// dump 依次保存 [u16 大端长度][完整 UDP 数据报]。
+/// 保留原有有效前缀的读取方式：遇到零长或不完整记录后停止，不解释剩余尾部。
 bool load(const char *path, std::vector<std::vector<uint8_t>> &out, std::string &err) {
+    err.clear();
     std::FILE *f = std::fopen(path, "rb");
     if (f == nullptr) {
-        err = std::string("打不开 ") + path;
+        err = std::string(SCRCTL_TR("Cannot open input file: ")) + std::strerror(errno);
         return false;
     }
-    std::fseek(f, 0, SEEK_END);
+    auto close_input = [&] {
+        errno = 0;
+        if (std::fclose(f) != 0 && err.empty()) {
+            err = std::string(SCRCTL_TR("Failed to close input file: ")) +
+                  std::strerror(errno == 0 ? EIO : errno);
+        }
+        return err.empty();
+    };
+    errno = 0;
+    if (std::fseek(f, 0, SEEK_END) != 0) {
+        err = std::string(SCRCTL_TR("Cannot seek input file: ")) +
+              std::strerror(errno == 0 ? EIO : errno);
+        close_input();
+        return false;
+    }
+    errno = 0;
     const long total = std::ftell(f);
-    std::fseek(f, 0, SEEK_SET);
-    std::vector<uint8_t> all(static_cast<std::size_t>(total < 0 ? 0 : total));
+    if (total < 0) {
+        err = std::string(SCRCTL_TR("Cannot determine input file size: ")) +
+              std::strerror(errno == 0 ? EIO : errno);
+        close_input();
+        return false;
+    }
+    errno = 0;
+    if (std::fseek(f, 0, SEEK_SET) != 0) {
+        err = std::string(SCRCTL_TR("Cannot seek input file: ")) +
+              std::strerror(errno == 0 ? EIO : errno);
+        close_input();
+        return false;
+    }
+    std::vector<uint8_t> all(static_cast<std::size_t>(total));
+    errno = 0;
     const std::size_t got = std::fread(all.data(), 1, all.size(), f);
-    std::fclose(f);
-    all.resize(got);
+    if (std::ferror(f) != 0) {
+        err = std::string(SCRCTL_TR("Failed to read input file: ")) +
+              std::strerror(errno == 0 ? EIO : errno);
+    } else if (got != all.size()) {
+        // 这与 dump 内部的不完整尾记录不同：文件在测量长度后出现短读，
+        // 当前读取不是完整快照，不能将它作为正常的有效前缀继续处理。
+        err = SCRCTL_TR("Input file ended before its measured size was read");
+    }
+    if (!close_input()) return false;
     std::size_t i = 0;
     while (i + 2 <= all.size()) {
         const std::size_t n = (static_cast<std::size_t>(all[i]) << 8) | all[i + 1];
@@ -47,9 +84,8 @@ bool load(const char *path, std::vector<std::vector<uint8_t>> &out, std::string 
     return !out.empty();
 }
 
-/// 剥 RTP 头。这条流的音频包实测没有扩展头也没有 CSRC（cc=0、X=0），但这里仍然按
-/// 头里的字段算，而不是直接跳 12 字节——写死的那一版一旦遇到带 CSRC 的流会把 CSRC
-/// 当载荷解，症状是"每帧都解不出"，很难往"跳多了 4 字节"上想。
+/// 按 RTP 的 CSRC 数量和扩展长度定位载荷，不能固定跳过 12 字节。
+/// 这里沿用工具原有的 RTPv2、CSRC 与扩展头处理，不增加新的解包规则。
 std::vector<uint8_t> payload_of(const std::vector<uint8_t> &dgram, uint8_t &payload_type) {
     payload_type = 0;
     if (dgram.size() < 12) {
@@ -87,7 +123,15 @@ void put_u16(std::vector<uint8_t> &out, uint16_t v) {
     out.push_back(static_cast<uint8_t>((v >> 8) & 0xFF));
 }
 
-void write_wav(const char *path, const std::vector<int16_t> &pcm, int rate, int channels) {
+bool write_wav(const char *path, const std::vector<int16_t> &pcm, int rate, int channels,
+               std::string &err) {
+    err.clear();
+    // RIFF 的 chunk size 为 32 位，固定头部占 36 字节；先检查再做乘法，
+    // 避免大样本数组被截断成较小长度，生成头部与内容不一致的文件。
+    if (pcm.size() > (std::numeric_limits<uint32_t>::max() - 36u) / sizeof(int16_t)) {
+        err = SCRCTL_TR("PCM data is too large for a RIFF/WAV file");
+        return false;
+    }
     const uint32_t data_bytes = static_cast<uint32_t>(pcm.size() * sizeof(int16_t));
     std::vector<uint8_t> h;
     h.insert(h.end(), {'R', 'I', 'F', 'F'});
@@ -97,46 +141,95 @@ void write_wav(const char *path, const std::vector<int16_t> &pcm, int rate, int 
     put_u16(h, 1);  // PCM
     put_u16(h, static_cast<uint16_t>(channels));
     put_u32(h, static_cast<uint32_t>(rate));
-    put_u32(h, static_cast<uint32_t>(rate * channels * 2));
+    put_u32(h, static_cast<uint32_t>(static_cast<uint64_t>(rate) * channels * 2));
     put_u16(h, static_cast<uint16_t>(channels * 2));
     put_u16(h, 16);
     h.insert(h.end(), {'d', 'a', 't', 'a'});
     put_u32(h, data_bytes);
     std::FILE *f = std::fopen(path, "wb");
     if (f == nullptr) {
-        std::fprintf(stderr, "写 %s 失败\n", path);
-        return;
+        err = std::string(SCRCTL_TR("Cannot open output file: ")) + std::strerror(errno);
+        return false;
     }
-    std::fwrite(h.data(), 1, h.size(), f);
-    std::fwrite(pcm.data(), sizeof(int16_t), pcm.size(), f);
-    std::fclose(f);
+    // fwrite 成功可能仅表示数据进入 stdio 缓冲，真正的写入错误也可能在 fclose
+    // 刷新时出现。失败时仍关闭文件，并保留最先发生的错误，不能继续报告保存成功。
+    errno = 0;
+    if (std::fwrite(h.data(), 1, h.size(), f) != h.size()) {
+        err = std::string(SCRCTL_TR("Failed to write WAV header: ")) +
+              std::strerror(errno == 0 ? EIO : errno);
+    } else {
+        errno = 0;
+        if (std::fwrite(pcm.data(), sizeof(int16_t), pcm.size(), f) != pcm.size()) {
+            err = std::string(SCRCTL_TR("Failed to write PCM samples: ")) +
+                  std::strerror(errno == 0 ? EIO : errno);
+        }
+    }
+    errno = 0;
+    if (std::fclose(f) != 0 && err.empty()) {
+        err = std::string(SCRCTL_TR("Failed to close output file: ")) +
+              std::strerror(errno == 0 ? EIO : errno);
+    }
+    return err.empty();
 }
 
 }  // namespace
 
 int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
-    if (argc < 3) {
-        std::fprintf(stderr, "用法: %s IN.rtp OUT.wav [采样率] [声道]\n", argv[0]);
+    std::string input_path;
+    std::string output_path;
+    int rate = 48000;
+    int channels = 2;
+    CLI::App app{SCRCTL_N_("Decode a recorded AAC-ELD audio dump to a WAV file")};
+    app.footer(SCRCTL_N_(
+        "Input records are a 16-bit big-endian length followed by a UDP datagram, as saved by "
+        "rr_keepalive_probe --audio-out. Only RTP payload type 101 is decoded, using 480 samples "
+        "per channel per frame. Output is interleaved 16-bit PCM. Numeric limits protect WAV "
+        "fields; they do not guarantee codec support. --help does not read or write files."));
+    app.set_help_flag("-h,--help", SCRCTL_N_("Show help"));
+    app.add_option("INPUT", input_path, SCRCTL_N_("Recorded audio dump path"))->required();
+    app.add_option("OUTPUT", output_path, SCRCTL_N_("Output WAV path"))->required();
+    app.add_option("RATE", rate, SCRCTL_N_("Sample rate in Hz (positive integer; default: 48000)"))
+        ->check(CLI::Range(1, std::numeric_limits<int>::max()));
+    app.add_option("CHANNELS", channels,
+        SCRCTL_N_("Channel count (1-32767; default: 2)"))->check(CLI::Range(1, 32767));
+    scrctl::i18n::CliLanguage language(app);
+    try {
+        app.parse(argc, argv);
+        if (!language.select()) return 2;
+    } catch (const CLI::CallForHelp &) {
+        if (!language.select()) return 2;
+        std::printf("%s", language.help().c_str());
+        return 0;
+    } catch (const CLI::ParseError &error) {
+        if (language.select())
+            std::fprintf(stderr, SCRCTL_TR("Invalid arguments: %s\n"), error.what());
         return 2;
     }
-    const int rate = argc > 3 ? std::atoi(argv[3]) : 48000;
-    const int channels = argc > 4 ? std::atoi(argv[4]) : 2;
+    // 16 位 PCM 的 blockAlign 已由声道上限保证；byteRate 的 32 位边界还需要
+    // 联合检查采样率和声道数。使用 64 位乘法，且在打开输入文件前拒绝越界参数。
+    if (static_cast<uint64_t>(rate) * channels * 2 > std::numeric_limits<uint32_t>::max()) {
+        std::fprintf(stderr, "%s\n", SCRCTL_TR(
+            "Invalid arguments: sample rate and channel count exceed the WAV byte-rate limit"));
+        return 2;
+    }
 
     std::vector<std::vector<uint8_t>> dgrams;
     std::string err;
-    if (!load(argv[1], dgrams, err)) {
-        std::fprintf(stderr, "%s\n", err.c_str());
+    if (!load(input_path.c_str(), dgrams, err)) {
+        if (err.empty()) err = SCRCTL_TR("Input dump contains no complete datagrams");
+        std::fprintf(stderr, SCRCTL_TR("Failed to load '%s': %s\n"), input_path.c_str(), err.c_str());
         return 1;
     }
-    std::printf("读入 %zu 条数据报，目标 %d Hz / %d 声道\n", dgrams.size(), rate, channels);
+    std::printf(SCRCTL_TR("Loaded %zu datagrams; target format: %d Hz, %d channels\n"),
+                dgrams.size(), rate, channels);
 
     auto dec = scrctl::create_audio_decoder(rate, channels, 480, err);
     if (dec == nullptr) {
-        std::fprintf(stderr, "建音频解码器失败: %s\n", err.c_str());
+        std::fprintf(stderr, SCRCTL_TR("Failed to create audio decoder: %s\n"), err.c_str());
         return 1;
     }
-    std::printf("音频后端: %s\n", dec->backend_name());
+    std::printf(SCRCTL_TR("Audio decoder: %s\n"), dec->backend_name());
 
     std::vector<int16_t> pcm;
     uint64_t frames = 0;
@@ -152,14 +245,14 @@ int main(int argc, char **argv) {
             continue;
         }
         if (pt != 101) {
-            ++other_pt;  // 同端口上混来的 RTCP
+            ++other_pt;  // 跳过该端口上 PT 不是 101 的包，包括 RTCP。
             continue;
         }
         const std::size_t before = pcm.size();
         std::string derr;
         if (!dec->decode(payload, pcm, derr)) {
             if (failed < 5) {
-                std::fprintf(stderr, "  第 %llu 帧解不出（%zu 字节）: %s\n",
+                std::fprintf(stderr, SCRCTL_TR("  Decode failed after %llu output frames (%zu bytes): %s\n"),
                              static_cast<unsigned long long>(frames), payload.size(),
                              derr.c_str());
             }
@@ -177,8 +270,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    // 每段的峰值分开打：整段一个峰值说明不了什么，而"前 1/4 有声、后面全零"这种
-    // 形状才是"解码器只认了开头那几帧然后就哑了"的证据。
+    // 将输出样本平均分成四段统计峰值，可观察后半段是否持续产生非零 PCM。
+    // 峰值为零也可能来自静音录制，不能单独据此认定后端解码失败。
     const std::size_t n = pcm.size();
     auto band_peak = [&](std::size_t from, std::size_t to) {
         int64_t p = 0;
@@ -190,22 +283,25 @@ int main(int argc, char **argv) {
         }
         return p;
     };
-    std::printf("解出 %llu 帧 / 失败 %llu / 空载荷 %llu / 非 101 PT %llu\n",
+    std::printf(SCRCTL_TR("Output frames: %llu; decode failures: %llu; empty payloads: %llu; other payload types: %llu\n"),
                 static_cast<unsigned long long>(frames), static_cast<unsigned long long>(failed),
                 static_cast<unsigned long long>(empty),
                 static_cast<unsigned long long>(other_pt));
-    std::printf("采样 %zu 个 = %.2f 秒；峰值 %lld / 32767；四段峰值", n,
-                channels ? static_cast<double>(n) / (rate * channels) : 0.0,
+    std::printf(SCRCTL_TR("PCM samples: %zu (%.2f seconds); peak: %lld / 32767; quarter peaks:"), n,
+                static_cast<double>(n) / (static_cast<double>(rate) * channels),
                 static_cast<long long>(peak));
     for (int q = 0; q < 4; ++q) {
         std::printf(" %lld", static_cast<long long>(band_peak(n * q / 4, n * (q + 1) / 4)));
     }
     std::printf("\n");
     if (frames > 0) {
-        std::printf("每帧平均 %.1f 个采样/声道（期望 480）\n",
+        std::printf(SCRCTL_TR("Average samples per channel per frame: %.1f (expected: 480)\n"),
                     static_cast<double>(n) / static_cast<double>(frames) / channels);
     }
-    write_wav(argv[2], pcm, rate, channels);
-    std::printf("已写 %s\n", argv[2]);
+    if (!write_wav(output_path.c_str(), pcm, rate, channels, err)) {
+        std::fprintf(stderr, SCRCTL_TR("Failed to write WAV '%s': %s\n"), output_path.c_str(), err.c_str());
+        return 1;
+    }
+    std::printf(SCRCTL_TR("Saved WAV: %s\n"), output_path.c_str());
     return failed == 0 && frames > 0 && peak > 100 ? 0 : 1;
 }

@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 05:31+0800\n"
+"POT-Creation-Date: 2026-10-08 06:05+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -158,9 +158,10 @@ msgstr ""
 "鼠标左键映射为触摸；方向不支持 flip，录制保留原始码流。\n"
 "无线需要先配对；--help / --version 不连接设备。"
 
-#: src/app/Cli.cpp:23 tools/audio_pump_probe.cpp:85
-#: tools/screenshot_probe.cpp:52 tools/stall_probe.cpp:59
-#: tools/wifi_probe.cpp:642
+#: src/app/Cli.cpp:23 tools/applist_probe.cpp:34
+#: tools/audio_decode_probe.cpp:189 tools/audio_pump_probe.cpp:85
+#: tools/feature_probe.cpp:61 tools/screenshot_probe.cpp:52
+#: tools/stall_probe.cpp:59 tools/wifi_probe.cpp:642
 msgid "Show help"
 msgstr "显示帮助"
 
@@ -1279,7 +1280,7 @@ msgstr "设备目录缺少服务："
 msgid "Screenshot response missing image data"
 msgstr "截图响应缺少 image 数据"
 
-#: src/media/StreamSession.cpp:127 src/remote/App.cpp:226
+#: src/media/StreamSession.cpp:127 src/remote/App.cpp:218
 #: src/transport/TcpConnect.cpp:27
 msgid ": "
 msgstr " 失败: "
@@ -1509,40 +1510,40 @@ msgstr "根元素必须是单个 <plist>"
 msgid "plist root must contain a single value"
 msgstr "plist 根必须包含单个值"
 
-#: src/remote/App.cpp:105
+#: src/remote/App.cpp:100
 #, c-format
 msgid ""
 "Launching %s: previous process has not exited (attempt %d); retry in 500 ms\n"
 msgstr "启动 %s 时原进程尚未退出（第 %d 次尝试），500 ms 后重试\n"
 
-#: src/remote/App.cpp:133
+#: src/remote/App.cpp:127
 msgid ""
 "Device appservice does not advertise streamapplist; large listapps fallback "
 "is disabled"
 msgstr "设备 appservice 未声明 streamapplist，未启用大回复 listapps 的回退"
 
-#: src/remote/App.cpp:192
+#: src/remote/App.cpp:186
 msgid "Device has no app with bundle ID "
 msgstr "设备上找不到 bundle id "
 
-#: src/remote/App.cpp:205
+#: src/remote/App.cpp:198
 #, c-format
 msgid "stop_app(%s): app is not running\n"
 msgstr "stop_app(%s)：应用未运行\n"
 
-#: src/remote/App.cpp:226 src/remote/App.cpp:231
+#: src/remote/App.cpp:218 src/remote/App.cpp:223
 msgid " process "
 msgstr " 的进程 "
 
-#: src/remote/App.cpp:226 src/remote/App.cpp:231
+#: src/remote/App.cpp:218 src/remote/App.cpp:223
 msgid "Failed to terminate "
 msgstr "无法终止 "
 
-#: src/remote/App.cpp:232
+#: src/remote/App.cpp:224
 msgid "; no reply after three attempts: "
 msgstr "；三次尝试均未收到响应："
 
-#: src/remote/App.cpp:253
+#: src/remote/App.cpp:244
 #, c-format
 msgid ""
 "stop_app(%s): signal sent, but process is still listed (exit may be "
@@ -3021,6 +3022,225 @@ msgstr "载荷解码失败"
 msgid ", received "
 msgstr "，已收到"
 
+#: tools/applist_probe.cpp:30
+msgid "Inspect device processes or installed apps"
+msgstr "查看设备进程或已安装应用"
+
+#: tools/applist_probe.cpp:32
+msgid ""
+"Shows up to three processes by default. --grep shows all matching processes; "
+"--list shows every installed app and ignores --grep. --help does not connect "
+"to a device."
+msgstr ""
+"默认最多显示前三个进程。--grep 显示全部匹配进程；--list 显示全部已安装应用，"
+"并忽略 --grep。--help 不连接设备。"
+
+#: tools/applist_probe.cpp:35
+msgid "Print connection and request details"
+msgstr "显示连接和请求详情"
+
+#: tools/applist_probe.cpp:36
+msgid "List installed apps instead of processes"
+msgstr "显示已安装应用列表"
+
+#: tools/applist_probe.cpp:37
+msgid "Show processes containing TEXT; ignored with --list"
+msgstr "显示包含 TEXT 的进程；使用 --list 时忽略此选项"
+
+#: tools/applist_probe.cpp:40 tools/audio_pump_probe.cpp:105
+#: tools/feature_probe.cpp:65
+msgid "Device identifier (optional; last value is used)"
+msgstr "设备标识（可选，多次提供时使用最后一个）"
+
+#: tools/applist_probe.cpp:52 tools/audio_decode_probe.cpp:206
+#: tools/audio_pump_probe.cpp:117 tools/feature_probe.cpp:77
+#: tools/rr_keepalive_probe.cpp:462 tools/screenshot_probe.cpp:69
+#: tools/stall_probe.cpp:88 tools/wifi_probe.cpp:742
+#, c-format
+msgid "Invalid arguments: %s\n"
+msgstr "参数无效：%s\n"
+
+#: tools/applist_probe.cpp:62 tools/audio_pump_probe.cpp:125
+#: tools/feature_probe.cpp:100 tools/rr_keepalive_probe.cpp:554
+#: tools/screenshot_probe.cpp:77 tools/stall_probe.cpp:133
+#, c-format
+msgid "Failed to establish device session: %s\n"
+msgstr "建立设备会话失败：%s\n"
+
+#: tools/applist_probe.cpp:65
+#, c-format
+msgid "Device session ready: %s / iOS %s\n"
+msgstr "设备会话已就绪：%s / iOS %s\n"
+
+#: tools/applist_probe.cpp:74
+#, c-format
+msgid "Failed to list device processes: %s\n"
+msgstr "查询设备进程失败：%s\n"
+
+#: tools/applist_probe.cpp:79
+#, c-format
+msgid "Reply: %s\n"
+msgstr "回复：%s\n"
+
+#: tools/applist_probe.cpp:83
+#, c-format
+msgid "Process tokens: %zu\n"
+msgstr "进程标识数量：%zu\n"
+
+#: tools/applist_probe.cpp:100
+#, c-format
+msgid "Processes matching %s: %d\n"
+msgstr "匹配 %s 的进程：%d 个\n"
+
+#: tools/applist_probe.cpp:107
+#, c-format
+msgid "Failed to list installed apps: %s\n"
+msgstr "查询已安装应用失败：%s\n"
+
+#: tools/applist_probe.cpp:110
+#, c-format
+msgid "Installed apps: %zu\n"
+msgstr "已安装应用数量：%zu\n"
+
+#: tools/audio_decode_probe.cpp:28
+msgid "Cannot open input file: "
+msgstr "无法打开输入文件："
+
+#: tools/audio_decode_probe.cpp:34
+msgid "Failed to close input file: "
+msgstr "关闭输入文件失败："
+
+#: tools/audio_decode_probe.cpp:41 tools/audio_decode_probe.cpp:56
+msgid "Cannot seek input file: "
+msgstr "无法在输入文件中定位："
+
+#: tools/audio_decode_probe.cpp:49
+msgid "Cannot determine input file size: "
+msgstr "无法获取输入文件大小："
+
+#: tools/audio_decode_probe.cpp:65
+msgid "Failed to read input file: "
+msgstr "读取输入文件失败："
+
+#: tools/audio_decode_probe.cpp:70
+msgid "Input file ended before its measured size was read"
+msgstr "输入文件提前结束，未读到测量出的完整长度"
+
+#: tools/audio_decode_probe.cpp:132
+msgid "PCM data is too large for a RIFF/WAV file"
+msgstr "PCM 数据过大，无法用 RIFF/WAV 格式保存"
+
+#: tools/audio_decode_probe.cpp:151
+msgid "Cannot open output file: "
+msgstr "无法打开输出文件："
+
+#: tools/audio_decode_probe.cpp:158
+msgid "Failed to write WAV header: "
+msgstr "写入 WAV 头部失败："
+
+#: tools/audio_decode_probe.cpp:163
+msgid "Failed to write PCM samples: "
+msgstr "写入 PCM 采样失败："
+
+#: tools/audio_decode_probe.cpp:169
+msgid "Failed to close output file: "
+msgstr "关闭输出文件失败："
+
+#: tools/audio_decode_probe.cpp:183
+msgid "Decode a recorded AAC-ELD audio dump to a WAV file"
+msgstr "将录制的 AAC-ELD 音频数据报解码为 WAV"
+
+#: tools/audio_decode_probe.cpp:185
+msgid ""
+"Input records are a 16-bit big-endian length followed by a UDP datagram, as "
+"saved by rr_keepalive_probe --audio-out. Only RTP payload type 101 is "
+"decoded, using 480 samples per channel per frame. Output is interleaved 16-"
+"bit PCM. Numeric limits protect WAV fields; they do not guarantee codec "
+"support. --help does not read or write files."
+msgstr ""
+"输入格式与 rr_keepalive_probe --audio-out 保存的文件一致：每条记录先写入 16 "
+"位大端长度，再写入 UDP 数据报。工具只解码 RTP 载荷类型 101，每帧每声道按 480 "
+"个采样处理，输出为交织的 16 位 PCM。参数上限用于防止 WAV 字段溢出，不代表后端"
+"支持所有这些配置。--help 不读取或写入文件。"
+
+#: tools/audio_decode_probe.cpp:190
+msgid "Recorded audio dump path"
+msgstr "录制的音频数据报文件路径"
+
+#: tools/audio_decode_probe.cpp:191
+msgid "Output WAV path"
+msgstr "输出 WAV 文件路径"
+
+#: tools/audio_decode_probe.cpp:192
+msgid "Sample rate in Hz (positive integer; default: 48000)"
+msgstr "采样率，单位 Hz（正整数；默认：48000）"
+
+#: tools/audio_decode_probe.cpp:195
+msgid "Channel count (1-32767; default: 2)"
+msgstr "声道数（1–32767；默认：2）"
+
+#: tools/audio_decode_probe.cpp:213
+msgid ""
+"Invalid arguments: sample rate and channel count exceed the WAV byte-rate "
+"limit"
+msgstr "参数无效：采样率与声道数的组合超出 WAV 字节率字段的范围"
+
+#: tools/audio_decode_probe.cpp:220
+msgid "Input dump contains no complete datagrams"
+msgstr "输入文件中没有完整的数据报"
+
+#: tools/audio_decode_probe.cpp:221
+#, c-format
+msgid "Failed to load '%s': %s\n"
+msgstr "读取“%s”失败：%s\n"
+
+#: tools/audio_decode_probe.cpp:224
+#, c-format
+msgid "Loaded %zu datagrams; target format: %d Hz, %d channels\n"
+msgstr "已读入 %zu 条数据报；目标格式：%d Hz，%d 声道\n"
+
+#: tools/audio_decode_probe.cpp:229
+#, c-format
+msgid "Failed to create audio decoder: %s\n"
+msgstr "创建音频解码器失败：%s\n"
+
+#: tools/audio_decode_probe.cpp:232
+#, c-format
+msgid "Audio decoder: %s\n"
+msgstr "音频解码器：%s\n"
+
+#: tools/audio_decode_probe.cpp:255
+#, c-format
+msgid "  Decode failed after %llu output frames (%zu bytes): %s\n"
+msgstr "  已输出 %llu 帧后遇到解码失败（载荷 %zu 字节）：%s\n"
+
+#: tools/audio_decode_probe.cpp:286
+#, c-format
+msgid ""
+"Output frames: %llu; decode failures: %llu; empty payloads: %llu; other "
+"payload types: %llu\n"
+msgstr "输出帧数：%llu；解码失败：%llu；空载荷：%llu；其他载荷类型：%llu\n"
+
+#: tools/audio_decode_probe.cpp:290
+#, c-format
+msgid "PCM samples: %zu (%.2f seconds); peak: %lld / 32767; quarter peaks:"
+msgstr "PCM 采样数：%zu（%.2f 秒）；峰值：%lld / 32767；四段峰值："
+
+#: tools/audio_decode_probe.cpp:298
+#, c-format
+msgid "Average samples per channel per frame: %.1f (expected: 480)\n"
+msgstr "每帧每声道平均采样数：%.1f（期望：480）\n"
+
+#: tools/audio_decode_probe.cpp:302
+#, c-format
+msgid "Failed to write WAV '%s': %s\n"
+msgstr "写入 WAV 文件“%s”失败：%s\n"
+
+#: tools/audio_decode_probe.cpp:305
+#, c-format
+msgid "Saved WAV: %s\n"
+msgstr "已保存 WAV：%s\n"
+
 #: tools/audio_pump_probe.cpp:44
 #, c-format
 msgid ""
@@ -3086,23 +3306,6 @@ msgid ""
 "Delay PCM consumption by N seconds in --realtime mode (nonnegative; default: "
 "0)"
 msgstr "在 --realtime 模式下延迟 N 秒开始消费 PCM（非负整数，默认：0）"
-
-#: tools/audio_pump_probe.cpp:105
-msgid "Device identifier (optional; last value is used)"
-msgstr "设备标识（可选，多次提供时使用最后一个）"
-
-#: tools/audio_pump_probe.cpp:117 tools/rr_keepalive_probe.cpp:462
-#: tools/screenshot_probe.cpp:69 tools/stall_probe.cpp:88
-#: tools/wifi_probe.cpp:742
-#, c-format
-msgid "Invalid arguments: %s\n"
-msgstr "参数无效：%s\n"
-
-#: tools/audio_pump_probe.cpp:125 tools/rr_keepalive_probe.cpp:554
-#: tools/screenshot_probe.cpp:77 tools/stall_probe.cpp:133
-#, c-format
-msgid "Failed to establish device session: %s\n"
-msgstr "建立设备会话失败：%s\n"
 
 #: tools/audio_pump_probe.cpp:133
 #, c-format
@@ -3195,11 +3398,119 @@ msgstr ""
 "合计：包=%llu 解码成功=%llu 解码失败=%llu 峰值=%zu 末段峰值=%zu（16 位 PCM）"
 "重起=%llu\n"
 
-#: tools/rr_keepalive_probe.cpp:121 tools/rr_keepalive_probe.cpp:122
-#: tools/rr_keepalive_probe.cpp:1004 tools/rr_keepalive_probe.cpp:1005
-#: tools/rr_keepalive_probe.cpp:1010
+#: tools/feature_probe.cpp:20
+#, c-format
+msgid "  %-46s not found in service directory\n"
+msgstr "  %-46s 服务目录中未找到\n"
+
+#: tools/feature_probe.cpp:24
+#, c-format
+msgid "  %-46s port=%u RemoteXPC=%s encrypted=%s\n"
+msgstr "  %-46s 端口=%u RemoteXPC=%s 加密=%s\n"
+
+#: tools/feature_probe.cpp:26 tools/feature_probe.cpp:27
+#: tools/rr_keepalive_probe.cpp:249 tools/rr_keepalive_probe.cpp:307
+msgid "no"
+msgstr "无"
+
+#: tools/feature_probe.cpp:26 tools/feature_probe.cpp:27
+#: tools/rr_keepalive_probe.cpp:249 tools/rr_keepalive_probe.cpp:307
+msgid "yes"
+msgstr "有"
+
+#: tools/feature_probe.cpp:39
+#, c-format
+msgid ""
+"\n"
+"Querying %s\n"
+msgstr ""
+"\n"
+"正在查询 %s\n"
+
+#: tools/feature_probe.cpp:41
+#, c-format
+msgid "  Query failed: %s\n"
+msgstr "  查询失败：%s\n"
+
+#: tools/feature_probe.cpp:45
+#, c-format
+msgid ""
+"  Query succeeded; formatted reply is %zu bytes:\n"
+"    %s\n"
+msgstr ""
+"  查询成功，格式化后的回复为 %zu 字节：\n"
+"    %s\n"
+
+#: tools/feature_probe.cpp:57
+msgid "Inspect CoreDevice services and query media support"
+msgstr "查看 CoreDevice 服务并查询媒体支持"
+
+#: tools/feature_probe.cpp:59
+msgid ""
+"Lists connected devices and queries media support and stream status. --help "
+"does not connect to a device."
+msgstr "列出已连接设备，并查询媒体支持及流服务状态。--help 不连接设备。"
+
+#: tools/feature_probe.cpp:63
+msgid "Print connection details and the raw service entry"
+msgstr "显示连接详情和原始服务目录条目"
+
+#: tools/feature_probe.cpp:64
+msgid "Also list every service name in the RSD directory"
+msgstr "同时列出 RSD 目录中的全部服务名"
+
+#: tools/feature_probe.cpp:87
+msgid "No connected devices"
+msgstr "没有已连接的设备"
+
+#: tools/feature_probe.cpp:89
+#, c-format
+msgid "Failed to list connected devices: %s\n"
+msgstr "列举已连接设备失败：%s\n"
+
+#: tools/feature_probe.cpp:94
+#, c-format
+msgid "Connected device: DeviceID=%u %s UDID=%s\n"
+msgstr "已连接设备：DeviceID=%u %s UDID=%s\n"
+
+#: tools/feature_probe.cpp:103
+#, c-format
+msgid ""
+"\n"
+"Device session ready: %s / %s / iOS %s (UDID %s)\n"
+msgstr ""
+"\n"
+"设备会话已就绪：%s / %s / iOS %s（UDID %s）\n"
+
+#: tools/feature_probe.cpp:106
+#, c-format
+msgid "RSD directory: %zu services; showing relevant entries below:\n"
+msgstr "RSD 目录共有 %zu 个服务，相关条目如下：\n"
+
+#: tools/feature_probe.cpp:130
+#, c-format
+msgid ""
+"\n"
+"Raw service entry (displayservice):\n"
+"  %s\n"
+msgstr ""
+"\n"
+"原始服务目录条目（displayservice）：\n"
+"  %s\n"
+
+#: tools/feature_probe.cpp:132 tools/rr_keepalive_probe.cpp:121
+#: tools/rr_keepalive_probe.cpp:122 tools/rr_keepalive_probe.cpp:1004
+#: tools/rr_keepalive_probe.cpp:1005 tools/rr_keepalive_probe.cpp:1010
 msgid "(missing)"
 msgstr "(缺失)"
+
+#: tools/feature_probe.cpp:145
+msgid "Both media queries succeeded"
+msgstr "两项媒体查询均成功"
+
+#: tools/feature_probe.cpp:146
+msgid "One or more media queries failed"
+msgstr "有媒体查询失败"
 
 #: tools/rr_keepalive_probe.cpp:188
 msgid "false"
@@ -3222,14 +3533,6 @@ msgid ""
 msgstr ""
 "  [%s] 收到过视频包=%s IDR=%llu 最后视频包 +%llums 最后 SR +%llums 视频静默期"
 "间 SR=%llu 结束时会话=%s"
-
-#: tools/rr_keepalive_probe.cpp:249 tools/rr_keepalive_probe.cpp:307
-msgid "no"
-msgstr "无"
-
-#: tools/rr_keepalive_probe.cpp:249 tools/rr_keepalive_probe.cpp:307
-msgid "yes"
-msgstr "有"
 
 #: tools/rr_keepalive_probe.cpp:254
 msgid "absent"

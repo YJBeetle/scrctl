@@ -220,7 +220,7 @@ add_executable(lockdown_probe tools/lockdown_probe.cpp)
 target_link_libraries(lockdown_probe PRIVATE scrctl_core)
 
 add_executable(feature_probe tools/feature_probe.cpp)
-target_link_libraries(feature_probe PRIVATE scrctl_core)
+target_link_libraries(feature_probe PRIVATE scrctl_core CLI11::CLI11)
 
 add_executable(screenshot_probe tools/screenshot_probe.cpp)
 target_link_libraries(screenshot_probe PRIVATE scrctl_core CLI11::CLI11)
@@ -238,7 +238,7 @@ add_executable(stream_probe tools/stream_probe.cpp)
 target_link_libraries(stream_probe PRIVATE scrctl_core)
 
 add_executable(applist_probe tools/applist_probe.cpp)
-target_link_libraries(applist_probe PRIVATE scrctl_core)
+target_link_libraries(applist_probe PRIVATE scrctl_core CLI11::CLI11)
 
 add_executable(app_launch_probe tools/app_launch_probe.cpp)
 target_link_libraries(app_launch_probe PRIVATE scrctl_core)
@@ -313,6 +313,15 @@ if(SCRCTL_BUILD_TESTS)
     add_test(NAME audio_pump_probe_cli COMMAND "${Python3_EXECUTABLE}"
         "${PROJECT_SOURCE_DIR}/tests/audio_pump_probe_cli_test.py" "$<TARGET_FILE:audio_pump_probe>")
     set_tests_properties(audio_pump_probe_cli PROPERTIES TIMEOUT 30)
+    add_test(NAME audio_decode_probe_cli COMMAND "${Python3_EXECUTABLE}"
+        "${PROJECT_SOURCE_DIR}/tests/audio_decode_probe_cli_test.py" "$<TARGET_FILE:audio_decode_probe>")
+    set_tests_properties(audio_decode_probe_cli PROPERTIES TIMEOUT 30)
+    add_test(NAME feature_probe_cli COMMAND "${Python3_EXECUTABLE}"
+        "${PROJECT_SOURCE_DIR}/tests/feature_probe_cli_test.py" "$<TARGET_FILE:feature_probe>")
+    set_tests_properties(feature_probe_cli PROPERTIES TIMEOUT 30)
+    add_test(NAME applist_probe_cli COMMAND "${Python3_EXECUTABLE}"
+        "${PROJECT_SOURCE_DIR}/tests/applist_probe_cli_test.py" "$<TARGET_FILE:applist_probe>")
+    set_tests_properties(applist_probe_cli PROPERTIES TIMEOUT 30)
     add_test(NAME i18n COMMAND "${Python3_EXECUTABLE}"
         "${PROJECT_SOURCE_DIR}/tests/i18n_test.py" "$<TARGET_FILE:scrctl>")
     set_tests_properties(i18n PROPERTIES TIMEOUT 30)
@@ -470,23 +479,21 @@ target_link_libraries(frame_probe PRIVATE scrctl_core)
 add_executable(pasteboard_probe tools/pasteboard_probe.cpp)
 target_link_libraries(pasteboard_probe PRIVATE scrctl_core)
 
-# 只显示几何订阅，不起媒体会话（理由见文件头）。
+# 观察显示几何订阅；不启动媒体会话，具体行为见文件头。
 add_executable(display_info_probe tools/display_info_probe.cpp)
 target_link_libraries(display_info_probe PRIVATE scrctl_core)
 
-# 音频解码的离线判据：吃 rr_keepalive_probe --audio-out 那份 dump，吐 WAV。
+# 离线解码 rr_keepalive_probe --audio-out 的录制数据，保存为 WAV。
 add_executable(audio_decode_probe tools/audio_decode_probe.cpp)
-target_link_libraries(audio_decode_probe PRIVATE scrctl_core)
+target_link_libraries(audio_decode_probe PRIVATE scrctl_core CLI11::CLI11)
 
-# 音频腿的真机四问（独立会话号 / 静默时发不发包 / RR 能不能续命 / 与视频腿共存）。
-# 不进 ctest：要真机。
-# PLI 后备重起到不到点（见文件头：三个"专门制造不一致"的档位）
+# 在真机流上注入故障，检查 PLI、重建和截图降级；模式说明见文件头。
 add_executable(stall_probe tools/stall_probe.cpp)
 target_link_libraries(stall_probe PRIVATE scrctl_app CLI11::CLI11)
 
 add_executable(audio_pump_probe tools/audio_pump_probe.cpp)
 target_link_libraries(audio_pump_probe PRIVATE scrctl_core CLI11::CLI11)
 
-# M5：对我们自己的 RemotePairing 实现做真机握手（要设备在同一网络上）。
+# RemotePairing 的 USB 配对及 Wi-Fi 握手、隧道和 RSD 验证。
 add_executable(wifi_probe tools/wifi_probe.cpp)
 target_link_libraries(wifi_probe PRIVATE scrctl_core CLI11::CLI11)
