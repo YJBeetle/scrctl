@@ -74,6 +74,7 @@ jobs:
           msystem: CLANGARM64
           update: true
           install: >-
+            git
             mingw-w64-clang-aarch64-clang
             mingw-w64-clang-aarch64-cmake
             mingw-w64-clang-aarch64-ninja
