@@ -948,7 +948,7 @@ msgstr "RSD 目录里没有 "
 
 #: src/hid/Hid.cpp:119
 msgid "connectedServices response missing connectedServices: "
-msgstr "connectedServices 的回信里没有 connectedServices: "
+msgstr "connectedServices 回复缺少 connectedServices 字段："
 
 #: src/hid/Hid.cpp:177
 msgid "Stroke requires at least one point"
@@ -1633,7 +1633,7 @@ msgstr "连接隧道内 RSD 并读取目录"
 
 #: src/remote/Device.cpp:179
 msgid "Tunnel returned an invalid IPv6 address"
-msgstr "隧道给的地址不是合法 IPv6"
+msgstr "隧道返回了无效的 IPv6 地址"
 
 #: src/remote/Device.cpp:190
 msgid "Ready"
@@ -1645,7 +1645,7 @@ msgstr "局域网配对验证"
 
 #: src/remote/Device.cpp:205
 msgid "Cannot connect to device RemotePairing port "
-msgstr "连不上设备的 RemotePairing 端口 "
+msgstr "无法连接设备的 RemotePairing 端口 "
 
 #: src/remote/Device.cpp:206
 msgid ""
@@ -1654,11 +1654,11 @@ msgstr "（请检查设备在当前网络是否可达，以及是否已配对）
 
 #: src/remote/Device.cpp:215
 msgid "Device rejected pairing record: "
-msgstr "设备不认这条配对记录："
+msgstr "设备拒绝此配对记录："
 
 #: src/remote/Device.cpp:216
 msgid " is not paired with this device, or its pairing was removed"
-msgstr " 在这台设备上没配过，或者已经在设备上被删掉了"
+msgstr " 尚未与此设备配对，或配对已被移除"
 
 #: src/remote/Device.cpp:218
 msgid "pair-verify failed: "
@@ -1674,17 +1674,17 @@ msgstr "TLS-PSK + CDTunnel 握手"
 
 #: src/remote/Device.cpp:234
 msgid "Cannot connect to tunnel port "
-msgstr "连不上隧道端口 "
+msgstr "无法连接隧道端口 "
 
 #: src/remote/Device.cpp:248
 msgid ""
 "Pairing host identifier is not a valid UUID; cannot construct a stable peer "
 "identity"
-msgstr "配对记录 host identifier 不是有效 UUID，无法构造稳定的 peer 身份"
+msgstr "配对记录的主机标识不是有效 UUID，无法构造稳定的对端身份"
 
 #: src/remote/Device.cpp:268
 msgid "Session not established"
-msgstr "会话没有建立"
+msgstr "会话尚未建立"
 
 #: src/remote/Device.cpp:280
 msgid " does not advertise feature "
@@ -1692,7 +1692,7 @@ msgstr " 没有声明 feature "
 
 #: src/remote/DisplayInfo.cpp:103
 msgid "Update missing displays array: "
-msgstr "推送里没有 displays 数组："
+msgstr "显示更新缺少 displays 数组："
 
 #: src/remote/DisplayInfo.cpp:139
 msgid "No recognized display entries"
@@ -1708,7 +1708,7 @@ msgstr "JSON 整数超出 XPC int64 范围"
 
 #: src/remote/PairingChannel.cpp:75
 msgid " must contain base64 binary data; decode failed: "
-msgstr " 该是二进制的 base64，解不出来: "
+msgstr " 必须包含 base64 编码的二进制数据，解码失败："
 
 #: src/remote/PairingChannel.cpp:75
 msgid "Field "
@@ -1720,7 +1720,7 @@ msgstr "未知的 JSON 值类型"
 
 #: src/remote/PairingChannel.cpp:151
 msgid "UUID field must contain 16 bytes"
-msgstr "UUID 字段不是 16 字节"
+msgstr "UUID 字段必须包含 16 字节"
 
 #: src/remote/PairingChannel.cpp:177
 msgid "File transfer placeholder is not supported on the pairing channel"
@@ -1736,11 +1736,11 @@ msgstr " ms 内未收到设备数据）"
 
 #: src/remote/PairingChannel.cpp:219
 msgid "Pairing reply timed out ("
-msgstr "等配对回信超时（"
+msgstr "等待配对回复超时（"
 
 #: src/remote/PairingChannel.cpp:224 src/remote/PairingChannel.cpp:228
 msgid "Pairing control channel disconnected"
-msgstr "配对控制通道断了"
+msgstr "配对控制通道已断开"
 
 #: src/remote/PairingChannel.cpp:242
 msgid "Channel received unexpected type; expected "
@@ -1756,7 +1756,7 @@ msgstr "SET 失败: "
 
 #: src/remote/Pasteboard.cpp:95
 msgid "SET response is not SET_REPLY: "
-msgstr "SET 的回信不是 SET_REPLY: "
+msgstr "SET 回复类型不是 SET_REPLY："
 
 #: src/remote/Pasteboard.cpp:108
 msgid "PULL failed: "
@@ -1773,35 +1773,35 @@ msgstr "    >> %zu 字节: "
 
 #: src/remote/RemoteXpc.cpp:165
 msgid "Failed to send HTTP/2 preface: "
-msgstr "发 HTTP/2 前置签名失败: "
+msgstr "发送 HTTP/2 前置签名失败："
 
 #: src/remote/RemoteXpc.cpp:173
 msgid "Failed to send SETTINGS: "
-msgstr "发 SETTINGS 失败: "
+msgstr "发送 SETTINGS 失败："
 
 #: src/remote/RemoteXpc.cpp:179
 msgid "Failed to send WINDOW_UPDATE: "
-msgstr "发 WINDOW_UPDATE 失败: "
+msgstr "发送 WINDOW_UPDATE 失败："
 
 #: src/remote/RemoteXpc.cpp:187
 msgid "Failed to send primary channel HEADERS: "
-msgstr "发主通道 HEADERS 失败: "
+msgstr "发送主通道 HEADERS 失败："
 
 #: src/remote/RemoteXpc.cpp:193
 msgid "Failed to send first frame: "
-msgstr "发首帧失败: "
+msgstr "发送首帧失败："
 
 #: src/remote/RemoteXpc.cpp:198
 msgid "Failed to send reply channel HEADERS: "
-msgstr "发回信通道 HEADERS 失败: "
+msgstr "发送回复通道 HEADERS 失败："
 
 #: src/remote/RemoteXpc.cpp:204
 msgid "Failed to send terminating frame: "
-msgstr "发终止帧失败: "
+msgstr "发送终止帧失败："
 
 #: src/remote/RemoteXpc.cpp:209
 msgid "Failed to send INIT_HANDSHAKE frame: "
-msgstr "发 INIT_HANDSHAKE 帧失败: "
+msgstr "发送 INIT_HANDSHAKE 帧失败："
 
 #: src/remote/RemoteXpc.cpp:218
 msgid "Timed out waiting for device SETTINGS"
@@ -1809,15 +1809,15 @@ msgstr "等待设备 SETTINGS 超时"
 
 #: src/remote/RemoteXpc.cpp:222
 msgid "Disconnected while waiting for device SETTINGS: "
-msgstr "等设备 SETTINGS 时断开: "
+msgstr "等待设备 SETTINGS 时连接断开："
 
 #: src/remote/RemoteXpc.cpp:233
 msgid "Failed to send RemoteXPC identity: "
-msgstr "发 RemoteXPC 身份申报失败: "
+msgstr "发送 RemoteXPC 身份信息失败："
 
 #: src/remote/RemoteXpc.cpp:238
 msgid "Failed to read peer_info: "
-msgstr "读 peer_info 失败: "
+msgstr "读取 peer_info 失败："
 
 #: src/remote/RemoteXpc.cpp:258 src/remote/RemoteXpc.cpp:608
 #: src/remote/RemoteXpc.cpp:778 src/remote/RemoteXpc.cpp:794
@@ -1917,11 +1917,11 @@ msgstr "对端未补充流控窗口，已发送 "
 
 #: src/remote/RemoteXpc.cpp:584
 msgid "Disconnected while waiting for flow-control window: "
-msgstr "等流控窗口时断开: "
+msgstr "等待流控窗口时连接断开："
 
 #: src/remote/RemoteXpc.cpp:595
 msgid "Failed to send DATA: "
-msgstr "发 DATA 失败: "
+msgstr "发送 DATA 失败："
 
 #: src/remote/RemoteXpc.cpp:614
 msgid "XPC encoding failed (depth or length limit exceeded)"
@@ -1929,19 +1929,19 @@ msgstr "XPC 编码失败（深度或长度超限）"
 
 #: src/remote/RemoteXpc.cpp:654
 msgid "Failed to accept file stream: "
-msgstr "接受文件流失败: "
+msgstr "接受文件流失败："
 
 #: src/remote/RemoteXpc.cpp:665
 msgid " has received "
-msgstr " 上已到 "
+msgstr " 已收到 "
 
 #: src/remote/RemoteXpc.cpp:665
 msgid "File receive timed out: stream "
-msgstr "收文件超时：流 "
+msgstr "接收文件超时：流 "
 
 #: src/remote/RemoteXpc.cpp:670
 msgid "Disconnected while receiving file: "
-msgstr "收文件时断开: "
+msgstr "接收文件时连接断开："
 
 #: src/remote/RemoteXpc.cpp:695
 msgid "RemoteXPC reply attachments exceed 32 MiB"
@@ -1954,7 +1954,7 @@ msgstr "    接收文件：%llu 字节，流 %u\n"
 
 #: src/remote/RemoteXpc.cpp:746
 msgid " contains malformed message: "
-msgstr " 上的消息畸形: "
+msgstr " 的消息格式无效："
 
 #: src/remote/RemoteXpc.cpp:746
 msgid "Stream "
@@ -1972,11 +1972,11 @@ msgstr "    => 流%u id=%llu %s\n"
 
 #: src/remote/RemoteXpc.cpp:790
 msgid "Timed out waiting for device reply"
-msgstr "等设备回信超时"
+msgstr "等待设备回复超时"
 
 #: src/remote/RemoteXpc.cpp:799
 msgid "Disconnected while waiting for device reply: "
-msgstr "等设备回信时断开: "
+msgstr "等待设备回复时连接断开："
 
 #: src/remote/Rsd.cpp:89
 #, c-format
@@ -1995,11 +1995,11 @@ msgstr " 端口 "
 
 #: src/remote/Rsd.cpp:152 src/transport/Usbmux.cpp:92
 msgid "Connect to "
-msgstr "连 "
+msgstr "连接 "
 
 #: src/remote/Rsd.cpp:161
 msgid " HTTP/2 handshake failed: "
-msgstr " 的 HTTP/2 握手失败: "
+msgstr " 的 HTTP/2 握手失败："
 
 #: src/remote/Rsd.cpp:172 src/remote/Rsd.cpp:180 src/remote/Rsd.cpp:188
 #: src/remote/Rsd.cpp:196
@@ -2012,19 +2012,19 @@ msgstr " 失败"
 
 #: src/remote/Rsd.cpp:214
 msgid "(code "
-msgstr "（code "
+msgstr "（错误码 "
 
 #: src/remote/Rsd.cpp:225
 msgid "; original error: "
-msgstr "；error 原文: "
+msgstr "；原始错误："
 
 #: src/remote/Rsd.cpp:249
 msgid " failed; response missing CoreDevice.output: "
-msgstr " 失败，回信里没有 CoreDevice.output: "
+msgstr " 失败，回复缺少 CoreDevice.output："
 
 #: src/remote/Rsd.cpp:261
 msgid "Streaming feature requires an XPC service connection"
-msgstr "这条服务连接不是 XPC 通道，流式 feature 走不了"
+msgstr "流式功能需要 XPC 服务连接"
 
 #: src/remote/Rsd.cpp:276
 msgid "Service connection is not an XPC channel"
@@ -2032,7 +2032,7 @@ msgstr "这条服务连接不是 XPC 通道"
 
 #: src/remote/Rsd.cpp:295
 msgid " response missing both sideChannelStatus and error: "
-msgstr " 的回信里既没有 sideChannelStatus 也没有 error: "
+msgstr " 回复缺少 sideChannelStatus 和 error 字段："
 
 #: src/remote/Rsd.cpp:301
 msgid " failed mid-stream: "
@@ -2040,7 +2040,7 @@ msgstr " 中途失败："
 
 #: src/remote/Rsd.cpp:355
 msgid "Connect to RSD port "
-msgstr "连 RSD 端口 "
+msgstr "连接 RSD 端口 "
 
 #: src/remote/Rsd.cpp:360
 msgid "RSD control channel handshake failed: "
@@ -2518,7 +2518,7 @@ msgstr "hex 长度不是偶数"
 
 #: src/wifi/PairRecord.cpp:62
 msgid "Invalid hex character"
-msgstr "hex 里有非法字符"
+msgstr "十六进制数据包含无效字符"
 
 #: src/wifi/PairRecord.cpp:104 src/wifi/PairRecordWindows.cpp:89
 msgid "Cannot open temporary file "
@@ -2552,15 +2552,15 @@ msgstr "scrctl 配对记录头无效"
 
 #: src/wifi/PairRecord.cpp:192
 msgid "Record line is not key=value"
-msgstr "记录里有一行不是 key=value"
+msgstr "配对记录中的行必须使用 key=value 格式"
 
 #: src/wifi/PairRecord.cpp:203
 msgid " requires "
-msgstr " 要 "
+msgstr " 需要 "
 
 #: src/wifi/PairRecord.cpp:203
 msgid "Incorrect field length: "
-msgstr "字段长度不对："
+msgstr "字段长度无效："
 
 #: src/wifi/PairRecord.cpp:204
 msgid " bytes; got "
@@ -2568,15 +2568,15 @@ msgstr " 字节，实际 "
 
 #: src/wifi/PairRecord.cpp:235
 msgid "Record missing host_private_key"
-msgstr "记录里没有 host_private_key"
+msgstr "配对记录缺少 host_private_key 字段"
 
 #: src/wifi/PairRecord.cpp:250
 msgid "Failed to create directory "
-msgstr "建目录失败 "
+msgstr "创建目录失败："
 
 #: src/wifi/PairRecord.cpp:308
 msgid "Reading directory "
-msgstr "读目录 "
+msgstr "读取目录 "
 
 #: src/wifi/PairSetup.cpp:45
 msgid "MD5 unavailable; check OpenSSL algorithm providers"
@@ -2584,7 +2584,7 @@ msgstr "MD5 不可用；请检查 OpenSSL 算法 provider"
 
 #: src/wifi/PairSetup.cpp:69
 msgid "Handshake response missing response._1.handshake._0"
-msgstr "handshake 回信里没有 response._1.handshake._0"
+msgstr "握手回复缺少 response._1.handshake._0 字段"
 
 #: src/wifi/PairSetup.cpp:84 src/wifi/PairSetup.cpp:445
 msgid " TLV decode incomplete: "
@@ -2613,7 +2613,7 @@ msgstr "缺少 host identifier；主机名查询不可用时请显式提供"
 
 #: src/wifi/PairSetup.cpp:226
 msgid "Verify M2 missing 32-byte public key"
-msgstr "verify 的 M2 里没有 32 字节公钥"
+msgstr "verify M2 缺少 32 字节公钥"
 
 #: src/wifi/PairSetup.cpp:272
 msgid ""
@@ -2630,11 +2630,11 @@ msgstr "handshake（attemptPairVerify=false）完成，发送 M1"
 
 #: src/wifi/PairSetup.cpp:313
 msgid "M2 missing PUBLIC_KEY or SALT"
-msgstr "M2 里缺 PUBLIC_KEY 或 SALT"
+msgstr "M2 缺少 PUBLIC_KEY 或 SALT 字段"
 
 #: src/wifi/PairSetup.cpp:339
 msgid "M4 missing PROOF"
-msgstr "M4 里没有 PROOF"
+msgstr "M4 缺少 PROOF 字段"
 
 #: src/wifi/PairSetup.cpp:345
 msgid "Device SRP proof mismatch; pairing aborted. Check PIN and peer identity"
@@ -2675,7 +2675,7 @@ msgstr "PV-Msg02 回复的 State 无效（应为 2）"
 
 #: src/wifi/PairVerify.cpp:82
 msgid "PV-Msg02 missing 32-byte public key"
-msgstr "PV-Msg02 里没有 32 字节的公钥"
+msgstr "PV-Msg02 缺少 32 字节公钥"
 
 #: src/wifi/PairVerify.cpp:130
 msgid "PV-Msg04 TLV decode incomplete: "
@@ -2687,7 +2687,7 @@ msgstr "PV-Msg04 回复的 State 无效（应为 4）"
 
 #: src/wifi/RemotePairing.cpp:35
 msgid "createListener response missing port (actual fields:"
-msgstr "createListener 回信里没有 port（实际字段:"
+msgstr "createListener 回复缺少 port 字段（实际字段："
 
 #: src/wifi/RemotePairing.cpp:40
 msgid "createListener returned an invalid port: "
@@ -2695,7 +2695,7 @@ msgstr "createListener 返回无效端口："
 
 #: src/wifi/Rppairing.cpp:27
 msgid "Frame exceeds u16 length field"
-msgstr "帧太长，u16 长度字段放不下"
+msgstr "帧长度超出 u16 字段范围"
 
 #: src/wifi/Rppairing.cpp:45
 msgid "Frame header is not RPPairing; check port and stream alignment"
@@ -2703,15 +2703,15 @@ msgstr "帧头不是 RPPairing；请检查端口和流对齐"
 
 #: src/wifi/Rppairing.cpp:85
 msgid "Envelope missing message field"
-msgstr "信封里没有 message 字段"
+msgstr "消息封装缺少 message 字段"
 
 #: src/wifi/Rppairing.cpp:91
 msgid "plain missing _0"
-msgstr "plain 里没有 _0"
+msgstr "plain 缺少 _0 字段"
 
 #: src/wifi/Rppairing.cpp:98
 msgid "Envelope is neither plain nor streamEncrypted"
-msgstr "信封既不是 plain 也不是 streamEncrypted"
+msgstr "消息封装类型必须是 plain 或 streamEncrypted"
 
 #: src/wifi/Rppairing.cpp:103
 msgid "streamEncrypted._0 is not a string"
@@ -2723,11 +2723,11 @@ msgstr "主密钥和 nonce 尚未准备好时收到加密帧"
 
 #: src/wifi/Rppairing.cpp:126
 msgid "Decrypted message is not a response"
-msgstr "解密出来的不是 response"
+msgstr "解密后的消息类型不是 response"
 
 #: src/wifi/Rppairing.cpp:131
 msgid "response missing _1"
-msgstr "response 里没有 _1"
+msgstr "response 缺少 _1 字段"
 
 #: src/wifi/Rppairing.cpp:140 src/wifi/Rppairing.cpp:199
 msgid "(no description)"
@@ -2735,15 +2735,15 @@ msgstr "(没有描述)"
 
 #: src/wifi/Rppairing.cpp:140 src/wifi/Rppairing.cpp:199
 msgid "Device rejected request: "
-msgstr "设备拒绝: "
+msgstr "设备拒绝请求："
 
 #: src/wifi/Rppairing.cpp:187
 msgid "Expected event during pairing"
-msgstr "配对过程中设备回的不是 event"
+msgstr "配对过程中预期收到 event 消息"
 
 #: src/wifi/Rppairing.cpp:192
 msgid "event missing _0"
-msgstr "event 里没有 _0"
+msgstr "event 缺少 _0 字段"
 
 #: src/wifi/Rppairing.cpp:204
 msgid "Device requested user consent twice consecutively"
@@ -2755,7 +2755,7 @@ msgstr "设备正在等待屏幕上的信任确认"
 
 #: src/wifi/Rppairing.cpp:217
 msgid "event missing pairingData._0.data; actual fields: "
-msgstr "event 里没有 pairingData._0.data，实际字段："
+msgstr "event 缺少 pairingData._0.data 字段，实际字段："
 
 #: src/wifi/Rppairing.cpp:230
 msgid "Main key not installed; cannot send encrypted frame"
@@ -2763,7 +2763,7 @@ msgstr "尚未安装主密钥，无法发送加密帧"
 
 #: src/wifi/Rppairing.h:30
 msgid "This stream does not support waiting for readability"
-msgstr "这条流不支持等可读"
+msgstr "此数据流不支持等待可读事件"
 
 #: src/wifi/Srp.cpp:113
 msgid "SRP server public key is empty or exceeds 384 bytes"
@@ -2824,11 +2824,11 @@ msgstr " 字节，上限 "
 
 #: src/xpc/XpcValue.cpp:334
 msgid "Invalid data length: declared "
-msgstr "数据段长度不合理: 声明 "
+msgstr "数据段长度无效：声明 "
 
 #: src/xpc/XpcValue.cpp:379
 msgid "Container length cannot hold count field"
-msgstr "容器长度前缀连 count 字段都装不下"
+msgstr "容器声明的长度不足以容纳 count 字段"
 
 #: src/xpc/XpcValue.cpp:397
 msgid "Entry count does not match container size"
@@ -2856,7 +2856,7 @@ msgstr "信封不足 24 字节"
 
 #: src/xpc/XpcValue.cpp:620
 msgid "Wrapper magic mismatch: 0x"
-msgstr "wrapper magic 不符：0x"
+msgstr "封装标识不匹配：0x"
 
 #: src/xpc/XpcValue.cpp:628
 msgid "Invalid message length: "
@@ -2864,11 +2864,11 @@ msgstr "消息长度不合理："
 
 #: src/xpc/XpcValue.cpp:647
 msgid "Payload magic mismatch: 0x"
-msgstr "payload magic 不符：0x"
+msgstr "载荷标识不匹配：0x"
 
 #: src/xpc/XpcValue.cpp:652
 msgid "Cannot read protocol version"
-msgstr "读不到协议版本"
+msgstr "无法读取协议版本"
 
 #: src/xpc/XpcValue.cpp:656
 msgid "Unsupported XPC protocol version: 0x"
@@ -2880,7 +2880,7 @@ msgstr "载荷解码失败"
 
 #: src/xpc/XpcValue.cpp:702
 msgid ", received "
-msgstr ", 已到"
+msgstr "，已收到"
 
 #: tools/screenshot_probe.cpp:50
 msgid "Capture a device screenshot and save it as PNG"
