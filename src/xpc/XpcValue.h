@@ -10,6 +10,11 @@
 
 namespace scrctl::xpc {
 
+/// XPC 对象与 RemoteXPC 附件共用的输入上限，属于当前应用的资源策略。
+/// 已验证的截图可内联多 MiB 数据；超过此限制的载荷需另行评估，不能据此
+/// 判定为协议本身不合法。
+inline constexpr std::size_t kMaxBuffer = 32u << 20;
+
 /// Apple XPC 的二进制对象图，RemoteXPC 的载荷格式。
 ///
 /// 为什么不引第三方：可用的开源实现（libxpc）是 GPL/LGPL 且面向 Mach 平台，

@@ -10,7 +10,7 @@
 
 - Linux：构建和离线测试已有 CI 作业，仍需 Linux 机器上的设备连接、DDI、镜像、输入
   及断线退出验证。本轮补修了 Ubuntu CI 发现的 glibc 语言回退问题；CI 不覆盖设备运行。
-- Windows：ARM64 构建、24 项离线回归及 USB / Wi-Fi 镜像、截图切换已通过，ARM64 CI
+- Windows：ARM64 构建、离线回归及 USB / Wi-Fi 镜像、截图切换已通过，ARM64 CI
   构建、安装检查及下载的真实 Release 包独立启动已通过。音频、输入控制、新建配对、DDI 初始安装、x64 和 MSVC
   待验证，见 [Windows 说明](WINDOWS.md)。发布产物还需完善对应第三方源码及分发材料。
 - lwIP：离线模拟已覆盖丢包、重传、多个连接 / 网络接口和取消等待；USB / Wi-Fi
@@ -22,7 +22,8 @@
 
 - HTTP/2：nghttp2 可用于已验证的控制流，但偶数文件流不符合其客户端会话模型。
   当前保留帧子集；文件子流映射和真机 FileTransfer 尚缺验证，见
-  [适配记录](NGHTTP2_COMPATIBILITY.md)。后续还需复审输入缓冲与流状态边界。
+  [适配记录](NGHTTP2_COMPATIBILITY.md)。控制帧、输入缓冲及当前文件生命周期的
+  离线边界已补齐；文件子流仍需真机互操作验证，当前未建立通用 HTTP/2 会话模型。
 - plist：起流已改用 XML，通用 binary 编解码删除；macOS USB 视频和音频对照通过，
   其他 iOS / iPadOS 版本的 XML 协商需要设备回归，见 [格式记录](BPLIST_COMPATIBILITY.md)。
 - 应用：独立命令与统计已拆入 Commands / LiveStats，继续对照旧 review

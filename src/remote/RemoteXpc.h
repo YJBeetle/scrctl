@@ -104,7 +104,8 @@ private:
                       std::chrono::steady_clock::time_point deadline, std::vector<uint8_t> &out,
                       std::string &err);
     /// 递归收集字典/数组里所有 FileTransfer 占位，顺序即流号顺序。
-    static void collect_files(const xpc::Value &v, std::vector<xpc::Value *> &out);
+    static bool collect_files(xpc::Value &v, std::vector<xpc::Value *> &out);
+    std::size_t buffered_bytes() const;
     /// 接收 FileTransfer 引用的文件，填入其 data 字段。
     bool materialize_files(xpc::Value &reply, std::chrono::steady_clock::time_point deadline,
                            std::string &err);
@@ -135,7 +136,17 @@ private:
     /// 按流号分别缓冲 XPC 字节；同一消息可能跨多个 DATA 帧。
     std::map<uint32_t, std::vector<uint8_t>> pending_;
     /// 当前文件传输约定在偶数流发送原始文件字节，单独缓冲，不经过 XPC 解码。
-    std::map<uint32_t, std::vector<uint8_t>> raw_;
+    // 这些是当前适配的资源限制，并未实现通用 HTTP/2 流状态机。
+    // 每条连接最多保留 100 个文件流记录，包含已消费的空记录。现有回复内
+    // 2、4、6 映射不能安全复用流号，保留空记录用于拒绝重复使用。
+    // FileTransfer 的真机互操作仍需回归验证。
+    struct FileStream {
+        std::vector<uint8_t> bytes;
+        std::optional<uint64_t> expected;
+        bool ended = false;
+        bool consumed = false;
+    };
+    std::map<uint32_t, FileStream> raw_;
     std::optional<xpc::Value> peer_info_;
     uint64_t next_message_id_ = 0;
 

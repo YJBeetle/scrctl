@@ -18,6 +18,9 @@ inline constexpr std::size_t kFrameHeaderSize = 9;
 /// 本实现接收单帧最多 4 MiB。协议长度字段为 24 位，可表示到 16 MiB - 1；
 /// 本地上限用于限制外部输入的缓冲分配。
 inline constexpr std::size_t kMaxFrameSize = 1u << 22;
+/// 协议长度字段和 SETTINGS_MAX_FRAME_SIZE 的上限，与本地接收上限分别维护。
+inline constexpr uint32_t kProtocolMaxFrameSize = (1u << 24) - 1;
+inline constexpr int64_t kMaxWindowSize = 0x7FFFFFFF;
 /// 双方未通过 SETTINGS 协商前的默认值（RFC 7540 §6.5.2 / §6.9.2）。
 inline constexpr uint32_t kDefaultInitialWindowSize = 65535;
 inline constexpr std::size_t kDefaultMaxFrameSize = 16384;

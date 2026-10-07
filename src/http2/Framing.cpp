@@ -85,6 +85,9 @@ const char *error_code_name(uint32_t code) {
 
 std::vector<uint8_t> serialize(uint8_t type, uint8_t flags, uint32_t stream_id,
                                std::span<const uint8_t> payload) {
+    if (payload.size() > kProtocolMaxFrameSize) {
+        return {};  // 长度必须能完整写入帧头的 24 位字段。
+    }
     std::vector<uint8_t> out;
     out.reserve(kFrameHeaderSize + payload.size());
     const uint32_t len = static_cast<uint32_t>(payload.size());
@@ -187,9 +190,15 @@ bool parse_settings(const Frame &f, std::vector<std::pair<uint16_t, uint32_t>> &
                     std::string &err) {
     ack = (f.flags & kFlagAck) != 0;
     out.clear();
+    if (f.stream_id != 0) {
+        err = SCRCTL_TR("SETTINGS must use stream 0");
+        return false;
+    }
     if (ack) {
-        // ACK 帧的载荷必须为空；非空是协议错误，但这里没必要为此拆连接，
-        // 忽略即可——真正的错误由对端的后续行为暴露。
+        if (!f.payload.empty()) {
+            err = SCRCTL_TR("SETTINGS ACK payload must be empty");
+            return false;
+        }
         return true;
     }
     if (f.payload.size() % 6 != 0) {
@@ -197,7 +206,18 @@ bool parse_settings(const Frame &f, std::vector<std::pair<uint16_t, uint32_t>> &
         return false;
     }
     for (std::size_t i = 0; i + 6 <= f.payload.size(); i += 6) {
-        out.emplace_back(be16(f.payload.data() + i), be32(f.payload.data() + i + 2));
+        const auto id = be16(f.payload.data() + i);
+        const auto value = be32(f.payload.data() + i + 2);
+        if (id == kSettingInitialWindowSize && value > kMaxWindowSize) {
+            err = SCRCTL_TR("SETTINGS_INITIAL_WINDOW_SIZE exceeds 2^31 - 1");
+            return false;
+        }
+        if (id == kSettingMaxFrameSize &&
+            (value < kDefaultMaxFrameSize || value > kProtocolMaxFrameSize)) {
+            err = SCRCTL_TR("SETTINGS_MAX_FRAME_SIZE is outside 16384..16777215");
+            return false;
+        }
+        out.emplace_back(id, value);
     }
     return true;
 }
@@ -208,6 +228,10 @@ bool parse_window_update(const Frame &f, uint32_t &increment, std::string &err) 
         return false;
     }
     increment = be32(f.payload.data()) & kStreamIdMask;
+    if (increment == 0) {
+        err = SCRCTL_TR("WINDOW_UPDATE increment must be nonzero");
+        return false;
+    }
     return true;
 }
 

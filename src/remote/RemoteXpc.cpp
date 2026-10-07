@@ -20,6 +20,9 @@ constexpr uint32_t kWindowIncr = kGrantWindow - http2::kDefaultInitialWindowSize
 
 /// 累计消费 1 MiB 后补充窗口，减少 WINDOW_UPDATE 帧数量。
 constexpr uint64_t kReplenishThreshold = 1u << 20;
+constexpr std::size_t kMaxFileStreams = 100;
+constexpr std::size_t kMaxXpcStream = xpc::kMaxBuffer + 24;
+constexpr std::size_t kMaxBuffered = 2 * xpc::kMaxBuffer;
 
 bool write_all(net::ByteStream &sock, std::span<const uint8_t> data, std::string &err) {
     return sock.send(std::string_view(reinterpret_cast<const char *>(data.data()), data.size()),
@@ -146,7 +149,16 @@ bool Channel::send_bytes(std::span<const uint8_t> data, std::string &err) {
     return write_all(socket_, data, err);
 }
 
+std::size_t Channel::buffered_bytes() const {
+    std::size_t total = rx_.size();
+    for (const auto &[id, bytes] : pending_) total += bytes.size();
+    for (const auto &[id, file] : raw_) total += file.bytes.size();
+    return total;
+}
+
 bool Channel::start(std::string &err) {
+    outbound_streams_.emplace(kRootStream, peer_initial_window_);
+    outbound_streams_.emplace(kReplyStream, peer_initial_window_);
     // 1. 客户端前置签名（不是帧，24 字节裸串）。
     if (!write_all(socket_, std::string_view(http2::kClientPreface, http2::kClientPrefaceSize),
                    err)) {
@@ -259,12 +271,15 @@ bool Channel::pump(int timeout_ms, std::string &err) {
                 std::fprintf(stderr, "    <- %s\n", http2::describe(f).c_str());
             }
             if (!handle_frame(f, err)) {
+                // 已消耗导致失败的帧，不能把下一次调用当成同一条健康连接继续。
+                terminated_ = true;
                 return false;
             }
             processed = true;
             continue;
         }
         if (st == http2::Status::Malformed) {
+            terminated_ = true;
             err = perr;
             // 记录缓冲前缀及流内偏移，便于与原始 dump 对照。
             // 这些信息用于定位问题，不足以单独判断是设备、传输还是本地解析错误。
@@ -299,6 +314,12 @@ bool Channel::pump(int timeout_ms, std::string &err) {
             // 单次读取超时不判定为断连。调用方按自己的总 deadline 决定是否继续等待。
             return true;
         }
+        terminated_ = true;
+        return false;
+    }
+    if (got.size() > kMaxBuffered - buffered_bytes()) {
+        terminated_ = true;
+        err = SCRCTL_TR("RemoteXPC connection input exceeds 64 MiB");
         return false;
     }
     rx_.insert(rx_.end(), got.begin(), got.end());
@@ -345,6 +366,12 @@ bool Channel::handle_frame(const http2::Frame &f, std::string &err) {
                         // 不修改连接级窗口；后者仅由 WINDOW_UPDATE 更新。
                         const int64_t delta =
                             static_cast<int64_t>(value) - static_cast<int64_t>(peer_initial_window_);
+                        for (const auto &[stream, window] : outbound_streams_) {
+                            if (window + delta > http2::kMaxWindowSize) {
+                                err = SCRCTL_TR("Flow-control window exceeds 2^31 - 1");
+                                return false;
+                            }
+                        }
                         peer_initial_window_ = value;
                         for (auto &[stream, window] : outbound_streams_) {
                             window += delta;
@@ -352,9 +379,8 @@ bool Channel::handle_frame(const http2::Frame &f, std::string &err) {
                         break;
                     }
                     case http2::kSettingMaxFrameSize:
-                        if (value >= 16384 && value <= http2::kMaxFrameSize) {
-                            peer_max_frame_ = value;
-                        }
+                        // 对端可以接受更大的帧，我方仍可选择较小分片。
+                        peer_max_frame_ = std::min(value, static_cast<uint32_t>(http2::kMaxFrameSize));
                         break;
                     default:
                         break;
@@ -369,23 +395,32 @@ bool Channel::handle_frame(const http2::Frame &f, std::string &err) {
                 return false;
             }
             if (f.stream_id == 0) {
+                if (outbound_connection_ > http2::kMaxWindowSize - inc) {
+                    err = SCRCTL_TR("Flow-control window exceeds 2^31 - 1");
+                    return false;
+                }
                 outbound_connection_ += inc;
             } else {
                 auto it = outbound_streams_.find(f.stream_id);
-                const int64_t base =
-                    it != outbound_streams_.end() ? it->second : peer_initial_window_;
-                outbound_streams_[f.stream_id] = base + inc;
+                // 尚未建立或已消费的流不再创建发送窗口状态。
+                if (it == outbound_streams_.end()) return true;
+                const int64_t base = it->second;
+                if (base > http2::kMaxWindowSize - inc) {
+                    err = SCRCTL_TR("Flow-control window exceeds 2^31 - 1");
+                    return false;
+                }
+                it->second = base + inc;
             }
             return true;
         }
         case http2::kPing:
+            if (f.stream_id != 0 || f.payload.size() != 8) {
+                err = SCRCTL_TR("PING must use stream 0 and contain exactly 8 bytes");
+                return false;
+            }
             // 非 ACK 的 PING 原样应答，维持设备的连接活性检查。
             if ((f.flags & http2::kFlagAck) != 0) {
                 return true;
-            }
-            if (f.payload.size() < 8) {
-                err = SCRCTL_TR("PING payload shorter than 8 bytes");
-                return false;
             }
             {
                 uint64_t opaque = 0;
@@ -395,6 +430,10 @@ bool Channel::handle_frame(const http2::Frame &f, std::string &err) {
                 return send_bytes(http2::ping_frame(opaque, true), err);
             }
         case http2::kGoAway: {
+            if (f.stream_id != 0) {
+                err = SCRCTL_TR("GOAWAY must use stream 0");
+                return false;
+            }
             http2::GoAway g;
             if (!http2::parse_goaway(f, g, err)) {
                 return false;
@@ -407,25 +446,81 @@ bool Channel::handle_frame(const http2::Frame &f, std::string &err) {
             return false;
         }
         case http2::kRstStream: {
+            if (f.stream_id == 0) {
+                err = SCRCTL_TR("RST_STREAM must use a nonzero stream");
+                return false;
+            }
             uint32_t code = 0;
             if (!http2::parse_rst_stream(f, code, err)) {
                 return false;
             }
-            if (f.stream_id == kRootStream) {
-                terminated_ = true;
-                err = std::string(SCRCTL_TR("Primary channel reset: ")) + http2::error_code_name(code);
-                return false;
-            }
-            return true;
+            // 重置也使该流的缓冲数据失效，不能在同批帧报告重置后仍返回回复或文件。
+            err = std::string(SCRCTL_TR("RemoteXPC stream reset: ")) +
+                  std::to_string(f.stream_id) + ": " + http2::error_code_name(code);
+            return false;
         }
         case http2::kData: {
+            if (f.stream_id == 0) {
+                err = SCRCTL_TR("DATA must use a nonzero stream");
+                return false;
+            }
             std::span<const uint8_t> body;
             if (!http2::data_payload(f, body, err)) {
                 return false;
             }
-            // 偶数号流是设备发起的，上面跑的是文件裸字节，不是 XPC 消息。
-            auto &buf = (f.stream_id % 2 == 0) ? raw_[f.stream_id] : pending_[f.stream_id];
-            buf.insert(buf.end(), body.begin(), body.end());
+            std::vector<uint8_t> *buf = nullptr;
+            FileStream *file = nullptr;
+            if (f.stream_id % 2 == 0) {
+                auto it = raw_.find(f.stream_id);
+                if (it == raw_.end()) {
+                    if (raw_.size() >= kMaxFileStreams) {
+                        err = SCRCTL_TR("RemoteXPC file stream limit exceeded (100)");
+                        return false;
+                    }
+                    it = raw_.try_emplace(f.stream_id).first;
+                    outbound_streams_.emplace(f.stream_id, peer_initial_window_);
+                }
+                file = &it->second;
+                // 文件按声明长度交付后，允许对端再发一次独立的空 END_STREAM。
+                // 这只补齐终结标记；新字节、重复终结或新元数据仍不能复用该流。
+                if (file->consumed && !file->ended && f.payload.empty() &&
+                    (f.flags & http2::kFlagEndStream) != 0) {
+                    file->ended = true;
+                    return true;
+                }
+                if (file->consumed || file->ended) {
+                    err = SCRCTL_TR("RemoteXPC file stream cannot be reused: ") + std::to_string(f.stream_id);
+                    return false;
+                }
+                buf = &file->bytes;
+                const auto limit = file->expected.value_or(xpc::kMaxBuffer);
+                if (body.size() > limit - buf->size()) {
+                    err = SCRCTL_TR("RemoteXPC file data exceeds declared size or 32 MiB limit");
+                    return false;
+                }
+                if ((f.flags & http2::kFlagEndStream) != 0) {
+                    file->ended = true;
+                    if (file->expected && buf->size() + body.size() != *file->expected) {
+                        err = SCRCTL_TR("RemoteXPC file ended before its declared size");
+                        return false;
+                    }
+                }
+            } else {
+                if (f.stream_id != kRootStream && f.stream_id != kReplyStream) {
+                    err = SCRCTL_TR("Unsupported RemoteXPC message stream: ") + std::to_string(f.stream_id);
+                    return false;
+                }
+                buf = &pending_[f.stream_id];
+                if (body.size() > kMaxXpcStream - buf->size()) {
+                    err = SCRCTL_TR("RemoteXPC message stream input exceeds 32 MiB plus wrapper");
+                    return false;
+                }
+            }
+            if (body.size() > kMaxBuffered - buffered_bytes()) {
+                err = SCRCTL_TR("RemoteXPC connection input exceeds 64 MiB");
+                return false;
+            }
+            buf->insert(buf->end(), body.begin(), body.end());
             // 流控包括 Pad Length 和填充；XPC / 文件缓冲只保存业务载荷。
             consumed_per_stream_[f.stream_id] += f.payload.size();
             consumed_connection_ += f.payload.size();
@@ -433,9 +528,9 @@ bool Channel::handle_frame(const http2::Frame &f, std::string &err) {
                 terminated_ = true;
                 return false;
             }
-            if ((f.flags & http2::kFlagEndStream) != 0 && f.stream_id == kRootStream) {
+            if ((f.flags & http2::kFlagEndStream) != 0 && (f.stream_id == kRootStream || f.stream_id == kReplyStream)) {
                 terminated_ = true;
-                err = SCRCTL_TR("Device set END_STREAM on primary channel; connection ended");
+                err = SCRCTL_TR("Device set END_STREAM on message channel; connection ended");
                 return false;
             }
             return true;
@@ -480,6 +575,7 @@ bool Channel::send_data(uint32_t stream_id, std::span<const uint8_t> payload, st
             // 发送窗口耗尽后最多等待五轮，每轮读超时上限 1 秒。
             // 这是轮数限制，实际总时长仍受底层读写耗时影响。
             if (++idle_rounds > 5) {
+                terminated_ = true;
                 err = SCRCTL_TR("Peer did not replenish flow-control window; sent ") + std::to_string(off) + "/" +
                       std::to_string(payload.size()) + SCRCTL_TR(" bytes");
                 return false;
@@ -495,6 +591,7 @@ bool Channel::send_data(uint32_t stream_id, std::span<const uint8_t> payload, st
                                           static_cast<uint64_t>(payload.size() - off));
         auto frame = http2::data_frame(stream_id, payload.subspan(off, n));
         if (!send_bytes(frame, err)) {
+            terminated_ = true;
             err = SCRCTL_TR("Failed to send DATA: ") + err;
             return false;
         }
@@ -529,58 +626,56 @@ bool Channel::send_request(const xpc::Value &body, bool want_reply, std::string 
     return true;
 }
 
-void Channel::collect_files(const xpc::Value &v, std::vector<xpc::Value *> &out) {
-    for (auto &entry : const_cast<xpc::Value &>(v).dict) {
-        if (entry.value.type == xpc::Type::FileTransfer) {
-            out.push_back(&entry.value);
-        } else if (entry.value.is_dict() || entry.value.is_array()) {
-            collect_files(entry.value, out);
-        }
+bool Channel::collect_files(xpc::Value &v, std::vector<xpc::Value *> &out) {
+    if (v.type == xpc::Type::FileTransfer) {
+        if (out.size() == kMaxFileStreams) return false;
+        out.push_back(&v);
     }
-    for (auto &item : const_cast<xpc::Value &>(v).array) {
-        if (item.type == xpc::Type::FileTransfer) {
-            out.push_back(&item);
-        } else if (item.is_dict() || item.is_array()) {
-            collect_files(item, out);
-        }
+    for (auto &entry : v.dict) {
+        if (!collect_files(entry.value, out)) return false;
     }
+    for (auto &item : v.array) {
+        if (!collect_files(item, out)) return false;
+    }
+    return true;
 }
 
 bool Channel::receive_file(uint32_t stream_id, uint64_t size,
                            std::chrono::steady_clock::time_point deadline,
                            std::vector<uint8_t> &out, std::string &err) {
-    // 按当前文件流约定，先发送 HEADERS 和 FILE_TX_STREAM_RESPONSE 接受帧，
-    // 再接收该流的原始文件数据。
-    std::vector<uint8_t> frames = http2::headers_frame(stream_id);
-    auto accept = xpc::encode_message(xpc::kFlagAlwaysSet | xpc::kFlagFileTxResponse, 0, nullptr);
-    auto ack_frame = http2::data_frame(stream_id, accept);
-    frames.insert(frames.end(), ack_frame.begin(), ack_frame.end());
-    if (!send_bytes(frames, err)) {
-        err = SCRCTL_TR("Failed to accept file stream: ") + err;
-        return false;
+    auto &file = raw_.at(stream_id);
+    if (size != 0) {
+        // 保留现有 RemoteXPC 接受顺序与偶数文件流映射。
+        std::vector<uint8_t> frames = http2::headers_frame(stream_id);
+        auto accept = xpc::encode_message(xpc::kFlagAlwaysSet | xpc::kFlagFileTxResponse, 0, nullptr);
+        auto ack_frame = http2::data_frame(stream_id, accept);
+        frames.insert(frames.end(), ack_frame.begin(), ack_frame.end());
+        if (!send_bytes(frames, err)) {
+            err = SCRCTL_TR("Failed to accept file stream: ") + err;
+            return false;
+        }
     }
-    out.clear();
-    out.reserve(static_cast<std::size_t>(std::min<uint64_t>(size, 64u << 20)));
-    while (raw_[stream_id].size() < size) {
-        const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
-                              deadline - std::chrono::steady_clock::now())
-                              .count();
-        if (left <= 0) {
+    while (file.bytes.size() < size) {
+        if (file.ended) {
+            err = SCRCTL_TR("RemoteXPC file ended before its declared size");
+            return false;
+        }
+        const auto left = remaining_ms(deadline);
+        if (left == 0) {
             err = SCRCTL_TR("File receive timed out: stream ") + std::to_string(stream_id) + SCRCTL_TR(" has received ") +
-                  std::to_string(raw_[stream_id].size()) + "/" + std::to_string(size) + SCRCTL_TR(" bytes");
+                  std::to_string(file.bytes.size()) + "/" + std::to_string(size) + SCRCTL_TR(" bytes");
             return false;
         }
         if (!pump(static_cast<int>(left), err)) {
-            if (raw_[stream_id].size() >= size) {
-                break;
-            }
             err = SCRCTL_TR("Disconnected while receiving file: ") + err;
             return false;
         }
     }
-    out.assign(raw_[stream_id].begin(), raw_[stream_id].begin() + static_cast<std::ptrdiff_t>(size));
-    raw_[stream_id].erase(raw_[stream_id].begin(),
-                          raw_[stream_id].begin() + static_cast<std::ptrdiff_t>(size));
+    out.clear();
+    out.swap(file.bytes);
+    file.consumed = true;
+    consumed_per_stream_.erase(stream_id);
+    outbound_streams_.erase(stream_id);
     return true;
 }
 
@@ -588,24 +683,53 @@ bool Channel::materialize_files(xpc::Value &reply,
                                 std::chrono::steady_clock::time_point deadline,
                                 std::string &err) {
     std::vector<xpc::Value *> files;
-    collect_files(reply, files);
-    if (files.empty()) {
-        return true;
+    if (!collect_files(reply, files)) {
+        err = SCRCTL_TR("RemoteXPC file stream limit exceeded (100)");
+        return false;
     }
-    // 按 FileTransfer 在回复中的遍历顺序分配偶数流 2、4、6……。
-    // 此映射仍需真机文件子流验证，verbose 日志记录请求接收的流号和长度。
+    uint64_t total = 0;
+    // 先检查整条回复的附件，再发送接受帧或接收文件数据。
     for (std::size_t i = 0; i < files.size(); ++i) {
-      const auto stream_id = static_cast<uint32_t>((i + 1) * 2);
-        if (files[i]->file_size == 0) {
-            continue;
-        }
-        if (verbose_) {
-            std::fprintf(stderr, SCRCTL_TR("    Receiving file: %llu bytes on stream %u\n"),
-                         static_cast<unsigned long long>(files[i]->file_size), stream_id);
-        }
-        if (!receive_file(stream_id, files[i]->file_size, deadline, files[i]->data, err)) {
+        const auto size = files[i]->file_size;
+        if (size > xpc::kMaxBuffer || size > xpc::kMaxBuffer - total) {
+            err = SCRCTL_TR("RemoteXPC reply attachments exceed 32 MiB");
             return false;
         }
+        total += size;
+        const auto id = static_cast<uint32_t>((i + 1) * 2);
+        auto it = raw_.find(id);
+        if (it == raw_.end()) {
+            if (raw_.size() >= kMaxFileStreams) {
+                err = SCRCTL_TR("RemoteXPC file stream limit exceeded (100)");
+                return false;
+            }
+            it = raw_.try_emplace(id).first;
+            outbound_streams_.emplace(id, peer_initial_window_);
+        }
+        auto &file = it->second;
+        if (file.consumed || file.expected) {
+            err = SCRCTL_TR("RemoteXPC file stream cannot be reused: ") + std::to_string(id);
+            return false;
+        }
+        if (file.bytes.size() > size) {
+            err = SCRCTL_TR("RemoteXPC file data exceeds declared size or 32 MiB limit");
+            return false;
+        }
+        if (file.ended && file.bytes.size() != size) {
+            err = SCRCTL_TR("RemoteXPC file ended before its declared size");
+            return false;
+        }
+        file.expected = size;
+    }
+    // 文件流仍按单条回复的顺序映射到 2、4、6。当前映射禁止流号复用；
+    // 其他映射需要真机协议证据，不能通过沿用残留字节猜测。
+    for (std::size_t i = 0; i < files.size(); ++i) {
+        const auto id = static_cast<uint32_t>((i + 1) * 2);
+        if (verbose_) {
+            std::fprintf(stderr, SCRCTL_TR("    Receiving file: %llu bytes on stream %u\n"),
+                         static_cast<unsigned long long>(files[i]->file_size), id);
+        }
+        if (!receive_file(id, files[i]->file_size, deadline, files[i]->data, err)) return false;
     }
     return true;
 }
@@ -650,10 +774,15 @@ Channel::Wait Channel::wait(xpc::Value &out, int timeout_ms, std::string &err) {
     err.clear();
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
     for (;;) {
+        if (terminated_) {
+            err = SCRCTL_TR("Connection terminated");
+            return Wait::Broken;
+        }
         if (take_message(out, deadline, err)) {
             return Wait::Message;
         }
         if (!err.empty()) {
+            terminated_ = true;
             return Wait::Broken;  // 解析或文件接收失败。
         }
         const auto left = remaining_ms(deadline);
@@ -666,11 +795,7 @@ Channel::Wait Channel::wait(xpc::Value &out, int timeout_ms, std::string &err) {
             return Wait::Broken;
         }
         if (!pump(static_cast<int>(left), err)) {
-            // 连接失败前可能已处理并缓冲一条完整回复，最后检查一次。
-            // 读超时由 pump 返回 true；这里处理的是其他连接或协议错误。
-            if (take_message(out, deadline, err)) {
-                return Wait::Message;
-            }
+            // 已缓冲的数据不能把重置、资源超限或协议错误转成成功回复。
             err = SCRCTL_TR("Disconnected while waiting for device reply: ") + err;
             return Wait::Broken;
         }

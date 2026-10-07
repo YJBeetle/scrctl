@@ -88,6 +88,23 @@ void test_settings() {
     Frame af;
     check(parse_frame(a, af, used, err) == Status::Ok && parse_settings(af, values, ack, err) && ack,
           "ACK 能认出来");
+    af.payload = {'x'};
+    check(!parse_settings(af, values, ack, err), "拒绝带载荷的 SETTINGS ACK");
+    af.payload.clear();
+    af.stream_id = 1;
+    check(!parse_settings(af, values, ack, err), "SETTINGS 必须使用连接流 0");
+
+    for (const auto setting : {std::pair<uint16_t, uint32_t>{kSettingInitialWindowSize, 0x80000000u},
+                               {kSettingMaxFrameSize, 16383},
+                               {kSettingMaxFrameSize, 1u << 24}}) {
+        const auto wire = settings_frame({setting});
+        check(parse_frame(wire, af, used, err) == Status::Ok &&
+                  !parse_settings(af, values, ack, err), "拒绝超出协议范围的 SETTINGS 值");
+    }
+    const auto maximum = settings_frame({{kSettingMaxFrameSize, kProtocolMaxFrameSize},
+                                         {kSettingInitialWindowSize, 0x7FFFFFFFu}});
+    check(parse_frame(maximum, af, used, err) == Status::Ok &&
+              parse_settings(af, values, ack, err), "协议上限不受本地较小接收上限影响");
 
     // 载荷不是 6 的倍数说明字节流错位了，必须报出来而不是少读一项继续。
     Frame ragged;
@@ -115,6 +132,8 @@ void test_flow_control_frames() {
     Frame masked;
     masked.payload = bytes_of({0x80, 0x00, 0x00, 0x01});
     check(parse_window_update(masked, inc, err) && inc == 1, "WINDOW_UPDATE 高位被掩掉");
+    masked.payload = bytes_of({0x80, 0, 0, 0});
+    check(!parse_window_update(masked, inc, err), "保留位掩掉后为零的窗口增量被拒绝");
 
     std::string debug = "Invalid or missing remote device connection version flags\x01\n";
     std::vector<uint8_t> body;
@@ -250,6 +269,8 @@ void test_stream_boundaries() {
     check(parse_frame(unknown, f, used, err) == Status::Ok && f.type == 0x9a &&
               f.payload.size() == 3,
           "未知帧类型照样解出，交上层忽略");
+    const std::vector<uint8_t> too_large(static_cast<std::size_t>(kProtocolMaxFrameSize) + 1);
+    check(serialize(kData, 0, 1, too_large).empty(), "不能将超长载荷截断到 24 位后发送");
 }
 
 }  // namespace

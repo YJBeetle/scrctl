@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 14:25+0800\n"
+"POT-Creation-Date: 2026-10-07 15:04+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -473,65 +473,65 @@ msgstr "解码后端: %s\n"
 msgid "Source ended"
 msgstr "源已结束"
 
-#: src/app/LiveSource.cpp:22
+#: src/app/LiveSource.cpp:21
 msgid "Invalid --test-degrade: "
 msgstr "--test-degrade 参数无效："
 
-#: src/app/LiveSource.cpp:65
+#: src/app/LiveSource.cpp:64
 #, c-format
 msgid "Failed to query display dimensions: %s (using model crop table)\n"
 msgstr "查询显示尺寸失败: %s（使用机型裁剪表）\n"
 
-#: src/app/LiveSource.cpp:66
+#: src/app/LiveSource.cpp:65
 msgid "Update contains no usable dimensions"
 msgstr "推送里没有可用的尺寸"
 
-#: src/app/LiveSource.cpp:76
+#: src/app/LiveSource.cpp:75
 #, c-format
 msgid ""
 "Failed to subscribe to display changes: %s (automatic rotation unavailable)\n"
 msgstr "订阅显示变化失败: %s（无法自动跟随旋转）\n"
 
-#: src/app/LiveSource.cpp:98
+#: src/app/LiveSource.cpp:97
 #, c-format
 msgid "Media stream unavailable: %s\n"
 msgstr "媒体流不可用：%s\n"
 
-#: src/app/LiveSource.cpp:101
+#: src/app/LiveSource.cpp:100
 #, c-format
 msgid ""
 "Using screenshot polling; refresh rate depends on capture time. Input "
 "control remains available\n"
 msgstr "已改用截图轮询，刷新率取决于截图耗时；输入控制仍可用\n"
 
-#: src/app/LiveSource.cpp:105
+#: src/app/LiveSource.cpp:104
 msgid "Failed to start screenshot polling: "
 msgstr "启动截图轮询失败: "
 
-#: src/app/LiveSource.cpp:117
+#: src/app/LiveSource.cpp:116
 msgid "No first screenshot within 5 seconds"
 msgstr "5 秒内未取得首张截图"
 
-#: src/app/LiveSource.cpp:127
+#: src/app/LiveSource.cpp:126
 msgid "Screenshot is the visible area"
 msgstr "截图即可见区"
 
-#: src/app/LiveSource.cpp:131
+#: src/app/LiveSource.cpp:130
 msgid "No first decoded frame within 5 seconds"
 msgstr "5 秒内未解出首帧"
 
-#: src/app/LiveSource.cpp:135
+#: src/app/LiveSource.cpp:134
 #, c-format
 msgid "Screenshot mirroring started: %s / iOS %s, %ux%u\n"
 msgstr "截图镜像已建立：%s / iOS %s，尺寸 %ux%u\n"
 
-#: src/app/LiveSource.cpp:139
+#: src/app/LiveSource.cpp:138
 #, c-format
 msgid ""
 "Video stream started: %s / iOS %s, receive port=%u PT=%u, first frame %ux%u\n"
 msgstr "视频流已建立：%s / iOS %s，收流端口=%u PT=%u，首帧 %ux%u\n"
 
-#: src/app/LiveSource.cpp:148
+#: src/app/LiveSource.cpp:147
 #, c-format
 msgid ""
 "Display geometry: visible area %dx%d (displayId=%llu %s), UI rotation %d "
@@ -540,65 +540,65 @@ msgstr ""
 "显示几何：设备报可见区 %dx%d（displayId=%llu %s），界面旋转顺时针 %d°，码流 "
 "%ux%u\n"
 
-#: src/app/LiveSource.cpp:155
+#: src/app/LiveSource.cpp:154
 #, c-format
 msgid "Screenshot mode cannot record Annex-B; ignoring --record\n"
 msgstr "截图模式无法录制 Annex-B，已忽略 --record\n"
 
-#: src/app/LiveSource.cpp:157
+#: src/app/LiveSource.cpp:156
 #, c-format
 msgid "Recording to %s\n"
 msgstr "录制到 %s\n"
 
-#: src/app/LiveSource.cpp:164
+#: src/app/LiveSource.cpp:163
 #, c-format
 msgid "Screenshot mode does not start audio\n"
 msgstr "截图模式不启动音频流\n"
 
-#: src/app/LiveSource.cpp:175
+#: src/app/LiveSource.cpp:174
 #, c-format
 msgid "Failed to start audio: %s (video continues)\n"
 msgstr "启动音频流失败: %s（继续显示画面）\n"
 
-#: src/app/LiveSource.cpp:180
+#: src/app/LiveSource.cpp:179
 #, c-format
 msgid "Audio stream started: receive port=%u PT=%u backend=%s\n"
 msgstr "音频流已建立：收流端口=%u PT=%u 后端=%s\n"
 
-#: src/app/LiveSource.cpp:188
+#: src/app/LiveSource.cpp:187
 #, c-format
 msgid "--test-degrade: from now,"
 msgstr "--test-degrade：从现在起"
 
-#: src/app/LiveSource.cpp:190
+#: src/app/LiveSource.cpp:189
 #, c-format
 msgid " at %.1f seconds: %s"
 msgstr " %.1f 秒%s"
 
-#: src/app/LiveSource.cpp:191
+#: src/app/LiveSource.cpp:190
 msgid "force fallback"
 msgstr "强制降级"
 
-#: src/app/LiveSource.cpp:191
+#: src/app/LiveSource.cpp:190
 msgid "release override"
 msgstr "放开"
 
-#: src/app/LiveSource.cpp:193
+#: src/app/LiveSource.cpp:192
 #, c-format
 msgid " (test mode)\n"
 msgstr "（测试模式）\n"
 
-#: src/app/LiveSource.cpp:200
+#: src/app/LiveSource.cpp:199
 msgid ""
 "No playable audio stream (disabled, failed to start, or unsupported build)"
 msgstr "没有可播放的音频流（已禁用、启动失败或构建不支持）"
 
-#: src/app/LiveSource.cpp:221
+#: src/app/LiveSource.cpp:220
 #, c-format
 msgid "Control connected (touch injection available)\n"
 msgstr "控制已接通（触摸注入可用）\n"
 
-#: src/app/LiveSource.cpp:295
+#: src/app/LiveSource.cpp:296
 #, c-format
 msgid ""
 "Live video unavailable; using screenshot polling while retrying video in the "
@@ -606,41 +606,41 @@ msgid ""
 msgstr ""
 "实时视频暂不可用，已切换到截图轮询；后台继续尝试恢复视频，成功后自动切回\n"
 
-#: src/app/LiveSource.cpp:298
+#: src/app/LiveSource.cpp:299
 #, c-format
 msgid "Failed to switch to screenshots: %s (retry in %llu seconds)\n"
 msgstr "切换到截图失败: %s（%llu 秒后重试）\n"
 
-#: src/app/LiveSource.cpp:304
+#: src/app/LiveSource.cpp:305
 #, c-format
 msgid "Live video recovered; switched back to video stream\n"
 msgstr "实时视频已恢复，已切回视频流\n"
 
-#: src/app/LiveSource.cpp:338
+#: src/app/LiveSource.cpp:339
 msgid "); closing session"
 msgstr "），正在关闭会话"
 
-#: src/app/LiveSource.cpp:338
+#: src/app/LiveSource.cpp:339
 msgid "Device connection lost ("
 msgstr "设备连接已断开（"
 
-#: src/app/LiveSource.cpp:348
+#: src/app/LiveStats.cpp:30
 #, c-format
 msgid "  Tunnel TCP: receive %.1f KiB/s, total %.2f MiB (lwIP)\n"
 msgstr "  隧道 TCP：接收 %.1f KiB/s，累计 %.2f MiB（lwIP）\n"
 
-#: src/app/LiveSource.cpp:351
+#: src/app/LiveStats.cpp:33
 #, c-format
 msgid ""
 "  Network diagnostics: bad checksums %llu, ICMPv6 %llu, echo replies %llu\n"
 msgstr "  网络诊断：校验和异常 %llu，ICMPv6 %llu，回音应答 %llu\n"
 
-#: src/app/LiveSource.cpp:369
+#: src/app/LiveStats.cpp:51
 #, c-format
 msgid "  Screenshots: %5.2f/s, total %llu images / %llu KiB, %llu failures\n"
 msgstr "  截图：%5.2f 张/s，累计 %llu 张 / %llu KiB，失败 %llu 次\n"
 
-#: src/app/LiveSource.cpp:409
+#: src/app/LiveStats.cpp:91
 #, c-format
 msgid ""
 "  Video: device video packets %6.0f/s, local datagrams (including RTCP) "
@@ -649,12 +649,12 @@ msgstr ""
 "  视频：设备视频包 %6.0f/s，本地数据报（含 RTCP）%6.0f/s，组帧 %5.1f/s，解码 "
 "%5.1f/s\n"
 
-#: src/app/LiveSource.cpp:416
+#: src/app/LiveStats.cpp:98
 #, c-format
 msgid "      Sampling: device SR not received yet, local %.1f s\n"
 msgstr "      采样窗口：设备 SR 尚未到达，本地 %.1f s\n"
 
-#: src/app/LiveSource.cpp:419
+#: src/app/LiveStats.cpp:101
 #, c-format
 msgid ""
 "      Sampling: device %.1f s, local %.1f s (different intervals; rates "
@@ -662,7 +662,7 @@ msgid ""
 msgstr ""
 "      采样窗口：设备 %.1f s，本地 %.1f s（窗口不同，速率不能直接相减）\n"
 
-#: src/app/LiveSource.cpp:426
+#: src/app/LiveStats.cpp:108
 #, c-format
 msgid ""
 "      Current session: device video packets %llu, local datagrams (including "
@@ -671,21 +671,21 @@ msgstr ""
 "      当前会话：设备视频包 %llu，本地数据报（含 RTCP）%llu；全程组帧 %llu，解"
 "码 %llu\n"
 
-#: src/app/LiveSource.cpp:432
+#: src/app/LiveStats.cpp:114
 #, c-format
 msgid ""
 "      Per frame: depacketize %.1f ms, decode %.1f ms, deliver %.1f ms (%llu "
 "AU calls)\n"
 msgstr "      每帧耗时：拆包 %.1f ms 解码 %.1f ms 交付 %.1f ms（AU %llu 次）\n"
 
-#: src/app/LiveSource.cpp:438
+#: src/app/LiveStats.cpp:120
 #, c-format
 msgid ""
 "      Current session: non-video packets %llu, sequence gaps %llu, dropped "
 "fragments %llu\n"
 msgstr "      当前会话：非视频包 %llu，序号缺口 %llu，丢弃分片 %llu\n"
 
-#: src/app/LiveSource.cpp:443
+#: src/app/LiveStats.cpp:125
 #, c-format
 msgid ""
 "      All sessions: no output %llu, dropped waiting for keyframe %llu, "
@@ -694,24 +694,24 @@ msgstr ""
 "      全程：未输出帧 %llu，等待关键帧丢弃 %llu，重启 %llu，过大 NAL 丢弃 "
 "%llu\n"
 
-#: src/app/LiveSource.cpp:452
+#: src/app/LiveStats.cpp:134
 #, c-format
 msgid ""
 "      All sessions: video packets %llu, SR %llu, sent RR %llu, PLI %llu\n"
 msgstr "      全程：视频包 %llu，SR %llu，发送 RR %llu，PLI %llu\n"
 
-#: src/app/LiveSource.cpp:467
+#: src/app/LiveStats.cpp:150
 #, c-format
 msgid ""
 "  Audio: received %6.0f packets/s, decoded %6.0f packets/s, delivered %6.0f "
 "frames/s (output=%s)\n"
 msgstr "  音频：接收 %6.0f 包/s，解码 %6.0f 包/s，交付 %6.0f 帧/s（输出=%s）\n"
 
-#: src/app/LiveSource.cpp:471
+#: src/app/LiveStats.cpp:154
 msgid "closed"
 msgstr "未开"
 
-#: src/app/LiveSource.cpp:473
+#: src/app/LiveStats.cpp:156
 #, c-format
 msgid ""
 "      All sessions: decode failures %llu, lost %llu, late %llu, dropped old "
@@ -840,7 +840,7 @@ msgstr "存在无效字符：\""
 msgid "Schedule requires at least one time"
 msgstr "时刻表至少需要一个时刻"
 
-#: src/decode/AudioDecoder.h:49
+#: src/decode/AudioDecoder.h:52
 msgid ""
 "AAC-ELD decoding is unavailable on this platform. This build uses "
 "AudioToolbox on macOS; the tested native FFmpeg AAC decoder does not support "
@@ -922,44 +922,64 @@ msgstr "connectedServices 的回信里没有 connectedServices: "
 msgid "Stroke requires at least one point"
 msgstr "stroke 至少要一个点"
 
-#: src/http2/Framing.cpp:141
+#: src/http2/Framing.cpp:144
 msgid "Frame header shorter than 9 bytes"
 msgstr "帧头不足 9 字节"
 
-#: src/http2/Framing.cpp:147
+#: src/http2/Framing.cpp:150
 msgid "Frame length too large: "
 msgstr "帧长过大: "
 
-#: src/http2/Framing.cpp:152 src/remote/RemoteXpc.cpp:484
-#: src/remote/RemoteXpc.cpp:570 src/xpc/XpcValue.cpp:649
+#: src/http2/Framing.cpp:155 src/remote/RemoteXpc.cpp:574
+#: src/remote/RemoteXpc.cpp:660 src/xpc/XpcValue.cpp:649
 msgid " bytes"
 msgstr " 字节"
 
-#: src/http2/Framing.cpp:152 src/xpc/XpcValue.cpp:649
+#: src/http2/Framing.cpp:155 src/xpc/XpcValue.cpp:649
 msgid "Missing "
 msgstr "还差 "
 
-#: src/http2/Framing.cpp:170
+#: src/http2/Framing.cpp:173
 msgid "PADDED DATA missing Pad Length byte"
 msgstr "DATA 带 PADDED 却没有 Pad Length 字节"
 
-#: src/http2/Framing.cpp:177
+#: src/http2/Framing.cpp:180
 msgid "Pad Length exceeds available payload: "
 msgstr "Pad Length 超过可用载荷: "
 
-#: src/http2/Framing.cpp:196
+#: src/http2/Framing.cpp:194
+msgid "SETTINGS must use stream 0"
+msgstr "SETTINGS 必须使用流 0"
+
+#: src/http2/Framing.cpp:199
+msgid "SETTINGS ACK payload must be empty"
+msgstr "SETTINGS ACK 的载荷必须为空"
+
+#: src/http2/Framing.cpp:205
 msgid "SETTINGS payload length is not a multiple of 6: "
 msgstr "SETTINGS 载荷不是 6 的倍数: "
 
-#: src/http2/Framing.cpp:207
+#: src/http2/Framing.cpp:212
+msgid "SETTINGS_INITIAL_WINDOW_SIZE exceeds 2^31 - 1"
+msgstr "SETTINGS_INITIAL_WINDOW_SIZE 超过 2^31 - 1"
+
+#: src/http2/Framing.cpp:217
+msgid "SETTINGS_MAX_FRAME_SIZE is outside 16384..16777215"
+msgstr "SETTINGS_MAX_FRAME_SIZE 超出 16384..16777215 的范围"
+
+#: src/http2/Framing.cpp:227
 msgid "WINDOW_UPDATE payload must be 4 bytes; got "
 msgstr "WINDOW_UPDATE 载荷长度应为 4，实际 "
 
-#: src/http2/Framing.cpp:216
+#: src/http2/Framing.cpp:232
+msgid "WINDOW_UPDATE increment must be nonzero"
+msgstr "WINDOW_UPDATE 的增量不能为零"
+
+#: src/http2/Framing.cpp:240
 msgid "GOAWAY payload shorter than 8 bytes"
 msgstr "GOAWAY 载荷不足 8 字节"
 
-#: src/http2/Framing.cpp:233
+#: src/http2/Framing.cpp:257
 msgid "RST_STREAM payload must be 4 bytes; got "
 msgstr "RST_STREAM 载荷长度应为 4，实际 "
 
@@ -1714,65 +1734,65 @@ msgstr "PULL 失败: "
 msgid "Response has no plain-text representation: "
 msgstr "响应缺少纯文本表示形式："
 
-#: src/remote/RemoteXpc.cpp:140
+#: src/remote/RemoteXpc.cpp:143
 #, c-format
 msgid "    >> %zu bytes: "
 msgstr "    >> %zu 字节: "
 
-#: src/remote/RemoteXpc.cpp:153
+#: src/remote/RemoteXpc.cpp:165
 msgid "Failed to send HTTP/2 preface: "
 msgstr "发 HTTP/2 前置签名失败: "
 
-#: src/remote/RemoteXpc.cpp:161
+#: src/remote/RemoteXpc.cpp:173
 msgid "Failed to send SETTINGS: "
 msgstr "发 SETTINGS 失败: "
 
-#: src/remote/RemoteXpc.cpp:167
+#: src/remote/RemoteXpc.cpp:179
 msgid "Failed to send WINDOW_UPDATE: "
 msgstr "发 WINDOW_UPDATE 失败: "
 
-#: src/remote/RemoteXpc.cpp:175
+#: src/remote/RemoteXpc.cpp:187
 msgid "Failed to send primary channel HEADERS: "
 msgstr "发主通道 HEADERS 失败: "
 
-#: src/remote/RemoteXpc.cpp:181
+#: src/remote/RemoteXpc.cpp:193
 msgid "Failed to send first frame: "
 msgstr "发首帧失败: "
 
-#: src/remote/RemoteXpc.cpp:186
+#: src/remote/RemoteXpc.cpp:198
 msgid "Failed to send reply channel HEADERS: "
 msgstr "发回信通道 HEADERS 失败: "
 
-#: src/remote/RemoteXpc.cpp:192
+#: src/remote/RemoteXpc.cpp:204
 msgid "Failed to send terminating frame: "
 msgstr "发终止帧失败: "
 
-#: src/remote/RemoteXpc.cpp:197
+#: src/remote/RemoteXpc.cpp:209
 msgid "Failed to send INIT_HANDSHAKE frame: "
 msgstr "发 INIT_HANDSHAKE 帧失败: "
 
-#: src/remote/RemoteXpc.cpp:206
+#: src/remote/RemoteXpc.cpp:218
 msgid "Timed out waiting for device SETTINGS"
 msgstr "等待设备 SETTINGS 超时"
 
-#: src/remote/RemoteXpc.cpp:210
+#: src/remote/RemoteXpc.cpp:222
 msgid "Disconnected while waiting for device SETTINGS: "
 msgstr "等设备 SETTINGS 时断开: "
 
-#: src/remote/RemoteXpc.cpp:221
+#: src/remote/RemoteXpc.cpp:233
 msgid "Failed to send RemoteXPC identity: "
 msgstr "发 RemoteXPC 身份申报失败: "
 
-#: src/remote/RemoteXpc.cpp:226
+#: src/remote/RemoteXpc.cpp:238
 msgid "Failed to read peer_info: "
 msgstr "读 peer_info 失败: "
 
-#: src/remote/RemoteXpc.cpp:246 src/remote/RemoteXpc.cpp:511
-#: src/remote/RemoteXpc.cpp:665
+#: src/remote/RemoteXpc.cpp:258 src/remote/RemoteXpc.cpp:602
+#: src/remote/RemoteXpc.cpp:772 src/remote/RemoteXpc.cpp:788
 msgid "Connection terminated"
 msgstr "连接已终止"
 
-#: src/remote/RemoteXpc.cpp:273
+#: src/remote/RemoteXpc.cpp:288
 #, c-format
 msgid ""
 "    HTTP/2 parse failed: %s; buffered %zu bytes, stream offset %llu (total "
@@ -1783,95 +1803,146 @@ msgstr ""
 "64 字节：\n"
 "      "
 
-#: src/remote/RemoteXpc.cpp:327
+#: src/remote/RemoteXpc.cpp:322 src/remote/RemoteXpc.cpp:514
+msgid "RemoteXPC connection input exceeds 64 MiB"
+msgstr "RemoteXPC 连接的输入缓冲超过 64 MiB"
+
+#: src/remote/RemoteXpc.cpp:348
 #, c-format
 msgid "    HTTP/2 input dump -> %s\n"
 msgstr "    HTTP/2 输入 dump -> %s\n"
 
-#: src/remote/RemoteXpc.cpp:387
-msgid "PING payload shorter than 8 bytes"
-msgstr "PING 载荷不足 8 字节"
+#: src/remote/RemoteXpc.cpp:371 src/remote/RemoteXpc.cpp:399
+#: src/remote/RemoteXpc.cpp:409
+msgid "Flow-control window exceeds 2^31 - 1"
+msgstr "流控窗口超过 2^31 - 1"
 
-#: src/remote/RemoteXpc.cpp:403
+#: src/remote/RemoteXpc.cpp:418
+msgid "PING must use stream 0 and contain exactly 8 bytes"
+msgstr "PING 必须使用流 0，且载荷必须正好为 8 字节"
+
+#: src/remote/RemoteXpc.cpp:434
+msgid "GOAWAY must use stream 0"
+msgstr "GOAWAY 必须使用流 0"
+
+#: src/remote/RemoteXpc.cpp:442
 msgid "Device sent GOAWAY "
 msgstr "设备发来 GOAWAY "
 
-#: src/remote/RemoteXpc.cpp:416
-msgid "Primary channel reset: "
-msgstr "主通道被 RST："
+#: src/remote/RemoteXpc.cpp:450
+msgid "RST_STREAM must use a nonzero stream"
+msgstr "RST_STREAM 必须使用非零流号"
 
-#: src/remote/RemoteXpc.cpp:438
-msgid "Device set END_STREAM on primary channel; connection ended"
-msgstr "设备在主通道上置了 END_STREAM，连接已经结束"
+#: src/remote/RemoteXpc.cpp:459
+msgid "RemoteXPC stream reset: "
+msgstr "RemoteXPC 流被重置："
 
-#: src/remote/RemoteXpc.cpp:454
+#: src/remote/RemoteXpc.cpp:465
+msgid "DATA must use a nonzero stream"
+msgstr "DATA 必须使用非零流号"
+
+#: src/remote/RemoteXpc.cpp:478 src/remote/RemoteXpc.cpp:681
+#: src/remote/RemoteXpc.cpp:697
+msgid "RemoteXPC file stream limit exceeded (100)"
+msgstr "RemoteXPC 文件流数量超过上限（100）"
+
+#: src/remote/RemoteXpc.cpp:486 src/remote/RemoteXpc.cpp:705
+msgid "RemoteXPC file stream cannot be reused: "
+msgstr "RemoteXPC 文件流不能重复使用："
+
+#: src/remote/RemoteXpc.cpp:492 src/remote/RemoteXpc.cpp:709
+msgid "RemoteXPC file data exceeds declared size or 32 MiB limit"
+msgstr "RemoteXPC 文件数据超过声明大小或 32 MiB 上限"
+
+#: src/remote/RemoteXpc.cpp:498 src/remote/RemoteXpc.cpp:654
+#: src/remote/RemoteXpc.cpp:713
+msgid "RemoteXPC file ended before its declared size"
+msgstr "RemoteXPC 文件流提前结束，数据未达到声明大小"
+
+#: src/remote/RemoteXpc.cpp:504
+msgid "Unsupported RemoteXPC message stream: "
+msgstr "不支持的 RemoteXPC 消息流："
+
+#: src/remote/RemoteXpc.cpp:509
+msgid "RemoteXPC message stream input exceeds 32 MiB plus wrapper"
+msgstr "RemoteXPC 消息流的输入超过 32 MiB 加封装头的上限"
+
+#: src/remote/RemoteXpc.cpp:527
+msgid "Device set END_STREAM on message channel; connection ended"
+msgstr "设备通过 END_STREAM 结束消息通道，连接已终止"
+
+#: src/remote/RemoteXpc.cpp:543
 msgid "Failed to replenish connection receive window: "
 msgstr "连接接收窗口补充失败："
 
-#: src/remote/RemoteXpc.cpp:463
+#: src/remote/RemoteXpc.cpp:552
 msgid "Failed to replenish stream receive window: "
 msgstr "流接收窗口补充失败："
 
-#: src/remote/RemoteXpc.cpp:483
+#: src/remote/RemoteXpc.cpp:573
 msgid "Peer did not replenish flow-control window; sent "
 msgstr "对端未补充流控窗口，已发送 "
 
-#: src/remote/RemoteXpc.cpp:488
+#: src/remote/RemoteXpc.cpp:578
 msgid "Disconnected while waiting for flow-control window: "
 msgstr "等流控窗口时断开: "
 
-#: src/remote/RemoteXpc.cpp:498
+#: src/remote/RemoteXpc.cpp:589
 msgid "Failed to send DATA: "
 msgstr "发 DATA 失败: "
 
-#: src/remote/RemoteXpc.cpp:517
+#: src/remote/RemoteXpc.cpp:608
 msgid "XPC encoding failed (depth or length limit exceeded)"
 msgstr "XPC 编码失败（深度或长度超限）"
 
-#: src/remote/RemoteXpc.cpp:559
+#: src/remote/RemoteXpc.cpp:648
 msgid "Failed to accept file stream: "
 msgstr "接受文件流失败: "
 
-#: src/remote/RemoteXpc.cpp:569
+#: src/remote/RemoteXpc.cpp:659
 msgid " has received "
 msgstr " 上已到 "
 
-#: src/remote/RemoteXpc.cpp:569
+#: src/remote/RemoteXpc.cpp:659
 msgid "File receive timed out: stream "
 msgstr "收文件超时：流 "
 
-#: src/remote/RemoteXpc.cpp:577
+#: src/remote/RemoteXpc.cpp:664
 msgid "Disconnected while receiving file: "
 msgstr "收文件时断开: "
 
-#: src/remote/RemoteXpc.cpp:603
+#: src/remote/RemoteXpc.cpp:689
+msgid "RemoteXPC reply attachments exceed 32 MiB"
+msgstr "RemoteXPC 回复的附件总大小超过 32 MiB"
+
+#: src/remote/RemoteXpc.cpp:723
 #, c-format
 msgid "    Receiving file: %llu bytes on stream %u\n"
 msgstr "    接收文件：%llu 字节，流 %u\n"
 
-#: src/remote/RemoteXpc.cpp:622
+#: src/remote/RemoteXpc.cpp:740
 msgid " contains malformed message: "
 msgstr " 上的消息畸形: "
 
-#: src/remote/RemoteXpc.cpp:622
+#: src/remote/RemoteXpc.cpp:740
 msgid "Stream "
 msgstr "流 "
 
-#: src/remote/RemoteXpc.cpp:629
+#: src/remote/RemoteXpc.cpp:747
 #, c-format
 msgid "    Stream %u message incomplete: %s\n"
 msgstr "    流 %u 的消息尚未完整：%s\n"
 
-#: src/remote/RemoteXpc.cpp:637
+#: src/remote/RemoteXpc.cpp:755
 #, c-format
 msgid "    => stream %u id=%llu %s\n"
 msgstr "    => 流%u id=%llu %s\n"
 
-#: src/remote/RemoteXpc.cpp:661
+#: src/remote/RemoteXpc.cpp:784
 msgid "Timed out waiting for device reply"
 msgstr "等设备回信超时"
 
-#: src/remote/RemoteXpc.cpp:674
+#: src/remote/RemoteXpc.cpp:793
 msgid "Disconnected while waiting for device reply: "
 msgstr "等设备回信时断开: "
 
