@@ -1,4 +1,5 @@
 #include "i18n/Translation.h"
+#include "i18n/CliLanguage.h"
 #include "app/Cli.h"
 #include "hid/Hid.h"
 #include <CLI/CLI.hpp>
@@ -12,8 +13,6 @@
 namespace scrctl::app {
 
 ParseResult parse_args(int argc, char **argv, Options &o) {
-    i18n::initialize();
-    std::string requested_language = "auto";
     CLI::App app{SCRCTL_N_("iOS screen mirroring and control")};
     app.footer(SCRCTL_N_(
         "With no arguments, mirror the connected device.\nThe device chooses encoding "
@@ -79,23 +78,10 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.add_option("--crop", crop, SCRCTL_N_("Crop WxH+X+Y or W:H:X:Y"));
     app.add_option("--background-color", background, SCRCTL_N_("Background color #RRGGBB"));
     app.add_option("--verify", verify, SCRCTL_N_("Read window at frame N into BMP: N FILE (requires a window)"))->expected(2);
-    auto *language_option = app.add_option("--lang", requested_language,
-        SCRCTL_N_("Message language: auto, en, zh-CN (default: environment, fallback: en)"))
-        ->check(CLI::IsMember({"auto", "en", "zh-CN"}));
-    auto select_language = [&]() {
-        const auto &values = language_option->results();
-        const auto requested = values.empty() ? std::string("auto") : values.back();
-        if (requested != "auto" && requested != "en" && requested != "zh-CN") {
-            std::fprintf(stderr, "%s\n", SCRCTL_TR("--lang must be auto, en or zh-CN"));
-            return false;
-        }
-        if (!i18n::initialize(requested))
-            std::fprintf(stderr, "%s\n", "Cannot enable the requested message locale; using English");
-        return true;
-    };
+    i18n::CliLanguage language(app);
     try {
         app.parse(argc, argv);
-        if (!select_language()) return ParseResult::Error;
+        if (!language.select()) return ParseResult::Error;
         if (!std::all_of(o.test_touch.begin(), o.test_touch.end(), [](double value) {
                 return std::isfinite(value) && value >= 0 && value <= 1;
             })) {
@@ -151,21 +137,11 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
             throw CLI::ValidationError("--verify", SCRCTL_TR("Requires a window; incompatible with --no-window"));
         }
     } catch (const CLI::CallForHelp &) {
-        if (!select_language()) return ParseResult::Error;
-        app.description(SCRCTL_TR(app.get_description().c_str()));
-        app.footer(SCRCTL_TR(app.get_footer().c_str()));
-        for (auto *option : app.get_options()) {
-            const auto description = option->get_description();
-            option->description(SCRCTL_TR(description.c_str()));
-        }
-        auto formatter = app.get_formatter();
-        formatter->label("Usage", SCRCTL_TR("Usage"));
-        formatter->label("Options", SCRCTL_TR("Options"));
-        formatter->label("OPTIONS", SCRCTL_TR("Options"));
-        std::printf("%s", app.help().c_str());
+        if (!language.select()) return ParseResult::Error;
+        std::printf("%s", language.help().c_str());
         return ParseResult::ExitSuccess;
     } catch (const CLI::ParseError &e) {
-        select_language();
+        language.select();
         std::fprintf(stderr, "%s\n", e.what());
         return ParseResult::Error;
     }

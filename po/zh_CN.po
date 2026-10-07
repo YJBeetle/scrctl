@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 03:26+0800\n"
+"POT-Creation-Date: 2026-10-08 04:01+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -49,7 +49,7 @@ msgstr "打开音频输出失败: %s（继续接收和解码音频）\n"
 msgid "Local audio playback disabled; receiving and decoding continue\n"
 msgstr "已禁用本机音频播放，继续接收和解码音频\n"
 
-#: src/app/Application.cpp:149
+#: src/app/Application.cpp:149 tools/rr_keepalive_probe.cpp:770
 msgid "failed"
 msgstr "失败"
 
@@ -77,50 +77,50 @@ msgstr "--test-type %s: 已注入\n"
 msgid "--test-type failed: %s\n"
 msgstr "--test-type 失败: %s\n"
 
-#: src/app/Application.cpp:197
+#: src/app/Application.cpp:198
 #, c-format
 msgid "Input injection failed (further attempts disabled): %s\n"
 msgstr "注入输入失败（已停止尝试）: %s\n"
 
-#: src/app/Application.cpp:208
+#: src/app/Application.cpp:209
 #, c-format
 msgid "Reached --time-limit %d seconds\n"
 msgstr "达到 --time-limit %d 秒\n"
 
-#: src/app/Application.cpp:212
+#: src/app/Application.cpp:213
 #, c-format
 msgid "Received exit signal; closing device session\n"
 msgstr "收到退出信号，正在关闭设备会话\n"
 
-#: src/app/Application.cpp:222
+#: src/app/Application.cpp:223
 #, c-format
 msgid ""
 "  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
 msgstr "  渲染：累计 %d 帧，本次 %d 帧 / %.1f fps，全程平均 %.1f fps\n"
 
-#: src/app/Application.cpp:247 src/app/Application.cpp:313
+#: src/app/Application.cpp:249 src/app/Application.cpp:315
 #, c-format
 msgid "Reached --exit-after %d\n"
 msgstr "达到 --exit-after %d\n"
 
-#: src/app/Application.cpp:262
+#: src/app/Application.cpp:264
 #, c-format
 msgid ""
 "Mouse input is unavailable: screenshot orientation or display dimensions are "
 "unknown or inconsistent\n"
 msgstr "截图的朝向或显示尺寸尚未确认，已暂停鼠标输入\n"
 
-#: src/app/Application.cpp:292
+#: src/app/Application.cpp:294
 #, c-format
 msgid "Render rotation changed to %d degrees clockwise; window recreated\n"
 msgstr "图像旋转角改为顺时针 %d°，窗口已重建\n"
 
-#: src/app/Application.cpp:324
+#: src/app/Application.cpp:329
 #, c-format
 msgid "Window readback was not reached (requested frame %d, rendered %d)\n"
 msgstr "未执行窗口回读：要求第 %d 帧，实际显示了 %d 帧\n"
 
-#: src/app/Application.cpp:328
+#: src/app/Application.cpp:333
 #, c-format
 msgid "Finished: rendered %d frames\n"
 msgstr "完成：渲染 %d 帧\n"
@@ -139,11 +139,11 @@ msgstr ""
 msgid "Audio output opened: %d Hz / %d channels, backend %s\n"
 msgstr "音频输出已打开：%d Hz / %d 声道，后端 %s\n"
 
-#: src/app/Cli.cpp:17
+#: src/app/Cli.cpp:16
 msgid "iOS screen mirroring and control"
 msgstr "iOS 屏幕镜像与控制"
 
-#: src/app/Cli.cpp:19
+#: src/app/Cli.cpp:18
 msgid ""
 "With no arguments, mirror the connected device.\n"
 "The device chooses encoding dimensions, bitrate and frame rate; overrides "
@@ -158,218 +158,201 @@ msgstr ""
 "鼠标左键映射为触摸；方向不支持 flip，录制保留原始码流。\n"
 "无线需要先配对；--help / --version 不连接设备。"
 
-#: src/app/Cli.cpp:24 tools/screenshot_probe.cpp:53
+#: src/app/Cli.cpp:23 tools/screenshot_probe.cpp:52
 msgid "Show help"
 msgstr "显示帮助"
 
-#: src/app/Cli.cpp:25
+#: src/app/Cli.cpp:24
 msgid "Play an Annex-B HEVC file"
 msgstr "回放 Annex-B HEVC 文件"
 
-#: src/app/Cli.cpp:26 tools/screenshot_probe.cpp:59
+#: src/app/Cli.cpp:25 tools/screenshot_probe.cpp:58
 msgid "Device UDID"
 msgstr "设备 UDID"
 
-#: src/app/Cli.cpp:27
+#: src/app/Cli.cpp:26
 msgid "LAN address (requires an existing pairing record)"
 msgstr "局域网地址（需要已有配对记录）"
 
-#: src/app/Cli.cpp:28
+#: src/app/Cli.cpp:27
 msgid "Record the live stream as Annex-B"
 msgstr "将实时流录为 Annex-B"
 
-#: src/app/Cli.cpp:29
+#: src/app/Cli.cpp:28
 msgid ""
 "Launch bundle ID; ? matches name prefix, + terminates the previous instance"
 msgstr "启动 bundle id；? 按名称前缀，+ 先终止实例"
 
-#: src/app/Cli.cpp:30
+#: src/app/Cli.cpp:29
 msgid "Window title"
 msgstr "窗口标题"
 
-#: src/app/Cli.cpp:31
+#: src/app/Cli.cpp:30
 msgid "SDL render driver, e.g. metal / software"
 msgstr "SDL 渲染驱动，如 metal / software"
 
-#: src/app/Cli.cpp:33
+#: src/app/Cli.cpp:32
 msgid "stream for live video or screenshot for polling; default: stream"
 msgstr "stream 实时流或 screenshot 截图轮询，默认 stream"
 
-#: src/app/Cli.cpp:35
+#: src/app/Cli.cpp:34
 msgid "Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"
 msgstr "注入直线 X0,Y0,X1,Y1 后退出（归一化坐标）"
 
-#: src/app/Cli.cpp:42
+#: src/app/Cli.cpp:41
 msgid "Inject home/lock/volup/voldn/mute"
 msgstr "注入 home/lock/volup/voldn/mute"
 
-#: src/app/Cli.cpp:44
+#: src/app/Cli.cpp:43
 msgid "Inject ASCII text (device text field must have focus)"
 msgstr "注入 ASCII 文本（设备需已聚焦文本框）"
 
-#: src/app/Cli.cpp:45
+#: src/app/Cli.cpp:44
 msgid "Force alternating video fallback and recovery at T1,T2,... seconds"
 msgstr "按 T1,T2,... 秒交替强制降级与恢复"
 
-#: src/app/Cli.cpp:46
+#: src/app/Cli.cpp:45
 msgid "Write device clipboard and exit (supports Unicode)"
 msgstr "写入设备剪贴板后退出（支持中文）"
 
-#: src/app/Cli.cpp:47
+#: src/app/Cli.cpp:46
 msgid "List connected devices"
 msgstr "列出连接的设备"
 
-#: src/app/Cli.cpp:48
+#: src/app/Cli.cpp:47
 msgid "Disable input control"
 msgstr "关闭输入控制"
 
-#: src/app/Cli.cpp:49
+#: src/app/Cli.cpp:48
 msgid "List device apps"
 msgstr "列出设备 App"
 
-#: src/app/Cli.cpp:50
+#: src/app/Cli.cpp:49
 msgid "Show version"
 msgstr "显示版本"
 
-#: src/app/Cli.cpp:51
+#: src/app/Cli.cpp:50
 msgid "Desktop fullscreen"
 msgstr "桌面全屏"
 
-#: src/app/Cli.cpp:52
+#: src/app/Cli.cpp:51
 msgid "Keep window on top"
 msgstr "窗口置顶"
 
-#: src/app/Cli.cpp:53
+#: src/app/Cli.cpp:52
 msgid "Borderless window"
 msgstr "无边框窗口"
 
-#: src/app/Cli.cpp:54
+#: src/app/Cli.cpp:53
 msgid "Prevent local screen sleep while running"
 msgstr "运行期间禁止本机息屏"
 
-#: src/app/Cli.cpp:55
+#: src/app/Cli.cpp:54
 msgid "Do not start audio stream"
 msgstr "不启动音频流"
 
-#: src/app/Cli.cpp:56
+#: src/app/Cli.cpp:55
 msgid "Receive and decode audio without local playback"
 msgstr "接收和解码音频，但本机不播放"
 
-#: src/app/Cli.cpp:57
+#: src/app/Cli.cpp:56
 msgid "Run without a window"
 msgstr "无窗口运行"
 
-#: src/app/Cli.cpp:58
+#: src/app/Cli.cpp:57
 msgid "Use platform hardware decoder; default: software"
 msgstr "使用平台硬件解码，默认软件解码"
 
-#: src/app/Cli.cpp:59
+#: src/app/Cli.cpp:58
 msgid "Print input coordinates"
 msgstr "打印输入坐标"
 
-#: src/app/Cli.cpp:60
+#: src/app/Cli.cpp:59
 msgid "Add tunnel diagnostics to --stats"
 msgstr "在 --stats 中增加隧道网络诊断"
 
-#: src/app/Cli.cpp:61
+#: src/app/Cli.cpp:60
 msgid "Print statistics every second"
 msgstr "每秒打印统计"
 
-#: src/app/Cli.cpp:62
+#: src/app/Cli.cpp:61
 msgid "Read device clipboard; with --copy, read back after writing"
 msgstr "读取设备剪贴板；与 --copy 同用时写后读回"
 
-#: src/app/Cli.cpp:63
+#: src/app/Cli.cpp:62
 msgid "Window horizontal position; default: centered"
 msgstr "窗口横坐标，默认居中"
 
-#: src/app/Cli.cpp:64
+#: src/app/Cli.cpp:63
 msgid "Window vertical position; default: centered"
 msgstr "窗口纵坐标，默认居中"
 
-#: src/app/Cli.cpp:65
+#: src/app/Cli.cpp:64
 msgid "Window width; 0 for automatic"
 msgstr "窗口宽度，0 为自动"
 
-#: src/app/Cli.cpp:66
+#: src/app/Cli.cpp:65
 msgid "Window height; 0 for automatic"
 msgstr "窗口高度，0 为自动"
 
-#: src/app/Cli.cpp:67
+#: src/app/Cli.cpp:66
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr "运行秒数，0 为不限"
 
-#: src/app/Cli.cpp:69
+#: src/app/Cli.cpp:68
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr "音频缓冲毫秒数，默认 50，上限 1000"
 
-#: src/app/Cli.cpp:71
+#: src/app/Cli.cpp:70
 msgid "Exit after N frames; 0 for unlimited"
 msgstr "处理 N 帧后退出，0 为不限"
 
-#: src/app/Cli.cpp:73
+#: src/app/Cli.cpp:72
 msgid "Finite positive scale; default: fit screen"
 msgstr "有限正数缩放比例，默认自动适应屏幕"
 
-#: src/app/Cli.cpp:77
+#: src/app/Cli.cpp:76
 msgid ""
 "Clockwise display orientation; auto follows device and does not affect "
 "recording"
 msgstr "显示顺时针朝向；auto 跟随设备，不影响录制"
 
-#: src/app/Cli.cpp:79
+#: src/app/Cli.cpp:78
 msgid "Crop WxH+X+Y or W:H:X:Y"
 msgstr "裁剪 WxH+X+Y 或 W:H:X:Y"
 
-#: src/app/Cli.cpp:80
+#: src/app/Cli.cpp:79
 msgid "Background color #RRGGBB"
 msgstr "背景色 #RRGGBB"
 
-#: src/app/Cli.cpp:81
+#: src/app/Cli.cpp:80
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr "第 N 帧回读窗口为 BMP：N FILE（需要窗口）"
 
-#: src/app/Cli.cpp:83 tools/screenshot_probe.cpp:61
-msgid "Message language: auto, en, zh-CN (default: environment, fallback: en)"
-msgstr "提示语言：auto、en、zh-CN（默认按环境选择，回退英文）"
-
-#: src/app/Cli.cpp:89 tools/screenshot_probe.cpp:69
-msgid "--lang must be auto, en or zh-CN"
-msgstr "--lang 必须为 auto、en 或 zh-CN"
-
-#: src/app/Cli.cpp:102
+#: src/app/Cli.cpp:88
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr "坐标必须是 [0, 1] 内的有限数"
 
-#: src/app/Cli.cpp:109
+#: src/app/Cli.cpp:95
 msgid "Requires a finite positive number"
 msgstr "需要有限正数"
 
-#: src/app/Cli.cpp:126
+#: src/app/Cli.cpp:112
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr "格式应为 WxH+X+Y 或 W:H:X:Y，尺寸为正、偏移非负"
 
-#: src/app/Cli.cpp:133
+#: src/app/Cli.cpp:119
 msgid "Expected #RRGGBB"
 msgstr "需要 #RRGGBB"
 
-#: src/app/Cli.cpp:146
+#: src/app/Cli.cpp:132
 msgid "Frame number must be a positive integer"
 msgstr "帧号需要正整数"
 
-#: src/app/Cli.cpp:151
+#: src/app/Cli.cpp:137
 msgid "Requires a window; incompatible with --no-window"
 msgstr "需要窗口，不能与 --no-window 同用"
-
-#: src/app/Cli.cpp:162 tools/screenshot_probe.cpp:90
-msgid "Usage"
-msgstr "用法"
-
-#: src/app/Cli.cpp:163 src/app/Cli.cpp:164 tools/screenshot_probe.cpp:92
-#: tools/screenshot_probe.cpp:93
-msgid "Options"
-msgstr "选项"
 
 #: src/app/Commands.cpp:40 src/app/Commands.cpp:63
 #, c-format
@@ -482,7 +465,7 @@ msgstr "读入 %s (%zu 字节)\n"
 msgid "Decoder backend: %s\n"
 msgstr "解码后端: %s\n"
 
-#: src/app/FrameSource.h:21
+#: src/app/FrameSource.h:23
 msgid "Source ended"
 msgstr "源已结束"
 
@@ -1015,6 +998,31 @@ msgstr "GOAWAY 载荷不足 8 字节"
 msgid "RST_STREAM payload must be 4 bytes; got "
 msgstr "RST_STREAM 载荷长度应为 4，实际 "
 
+#: src/i18n/CliLanguage.h:16
+msgid "Message language: auto, en, zh-CN (default: environment, fallback: en)"
+msgstr "提示语言：auto、en、zh-CN（默认按环境选择，回退英文）"
+
+#: src/i18n/CliLanguage.h:30
+msgid "--lang must be auto, en or zh-CN"
+msgstr "--lang 必须为 auto、en 或 zh-CN"
+
+#: src/i18n/CliLanguage.h:35
+msgid "Cannot enable the requested message locale; using English"
+msgstr "无法启用请求的消息语言，使用英文"
+
+#: src/i18n/CliLanguage.h:47 src/i18n/CliLanguage.h:52
+#: src/i18n/CliLanguage.h:53
+msgid "Options"
+msgstr "选项"
+
+#: src/i18n/CliLanguage.h:51
+msgid "Usage"
+msgstr "用法"
+
+#: src/i18n/CliLanguage.h:54 src/i18n/CliLanguage.h:55
+msgid "Positionals"
+msgstr "位置参数"
+
 #: src/json/Json.cpp:15
 msgid "Input too large"
 msgstr "输入过大"
@@ -1156,6 +1164,7 @@ msgstr "设备会话已结束"
 #: src/net/TcpStream.cpp:126 src/net/UdpSocket.cpp:109
 #: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:214
 #: src/transport/Socket.cpp:114 src/wifi/RemotePairing.cpp:35
+#: tools/rr_keepalive_probe.cpp:636
 msgid ")"
 msgstr "）"
 
@@ -2882,93 +2891,738 @@ msgstr "载荷解码失败"
 msgid ", received "
 msgstr "，已收到"
 
-#: tools/screenshot_probe.cpp:50
-msgid "Capture a device screenshot and save it as PNG"
-msgstr "获取设备截图并保存为 PNG"
+#: tools/rr_keepalive_probe.cpp:121 tools/rr_keepalive_probe.cpp:122
+#: tools/rr_keepalive_probe.cpp:1004 tools/rr_keepalive_probe.cpp:1005
+#: tools/rr_keepalive_probe.cpp:1010
+msgid "(missing)"
+msgstr "(缺失)"
 
-#: tools/screenshot_probe.cpp:52
+#: tools/rr_keepalive_probe.cpp:188
+msgid "false"
+msgstr "false"
+
+#: tools/rr_keepalive_probe.cpp:188 tools/rr_keepalive_probe.cpp:1011
+msgid "true"
+msgstr "true"
+
+#: tools/rr_keepalive_probe.cpp:202
+#, c-format
+msgid "    %s = <%zu bytes>\n"
+msgstr "    %s = <%zu 字节>\n"
+
+#: tools/rr_keepalive_probe.cpp:248
+#, c-format
 msgid ""
-"With no UDID, use the connected device. --help does not connect to a device."
-msgstr "未指定 UDID 时使用已连接设备。--help 不会连接设备。"
+"  [%s] video received=%s IDRs=%llu last video +%llums last SR +%llums SRs "
+"during video quiet periods=%llu session at end=%s"
+msgstr ""
+"  [%s] 收到过视频包=%s IDR=%llu 最后视频包 +%llums 最后 SR +%llums 视频静默期"
+"间 SR=%llu 结束时会话=%s"
 
-#: tools/screenshot_probe.cpp:54
-msgid "Print device connection and request details"
-msgstr "输出设备连接及请求详情"
+#: tools/rr_keepalive_probe.cpp:249 tools/rr_keepalive_probe.cpp:307
+msgid "no"
+msgstr "无"
 
-#: tools/screenshot_probe.cpp:56
-msgid "Output PNG path (default: /tmp/scrctl-shot.png)"
-msgstr "PNG 输出路径（默认：/tmp/scrctl-shot.png）"
+#: tools/rr_keepalive_probe.cpp:249 tools/rr_keepalive_probe.cpp:307
+msgid "yes"
+msgstr "有"
 
-#: tools/screenshot_probe.cpp:74
-msgid "Cannot enable the requested message locale; using English"
-msgstr "无法启用请求的消息语言，使用英文"
+#: tools/rr_keepalive_probe.cpp:254
+msgid "absent"
+msgstr "不存在"
 
-#: tools/screenshot_probe.cpp:91
-msgid "Positionals"
-msgstr "位置参数"
+#: tools/rr_keepalive_probe.cpp:254
+msgid "present"
+msgstr "存在"
 
-#: tools/screenshot_probe.cpp:98
+#: tools/rr_keepalive_probe.cpp:256
+#, c-format
+msgid " keyframe requests=%llu first at +%llums subsequent IDR "
+msgstr " 关键帧请求=%llu 首次在 +%llums 随后 IDR "
+
+#: tools/rr_keepalive_probe.cpp:263
+msgid "not observed"
+msgstr "未观察到"
+
+#: tools/rr_keepalive_probe.cpp:264
+msgid "ms later"
+msgstr "ms 后到达"
+
+#: tools/rr_keepalive_probe.cpp:268
+#, c-format
+msgid " session polls reporting alive=%llu last at +%llums"
+msgstr " 会话查询存活=%llu 次 最后一次 +%llums"
+
+#: tools/rr_keepalive_probe.cpp:286
+#, c-format
+msgid "  [%s] device session table: %zu entries\n"
+msgstr "  [%s] 设备会话表：%zu 条\n"
+
+#: tools/rr_keepalive_probe.cpp:303
+#, c-format
+msgid "    [%zu] %s PT=%llu type=%s timeout key=%s run duration=%llus\n"
+msgstr "    [%zu] %s PT=%llu type=%s timeout 键=%s 运行时长=%llus\n"
+
+#: tools/rr_keepalive_probe.cpp:304
+msgid "other client"
+msgstr "其他客户端"
+
+#: tools/rr_keepalive_probe.cpp:304
+msgid "ours"
+msgstr "本探针"
+
+#: tools/rr_keepalive_probe.cpp:306
+msgid "(missing; creation path may differ)"
+msgstr "(缺失；创建路径可能不同)"
+
+#: tools/rr_keepalive_probe.cpp:381
+msgid "Compare RTCP keepalive and keyframe request strategies over USB"
+msgstr "比较 USB 连接上的 RTCP 保活与关键帧请求策略"
+
+#: tools/rr_keepalive_probe.cpp:382
+msgid "Show help and exit without connecting to a device"
+msgstr "显示帮助并退出，不连接设备"
+
+#: tools/rr_keepalive_probe.cpp:386
+msgid "Observation seconds per arm (default: 30)"
+msgstr "每个对照组的观察秒数（默认：30）"
+
+#: tools/rr_keepalive_probe.cpp:388
+msgid "Number of rounds (default: 2)"
+msgstr "对照轮数（默认：2）"
+
+#: tools/rr_keepalive_probe.cpp:390
+msgid "RR and keyframe request frequency in Hz (default: 1)"
+msgstr "RR 与关键帧请求频率，单位 Hz（默认：1）"
+
+#: tools/rr_keepalive_probe.cpp:396
+msgid ""
+"must be a finite positive frequency with a representable millisecond period"
+msgstr "频率必须为有限正数，且毫秒周期在可表示范围内"
+
+#: tools/rr_keepalive_probe.cpp:400
+msgid "Negotiation timeout in seconds (default: 20)"
+msgstr "协商请求的 timeout 秒数（默认：20）"
+
+#: tools/rr_keepalive_probe.cpp:401
+msgid "Comma-separated arms (default: none,rrsrc,rrsrcsd)"
+msgstr "以逗号分隔的对照组（默认：none,rrsrc,rrsrcsd）"
+
+#: tools/rr_keepalive_probe.cpp:407
+msgid "must contain at least one arm"
+msgstr "必须包含至少一个对照组"
+
+#: tools/rr_keepalive_probe.cpp:415
+msgid "unknown arm: "
+msgstr "未知对照组："
+
+#: tools/rr_keepalive_probe.cpp:422
+msgid "unknown arm flag: "
+msgstr "未知对照组标志："
+
+#: tools/rr_keepalive_probe.cpp:430
+msgid "Omit the timeout key from the request"
+msgstr "在请求中省略 timeout 键"
+
+#: tools/rr_keepalive_probe.cpp:431
+msgid "Print packet bytes and exit without connecting"
+msgstr "打印包字节并退出，不连接设备"
+
+#: tools/rr_keepalive_probe.cpp:432
+msgid "Print the full final session status"
+msgstr "打印最终会话状态的完整结构"
+
+#: tools/rr_keepalive_probe.cpp:433
+msgid "Write length-prefixed audio RTP packets to FILE"
+msgstr "将带长度前缀的音频 RTP 包写入 FILE"
+
+#: tools/rr_keepalive_probe.cpp:434
+msgid "Start audio with the same client session ID as video"
+msgstr "使用与视频相同的客户端会话 ID 启动音频流"
+
+#: tools/rr_keepalive_probe.cpp:435
+msgid "Start audio and send RR+SDES on its port at 1 Hz"
+msgstr "启动音频流，并以 1 Hz 向其端口发送 RR+SDES"
+
+#: tools/rr_keepalive_probe.cpp:436
+msgid "Use FILE bytes as the negotiator offer"
+msgstr "使用 FILE 原始字节作为协商 offer"
+
+#: tools/rr_keepalive_probe.cpp:437
+msgid "AVConference feature string (default: FLS;SW:1;)"
+msgstr "AVConference feature 字符串（默认：FLS;SW:1;）"
+
+#: tools/rr_keepalive_probe.cpp:438
+msgid "Include a session event channel UUID"
+msgstr "在请求中附加会话事件通道 UUID"
+
+#: tools/rr_keepalive_probe.cpp:439
+msgid "Keep the stream-start connection open and service it"
+msgstr "保持起流连接并处理其控制消息"
+
+#: tools/rr_keepalive_probe.cpp:440
+msgid "Keep a display connection open without starting media"
+msgstr "保持显示服务连接，不启动媒体流"
+
+#: tools/rr_keepalive_probe.cpp:441
+msgid "Disable status polling on the held connection"
+msgstr "禁用保持连接上的状态轮询"
+
+#: tools/rr_keepalive_probe.cpp:442
+msgid "Subscribe to display updates before starting"
+msgstr "启动媒体流前订阅显示更新"
+
+#: tools/rr_keepalive_probe.cpp:443
+msgid "Attach HID before starting, without sending input"
+msgstr "启动媒体流前连接 HID，不发送输入"
+
+#: tools/rr_keepalive_probe.cpp:444
+msgid "Send five ICMPv6 echo requests before starting"
+msgstr "起流前发送 5 个 ICMPv6 回音请求"
+
+#: tools/rr_keepalive_probe.cpp:445
+msgid "Send a unicast DNS query to device port 5353"
+msgstr "向设备 5353 端口发送单播 DNS 查询"
+
+#: tools/rr_keepalive_probe.cpp:447
+msgid "Send three UDP datagrams to optional PORT (default: 47891)"
+msgstr "向可选 PORT 发送 3 个 UDP 数据报（默认：47891）"
+
+#: tools/rr_keepalive_probe.cpp:449
+msgid "Set a random IPv6 flow label"
+msgstr "设置随机 IPv6 流标签"
+
+#: tools/rr_keepalive_probe.cpp:450
+msgid "Request keyframes even while video is arriving"
+msgstr "视频仍在到达时也请求关键帧"
+
+#: tools/rr_keepalive_probe.cpp:451
+msgid "Print verbose protocol logging"
+msgstr "打印详细协议日志"
+
+#: tools/rr_keepalive_probe.cpp:452
+msgid ""
+"Arms: none, poll, poll5, rr, rrsame, rrsdes, rrp1, rrall, rrneg, rrnegp1,\n"
+"rrnegsr, rrmine, rrminep1, rrminesr, rrminesd, rrminecname, rrsrc, rrsrcsd,\n"
+"rctl, rctlrr, pli, fir. Append +fb and/or +ltrp to enable offer flags.\n"
+"Without --help or --dump-packets, this probe connects to the USB device."
+msgstr ""
+"对照组：none、poll、poll5、rr、rrsame、rrsdes、rrp1、rrall、rrneg、"
+"rrnegp1、\n"
+"rrnegsr、rrmine、rrminep1、rrminesr、rrminesd、rrminecname、rrsrc、"
+"rrsrcsd、\n"
+"rctl、rctlrr、pli、fir。附加 +fb 和/或 +ltrp 可启用对应 offer 标志。\n"
+"未指定 --help 或 --dump-packets 时，本探针将连接 USB 设备。"
+
+#: tools/rr_keepalive_probe.cpp:462 tools/screenshot_probe.cpp:69
 #, c-format
 msgid "Invalid arguments: %s\n"
 msgstr "参数无效：%s\n"
 
-#: tools/screenshot_probe.cpp:106
+#: tools/rr_keepalive_probe.cpp:474
+msgid "timeout key omitted"
+msgstr "未发送 timeout 键"
+
+#: tools/rr_keepalive_probe.cpp:489
+#, c-format
+msgid "sessionEventChannel = %s\n"
+msgstr "sessionEventChannel = %s\n"
+
+#: tools/rr_keepalive_probe.cpp:502
+#, c-format
+msgid ""
+"Packet self-check: RR %zu bytes (length=%d) RR+SDES %zu bytes SR %zu bytes "
+"RCTL %zu bytes Companion %zu bytes\n"
+msgstr ""
+"包自检：RR %zu 字节（length=%d）RR+SDES %zu 字节 SR %zu 字节 RCTL %zu 字节 伴"
+"随包 %zu 字节\n"
+
+#: tools/rr_keepalive_probe.cpp:507
+#, c-format
+msgid ""
+"Unexpected packet shape (expected RR 32 / SDES 12 / SR 28 / RCTL 32 / "
+"Companion 16, RR length 7); this round is invalid\n"
+msgstr ""
+"包结构不符（应为 RR 32 / SDES 12 / SR 28 / RCTL 32 / 伴随包 16，RR length "
+"7）；本轮无效\n"
+
+#: tools/rr_keepalive_probe.cpp:530
+#, c-format
+msgid "Companion %s\n"
+msgstr "伴随包    %s\n"
+
+#: tools/rr_keepalive_probe.cpp:538
+#, c-format
+msgid "Failed to open offer file %s\n"
+msgstr "无法打开 offer 文件 %s\n"
+
+#: tools/rr_keepalive_probe.cpp:547
+#, c-format
+msgid "Using %s as raw negotiatorOffer (%zu bytes; offer builder bypassed)\n"
+msgstr "使用 %s 作为原始 negotiatorOffer（%zu 字节；跳过 offer 构造器）\n"
+
+#: tools/rr_keepalive_probe.cpp:554 tools/screenshot_probe.cpp:77
 #, c-format
 msgid "Failed to establish device session: %s\n"
 msgstr "建立设备会话失败：%s\n"
 
-#: tools/screenshot_probe.cpp:109
+#: tools/rr_keepalive_probe.cpp:564
+#, c-format
+msgid "  Outbound IPv6 flow label: 0x%05x (default: 0)\n"
+msgstr "  出站 IPv6 流标签：0x%05x（默认：0）\n"
+
+#: tools/rr_keepalive_probe.cpp:572
+#, c-format
+msgid "  ping6 #%d write failed: %s\n"
+msgstr "  ping6 #%d 写入失败：%s\n"
+
+#: tools/rr_keepalive_probe.cpp:577
+#, c-format
+msgid "  ping6 -> %s: ICMP received=%llu echo replies=%llu%s\n"
+msgstr "  ping6 -> %s：收到 ICMP=%llu 回音应答=%llu%s\n"
+
+#: tools/rr_keepalive_probe.cpp:581
+msgid " (non-TCP traffic received through the tunnel)"
+msgstr "（隧道已收到非 TCP 流量）"
+
+#: tools/rr_keepalive_probe.cpp:582
+msgid " (no echo reply; this does not establish UDP failure)"
+msgstr "（未收到回音应答；不能据此判定 UDP 失败）"
+
+#: tools/rr_keepalive_probe.cpp:584
+#, c-format
+msgid "    Last message: %s\n"
+msgstr "    最后一条消息：%s\n"
+
+#: tools/rr_keepalive_probe.cpp:601
+#, c-format
+msgid "  udp-mdns: failed to bind a local port\n"
+msgstr "  udp-mdns：绑定本地端口失败\n"
+
+#: tools/rr_keepalive_probe.cpp:634
+msgid " bytes from port "
+msgstr " 字节，来源端口 "
+
+#: tools/rr_keepalive_probe.cpp:634
+msgid "Reply received: "
+msgstr "收到回复："
+
+#: tools/rr_keepalive_probe.cpp:635
+msgid "; client-to-device UDP delivery confirmed"
+msgstr "；已确认本次客户端到设备的 UDP 投递"
+
+#: tools/rr_keepalive_probe.cpp:636
+msgid "No reply ("
+msgstr "未收到回复（"
+
+#: tools/rr_keepalive_probe.cpp:637
+#, c-format
+msgid "  udp-mdns: local port %u, queries sent=%d, %s\n"
+msgstr "  udp-mdns：本地端口 %u，已发查询=%d，%s\n"
+
+#: tools/rr_keepalive_probe.cpp:648
+#, c-format
+msgid "Failed to open connection: %s\n"
+msgstr "打开连接失败：%s\n"
+
+#: tools/rr_keepalive_probe.cpp:656
+#, c-format
+msgid "[idle] First call: %s, reply type %d\n"
+msgstr "[idle] 首次调用：%s，回复类型 %d\n"
+
+#: tools/rr_keepalive_probe.cpp:657 tools/rr_keepalive_probe.cpp:680
+#: tools/rr_keepalive_probe.cpp:770
+msgid "succeeded"
+msgstr "成功"
+
+#: tools/rr_keepalive_probe.cpp:667
+#, c-format
+msgid "    [idle] Connection closed by peer at +%lldms: %s\n"
+msgstr "    [idle] 连接在 +%lldms 被对端关闭：%s\n"
+
+#: tools/rr_keepalive_probe.cpp:678
+#, c-format
+msgid "    [idle] +%llus repeat call on the same connection: %s\n"
+msgstr "    [idle] +%llus 在同一连接再次调用：%s\n"
+
+#: tools/rr_keepalive_probe.cpp:686
+#, c-format
+msgid ""
+"[idle] Result: displayservice connection held for %lldms, %s, successful "
+"repeat calls=%d\n"
+msgstr "[idle] 结果：显示服务连接保持 %lldms，%s，成功复查 %d 次\n"
+
+#: tools/rr_keepalive_probe.cpp:688
+msgid "closed by device"
+msgstr "设备已关闭"
+
+#: tools/rr_keepalive_probe.cpp:688
+msgid "not closed by device"
+msgstr "设备未关闭"
+
+#: tools/rr_keepalive_probe.cpp:761
+#, c-format
+msgid "[%s] HID connection failed: %s (round invalid)\n"
+msgstr "[%s] HID 连接失败：%s（本轮无效）\n"
+
+#: tools/rr_keepalive_probe.cpp:769
+#, c-format
+msgid ""
+"  HID attached without sending input (connectedServices query %s, "
+"surfaces=%zu)\n"
+msgstr "  HID 已连接，未发送输入（connectedServices 查询%s，显示面=%zu）\n"
+
+#: tools/rr_keepalive_probe.cpp:785
+#, c-format
+msgid "Failed to open audio output file %s\n"
+msgstr "无法打开音频输出文件 %s\n"
+
+#: tools/rr_keepalive_probe.cpp:801
+#, c-format
+msgid "[%s] Failed to start audio stream: %s (round invalid)\n"
+msgstr "[%s] 音频起流失败：%s（本轮无效）\n"
+
+#: tools/rr_keepalive_probe.cpp:815
+#, c-format
+msgid ""
+"  Audio stream started: receive port=%u device send port=%u PT=%u "
+"RemoteSSRC=%u LocalSSRC=%u\n"
+msgstr ""
+"  音频已起流：接收端口=%u 设备发送端口=%u PT=%u RemoteSSRC=%u LocalSSRC=%u\n"
+
+#: tools/rr_keepalive_probe.cpp:817
+msgid "audio"
+msgstr "音频"
+
+#: tools/rr_keepalive_probe.cpp:820
+#, c-format
+msgid "  Full audio answer: %s\n"
+msgstr "  完整音频 answer：%s\n"
+
+#: tools/rr_keepalive_probe.cpp:837
+#, c-format
+msgid "[%s] Failed to connect to deviceinfo: %s\n"
+msgstr "[%s] 连接 deviceinfo 失败：%s\n"
+
+#: tools/rr_keepalive_probe.cpp:866
+#, c-format
+msgid "    [sub] +%lldms display update: %s\n"
+msgstr "    [sub] +%lldms 显示更新：%s\n"
+
+#: tools/rr_keepalive_probe.cpp:876
+#, c-format
+msgid "    [sub] +%lldms subscription closed; reconnecting: %s\n"
+msgstr "    [sub] +%lldms 订阅已关闭，正在重连：%s\n"
+
+#: tools/rr_keepalive_probe.cpp:881
+#, c-format
+msgid "    [sub] Reconnection failed: %s\n"
+msgstr "    [sub] 重连失败：%s\n"
+
+#: tools/rr_keepalive_probe.cpp:900
+#, c-format
+msgid "[%s] Failed to open connection: %s\n"
+msgstr "[%s] 打开连接失败：%s\n"
+
+#: tools/rr_keepalive_probe.cpp:908
+#, c-format
+msgid "[%s] Failed to start stream: %s\n"
+msgstr "[%s] 起流失败：%s\n"
+
+#: tools/rr_keepalive_probe.cpp:920
+#, c-format
+msgid "    [hold] Connection closed at +%lldms: %s\n"
+msgstr "    [hold] 连接在 +%lldms 关闭：%s\n"
+
+#: tools/rr_keepalive_probe.cpp:936
+#, c-format
+msgid "    [hold] +%lldms session entries on the same connection=%zu\n"
+msgstr "    [hold] +%lldms 同一连接查询到的会话=%zu 条\n"
+
+#: tools/rr_keepalive_probe.cpp:942
+#, c-format
+msgid ""
+"    [hold] +%lldms status query on the same connection failed (%d): %s\n"
+msgstr "    [hold] +%lldms 同一连接查询状态失败（%d）：%s\n"
+
+#: tools/rr_keepalive_probe.cpp:950
+#, c-format
+msgid ""
+"Round %d [%s]: stream started, observing for %d seconds (leave the device "
+"idle) offer: allowRTCPFB=%d ltrpEnabled=%d\n"
+msgstr ""
+"第 %d 轮 [%s]：媒体流已启动，观察 %d 秒（请暂时不要操作设备）offer："
+"allowRTCPFB=%d ltrpEnabled=%d\n"
+
+#: tools/rr_keepalive_probe.cpp:1007
+msgid "video"
+msgstr "视频"
+
+#: tools/rr_keepalive_probe.cpp:1008
+#, c-format
+msgid ""
+"  Requested timeout=%s -> answer RTCPTimeoutInterval=%s "
+"RTCPTimeoutEnabled=%s\n"
+msgstr ""
+"  请求 timeout=%s -> answer RTCPTimeoutInterval=%s RTCPTimeoutEnabled=%s\n"
+
+#: tools/rr_keepalive_probe.cpp:1011
+msgid "false/not read"
+msgstr "false 或未读取"
+
+#: tools/rr_keepalive_probe.cpp:1011
+msgid "other"
+msgstr "其他"
+
+#: tools/rr_keepalive_probe.cpp:1013
+#, c-format
+msgid "  Timeout values differ: the device did not echo the requested value\n"
+msgstr "  超时值不同：设备未原样回显请求值\n"
+
+#: tools/rr_keepalive_probe.cpp:1016
+#, c-format
+msgid "  Ports differ: rrsrc* arms send to streamConfig.SourcePort\n"
+msgstr "  端口不同：rrsrc* 对照组发往 streamConfig.SourcePort\n"
+
+#: tools/rr_keepalive_probe.cpp:1021
+#, c-format
+msgid "  Sent %s -> answer TxCodecFeatureListString=%s\n"
+msgstr "  发送 %s -> answer TxCodecFeatureListString=%s\n"
+
+#: tools/rr_keepalive_probe.cpp:1033
+#, c-format
+msgid "  UDP probe #%d -> %u: %s\n"
+msgstr "  UDP 探测 #%d -> %u：%s\n"
+
+#: tools/rr_keepalive_probe.cpp:1034
+msgid "write failed: "
+msgstr "写入失败："
+
+#: tools/rr_keepalive_probe.cpp:1034
+msgid "written to tunnel"
+msgstr "已写入隧道"
+
+#: tools/rr_keepalive_probe.cpp:1099
+msgid "Failed to send RCTL companion packet: "
+msgstr "发送 RCTL 伴随包失败："
+
+#: tools/rr_keepalive_probe.cpp:1122
+msgid "Failed to send RCTL: "
+msgstr "发送 RCTL 失败："
+
+#: tools/rr_keepalive_probe.cpp:1158
+#, c-format
+msgid "  RTP SSRC %u compared with answer %s (%s)\n"
+msgstr "  RTP SSRC %u 对照 answer %s（%s）\n"
+
+#: tools/rr_keepalive_probe.cpp:1160
+msgid "matches LocalSSRC"
+msgstr "与 LocalSSRC 相等"
+
+#: tools/rr_keepalive_probe.cpp:1161
+msgid "LocalSSRC differs; compare RemoteSSRC with the value above"
+msgstr "与 LocalSSRC 不同；请与上方 RemoteSSRC 值核对"
+
+#: tools/rr_keepalive_probe.cpp:1164
+msgid "Failed to send RTCP: "
+msgstr "发送 RTCP 失败："
+
+#: tools/rr_keepalive_probe.cpp:1188
+msgid "Failed to send keyframe request: "
+msgstr "发送关键帧请求失败："
+
+#: tools/rr_keepalive_probe.cpp:1196
+#, c-format
+msgid "  First %s sent (video quiet for %llums; later requests follow --hz)\n"
+msgstr "  首次发送 %s（视频已静默 %llums；后续请求按 --hz 发送）\n"
+
+#: tools/rr_keepalive_probe.cpp:1237
+msgid "Failed to send audio RR: "
+msgstr "发送音频 RR 失败："
+
+#: tools/rr_keepalive_probe.cpp:1257
+#, c-format
+msgid ""
+"  +%3llus video packets %6llu SRs %4llu RTCP sent %5llu audio packets %6llu "
+"audio RR %3llu (requested timeout %s)\n"
+msgstr ""
+"  +%3llus 视频包 %6llu SR %4llu 已发 RTCP %5llu 音频包 %6llu 音频 RR %3llu"
+"（请求超时 %s）\n"
+
+#: tools/rr_keepalive_probe.cpp:1265
+#, c-format
+msgid ""
+"  +%3llus video packets %6llu SRs %4llu RTCP sent %5llu (requested timeout "
+"%s)\n"
+msgstr "  +%3llus 视频包 %6llu SR %4llu 已发 RTCP %5llu（请求超时 %s）\n"
+
+#: tools/rr_keepalive_probe.cpp:1276
+#, c-format
+msgid "    Our session_uuid = "
+msgstr "    本探针 session_uuid = "
+
+#: tools/rr_keepalive_probe.cpp:1289
+#, c-format
+msgid "    Session table entry %zu uuid = "
+msgstr "    会话表第 %zu 条 uuid = "
+
+#: tools/rr_keepalive_probe.cpp:1291
+#, c-format
+msgid "(unavailable)"
+msgstr "(无法读取)"
+
+#: tools/rr_keepalive_probe.cpp:1300 tools/rr_keepalive_probe.cpp:1310
+msgid "Status"
+msgstr "状态"
+
+#: tools/rr_keepalive_probe.cpp:1306
+msgid "observation ended"
+msgstr "观察结束"
+
+#: tools/rr_keepalive_probe.cpp:1308
+#, c-format
+msgid "  Device status at the end of the observation window:\n"
+msgstr "  观察结束时的设备状态：\n"
+
+#: tools/rr_keepalive_probe.cpp:1327
+#, c-format
+msgid "  [sub] Display updates received=%d%s\n"
+msgstr "  [sub] 收到显示更新=%d 次%s\n"
+
+#: tools/rr_keepalive_probe.cpp:1328
+msgid " (subscription failed during observation)"
+msgstr "（观察期间订阅曾失败）"
+
+#: tools/rr_keepalive_probe.cpp:1333
+#, c-format
+msgid ""
+"  [hold] Successful session polls on the same connection=%d; connection %s\n"
+msgstr "  [hold] 同一连接成功查询会话=%d 次；连接%s\n"
+
+#: tools/rr_keepalive_probe.cpp:1335
+msgid "closed during observation"
+msgstr "在观察期间关闭"
+
+#: tools/rr_keepalive_probe.cpp:1335
+msgid "remained open"
+msgstr "一直保持打开"
+
+#: tools/rr_keepalive_probe.cpp:1343
+#, c-format
+msgid ""
+"\n"
+"Summary (rounds alive at observation end / valid rounds):\n"
+msgstr ""
+"\n"
+"汇总（观察结束时存活轮数 / 有效轮数）：\n"
+
+#: tools/rr_keepalive_probe.cpp:1345
+#, c-format
+msgid "  %-6s alive %d / %d\n"
+msgstr "  %-6s 存活 %d / %d\n"
+
+#: tools/rr_keepalive_probe.cpp:1356
+#, c-format
+msgid ""
+"Control condition met: the none arm ended in every observed valid round.\n"
+msgstr "满足对照条件：none 组在所有已观察的有效轮次中均结束。\n"
+
+#: tools/rr_keepalive_probe.cpp:1363
+#, c-format
+msgid "  %-6s: %s\n"
+msgstr "  %-6s：%s\n"
+
+#: tools/rr_keepalive_probe.cpp:1365
+msgid ""
+"alive in every observed round; consistent with keepalive in this comparison"
+msgstr "所有已观察轮次均存活；本次对照支持其保活作用"
+
+#: tools/rr_keepalive_probe.cpp:1366
+msgid ""
+"ended in every observed round; no keepalive effect observed in this "
+"comparison"
+msgstr "所有已观察轮次均结束；本次对照未观察到保活作用"
+
+#: tools/rr_keepalive_probe.cpp:1367
+msgid "mixed outcomes; more controlled observations are needed"
+msgstr "存活结果不一致；需要更多受控观察"
+
+#: tools/rr_keepalive_probe.cpp:1370
+#, c-format
+msgid ""
+"Control condition not met: the none arm survived or no valid control round "
+"was recorded.\n"
+msgstr "不满足对照条件：none 组曾存活，或未记录有效对照轮次。\n"
+
+#: tools/screenshot_probe.cpp:49
+msgid "Capture a device screenshot and save it as PNG"
+msgstr "获取设备截图并保存为 PNG"
+
+#: tools/screenshot_probe.cpp:51
+msgid ""
+"With no UDID, use the connected device. --help does not connect to a device."
+msgstr "未指定 UDID 时使用已连接设备。--help 不会连接设备。"
+
+#: tools/screenshot_probe.cpp:53
+msgid "Print device connection and request details"
+msgstr "输出设备连接及请求详情"
+
+#: tools/screenshot_probe.cpp:55
+msgid "Output PNG path (default: /tmp/scrctl-shot.png)"
+msgstr "PNG 输出路径（默认：/tmp/scrctl-shot.png）"
+
+#: tools/screenshot_probe.cpp:80
 #, c-format
 msgid "Device: %s / iOS %s\n"
 msgstr "设备：%s / iOS %s\n"
 
-#: tools/screenshot_probe.cpp:121
+#: tools/screenshot_probe.cpp:92
 #, c-format
 msgid "Failed to capture screenshot: %s\n"
 msgstr "获取截图失败：%s\n"
 
-#: tools/screenshot_probe.cpp:124
+#: tools/screenshot_probe.cpp:95
 #, c-format
 msgid "Reply structure: %s\n"
 msgstr "回复结构：%s\n"
 
-#: tools/screenshot_probe.cpp:128
+#: tools/screenshot_probe.cpp:99
 msgid "Screenshot reply contains no image field"
 msgstr "截图回复缺少 image 字段"
 
-#: tools/screenshot_probe.cpp:132
+#: tools/screenshot_probe.cpp:103
 msgid "Screenshot image contains no bytes"
 msgstr "截图图像不含字节数据"
 
-#: tools/screenshot_probe.cpp:137
+#: tools/screenshot_probe.cpp:108
 #, c-format
 msgid "Image: %zu bytes, %s\n"
 msgstr "图像：%zu 字节，%s\n"
 
-#: tools/screenshot_probe.cpp:138
+#: tools/screenshot_probe.cpp:109
 msgid "PNG header not recognized"
 msgstr "无法识别 PNG 头部"
 
-#: tools/screenshot_probe.cpp:138
+#: tools/screenshot_probe.cpp:109
 msgid "PNG header recognized"
 msgstr "已识别 PNG 头部"
 
-#: tools/screenshot_probe.cpp:140
+#: tools/screenshot_probe.cpp:111
 #, c-format
 msgid "Image dimensions: %ux%u\n"
 msgstr "图像尺寸：%ux%u\n"
 
-#: tools/screenshot_probe.cpp:146
+#: tools/screenshot_probe.cpp:117
 #, c-format
 msgid "Failed to open %s: %s\n"
 msgstr "无法打开 %s：%s\n"
 
-#: tools/screenshot_probe.cpp:158
+#: tools/screenshot_probe.cpp:129
 #, c-format
 msgid "Failed to save %s: %s\n"
 msgstr "保存 %s 失败：%s\n"
 
-#: tools/screenshot_probe.cpp:162
+#: tools/screenshot_probe.cpp:133
 #, c-format
 msgid "Saved to %s\n"
 msgstr "已保存到 %s\n"

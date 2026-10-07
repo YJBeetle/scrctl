@@ -1,39 +1,12 @@
-// 探针：每秒发一个 RTCP 接收报告（RR），能不能让设备**不**把这条流结束掉。
+// 比较 USB 隧道上的 RTCP 反馈、会话查询及关键帧请求策略。
+// 各对照臂交替运行，分别统计视频 RTP、设备 SR、IDR、主动请求和观察结束时的会话状态。
+// SR 到达证明当时存在设备反馈，不能单独保证整个媒体会话正常；结束状态另由 RPC 查询。
+// IDR 计数与会话存活是不同指标，请结合 none 对照及完整观察窗口解释结果。
 //
-// 为什么单独问这个：之前那轮"RTCP 全都不理"的实验，判据用错了。那次量的是"发完请求
-// 6 秒里有没有 IRAP 到达"（见 tools/fir_probe.cpp 的判据），也就是"能不能把帧催出来";
-// 而这里要问的是另一件事——"会话会不会被结束"。一个保活机制成功的表现恰恰是**没有新
-// 帧也不死**，用"有没有帧"去判它，注定判成失败。
-//
-// 而同一批实验留下的现象里其实已经写着答案：docs §13 记着"RR 发到视频端口会让投递
-// 几乎停""不再有结束事件"。当时把"没有结束事件"和"一个包都不来了"混成一件事读，
-// 于是记成了"RR 有害"。这两件事必须分开量：
-//
-//   会话还活着但画面静止  -> 只有每秒一个 SR，没有视频包，会话表里 running:true
-//   会话被结束            -> 连 SR 都停，会话表里 running:false
-//
-// 判据用**设备自己那一秒一个的 SR** 当存活信号：它是被动到达的，不引入任何额外流量，
-// 而且实测它在会话消失的同一秒才停（docs §13 的时间轴）。所以"最后一个视频包之后 SR
-// 还在继续来"就是"会话还活着"，不需要为此额外发任何 RPC——那会污染对照。
-// 只在整轮结束时问一次会话表，作为独立佐证。
-//
-// 对照组 `none` 什么都不发。两臂**交替**各跑若干轮：单次对照不算对照（docs §13）。
-//
-// 完整参数见 rr_keepalive_probe --help；帮助和 --dump-packets 均不会连接设备。
-//
-// 第二轮加的 `poll` 臂是因为第一批数据把"空闲超时"这个模型打掉了：四臂里最后一个视频
-// 包分别落在 +11.1s / +7.1s / +7.1s / +7.1s，而**每一臂都是 +20.0s 整**停止收 SR 并在
-// 会话表里消失。锚点是起流时刻，不是"最后一个视频包"。所以这不是"画面静止 6.9 秒就
-// 拆流"（那个数来自另一轮"视频 13.1s 停、20.0s 死"的样本，同样落在 20 这个数上，只是
-// 当时先入为主当成了间隔）。
-//
-// 那为什么另一次实验里"画面全程在动"的会话活了 45 秒？那一轮用的是 `rtcp_probe --death`，
-// 它**每秒查一次会话表**。如果查状态这个动作本身会把 20 秒的表推后，那 45 秒就不是
-// "有媒体可发所以留着"，而是"我们自己一直在续"。`poll` 臂就是专门验这个的：只查状态、
-// 不发任何 RTCP。
-//
-// 存活信号仍然用设备自己每秒一个的 SR（被动、不引入流量）；`poll` 臂会引入 RPC，所以
-// 它的对照意义是"这一臂能不能活过 20 秒"，而不是"SR 数说明什么"。
+// 早期约 20 秒断流及“RTCP 无效”的实验发生在 UDP 发送修复之前，不能作为当前结论。
+// 原始记录、UDP 修复后对照及当前边界见 docs/coredevice.md §13「UDP 修复后的反馈对照」
+// 和 §30.3「同配置 RR / PLI / 标准 FIR 的三轮对照」。
+// 完整参数见 --help；--help 和 --dump-packets 均在设备连接前退出。
 #include <CLI/CLI.hpp>
 #include <algorithm>
 #include <atomic>
@@ -52,6 +25,8 @@
 #include <vector>
 
 #include "hid/Hid.h"
+#include "i18n/CliLanguage.h"
+#include "i18n/Translation.h"
 #include "media/StreamSession.h"
 #include "net/UdpSocket.h"
 #include "remote/Device.h"
@@ -62,9 +37,8 @@ namespace {
 
 using namespace std::chrono_literals;
 using clock = std::chrono::steady_clock;
-// 标准 RTCP 包的拼装住在产品代码里（`src/rt/Rtcp.cpp`）：产品路径现在每秒要发一个 RR
-// 续命，两处各写一份字节格式迟早飘——而这个文件的历史上，"两份不一样"已经让一整批
-// 实验的结论作废过一次（长度字段写成 32 位）。这里只留 AVConference 那种厂商私有包。
+// 标准 RTCP 包复用 src/rt/Rtcp.cpp，避免探针与产品路径的字节格式不一致。
+// 本文件只保留实验使用的 AVConference 私有 APP 包构造器。
 using scrctl::rt::build_rr;
 using scrctl::rt::build_sdes;
 using scrctl::rt::build_sdes_cname;
@@ -86,18 +60,15 @@ void put32(std::vector<uint8_t> &v, uint32_t x) {
     v.push_back(static_cast<uint8_t>(x));
 }
 
-/// RTCP 公共头里的长度是**16 位**（RFC 3550 §6.1：V/RC 1 字节 + PT 1 字节 + length 2
-/// 字节）。这个坑在本文件里踩过一次、docs §13 还专门记着"拿自己组装的包去证明设备不理
-/// 之前，先核对它的字节数"，结果今天又用 `put32(v, 7)` 写了一遍：整包从第 3 字节起错位
-/// 两字节，于是"设备不理我们"这个结论的证据基础又是一个畸形包。
+/// RTCP 公共头使用 16 位大端 length，值为整包的 32 位字数减一（RFC 3550 §6.1）。
+/// 不可用 put32 写 length，否则会造成后续字段错位。
 void put16(std::vector<uint8_t> &v, uint16_t x) {
     v.push_back(static_cast<uint8_t>(x >> 8));
     v.push_back(static_cast<uint8_t>(x));
 }
 
-/// 从 answer 的 `connection.streamConfig` 里取一个数。取不到返回 false。
-/// 布尔也按数读：`RTCPTimeoutEnabled` 这种键在线上就是 XPC 的 Bool 类型，只按
-/// Int64/UInt64 找会当成"没有这个键"。
+/// 从 answer.connection.streamConfig 读取数值；缺失或类型不支持时返回 false。
+/// 同时接受 Bool，RTCPTimeoutEnabled 的实测回复使用这种类型。
 bool stream_config_u32(const scrctl::xpc::Value &answer, const char *key, uint32_t &out) {
     const auto *conn = answer.find("connection");
     const auto *cfg = conn != nullptr ? conn->find("streamConfig") : nullptr;
@@ -123,7 +94,7 @@ bool stream_config_u32(const scrctl::xpc::Value &answer, const char *key, uint32
     }
 }
 
-/// 同上，取字符串项（`TxCodecFeatureListString` 这种）。
+/// 同为绝对单调时刻，取字符串项（`TxCodecFeatureListString` 这种）。
 bool stream_config_str(const scrctl::xpc::Value &answer, const char *key, std::string &out) {
     const auto *conn = answer.find("connection");
     const auto *cfg = conn != nullptr ? conn->find("streamConfig") : nullptr;
@@ -135,18 +106,9 @@ bool stream_config_str(const scrctl::xpc::Value &answer, const char *key, std::s
     return true;
 }
 
-/// 打出 answer 里那对**同步令牌**，以及 `IsltrpEnabled`。
-///
-/// 为什么单看这三个数：苹果视频腿 answer 里
-/// `SyncStreamToken = VideoSynchronizationSourceStreamToken = 1183494201`（非零），
-/// 而它音频腿的两个都是 0——也就是说**设备自己**在 answer 里标明了"这条视频腿挂在
-/// 那条音频腿的时间轴上"。我们两条腿共用一个 ClientSessionID，请求里也没有别的键
-/// 能表达这层关系（抓包里苹果的请求就是少我们一个 `CoreDeviceVideoDisplayMode`，
-/// 别的完全一样），所以配对成没成，只有设备回的这两个数能证明。
-///
-/// 这件事直接决定了"音频腿"这一臂到底测过没有：如果我们的视频腿令牌仍是 0，那
-/// 设备从没把两条腿看成一组，之前那次"带了音频腿照样 20 秒死"就**没有否证**
-/// "分组才免租期"这个假设——它测的是一条没配对的音频腿。
+/// 打印同步令牌和 IsltrpEnabled，供音视频对照使用。
+/// 参考抓包中视频与音频的令牌不同，探针也曾观察到同样形状；这些字段本身
+/// 不证明同步已经完成，也不能据此保证会话存活。历史实验见 docs/coredevice.md §13。
 void print_sync_tokens(std::string_view tag, const scrctl::xpc::Value &answer) {
     uint32_t sync = 0, vsync = 0, isltrp = 0;
     const bool has_sync = stream_config_u32(answer, "SyncStreamToken", sync);
@@ -156,34 +118,19 @@ void print_sync_tokens(std::string_view tag, const scrctl::xpc::Value &answer) {
     std::printf("    [%s] SyncStreamToken=%s VideoSynchronizationSourceStreamToken=%s "
                 "IsltrpEnabled=%u\n",
                 std::string(tag).c_str(),
-                has_sync ? std::to_string(sync).c_str() : "(没有)",
-                has_vsync ? std::to_string(vsync).c_str() : "(没有)", isltrp);
+                has_sync ? std::to_string(sync).c_str() : SCRCTL_TR("(missing)"),
+                has_vsync ? std::to_string(vsync).c_str() : SCRCTL_TR("(missing)"), isltrp);
 }
 
-/// AVConference 的接收端反馈包：RTCP APP（PT=204），名字 "RCTL"，32 字节。
-///
-/// 这是本轮改主意的来源。参考实现的抓包记着（原文注释）："tag 0x85000004 然后 8 个
-/// u16：[0]=收到的 RTP 时间戳>>8，[1..2]=0，[3]=抖动/丢包(0)，[4]=1024Hz 接收端墙钟，
-/// [5]=接收质量，[6]=帧数，[7]=接受的最高码率(kbps)"，并且**约 20 个/秒**；同一条流上
-/// 还并行一种 name=5、16 字节的伴随包，节奏约 35 个/秒（每帧一个），内容是**收到的那个
-/// RTP 时间戳**。两句要照抄的话：
-///   "Echoing the *received* RTP timestamp is what makes the device act on the feedback
-///    (a synthetic clock was ignored). Xcode sends this and no PLIs."
-/// 也就是说 Apple 的客户端在视频端口上灌的不是 RR 也不是 PLI，而是这种厂商私有 APP 包。
-/// 我们此前把所有变体的 RR/SDES/SR 都对齐了字节还是 20.0 秒死——那么"设备认的那种 RTCP"
-/// 很可能根本不是 RFC 3550 里那几种，而是这个。
+/// 实验性 AVConference 反馈：RTCP APP（PT=204），名字 RCTL，32 字节。
+/// 字段解释来自参考抓包，尚无设备端正式协议保证；不能由这些字段推断所有设备行为。
+/// 使用已收到的 RTP 时间戳；主循环按 20Hz 发送，并在 RTP marker 时发送伴随包。
+/// 抓包对齐及 UDP 修复前后的实验边界见 docs/coredevice.md §13。
 std::vector<uint8_t> build_rctl(uint32_t our_ssrc, uint32_t last_rtp_ts, uint32_t last_frame_pkts,
                                 uint32_t packets_received, uint32_t clock_1024) {
-    // w2 = (RTP 时间戳 >> 8) << 16；w3 = 上一帧的包数；
-    // w4 = (1024Hz 墙钟 << 16) | 抖动；w5 = (累计包数 << 16) | 60001。
-    //
-    // w4 这个钟要按 **1024Hz 的本地单调时间**填，不是按 RTP 时间戳推。这是把苹果那 1469 个
-    // RCTL 和它当时的收包状态逐个对齐量出来的：w4 高 16 位的全场斜率是 **1024.0/s**（16 位
-    // 会回绕），而 RTP 时间戳是 24kHz、`ts/24` 只有 1000/s——按 ts 推会在 20 秒里差出约
-    // 480ms，设备据此算出的单程时延就会一路漂。参考实现早期那句"用自起流以来的毫秒"就是
-    // 踩在这个 2.4% 上。
-    // w5 低 16 位固定 60001 也是同一批测量的结果：苹果全场分布是 {60001: 1075, 60000: 355,
-    // 0: 39}，主值就是它（我一度只看前 12 个样本以为苹果发 0，查完全场才发现是我们对）。
+    // w2 = (RTP 时间戳 >> 8) << 16；w3 = 上一帧包数。
+    // w4 高 16 位为 1024Hz 本地单调钟，低位抖动填 0；w5 高位为累计包数，低位为 60001。
+    // 这些取值与现有抓包主值对齐，16 位字段会回绕；它们的全部设备端语义尚未确认。
     const uint32_t ts = last_rtp_ts;
     const uint32_t w2 = ((ts >> 8) & 0xFFFF) << 16;
     const uint32_t w3 = last_frame_pkts & 0xFFFFFFFF;
@@ -203,8 +150,8 @@ std::vector<uint8_t> build_rctl(uint32_t our_ssrc, uint32_t last_rtp_ts, uint32_
     return v;
 }
 
-/// RCTL 的伴随包：同一种 APP（PT=204），但 name 换成整数 5，只带一个字——
-/// 收到的那个 RTP 时间戳。16 字节。抓包里的节奏是**每帧一个**。
+/// 16 字节 RTCP APP 伴随包：name 为整数 5，载荷为已收到的 RTP 时间戳。
+/// 本探针按 marker 位触发，保持现有参考抓包对照的节奏。
 std::vector<uint8_t> build_rctl_companion(uint32_t our_ssrc, uint32_t last_rtp_ts) {
     std::vector<uint8_t> v;
     v.push_back(0x80);
@@ -216,14 +163,11 @@ std::vector<uint8_t> build_rctl_companion(uint32_t our_ssrc, uint32_t last_rtp_t
     return v;
 }
 
-/// 把一棵 xpc 树的全部叶子打出来（`path = value` 一行一个）。
-///
-/// 为什么不用 `describe()`：它给字典条目做截断，而"设备有没有收到我们发的 RTCP"这件事
-/// 恰恰藏在一个我们事先想不到的键里——只打自己预先想到的那几个键，就永远发现不了设备
-/// 其实给了一个我们没读的键。这条教训在 `bitrate_probe --dump-answer` 上已经用过一次。
+/// 按 path = value 输出 XPC 树叶子，避免 describe 对字典条目的截断遗漏诊断字段。
+/// 深度最多为 6；字符串和设备字段原样输出，数据/UUID 仅显示字节数。
 void walk(const scrctl::xpc::Value &v, const std::string &path, int depth) {
     if (depth > 6) {
-        return;  // 防御性：设备的树不该这么深，真到了就是形状和预期不一样
+        return;  // 限制诊断递归深度，不保证打印完整设备树。
     }
     switch (v.type) {
     case scrctl::xpc::Type::Dict:
@@ -241,7 +185,7 @@ void walk(const scrctl::xpc::Value &v, const std::string &path, int depth) {
         std::printf("    %s = \"%s\"\n", path.c_str(), v.string.c_str());
         break;
     case scrctl::xpc::Type::Bool:
-        std::printf("    %s = %s\n", path.c_str(), v.boolean ? "真" : "假");
+        std::printf("    %s = %s\n", path.c_str(), v.boolean ? SCRCTL_TR("true") : SCRCTL_TR("false"));
         break;
     case scrctl::xpc::Type::Int64:
         std::printf("    %s = %lld\n", path.c_str(), static_cast<long long>(v.int64));
@@ -255,7 +199,7 @@ void walk(const scrctl::xpc::Value &v, const std::string &path, int depth) {
         break;
     case scrctl::xpc::Type::Data:
     case scrctl::xpc::Type::Uuid:
-        std::printf("    %s = <%zu 字节>\n", path.c_str(), v.data.size());
+        std::printf(SCRCTL_TR("    %s = <%zu bytes>\n"), path.c_str(), v.data.size());
         break;
     default:
         std::printf("    %s = (type %08x)\n", path.c_str(), static_cast<unsigned>(v.type));
@@ -263,17 +207,8 @@ void walk(const scrctl::xpc::Value &v, const std::string &path, int depth) {
     }
 }
 
-/// 一段 Annex-B 里有没有 IDR（HEVC 的 NAL type 19=IDR_W_RADL / 20=IDR_N_LP）。
-///
-/// 为什么不能只看"收到视频包"：这条流在画面动的时候每秒发六百个包，绝大多数是 P 帧；
-/// 把"收到包"当成"收到关键帧"会让任何一次误触发都读成成功。
-///
-/// 为什么不在 RTP 层判：这一版曾经在 RTP 载荷的头两字节直接读 NAL type（含 RFC 7798 的
-/// 分片包 FU=62），结果是 30 秒 18000 个包里"IDR 0 个"——连起流那一下必然存在的第一个
-/// 关键帧都没认出来。真实原因是这条流的载荷类型和 RFC 7798 不一样（这条流的值：聚合包
-/// 48、分片包 **49**，不是 62），而 `HevcRtpDepacketizer` 里已经带着这份实测知识。
-/// 所以这里改成**复用拆包器**：把它吐出来的 Annex-B 扫一遍。判据于是和产品解码用的是
-/// 同一个，不会再出现"仪器说没关键帧、解码器却解出了帧"。
+/// 在拆包后的 Annex-B 中检查 HEVC IDR（NAL type 19 / 20）。
+/// 复用产品 HevcRtpDepacketizer 后再检查，不把任何视频 RTP 或 FU 分片当作 IDR。
 bool annexb_has_idr(const std::vector<uint8_t> &b) {
     for (std::size_t i = 0; i + 4 < b.size(); ++i) {
         if (b[i] != 0 || b[i + 1] != 0 || b[i + 2] != 0 || b[i + 3] != 1) {
@@ -287,25 +222,22 @@ bool annexb_has_idr(const std::vector<uint8_t> &b) {
     return false;
 }
 
-/// 静止多久才开始发关键帧请求。画面在动的时候设备本来就在发 IDR 之外的帧，那时候发请
-/// 求换不来可归因的信号；静止满这个秒数之后再发，"突然来了一帧 IDR"才是请求的结果。
+/// 关键帧请求前的视频静默阈值。静默后的 IDR 仍需结合对照判断，不能仅按先后顺序归因。
 constexpr uint64_t kPliQuietMs = 2500;
 
 struct Arm {
     std::string what;
-    /// 收到过**任何**视频包。注意这个名字是误标（历史原因留着）：它判不出关键帧，
-    /// 判 PLI/FIR 有没有换来 IDR 要看 `idr_after_request_ms`。
+    /// 历史字段名；实际表示收到过任意匹配 PT 的视频 RTP，不能据此判断 IDR。
     bool got_idr = false;
-    /// 第一次"静止之后发出关键帧请求"的时刻（相对起流），以及那之后第一个 IDR 的延迟。
+    /// 首次计时关键帧请求的绝对单调时刻；打印时减去本轮起点。
     uint64_t first_request_ms = 0;
-    /// 这一轮里收到的真 IDR 个数。**所有臂都记**：画面在动的时候"请求之后来了 IDR"这件事
-    /// 需要一条基线才知道是不是碰巧——`rrsrc` 那一臂就是这条基线（它一个请求都不发）。
+    /// 本轮所有臂都记录拆包后 IDR 的数量，作为请求效果的对照基线。
     uint64_t idr_packets = 0;
     uint64_t idr_after_request_ms = 0;
     uint64_t requests_sent = 0;
-    uint64_t last_video_ms = 0;   // 相对起流的时刻
-    uint64_t last_sr_ms = 0;      // 同上
-    uint64_t srs_after_video = 0;  // 最后一个视频包之后还收到多少个 SR
+    uint64_t last_video_ms = 0;   // 绝对单调时刻，输出时减去 t0
+    uint64_t last_sr_ms = 0;      // 同为绝对单调时刻
+    uint64_t srs_after_video = 0;  // 视频静默超过 1500ms 时累计收到的 SR；可能跨多个静默区间
     uint64_t polls_alive = 0;     // poll 臂：查会话表答"还在"的次数
     uint64_t last_alive_ms = 0;   // 最后一次答"还在"的时刻
     bool alive_at_end = false;
@@ -313,29 +245,27 @@ struct Arm {
 };
 
 void print_arm(const Arm &a, uint64_t t0) {
-    std::printf("  [%s] 收到过视频包=%s 真 IDR %llu 个 最后视频包 +%llums 最后 SR +%llums "
-                "之后 SR 共 %llu 个 结束时会话表=%s",
-                a.what.c_str(), a.got_idr ? "有" : "无",
+    std::printf(SCRCTL_TR("  [%s] video received=%s IDRs=%llu last video +%llums last SR +%llums SRs during video quiet periods=%llu session at end=%s"),
+                a.what.c_str(), a.got_idr ? SCRCTL_TR("yes") : SCRCTL_TR("no"),
                 static_cast<unsigned long long>(a.idr_packets),
                 static_cast<unsigned long long>(a.last_video_ms > t0 ? a.last_video_ms - t0 : 0),
                 static_cast<unsigned long long>(a.last_sr_ms > t0 ? a.last_sr_ms - t0 : 0),
                 static_cast<unsigned long long>(a.srs_after_video),
-                a.alive_at_end ? "还在" : "已没了");
+                a.alive_at_end ? SCRCTL_TR("present") : SCRCTL_TR("absent"));
     if (a.requests_sent != 0) {
-        std::printf(" 关键帧请求 %llu 次，第一次在 +%llums，之后 IDR ",
+        std::printf(SCRCTL_TR(" keyframe requests=%llu first at +%llums subsequent IDR "),
                     static_cast<unsigned long long>(a.requests_sent),
                     static_cast<unsigned long long>(a.first_request_ms > t0
                                                         ? a.first_request_ms - t0
                                                         : 0));
-        // 走 %s 而不是直接把字符串当格式串：这里拼出来的是运行期的值，
-        // `-Wformat-security` 报的就是"里面的 % 会被当真"。
+        // 运行期字符串通过 %s 打印，不能把其中的百分号当作格式说明。
         const std::string got = a.idr_after_request_ms == 0
-            ? std::string("没来")
-            : ("+" + std::to_string(a.idr_after_request_ms) + "ms 到");
+            ? std::string(SCRCTL_TR("not observed"))
+            : ("+" + std::to_string(a.idr_after_request_ms) + SCRCTL_TR("ms later"));
         std::printf("%s", got.c_str());
     }
     if (a.polls_alive != 0) {
-        std::printf(" 查会话表 %llu 次答还在，最后一次 +%llums",
+        std::printf(SCRCTL_TR(" session polls reporting alive=%llu last at +%llums"),
                     static_cast<unsigned long long>(a.polls_alive),
                     static_cast<unsigned long long>(a.last_alive_ms > t0 ? a.last_alive_ms - t0 : 0));
     }
@@ -344,23 +274,16 @@ void print_arm(const Arm &a, uint64_t t0) {
 
 }  // namespace
 
-/// 把设备会话表里每一条的**身份**打出来：是我们的还是别人的。
-///
-/// 为什么非要有这一段：一台设备只容一条媒体流，而"会话没了"有两种完全不同的原因——
-/// 租期到点被设备摘掉，和**别的客户端（Xcode DeviceHub、另一个探针）发了它自己的
-/// startmediastream 把我们的顶掉**。只看"我们收不到包了"这两种一模一样，而它们的结论
-/// 完全相反：前者说明租期模型成立，后者说明这一轮数据根本不作数。
-///
-/// 身份怎么认：设备会把客户端请求里的键回显到会话条目上，所以
-/// `type` / `timeout` 在不在、PT 是 100 还是 101、`clientSessionID` 等不等我们的，
-/// 三条一起看就能认出这条是谁建的。
+/// 打印设备会话表和客户端 UUID 归属，协助区分本探针与其他客户端创建的条目。
+/// type/timeout/PT 是辅助线索，缺少某键不能单独证明创建路径；最终查询也不能还原
+/// 更早断流的原因。原始归属排查见 docs/coredevice.md §13。
 void dump_sessions(scrctl::remote::Device &dev, const std::vector<uint8_t> &our_uuid,
                    const char *tag) {
     std::string qerr;
     const auto st = scrctl::media::StreamSession::status(dev, qerr, false);
     const auto *ss = st.find("sessions");
     const std::size_t n = ss == nullptr ? 0 : ss->array.size();
-    std::printf("  [%s] 设备表里 %zu 条会话\n", tag, n);
+    std::printf(SCRCTL_TR("  [%s] device session table: %zu entries\n"), tag, n);
     if (ss == nullptr) {
         return;
     }
@@ -377,11 +300,11 @@ void dump_sessions(scrctl::remote::Device &dev, const std::vector<uint8_t> &our_
         const bool mine = u != nullptr && u->data == our_uuid;
         const auto *stat = s.find("status");
         const auto *run = stat == nullptr ? nullptr : stat->find("runDurationSeconds");
-        std::printf("    [%zu] %s PT=%llu type=%s timeout键=%s 活了=%llus\n", i,
-                    mine ? "我们的" : "别人的",
+        std::printf(SCRCTL_TR("    [%zu] %s PT=%llu type=%s timeout key=%s run duration=%llus\n"), i,
+                    mine ? SCRCTL_TR("ours") : SCRCTL_TR("other client"),
                     pt == nullptr ? 0ULL : static_cast<unsigned long long>(pt->uint64),
-                    type == nullptr ? "(没有→不是这个 feature 建的)" : type->string.c_str(),
-                    timeout == nullptr ? "无" : "有",
+                    type == nullptr ? SCRCTL_TR("(missing; creation path may differ)") : type->string.c_str(),
+                    timeout == nullptr ? SCRCTL_TR("no") : SCRCTL_TR("yes"),
                     run == nullptr ? 0ULL : static_cast<unsigned long long>(run->uint64));
     }
 }
@@ -393,181 +316,95 @@ int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     int seconds = 30;
     int attempts = 2;
-    // 我们自己在 startmediastream 请求里发出去的那个 `timeout`。默认 20 —— 和设备的
-    // `RTCPTimeoutInterval: 20`、以及实测那条 20.0 秒租期**是同一个数**。
-    //
-    // 这件事到此为止一直没人怀疑过，而所有"保活"实验都是在 it=20 下跑的：如果租期长度
-    // 根本就是我们报的这个数（pymobiledevice3 把它注释成"negotiation timeout"，也就是
-    // 当成客户端等回复的超时），那么回多少种 RTCP 都不可能把流留住超过 20 秒——因为
-    // 那个 20 是我们自己写的。改这一个整数就能判掉这个假设，比造包便宜两个数量级。
+    // startmediastream 请求的 timeout，默认 20 秒；对照其与 answer 超时字段的关系。
+    // 请求值不等于已证明的硬租期。早期断流解释受 UDP 发送缺陷影响，见 docs/coredevice.md §13。
     uint32_t timeout_seconds = 20;
-    // 整个 `timeout` 键都不发（而不是发 0）。动机是从设备自己的会话表里读到的现象：
-    // Xcode DeviceHub 正在镜像时，它的会话条目里没有 `timeout` 键、`RTCPTimeoutInterval`
-    // 仍是 20.0，而 `runDurationSeconds` 爬到了 158 秒没换过会话。当时唯一的读法是
-    // "报数=硬租期，不报=能被 RTCP 复位的空闲计时器"。
-    //
-    // **实测否掉了它：feature 层要求这个键，不发直接起不了流**
-    // （`code 4865 / "Expected to find key timeout."`，`none` 和 `rrsrcsd` 两臂都撞在这）。
-    // 留下的结论比原假设更要紧：会话条目里的 `timeout`/`type` 是 feature 层替客户端补的，
-    // 所以 DeviceHub 那条会话根本不是从这个 feature 建的，它的"不断流"不能拿来当
-    // "存在我们没找到的保活"的证据。这一臂留着，是为了让这条推理链随时可以重跑。
+    // 完全省略 timeout 键，与发送 0 不同。已测 feature 路径曾以 code 4865
+    // 和 Expected to find key timeout 拒绝；保留选项以复现该边界。
+    // 其他客户端会话缺少此键，不能单独证明计时器或创建路径的具体行为。
     bool no_timeout_key = false;
-    /// 只把自己构造出的那几种 RTCP 打成十六进制然后退出（不碰设备）。
-    /// 给"和苹果抓包里的包并排比对"用。
+    /// 输出固定 RTCP 样本的十六进制，在设备连接前退出，供抓包对照。
     bool dump_packets = false;
-    /// 把**音频腿**收到的每个 RTP 数据报原样落盘（前面加一个 u16 长度）。
-    /// 为什么要落而不是只看计数：要做 M4 的设备音频，第一件事是知道设备上跑的到底是
-    /// 哪种编码、怎么打包的——这个没有任何文档可查，只能把线上字节拿下来自己认。
-    /// 计数只能回答"有没有在推"，答不出"推的是什么"。
+    /// 音频 RTP 原样落盘，每包前加大端 u16 长度，供离线检查头部和载荷。
+    /// 包计数表示收到流量，不代表已识别编码或成功解码。
     std::string audio_out;
-    // 在请求里带上 `sessionEventChannel`（一个 XPC UUID）。这是抓包对齐出来的、我们和
-    // Xcode DeviceHub 的请求之间唯一差的一个键——苹果的 `timeout` 也是 20，却活了 715 秒。
-    // 这一臂就是判"是不是这个键让租期失效"。
+    // 在请求中附加 XPC UUID 类型的 sessionEventChannel，作为独立对照变量。
     bool event_channel = false;
-    /// 握着那条起流连接不放，并在它上面持续 service() + 定期查状态。
-    ///
-    /// 为什么要这一位：95.8 秒的苹果抓包里，carrying 两次 mediastreamstart 的那条
-    /// displayservice 连接（sport 61689 -> dport 54626）SYN 之后**整场没有 FIN 也没有
-    /// RST**，一路活到抓包结束；而它的会话在报着 20 秒租期的情况下 74 秒没断。我们这边
-    /// 每次 feature 调用都是"开连接→发一次→丢连接"（Device::feature_call），所以
-    /// "会话有没有一个还开着的宿主连接"是从没被控住的变量。
-    /// 上一轮"握着连接"那一臂测的是握了但没人读它——设备发 PING 没人 ACK，10 秒就
-    /// cancel；这一臂把 service() 放上，先证明我们能不能握 60 秒，再看租期。
+    /// 保持起流连接，并由同一线程持续 service 和定期查询状态。
+    /// 此选项区分连接生命周期与媒体反馈；持有句柄本身不代表已经响应设备控制消息。
     bool hold_connection = false;
-    /// 只握连接不起流（见使用处的说明）。
+    /// 保持显示服务连接，不创建媒体流；具体观测见使用处。
     bool hold_idle = false;
-    /// 握着连接时不要每 5 秒在同一条连接上查一次状态。
-    /// 为什么要有：查状态本身是一次请求，而"我们在一条设备上刚答完话的连接上再发一次
-    /// 请求"这件事完全可能是把会话搞死的原因——不去掉它，就分不清"设备自己关的"和
-    /// "被我们第二次调用搞关的"。
+    /// 禁用保持连接上的 5 秒状态查询，仅保留 service，用于隔离主动 RPC 的影响。
     bool hold_no_poll = false;
-    /// 起一条**音频腿**，和视频腿共用同一个 `avcMediaStreamOptionClientSessionID`。
-    ///
-    /// 起因：抓包里苹果先 `type:"audio"` 再 `type:"video"`、两条共用一个 ClientSessionID，
-    /// 而那条精确 1.000Hz 的 `RR+SDES` 发在音频腿上。当时的假设是"设备按 ClientSessionID
-    /// 分组记计时器，喂住它的是音频腿"。
-    ///
-    /// **这一臂现在能给出判决性的证据了，而且答案是"已经否证"**：配对到底成没成不用猜，
-    /// 设备自己在 answer 里写了——`SyncStreamToken` / `VideoSynchronizationSourceStreamToken`
-    /// 非零就是"视频腿挂在音频腿的时间轴上"。苹果视频腿=1183494201、音频腿=0；
-    /// 我们带音频腿跑的那一轮（`--audio-leg --audio-rr --what rctl --timeout 20`）视频腿
-    /// 拿到了 **1183494365**、音频腿 0，形状与苹果逐字一致——**配对成功了**，
-    /// 视频腿照样死在 **+20003ms**。所以"分组免租期"这个解释是错的，不是没做出来。
+    /// 先起音频，再以相同 avcMediaStreamOptionClientSessionID 起视频，供分组对照。
+    /// 历史实验曾得到与参考抓包相似的同步令牌，但 UDP 修复前的断流结果
+    /// 不能证明音视频分组不影响存活。字段形状也不是同步完成的充分证据。
+    /// 原始数据及当前结论见 docs/coredevice.md §13、§17。
     bool audio_leg = false;
-    /// 在音频腿上按 1Hz 发 RR+SDES（苹果就是这么做的）。和 `--audio-leg` 分开是必要的：
-    /// 只起腿 = 验"设备是不是按 ClientSessionID 分组来免租期"；起腿 + 发 RR = 验
-    /// "喂住计时器的是音频腿的 RTCP"。两个解释的修法完全不同，不能一次混着测。
+    /// 在音频端口每秒发送 RR+SDES；独立于仅创建音频的开关，避免混合对照变量。
     bool audio_rr = false;
-    /// 把这份文件里的字节**原样**当 negotiatorOffer 发（绕开我们自己的构造器）。
-    /// 给的是 Xcode DeviceHub 抓包里那次起流当场发出的 482 字节原文。
+    /// 文件字节原样作为 negotiatorOffer，绕过构造器，不假定其使用 binary 或 XML plist。
     std::string raw_offer_path;
     std::vector<uint8_t> raw_offer;
-    /// 在 `com.apple.coredevice.deviceinfo` 上挂一条 **displayinfoupdates** 流式订阅。
-    ///
-    /// 这是今晚从"我们自己的日志"里翻出来的不对称逼出来的方向：同一份请求、同样报
-    /// `timeout=20`，我们的**音频腿活过了 20 秒**（+30s 已收 1878 包、+40s 1999 包），
-    /// 而视频腿精确死在 19997ms。也就是说被回收的不是"会话"，是**视频**那条。
-    /// 什么会让设备的视频采集会话变成孤儿？抓包里苹果在 `deviceinfo`（设备端口 54583）上
-    /// 有一条**抓包开始之前就已建立**的长连接，整场只推了一次
-    /// `sideChannelStatus{pushing:[方向 / primary LCD / 6 个 wireless 显示器 / 背光]}`，
-    /// 而那次推送的时刻是 **+20.71s——视频起流（+20.69s）之后 0.02 秒**。这个 feature 就挂在
-    /// `deviceinfo` 的列表里：`com.apple.coredevice.feature.displayinfoupdates`。
-    /// 如果"有人在订阅显示变化"就是设备判定这个显示采集有人在用的依据，那它就能同时解释
-    /// 苹果 74 秒不断、我们 20 秒必死、以及我们的音频腿为什么不受影响。
-    /// 被回收的不是"会话"而是"视频那条"——我们自己的音频腿活过了 20 秒（+30s 已收 1878
-    /// 包、+40s 1999 包），而视频腿精确死在 19997ms。什么会让设备的视频采集会话变成孤儿？
-    ///
-    /// 抓包里苹果在**抓包开始之前**就挂着一条 `com.apple.coredevice.deviceinfo`（设备端口
-    /// 54583）上的长连接，整场只推了一次
-    /// `CoreDevice.XPCMessageKey.sideChannelStatus{pushing:[方向 / primary LCD 1080x2340 /
-    /// 6 个 wireless 显示器 / backlightState:activeOn]}`，而那次推送的时刻是 **+20.71s——
-    /// 视频起流（+20.69s）之后 0.02 秒**。这个 feature 就挂在 `deviceinfo` 的列表里：
-    /// `com.apple.coredevice.feature.displayinfoupdates`。
-    ///
-    /// 如果"有人在订阅显示变化"就是设备判定这次显示采集有人在用的依据，那它能同时解释
-    /// 三件事：苹果 74 秒不断、我们 20 秒必死、以及我们的音频腿不受影响。所以这一臂只做
-    /// 一件事：把这条订阅挂上，别的全不动（租期仍然 20、不发任何 RTCP）。
+    /// 在 com.apple.coredevice.deviceinfo 上订阅 displayinfoupdates。
+    /// 它与媒体起流使用独立连接，用于观察显示更新及订阅生命周期。
+    /// 参考客户端存在此连接，但其存在不证明它负责媒体保活；早期约 20 秒
+    /// 断流假设受 UDP 缺陷影响，历史过程见 docs/coredevice.md §13。
     bool display_subscribe = false;
-    /// 在起流**之前**连上 `universalhidservice`（HID 注入那条），整窗握着不放。
-    ///
-    /// 这是最后一个"客户端侧还挂着一条什么连接"的变量，也是之前每一次否证都没控住的
-    /// 那一个。抓包里的形状：DeviceHub 在 +20.90s（视频起流 +20.69s 之后 0.2 秒）连上
-    /// 设备端口 54572 = `com.apple.coredevice.feature.remote.universalhidservice`，
-    /// 先发一个 `connectedServices` 查询、再建了 3 个虚拟服务（键盘 512、trackpad
-    /// 4294969677、键盘事件面 4294969634）、发了两个 HID 报告、`resetGestureState` 四次，
-    /// 然后**那条连接整场没关**（+22.82s 之后再无字节，但 SYN 之后无 FIN 无 RST）。
-    ///
-    /// 为什么它值得单独测：它和"显示"是同一套栈的（dtuhidd 注册的面里就有
-    /// `CoreDevice touchscreen` 那个 digitizer），如果设备判定"这次显示采集有人在用"
-    /// 的依据是"有一个 HID 客户端附着着"，那它能同时解释苹果 74 秒不断、我们 20 秒必死。
-    ///
-    /// **为什么产品的 75 秒实测没有把它测掉**：`src/app/main.cpp` 里 HID 是**首次输入
-    /// 事件时才 `Service::open`** 的（懒连），那轮 `scrctl --stats` 全程没人动键盘鼠标，
-    /// 所以那条连接压根不存在。这一臂就是把"附着"这一个变量单独立出来，
-    /// 其他一律不动（租期仍 20、一个 RTCP 也不发、不发任何输入以免画面变化）。
+    /// 起流前附着 universalhidservice，并保持连接但不发送输入。
+    /// 该对照只检查 HID 附着的影响；参考客户端的调用顺序不构成所有设备的起流前提。
+    /// 虚拟显示面的字段和历史观察见 docs/coredevice.md §13。
     bool hid_attach = false;
-    /// 往设备一个确定没人监听的端口打三个 UDP 数据报，看设备的内核答不答话
-    /// （ICMPv6 端口不可达由 `net::Stack` 打进 stderr）。用途见使用处的说明。
-    /// **实测**：修好 `build_udp_datagram` 之前 3 条全哑；修好之后 3 条全收到
-    /// `type=1 code=4（端口不可达）`，内层四元组就是发包那对——同一段代码、同一个
-    /// 靶、只改数据报拼装，这是整件事最干净的前后对照。
+    /// 向指定设备端口发送 3 个 UDP 数据报，检查隧道写入及可观察的设备反馈。
+    /// UDP 修复后曾收到 3 个 ICMPv6 port-unreachable；无回复仍不能单独证明未投递。
     bool udp_canary = false;
-    /// 起流之前先对设备隧道地址发 5 个 ICMPv6 回音请求，看设备答不答话。
-    /// **实测**：5/5 有应答（修前修后都一样）。它把"隧道不投递我们的非 TCP 包"
-    /// 和"我们自己的包是坏的"这两种解释分开，而答案是后者。
+    /// 起流前发送 5 个 ICMPv6 echo request；ICMP 应答不能代替 UDP 路径验证。
     bool ping6 = false;
-    /// 向设备的 5353 发单播 DNS 查询，问"客户端->设备的 UDP 落不落地"。
-    /// **实测**：修好后仍无回信。这一臂**不能定案**（mDNSResponder 大概率不答隧道
-    /// 上的单播查询，阴性本来就不作数），留着只因为它顺手能证明"发得出"这条路没坏。
+    /// 向设备 5353 端口单播 DNS 查询。有回复证明本次往返，无回复可能有多种原因。
     bool udp_mdns = false;
-    /// 给出站包打一个非零 IPv6 流标签（苹果客户端实测是 0xd0d00 这种随机值，我们是 0）。
-    /// **已判掉**：非零标签下设备侧依旧 `pkts in: 0`、照旧 20 秒死。
+    /// 设置随机的 20 位 IPv6 流标签，作为独立网络变量；随机结果也可能为 0。
+    /// UDP 修复前的零收包及断流结果不能证明流标签无效，历史记录见 docs/coredevice.md §13。
     bool flow_label = false;
-    /// `pli` / `fir` 两臂的开关：默认只在画面静止满 2.5 秒之后才发关键帧请求（那才是能
-    /// 归因的时刻）。这一位改成"画面在动也照发"，用的是另一种判据：**和 `rrsrc` 基线比
-    /// IDR 的个数**——静止时机等不到时（设备一直在发新帧）只能这么量。
+    /// 即使视频仍在到达也发送 PLI/FIR，跳过 2.5 秒静默条件；其它计时规则不变。
     bool request_always = false;
     uint16_t canary_port = 47891;
-    // AVC 那条形串。抓包对齐到的最后一处可见差别：苹果发 `FLS;VRAE:0;SW:1;`，我们和 p3
-    // 都发 `FLS;SW:1;`（p3 还专门注释说 VRAE:0 不能进）。设备会把它回显成
-    // `TxCodecFeatureListString`，所以这条改动是可以在 answer 里验证"它收没收下"的——
-    // 不然"发了个被设备默默丢掉的字符串"和"这个字符串真的进了协商"就分不清了。
+    // AVC feature 字符串原样放入 offer，并打印 answer 回显以检查协商结果。
+    // 默认值来自既有实现；回显不能证明每项 feature 已被设备启用。
     std::string avc_features = "FLS;SW:1;";
-    // RTCP 的发送频率（每秒几个）。默认 1 是照参考实现的口径（"One RR/s keeps it
-    // alive"）。为什么要能改：如果设备那个计时器真的"收到 RTCP 就复位"，那 1/s 在
-    // `--timeout 6` 下必然活过 6 秒；反过来，1/s 不够而 5/s 够，说明它要的是"在
-    // `RTCPSendInterval` 之内至少收到一个"。只试一种频率就宣布"RTCP 不能续命"，
-    // 是拿一个样本当结论。
+    // 视频 RR 和 PLI/FIR 的请求频率，默认 1Hz；RCTL 和音频 RR 保留各自固定周期。
+    // 可改变频率做对照，但单次存活或断流不能证明某个通用设备计时模型。
     double hz = 1.0;
     bool dump_status = false;
     std::string what = "none,rrsrc,rrsrcsd";
     bool verbose = false;
-    CLI::App cli{"Compare RTCP keepalive and keyframe request strategies over USB"};
-    cli.set_help_flag("-h,--help", "Show help and exit without connecting to a device");
+    CLI::App cli{SCRCTL_N_("Compare RTCP keepalive and keyframe request strategies over USB")};
+    cli.set_help_flag("-h,--help", SCRCTL_N_("Show help and exit without connecting to a device"));
     cli.option_defaults()->take_last();
+    scrctl::i18n::CliLanguage language(cli);
     // --hold 的等待时间以 int 毫秒保存，参数上限同时保护现有的加法和乘法。
-    cli.add_option("--seconds", seconds, "Observation seconds per arm (default: 30)")
+    cli.add_option("--seconds", seconds, SCRCTL_N_("Observation seconds per arm (default: 30)"))
         ->check(CLI::Range(1, std::numeric_limits<int>::max() / 1000 - 30));
-    cli.add_option("--attempts", attempts, "Number of rounds (default: 2)")
+    cli.add_option("--attempts", attempts, SCRCTL_N_("Number of rounds (default: 2)"))
         ->check(CLI::PositiveNumber);
-    cli.add_option("--hz", hz, "RR and keyframe request frequency in Hz (default: 1)")
+    cli.add_option("--hz", hz, SCRCTL_N_("RR and keyframe request frequency in Hz (default: 1)"))
         ->check(CLI::Validator([](std::string &value) {
             double frequency = 0;
             if (!CLI::detail::lexical_cast(value, frequency) || !std::isfinite(frequency) ||
                 frequency <= 0 ||
                 1000.0 / frequency >= static_cast<double>(std::numeric_limits<long long>::max())) {
-                return std::string("must be a finite positive frequency with a representable millisecond period");
+                return std::string(SCRCTL_TR("must be a finite positive frequency with a representable millisecond period"));
             }
             return std::string{};
         }, "FINITE POSITIVE"));
-    cli.add_option("--timeout", timeout_seconds, "Negotiation timeout in seconds (default: 20)");
-    cli.add_option("--what", what, "Comma-separated arms (default: none,rrsrc,rrsrcsd)")
+    cli.add_option("--timeout", timeout_seconds, SCRCTL_N_("Negotiation timeout in seconds (default: 20)"));
+    cli.add_option("--what", what, SCRCTL_N_("Comma-separated arms (default: none,rrsrc,rrsrcsd)"))
         ->check(CLI::Validator([](std::string &value) {
             static const std::set<std::string> bases = {
                 "none", "poll", "poll5", "rr", "rrsame", "rrsdes", "rrp1", "rrall",
                 "rrneg", "rrnegp1", "rrnegsr", "rrmine", "rrminep1", "rrminesr",
                 "rrminesd", "rrminecname", "rrsrc", "rrsrcsd", "rctl", "rctlrr", "pli", "fir"};
-            if (value.empty()) return std::string("must contain at least one arm");
+            if (value.empty()) return std::string(SCRCTL_TR("must contain at least one arm"));
             std::size_t pos = 0;
             do {
                 const auto comma = value.find(',', pos);
@@ -575,14 +412,14 @@ int main(int argc, char **argv) {
                 while (!arm.empty() && arm.front() == ' ') arm.erase(arm.begin());
                 const auto plus = arm.find('+');
                 if (bases.count(arm.substr(0, plus)) == 0)
-                    return std::string("unknown arm: ") + arm;
+                    return std::string(SCRCTL_TR("unknown arm: ")) + arm;
                 auto flag_pos = plus;
                 while (flag_pos != std::string::npos) {
                     const auto next = arm.find('+', flag_pos + 1);
                     const auto flag = arm.substr(flag_pos + 1,
                         next == std::string::npos ? next : next - flag_pos - 1);
                     if (flag != "fb" && flag != "ltrp")
-                        return std::string("unknown arm flag: ") + flag;
+                        return std::string(SCRCTL_TR("unknown arm flag: ")) + flag;
                     flag_pos = next;
                 }
                 if (comma == std::string::npos) break;
@@ -590,50 +427,53 @@ int main(int argc, char **argv) {
             } while (pos <= value.size());
             return std::string{};
         }, "ARMS"));
-    cli.add_flag("--no-timeout-key", no_timeout_key, "Omit the timeout key from the request");
-    cli.add_flag("--dump-packets", dump_packets, "Print packet bytes and exit without connecting");
-    cli.add_flag("--dump-status", dump_status, "Print the full final session status");
-    cli.add_option("--audio-out", audio_out, "Write length-prefixed audio RTP packets to FILE");
-    cli.add_flag("--audio-leg", audio_leg, "Start audio with the same client session ID as video");
-    cli.add_flag("--audio-rr", audio_rr, "Start audio and send RR+SDES on its port at 1 Hz");
-    cli.add_option("--offer", raw_offer_path, "Use FILE bytes as the negotiator offer");
-    cli.add_option("--avc-features", avc_features, "AVConference feature string (default: FLS;SW:1;)");
-    cli.add_flag("--event-channel", event_channel, "Include a session event channel UUID");
-    cli.add_flag("--hold", hold_connection, "Keep the stream-start connection open and service it");
-    cli.add_flag("--hold-idle", hold_idle, "Keep a display connection open without starting media");
-    cli.add_flag("--hold-no-poll", hold_no_poll, "Disable status polling on the held connection");
-    cli.add_flag("--display-subscribe", display_subscribe, "Subscribe to display updates before starting");
-    cli.add_flag("--hid-attach", hid_attach, "Attach HID before starting, without sending input");
-    cli.add_flag("--ping6", ping6, "Send five ICMPv6 echo requests before starting");
-    cli.add_flag("--udp-mdns", udp_mdns, "Send a unicast DNS query to device port 5353");
+    cli.add_flag("--no-timeout-key", no_timeout_key, SCRCTL_N_("Omit the timeout key from the request"));
+    cli.add_flag("--dump-packets", dump_packets, SCRCTL_N_("Print packet bytes and exit without connecting"));
+    cli.add_flag("--dump-status", dump_status, SCRCTL_N_("Print the full final session status"));
+    cli.add_option("--audio-out", audio_out, SCRCTL_N_("Write length-prefixed audio RTP packets to FILE"));
+    cli.add_flag("--audio-leg", audio_leg, SCRCTL_N_("Start audio with the same client session ID as video"));
+    cli.add_flag("--audio-rr", audio_rr, SCRCTL_N_("Start audio and send RR+SDES on its port at 1 Hz"));
+    cli.add_option("--offer", raw_offer_path, SCRCTL_N_("Use FILE bytes as the negotiator offer"));
+    cli.add_option("--avc-features", avc_features, SCRCTL_N_("AVConference feature string (default: FLS;SW:1;)"));
+    cli.add_flag("--event-channel", event_channel, SCRCTL_N_("Include a session event channel UUID"));
+    cli.add_flag("--hold", hold_connection, SCRCTL_N_("Keep the stream-start connection open and service it"));
+    cli.add_flag("--hold-idle", hold_idle, SCRCTL_N_("Keep a display connection open without starting media"));
+    cli.add_flag("--hold-no-poll", hold_no_poll, SCRCTL_N_("Disable status polling on the held connection"));
+    cli.add_flag("--display-subscribe", display_subscribe, SCRCTL_N_("Subscribe to display updates before starting"));
+    cli.add_flag("--hid-attach", hid_attach, SCRCTL_N_("Attach HID before starting, without sending input"));
+    cli.add_flag("--ping6", ping6, SCRCTL_N_("Send five ICMPv6 echo requests before starting"));
+    cli.add_flag("--udp-mdns", udp_mdns, SCRCTL_N_("Send a unicast DNS query to device port 5353"));
     auto *canary = cli.add_option("--udp-canary", canary_port,
-        "Send three UDP datagrams to optional PORT (default: 47891)")
+        SCRCTL_N_("Send three UDP datagrams to optional PORT (default: 47891)"))
         ->expected(0, 1)->default_str("47891")->type_name("PORT");
-    cli.add_flag("--flow-label", flow_label, "Set a random nonzero IPv6 flow label");
-    cli.add_flag("--request-always", request_always, "Request keyframes even while video is arriving");
-    cli.add_flag("-v,--verbose", verbose, "Print verbose protocol logging");
-    cli.footer("Arms: none, poll, poll5, rr, rrsame, rrsdes, rrp1, rrall, rrneg, rrnegp1,\n"
-               "rrnegsr, rrmine, rrminep1, rrminesr, rrminesd, rrminecname, rrsrc, rrsrcsd,\n"
-               "rctl, rctlrr, pli, fir. Append +fb and/or +ltrp to enable offer flags.\n"
-               "Without --help or --dump-packets, this probe connects to the USB device.");
+    cli.add_flag("--flow-label", flow_label, SCRCTL_N_("Set a random IPv6 flow label"));
+    cli.add_flag("--request-always", request_always, SCRCTL_N_("Request keyframes even while video is arriving"));
+    cli.add_flag("-v,--verbose", verbose, SCRCTL_N_("Print verbose protocol logging"));
+    cli.footer(SCRCTL_N_("Arms: none, poll, poll5, rr, rrsame, rrsdes, rrp1, rrall, rrneg, rrnegp1,\nrrnegsr, rrmine, rrminep1, rrminesr, rrminesd, rrminecname, rrsrc, rrsrcsd,\nrctl, rctlrr, pli, fir. Append +fb and/or +ltrp to enable offer flags.\nWithout --help or --dump-packets, this probe connects to the USB device."));
     try {
         cli.parse(argc, argv);
+        if (!language.select()) return 2;
+    } catch (const CLI::CallForHelp &) {
+        if (!language.select()) return 2;
+        std::printf("%s", language.help().c_str());
+        return 0;
     } catch (const CLI::ParseError &e) {
-        return cli.exit(e);
+        if (language.select()) {
+            std::fprintf(stderr, SCRCTL_TR("Invalid arguments: %s\n"), e.what());
+            return e.get_exit_code();
+        }
+        return 2;
     }
     udp_canary = canary->count() != 0;
     audio_leg = audio_leg || audio_rr;
 
-    // 后面所有打印都走这两个，免得某一处还按"我们一定发了 timeout"来印数字。
+    // 请求及诊断共享同一 timeout 表示，区分省略键与数值 0。
     const std::optional<uint32_t> lease =
         no_timeout_key ? std::optional<uint32_t>{} : std::optional<uint32_t>{timeout_seconds};
     const std::string lease_text =
-        no_timeout_key ? "不发 timeout 键" : std::to_string(timeout_seconds) + "s";
+        no_timeout_key ? SCRCTL_TR("timeout key omitted") : std::to_string(timeout_seconds) + "s";
 
-    // 事件通道号：现编一个 v4 UUID 带上。为什么要自己填版本/变体位：设备侧是 Swift
-    // Codable 的 UUID，形状不对时它会用一句很干脆的拒绝把整条请求挡掉（我们已经在
-    // `avcMediaStreamOptionClientSessionID` 上撞过一次 "Expected to decode UUID but
-    // found a OS_xpc_string instead"），别把那种拒绝误读成"这个键不被接受"。
+    // 使用 v4 UUID 的版本/变体位，并以 XPC UUID 交付；字符串 UUID 不等同于该类型。
     std::optional<std::vector<uint8_t>> event_channel_uuid;
     if (event_channel) {
         std::vector<uint8_t> u(16);
@@ -646,13 +486,12 @@ int main(int argc, char **argv) {
                       "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
                       u[0], u[1], u[2], u[3], u[4], u[5], u[6], u[7], u[8], u[9], u[10], u[11],
                       u[12], u[13], u[14], u[15]);
-        std::printf("带 sessionEventChannel = %s\n", hex);
+        std::printf(SCRCTL_TR("sessionEventChannel = %s\n"), hex);
         event_channel_uuid = u;
     }
 
-    // 自检：这条探针的全部结论都建立在"我发出去的包是合法的"上面，而它已经两次栽在
-    // 长度字段写成 32 位上（docs §13）。所以先把三种包的字节数和头里的 length 域打出来
-    // 核对，对不上就直接不作数——宁可这一轮白跑，也不要再拿畸形包去证明"设备不理"。
+    // 在连接设备前检查固定样本的字节数及 RR length；失败时本轮退出。
+    // 长度检查只覆盖包形状，不能证明私有字段语义或设备已经接受反馈。
     {
         const auto rr = build_rr(0x11111111u, 0x22222222u, 3);
         const auto sd = build_sdes(0x11111111u);
@@ -660,19 +499,15 @@ int main(int argc, char **argv) {
         const auto rctl = build_rctl(0x11111111u, 0x22222222u, 10, 100, 0);
         const auto comp = build_rctl_companion(0x11111111u, 0x22222222u);
         const int rr_len_field = (rr[2] << 8) | rr[3];
-        std::printf("包自检：RR %zu 字节（头里 length=%d）  RR+SDES 复合 %zu 字节  SR %zu 字节  "
-                    "RCTL %zu 字节  伴随 %zu 字节\n",
+        std::printf(SCRCTL_TR("Packet self-check: RR %zu bytes (length=%d) RR+SDES %zu bytes SR %zu bytes RCTL %zu bytes Companion %zu bytes\n"),
                     rr.size(), rr_len_field, rr.size() + sd.size(), sr.size(), rctl.size(),
                     comp.size());
         if (rr.size() != 32 || rr_len_field != 7 || sd.size() != 12 || sr.size() != 28 ||
             rctl.size() != 32 || comp.size() != 16) {
-            std::fprintf(stderr, "包形状不对（应为 RR 32 / SDES 12 / SR 28 / RCTL 32 / 伴随 16，"
-                                 "RR length 7），这一轮不作数\n");
+            std::fprintf(stderr, SCRCTL_TR("Unexpected packet shape (expected RR 32 / SDES 12 / SR 28 / RCTL 32 / Companion 16, RR length 7); this round is invalid\n"));
             return 2;
         }
-        // 只量长度等于没量：RCTL 那七个字的语义是拿苹果的包反推出来的，而"我们的第 4
-        // 个字是不是那个含 1024Hz 时钟的字段"这种问题，只有把两边并排看十六进制才答得出来。
-        // 设备抓不到我们自己的包（用户态隧道，见 docs §13），所以只能反过来把我们的包打出来。
+        // 十六进制输出用于与参考抓包逐字段对照；固定样本顺序和内容保持稳定。
         if (dump_packets) {
             const auto hex = [](const std::vector<uint8_t> &b) {
                 std::string s;
@@ -692,7 +527,7 @@ int main(int argc, char **argv) {
             std::printf("RR+SDES   %s\n", hex(compound).c_str());
             std::printf("SR        %s\n", hex(sr).c_str());
             std::printf("RCTL      %s\n", hex(rctl).c_str());
-            std::printf("伴随      %s\n", hex(comp).c_str());
+            std::printf(SCRCTL_TR("Companion %s\n"), hex(comp).c_str());
             return 0;
         }
     }
@@ -700,7 +535,7 @@ int main(int argc, char **argv) {
     if (!raw_offer_path.empty()) {
         FILE *f = std::fopen(raw_offer_path.c_str(), "rb");
         if (f == nullptr) {
-            std::fprintf(stderr, "打不开 offer 文件 %s\n", raw_offer_path.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to open offer file %s\n"), raw_offer_path.c_str());
             return 1;
         }
         uint8_t buf[4096];
@@ -709,28 +544,24 @@ int main(int argc, char **argv) {
             raw_offer.insert(raw_offer.end(), buf, buf + n);
         }
         std::fclose(f);
-        std::printf("用 %s 的原文当 negotiatorOffer（%zu 字节，不走我们自己的构造器）\n",
+        std::printf(SCRCTL_TR("Using %s as raw negotiatorOffer (%zu bytes; offer builder bypassed)\n"),
                     raw_offer_path.c_str(), raw_offer.size());
     }
 
     std::string err;
     auto dev = scrctl::remote::Device::establish({}, err, verbose);
     if (!dev) {
-        std::fprintf(stderr, "建立会话失败: %s\n", err.c_str());
+        std::fprintf(stderr, SCRCTL_TR("Failed to establish device session: %s\n"), err.c_str());
         return 1;
     }
 
-    // **ICMPv6 回音**：这一步完全不碰媒体会话，只问"这条用户态隧道到底投不投递
-    // 非 TCP 的流量"。它是金丝雀的前置条件：往关闭的 UDP 端口发包拿不到"端口不可达"
-    // 是二义的——可能我们的包没进内核，也可能设备压根不在这条隧道上生成 ICMP。
-    // 回音请求由设备**内核**直接回答，不需要任何 App 配合，所以它能把那两种分开。
-    // **实测 5/5 有应答**（修前修后都一样）：隧道确实投递我们手搓的非 TCP 包，
-    // 而设备认我们的 IPv6 头、伪头和校验和——因为它要是不认，连 ICMP 都不会回。
+    // ICMP 与 UDP 的投递路径分别观察；收到 ICMP 只能证明对应流量经过隧道。
+    // UDP 路径修复与历史误判见 docs/coredevice.md §13「UDP 修复后的反馈对照」。
     if (flow_label) {
         std::random_device rd;
         const uint32_t label = rd() & 0xFFFFFu;
         dev->rsd().stack().set_flow_label(label);
-        std::printf("  出站包的 IPv6 流标签改成 0x%05x（默认是 0；苹果客户端实测非零）\n", label);
+        std::printf(SCRCTL_TR("  Outbound IPv6 flow label: 0x%05x (default: 0)\n"), label);
     }
     if (ping6) {
         auto &st = dev->rsd().stack();
@@ -738,35 +569,24 @@ int main(int argc, char **argv) {
             std::string perr;
             const bool ok = st.send_echo_request(0x5343, static_cast<uint16_t>(i + 1), perr);
             if (!ok) {
-                std::printf("  ping6 #%d 写入失败: %s\n", i + 1, perr.c_str());
+                std::printf(SCRCTL_TR("  ping6 #%d write failed: %s\n"), i + 1, perr.c_str());
             }
             std::this_thread::sleep_for(400ms);
         }
         std::this_thread::sleep_for(1500ms);
-        std::printf("  ping6 -> %s：ICMP 共收到 %llu 个，其中回音应答 %llu 个%s\n",
+        std::printf(SCRCTL_TR("  ping6 -> %s: ICMP received=%llu echo replies=%llu%s\n"),
                     dev->rsd().stack().peer_text().c_str(),
                     static_cast<unsigned long long>(st.icmp_seen()),
                     static_cast<unsigned long long>(st.echo_replies()),
-                    st.echo_replies() > 0 ? "（隧道会投递非 TCP 流量）"
-                                          : "（设备没答 ICMP —— 金丝雀的阴性不作数）");
+                    st.echo_replies() > 0 ? SCRCTL_TR(" (non-TCP traffic received through the tunnel)")
+                                          : SCRCTL_TR(" (no echo reply; this does not establish UDP failure)"));
         if (!st.icmp_last().empty()) {
-            std::printf("    最后一条：%s\n", st.icmp_last().c_str());
+            std::printf(SCRCTL_TR("    Last message: %s\n"), st.icmp_last().c_str());
         }
     }
 
-    // **客户端->设备的 UDP 到底落不落地**：拿设备上必然在听 UDP 的那个进程
-    // （mDNSResponder:5353）当探测靶，发一个单播 DNS 查询，看回不回。
-    //
-    // 为什么这一步当时看起来必须做：上面那一 ping 已经证明"我们手搓的 IPv6 包设备
-    // 内核收得下、也答得回来"，而媒体 socket 那边却是 `pkts in: 0`，于是读成
-    // "两者唯一的差别就是 17 还是 58"——像是设备/隧道在入方向按协议丢 UDP。
-    // **这个读法是错的，而这一臂正是把它证伪的那一步**：差别从来不在协议号，
-    // 在两个包是谁拼的。ICMP 那一条走 `Stack::send_echo_request()`（拼装是对的），
-    // UDP 那一条走 `UdpSocket::send()`（长度字段与校验和都算错了范围）。
-    // 所以"ping 通而 UDP 不通"当时看起来像协议过滤器，实际是同一个函数族里
-    // 只有一条路径被测过。教训：**别拿两条不同代码路径的观测去推断网络行为**。
-    //   有回信 ⇒ 客户端->设备的 UDP 通
-    //   无回信 ⇒ 定不了案（mDNSResponder 大概率不答隧道上的单播查询）
+    // DNS 查询使用独立 UDP socket，主循环继续服务隧道以接收回复。
+    // 有回复证明本次请求投递；超时可能来自设备策略、查询内容或网络，不能直接判为过滤。
     if (udp_mdns) {
         auto &st = dev->rsd().stack();
         std::unique_ptr<scrctl::net::UdpSocket> sock;
@@ -778,7 +598,7 @@ int main(int argc, char **argv) {
             }
         }
         if (!sock) {
-            std::fprintf(stderr, "  udp-mdns：绑不到本地端口\n");
+            std::fprintf(stderr, SCRCTL_TR("  udp-mdns: failed to bind a local port\n"));
         } else {
             // DNS 查询头：ID / flags=0 / QDCOUNT=1，其余计数 0；
             // QNAME = _mdns._udp.local，QTYPE=PTR(12)，CLASS=IN(1)。
@@ -811,28 +631,21 @@ int main(int argc, char **argv) {
             std::string rerr;
             const bool got = sock->recv(reply, from_port, 2500, rerr);
             const std::string verdict =
-                got ? ("**收到回信 " + std::to_string(reply.size()) + " 字节，来自端口 " +
-                       std::to_string(from_port) + " ⇒ 客户端->设备的 UDP 是通的**")
-                    : ("无回信（" + rerr + "）");
-            std::printf("  udp-mdns：从端口 %u 发出 %d 个查询，%s\n",
+                got ? (SCRCTL_TR("Reply received: ") + std::to_string(reply.size()) + SCRCTL_TR(" bytes from port ") +
+                       std::to_string(from_port) + SCRCTL_TR("; client-to-device UDP delivery confirmed"))
+                    : (SCRCTL_TR("No reply (") + rerr + SCRCTL_TR(")"));
+            std::printf(SCRCTL_TR("  udp-mdns: local port %u, queries sent=%d, %s\n"),
                         static_cast<unsigned>(sock->local_port()), sent, verdict.c_str());
         }
     }
 
-    // `--hold-idle`：不开媒体会话，只开一条 displayservice 连接、调一次 getsupportinfo，
-    // 然后握着它空转 --seconds 秒。
-    //
-    // 为什么要单独问这个：握连接那一臂里设备在 +241ms 就把连接关了，而媒体流同时刻冻住
-    // （61 个包、0 个 SR）。这两种解释完全相反，且都还在桌上：
-    //   (a) "答完话就关"是**这条服务连接本身**的固有生命周期——那我们和苹果差的是别的；
-    //   (b) 关连接是**会话被结束**的一个症状——那连接根本不是原因。
-    // 把媒体会话从实验里拿掉就能二选一：这里如果也在 ~240ms 被关，是 (a)；如果空转 30 秒
-    // 不被关，那 240ms 那个关是跟着会话一起来的，是 (b)。
+    // 仅连接 displayservice 并调用 getsupportedmediacapabilities，不起媒体。
+    // 先调用后持续 service，可隔离媒体反馈与连接保活；复查是否成功另行计数。
     if (hold_idle) {
         std::string cerr;
         auto conn = dev->connect("com.apple.coredevice.displayservice", cerr, verbose);
         if (conn == nullptr) {
-            std::fprintf(stderr, "开连接失败: %s\n", cerr.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to open connection: %s\n"), cerr.c_str());
             return 1;
         }
         scrctl::xpc::Value out;
@@ -840,8 +653,8 @@ int main(int argc, char **argv) {
         const auto r = conn->invoke("com.apple.coredevice.feature.getmediasupportinfo",
                                     "com.apple.coredevice.action.mediastreamgetsupportinfo", in,
                                     out, 10000, cerr);
-        std::printf("[idle] 第一次调用：%s，输出类型 %d\n",
-                    r == scrctl::remote::CallResult::Ok ? "成功" : cerr.c_str(),
+        std::printf(SCRCTL_TR("[idle] First call: %s, reply type %d\n"),
+                    r == scrctl::remote::CallResult::Ok ? SCRCTL_TR("succeeded") : cerr.c_str(),
                     static_cast<int>(out.type));
         const uint64_t it0 = now_ms();
         uint64_t next_poll = it0 + 5000;
@@ -851,7 +664,7 @@ int main(int argc, char **argv) {
         while (now_ms() - it0 < static_cast<uint64_t>(seconds) * 1000) {
             if (!conn->service(200, serr)) {
                 died_ms = static_cast<long long>(now_ms() - it0);
-                std::printf("    [idle] 连接在 +%lldms 被对端关掉: %s\n", died_ms, serr.c_str());
+                std::printf(SCRCTL_TR("    [idle] Connection closed by peer at +%lldms: %s\n"), died_ms, serr.c_str());
                 break;
             }
             if (now_ms() >= next_poll) {
@@ -862,17 +675,17 @@ int main(int argc, char **argv) {
                 const auto pr = conn->invoke(
                     "com.apple.coredevice.feature.getmediasupportinfo",
                     "com.apple.coredevice.action.mediastreamgetsupportinfo", pi, po, 10000, qerr);
-                std::printf("    [idle] +%llus 同一条连接再调一次：%s\n",
+                std::printf(SCRCTL_TR("    [idle] +%llus repeat call on the same connection: %s\n"),
                             static_cast<unsigned long long>((now_ms() - it0) / 1000),
-                            pr == scrctl::remote::CallResult::Ok ? "成功" : qerr.c_str());
+                            pr == scrctl::remote::CallResult::Ok ? SCRCTL_TR("succeeded") : qerr.c_str());
                 if (pr == scrctl::remote::CallResult::Ok) {
                     ++polls;
                 }
             }
         }
-        std::printf("[idle] 结论：握着这条 displayservice 连接 %lld 毫秒，%s，同连接复查成功 %d 次\n",
+        std::printf(SCRCTL_TR("[idle] Result: displayservice connection held for %lldms, %s, successful repeat calls=%d\n"),
                     died_ms >= 0 ? died_ms : static_cast<long long>(now_ms() - it0),
-                    died_ms >= 0 ? "被设备关了" : "设备没关", polls);
+                    died_ms >= 0 ? SCRCTL_TR("closed by device") : SCRCTL_TR("not closed by device"), polls);
         return 0;
     }
 
@@ -889,13 +702,11 @@ int main(int argc, char **argv) {
         }
         p = c == std::string::npos ? what.size() : c + 1;
     }
-    std::map<std::string, std::pair<int, int>> tally;  // 臂 -> {活着, 死了}
+    std::map<std::string, std::pair<int, int>> tally;  // 对照臂 -> {收到视频包的有效轮数，结束时不存活轮数}
 
     for (int round = 0; round < attempts; ++round) {
         for (const std::string &w : arms_to_run) {
-            // 臂名形如 `<包变体>[+<offer 开关>[+...]]'，比如 `rrsrcsd+fb'、`rctl+fb+ltrp'。
-            // 用 + 拆而不是把开关焊进变体名里：开关有 2 个、包变体有一串，全组合展开成
-            // 三十多个名字，每个组合都得重写一遍判断条件。
+            // 每个对照臂按 <base>[+flag...] 拆分；合法名称及标志已由 CLI11 校验。
             const auto plus = w.find('+');
             const std::string base = plus == std::string::npos ? w : w.substr(0, plus);
             const std::string flags = plus == std::string::npos ? "" : w.substr(plus + 1);
@@ -903,37 +714,15 @@ int main(int argc, char **argv) {
             const bool ltrp = flags.find("ltrp") != std::string::npos;
 
             const int poll_every_ms = base == "poll" ? 2000 : (base == "poll5" ? 5000 : 0);
-            // RTCP 变体。这一批臂是"回 RTCP 能不能续命"这个问题留下的：当时以为会话是
-            // 起流后 20 秒的硬租期、而协商参数里写着 `RTCPTimeoutInterval: 20`，于是把
-            // 那 20 秒读成"没收到接收端 RTCP 的超时"。**这个解释后来被推翻了**（那个 20
-            // 就是我们在请求里报的 `timeout`，见 --timeout），但这批臂作为"RTCP 能不能
-            // 延长租期"的负结果仍然成立——答案是完全不能，报多长就多少秒死，一视同仁。
-            // 这几个变体各改一个变量：
-            //   rr      裸 RR，发送者 SSRC 用我们自己编的，发到设备那个媒体端口
-            //   rrsame  同上，但发送者 SSRC = 设备的媒体 SSRC
-            //   rrsdes  RR + SDES(CNAME) 复合包（设备的 SR 就是 SR+SDES 复合来的）
-            //   rrp1    裸 RR 发到 媒体端口+1（RFC 3550 的 RTCP 端口惯例）
-            //   rrall   复合包 + 媒体 SSRC + 端口+1，全都给
-            //   rrneg   发送者 SSRC = answer 的 `LocalSSRC`，报告块 = `RemoteSSRC`
-            //   rrnegp1 rrneg 但发到 媒体端口+1
-            //   rrnegsr rrneg 但发 SR 而不是 RR
-            //   rrmine  **反过来**：发送者 = `RemoteSSRC`，报告块 = `LocalSSRC`
-            //   rrminep1/rrminesr 同上两件事的端口/SR 变体
-            //   rrsrc / rrsrcsd 同上，但目的端口换成 streamConfig.SourcePort
-            //   rctl    AVConference 的 RTCP APP "RCTL"（20/s）+ 每帧一个 name=5 伴随包
-            //   rctlrr  RCTL 那一套 + 每秒一个 RR+SDES 复合包
-            //
-            // rrmine 这一组才是上一轮的重点。上一轮跑出来才发现 answer 里的 `LocalSSRC`
-            // 就是 RTP 头里设备自己那个 SSRC（探针把报告块与实际包头一比就露馅了），也就
-            // 是说这两个名字是**从设备的视角**起的：Local = 设备自己发的那条流，Remote =
-            // 设备给我们这一端分配的 SSRC。那么"RTCP 发送者该填谁"根本不是我们能编的——
-            // 它已经替我们编好了。前面所有臂（包括 rrneg）都填错了人。
-            //
-            // rctl 这一组是本轮的重点，理由见 build_rctl 上面那段：把 RFC 3550 那几种包
-            // 的字节、SSRC、端口全对上了仍然 20.0 秒死，而 Apple 客户端在视频端口上灌的
-            // 是这种 PT=204 的厂商 APP 包，"Xcode sends this and no PLIs"。
-            // pli/fir 使用与 rrsrc 相同的 RR、协商 SSRC 和 SourcePort，
-            // 在这条保活基线上分别增加 PLI 或标准 FIR 请求。
+            // 每个 RTCP 变体改变发送者/报告 SSRC、复合包或目的端口：
+            // rr：自选 SSRC；rrsame：媒体 SSRC；rrsdes：附加 SDES；rrp1：媒体端口 +1。
+            // rrall：媒体 SSRC + SDES + 端口 +1；rrneg：LocalSSRC 发送、RemoteSSRC 报告。
+            // rrnegp1/rrnegsr：上述端口/SR 变体；rrmine：RemoteSSRC 发送、LocalSSRC 报告。
+            // rrminep1/rrminesr/rrminesd/rrminecname：端口、SR 或 SDES 变体。
+            // rrsrc/rrsrcsd：采用 SourcePort；rctl：20Hz RCTL + marker 触发的伴随包。
+            // rctlrr：在 RCTL 之外增加 RR；pli/fir：在 rrsrc 的 RR 基线上增加关键帧请求。
+            // 已测视频的 LocalSSRC 与设备 RTP SSRC 相等，RemoteSSRC 用作接收端反馈来源。
+            // 修复前的负结果不能作为当前 RTCP 无效的证据；当前对照见 docs/coredevice.md §30.3。
             const bool send_pli = base == "pli";
             const bool send_fir = base == "fir";
             const bool send_rr = base.rfind("rr", 0) == 0 || send_pli || send_fir;
@@ -946,8 +735,7 @@ int main(int argc, char **argv) {
                 base == "rrmine" || base == "rrminep1" || base == "rrminesr" ||
                 base == "rrminesd" || base == "rrminecname" || base == "rrsrc" ||
                 base == "rrsrcsd" || base == "rctl" || base == "rctlrr" || send_pli || send_fir;
-            // 发到 streamConfig.SourcePort（pymobiledevice3 用的就是它），而不是
-            // connection.sender.port。RCTL 那两臂没有别的选项——按抓包它就是这个目的。
+            // 对应臂优先选择 streamConfig.SourcePort；缺失时保留 sender.port 回退。
             const bool to_source_port =
                 base == "rrsrc" || base == "rrsrcsd" || base == "rctl" || base == "rctlrr" ||
                 send_pli || send_fir;
@@ -963,14 +751,14 @@ int main(int argc, char **argv) {
             req.session_event_channel = event_channel_uuid;
             req.raw_offer = raw_offer;
 
-            // 苹果是**先起音频再起视频**，两条腿共用同一个 ClientSessionID。这里照那个
-            // 顺序来：先生成/复用这 16 字节，起音频腿，再用同一个 UUID 起视频腿。
+            // 按参考客户端的顺序先启动音频，再启动视频；两者复用同一个
+            // 16 字节 ClientSessionID，以便观察协商字段中的同步关系。
             std::unique_ptr<scrctl::hid::Service> hid_held;
             if (hid_attach) {
                 std::string herr;
                 hid_held = scrctl::hid::Service::open(*dev, herr, verbose);
                 if (hid_held == nullptr) {
-                    std::fprintf(stderr, "[%s] HID 连接失败: %s（这一臂不作数）\n", w.c_str(),
+                    std::fprintf(stderr, SCRCTL_TR("[%s] HID connection failed: %s (round invalid)\n"), w.c_str(),
                                  herr.c_str());
                     std::this_thread::sleep_for(2s);
                     continue;
@@ -978,8 +766,8 @@ int main(int argc, char **argv) {
                 std::vector<scrctl::hid::Service::Surface> faces;
                 std::string serr;
                 const bool listed = hid_held->surfaces(faces, serr);
-                std::printf("  HID 已附着，整窗握着不发输入（connectedServices 查询%s，%zu 个面）\n",
-                            listed ? "成功" : "失败", listed ? faces.size() : 0);
+                std::printf(SCRCTL_TR("  HID attached without sending input (connectedServices query %s, surfaces=%zu)\n"),
+                            listed ? SCRCTL_TR("succeeded") : SCRCTL_TR("failed"), listed ? faces.size() : 0);
             }
             std::vector<uint8_t> shared_session;
             std::unique_ptr<scrctl::media::StreamSession> audio;
@@ -987,17 +775,14 @@ int main(int argc, char **argv) {
             uint16_t audio_dest_port = 0;
             uint64_t audio_seen = 0;
             uint32_t audio_highest_seq = 0;
-            // 音频腿的原始数据报按 `[u16 长度][整包字节]` 顺序落盘（`--audio-out`）。
-            // 要做设备音频，第一个要回答的问题不是"能不能收到包"（那个早就量到 12~29/s），
-            // 而是"来的到底是什么编码、怎么打包的"——这个没有任何文档可查，只能把线上
-            // 字节拿下来自己认。
+            // 音频落盘保留整包 RTP；大端 u16 长度用于离线分割，与产品解码输出不同。
             struct FileCloser {
                 int operator()(FILE *f) const { return f == nullptr ? 0 : std::fclose(f); }
             };
             std::unique_ptr<FILE, FileCloser> audio_dump {
                 audio_out.empty() ? nullptr : std::fopen(audio_out.c_str(), "wb") };
             if (!audio_out.empty() && audio_dump == nullptr) {
-                std::fprintf(stderr, "打不开音频落盘文件 %s\n", audio_out.c_str());
+                std::fprintf(stderr, SCRCTL_TR("Failed to open audio output file %s\n"), audio_out.c_str());
             }
             if (audio_leg) {
                 std::random_device rd;
@@ -1013,14 +798,13 @@ int main(int argc, char **argv) {
                 std::string aerr;
                 audio = scrctl::media::StreamSession::start(*dev, areq, aerr, verbose);
                 if (!audio) {
-                    std::fprintf(stderr, "[%s] 音频腿起流失败: %s（这一臂不作数）\n", w.c_str(),
+                    std::fprintf(stderr, SCRCTL_TR("[%s] Failed to start audio stream: %s (round invalid)\n"), w.c_str(),
                                  aerr.c_str());
                     std::this_thread::sleep_for(2s);
                     continue;
                 }
-                // 设备在音频 answer 里给的三个数，就是我们在音频腿上发 RTCP 要用的三个数
-                // （发送者 = 它给我们分配的 RemoteSSRC，报告块 = 它自己的 LocalSSRC，
-                // 目的端口 = 它的 sender.port）。取不到就停在这一臂上，别拿编的数发包。
+                // 按已测 answer 角色取反馈发送者和报告 SSRC，并从 sender.port 取目的端口。
+                // 缺失值保留当前回退；输出各值供本次协商核对，不作所有设备保证。
                 uint32_t a_remote = 0, a_local = 0;
                 stream_config_u32(audio->started().answer, "RemoteSSRC", a_remote);
                 stream_config_u32(audio->started().answer, "LocalSSRC", a_local);
@@ -1028,28 +812,20 @@ int main(int argc, char **argv) {
                 audio_report_ssrc = a_local;
                 audio_dest_port = audio->started().sender_port;
                 uint32_t audio_pt = audio->started().payload_type;
-                std::printf("  音频腿已起：收流端口=%u 设备发送端口=%u PT=%u "
-                            "RemoteSSRC=%u LocalSSRC=%u\n",
+                std::printf(SCRCTL_TR("  Audio stream started: receive port=%u device send port=%u PT=%u RemoteSSRC=%u LocalSSRC=%u\n"),
                             audio->receiver_port(), audio_dest_port, audio_pt, a_remote, a_local);
-                print_sync_tokens("音频腿", audio->started().answer);
+                print_sync_tokens(SCRCTL_TR("audio"), audio->started().answer);
                 if (!audio_out.empty()) {
-                    // 收到的音频包全是同样 16 字节（12 字节 RTP 头 + 4 字节载荷）、
-                    // 时间戳每包 +480 —— 光看字节认不出这是 AAC 还是 ALAC 还是别的什么。
-                    // answer 里设备自己会交代媒体类型与采样率，那是唯一不用猜的来源，
-                    // 所以把它整条打出来。
-                    std::printf("  音频腿 answer 全貌：%s\n",
+                    // 保留完整音频 answer，以检查当前协商的编码与配置；RTP 计数不证明解码。
+                    std::printf(SCRCTL_TR("  Full audio answer: %s\n"),
                                 scrctl::xpc::describe(audio->started().answer, ~std::size_t { 0 })
                                     .c_str());
                 }
                 req.client_session_uuid = shared_session;
             }
 
-            // displayinfoupdates 订阅臂：照抓包里苹果那条挂着的长连接，在
-            // `com.apple.coredevice.deviceinfo` 上开一条流式订阅并**持续收**它的推送。
-            // 形状用现成的 stream()（当年为 streamapplist 写的）：请求把参数裹在
-            // `CoreDevice.input.actualInput` 下、再给一个 `streamProxy.sideChannel` =
-            // 客户端自己生成的 UUID，回信一串 `sideChannelStatus{pushing:...}`。
-            // 订阅必须在**起视频流之前**就挂上，否则测的就不是"起流时有没有人在看显示"。
+            // displayinfoupdates 使用独立 deviceinfo 连接，先订阅再起视频。
+            // 此连接由订阅线程独占；更新计数只描述本轮实际收到的事件。
             std::atomic<bool> sub_done { false };
             std::atomic<int> sub_elements { 0 };
             std::atomic<bool> sub_failed { false };
@@ -1058,7 +834,7 @@ int main(int argc, char **argv) {
                 std::string cerr2;
                 auto sub = dev->connect("com.apple.coredevice.deviceinfo", cerr2, verbose);
                 if (sub == nullptr) {
-                    std::fprintf(stderr, "[%s] 连 deviceinfo 失败: %s\n", w.c_str(),
+                    std::fprintf(stderr, SCRCTL_TR("[%s] Failed to connect to deviceinfo: %s\n"), w.c_str(),
                                  cerr2.c_str());
                     sub_failed.store(true);
                 } else {
@@ -1073,28 +849,21 @@ int main(int argc, char **argv) {
                     scrctl::xpc::dict_set(sinput, "actualInput", scrctl::xpc::make_dict());
                     scrctl::xpc::dict_set(sinput, "streamProxy", std::move(proxy));
                     const uint64_t sub_t0 = now_ms();
-                    // 单次 stream() 的等待上限：给到比观察窗还长，免得订阅在 deadline 之前
-                    // 自己先退（第一版就是这么漏掉的）。
+                    // 单次 stream() 的等待上限比媒体观察窗长，避免订阅提前到期。
                     const int hold_ms = (seconds + 30) * 1000;
                     sub_thread = std::thread(
                         [in = std::move(sinput), conn = std::move(sub), &sub_done, &sub_elements,
                          &sub_failed, sub_t0, hold_ms, dev_ptr = &*dev, verbose]() mutable {
-                            // **订阅必须跨过那个 deadline**。第一版这里写死了 15 秒接收超时，
-                            // 结果设备 90ms 推完两次之后就静默，15 秒一到 stream() 自己退出，
-                            // 到 20 秒时订阅早就不在了——那一臂等于什么都没测。现在把单次
-                            // 超时给到"比观察窗还长"，并且一断就重开一条连接重新订阅，
-                            // 中间不留空窗。
+                            // 订阅窗口比媒体观察窗长 30 秒；断开后重建连接并订阅。
+                            // 该重连只影响显示订阅，不改变媒体控制策略。
                             std::string e2;
                             while (!sub_done.load()) {
                                 const auto r = conn->stream(
                                     "com.apple.coredevice.feature.displayinfoupdates", "", in,
                                     [&](const scrctl::xpc::Value &one) {
                                         ++sub_elements;
-                                        // 只打"有几个键"等于没打：要照它给的几何画界面，得知道字段叫什么、
-                                        // 值是像素还是点。整条 describe 打出来（字符串截断到 120 字节）。
-                                        // budget 给到不设上限：这条推送的键正好落在
-                                        // 默认 400 字符之后，截了等于没测。
-                                        std::printf("    [sub] +%lldms 显示推送：%s\n",
+                                        // 输出完整结构，方便与参考客户端的显示面、方向及背光字段对照。
+                                        std::printf(SCRCTL_TR("    [sub] +%lldms display update: %s\n"),
                                                     static_cast<long long>(now_ms() - sub_t0),
                                                     scrctl::xpc::describe(one, ~std::size_t { 0 })
                                                         .c_str());
@@ -1104,12 +873,12 @@ int main(int argc, char **argv) {
                                 if (sub_done.load() || r == scrctl::remote::CallResult::Ok) {
                                     return;  // 设备自己发了 finishStreaming，不用再挂
                                 }
-                                std::printf("    [sub] +%lldms 订阅断了，重开一条连接重订: %s\n",
+                                std::printf(SCRCTL_TR("    [sub] +%lldms subscription closed; reconnecting: %s\n"),
                                             static_cast<long long>(now_ms() - sub_t0), e2.c_str());
                                 conn = dev_ptr->connect("com.apple.coredevice.deviceinfo", e2,
                                                         verbose);
                                 if (conn == nullptr) {
-                                    std::printf("    [sub] 重连失败: %s\n", e2.c_str());
+                                    std::printf(SCRCTL_TR("    [sub] Reconnection failed: %s\n"), e2.c_str());
                                     sub_failed.store(true);
                                     return;
                                 }
@@ -1117,12 +886,8 @@ int main(int argc, char **argv) {
                         });
                 }
             }
-            // 握着连接那一臂：自己开一条 displayservice 连接，用它来起流，然后**不放**，
-            // 另起一个线程只管 service()——空转时替这条连接读一眼，好让设备的 PING 有人
-            // 应答。查状态也走这同一条连接：这样"连接还活着"和"会话还在表里"是同一时刻
-            // 从同一条链路上拿到的两个证据，而不是两条连接各说一套。
-            // 一个线程独占这条 Channel 是有意的：Channel 的 rx_/pending_ 没有锁，
-            // service() 和 invoke() 并发跑会互相吃掉字节。
+            // Channel 的发送/接收没有内部并发锁。起流握手先在主线程完成，
+            // 再把同一连接交给保持线程，避免 service 和同步 invoke 争用流。
             std::unique_ptr<scrctl::remote::ServiceConnection> held;
             std::atomic<bool> hold_done { false };
             std::atomic<int> hold_polls { 0 };
@@ -1132,7 +897,7 @@ int main(int argc, char **argv) {
                 std::string cerr;
                 held = dev->connect("com.apple.coredevice.displayservice", cerr, verbose);
                 if (held == nullptr) {
-                    std::fprintf(stderr, "[%s] 开连接失败: %s\n", w.c_str(), cerr.c_str());
+                    std::fprintf(stderr, SCRCTL_TR("[%s] Failed to open connection: %s\n"), w.c_str(), cerr.c_str());
                     std::this_thread::sleep_for(2s);
                     continue;
                 }
@@ -1140,7 +905,7 @@ int main(int argc, char **argv) {
             auto session = scrctl::media::StreamSession::start(*dev, req, start_err, verbose,
                                                                held.get());
             if (!session) {
-                std::fprintf(stderr, "[%s] 起流失败: %s\n", w.c_str(), start_err.c_str());
+                std::fprintf(stderr, SCRCTL_TR("[%s] Failed to start stream: %s\n"), w.c_str(), start_err.c_str());
                 std::this_thread::sleep_for(2s);
                 continue;
             }
@@ -1152,7 +917,7 @@ int main(int argc, char **argv) {
                     while (!hold_done.load()) {
                         if (!held->service(200, serr)) {
                             hold_died_ms.store(static_cast<long long>(now_ms() - arm_t0));
-                            std::printf("    [hold] 连接在 +%lldms 断了: %s\n",
+                            std::printf(SCRCTL_TR("    [hold] Connection closed at +%lldms: %s\n"),
                                         static_cast<long long>(now_ms() - arm_t0), serr.c_str());
                             return;
                         }
@@ -1168,13 +933,13 @@ int main(int argc, char **argv) {
                             if (r == scrctl::remote::CallResult::Ok) {
                                 ++hold_polls;
                                 const auto *ss = out.find("sessions");
-                                std::printf("    [hold] +%lldms 同一条连接查到会话 %zu 条\n",
+                                std::printf(SCRCTL_TR("    [hold] +%lldms session entries on the same connection=%zu\n"),
                                             static_cast<long long>(now_ms() - arm_t0),
                                             ss != nullptr && ss->is_array()
                                                 ? ss->array.size()
                                                 : static_cast<std::size_t>(0));
                             } else {
-                                std::printf("    [hold] +%lldms 同一条连接查状态失败(%d): %s\n",
+                                std::printf(SCRCTL_TR("    [hold] +%lldms status query on the same connection failed (%d): %s\n"),
                                             static_cast<long long>(now_ms() - arm_t0),
                                             static_cast<int>(r), qerr.c_str());
                             }
@@ -1182,8 +947,7 @@ int main(int argc, char **argv) {
                     }
                 });
             }
-            std::printf("第 %d 轮 [%s]：流已起，观察 %d 秒（不去碰设备，让画面自己静止）"
-                        "offer: allowRTCPFB=%d ltrpEnabled=%d\n",
+            std::printf(SCRCTL_TR("Round %d [%s]: stream started, observing for %d seconds (leave the device idle) offer: allowRTCPFB=%d ltrpEnabled=%d\n"),
                         round, w.c_str(), seconds, fb ? 1 : 0, ltrp ? 1 : 0);
 
             Arm arm;
@@ -1195,9 +959,7 @@ int main(int argc, char **argv) {
             bool ssrc_role_printed = false;
             uint16_t highest_seq = 0;
             uint64_t last_video = 0;
-            // 静止判据的起点没有收到过包，所以按"起流时刻"起算；留 0 的话第一个包之前
-            // 每一轮都算"静止了几万毫秒"，请求会在流还没稳的时候就发出去。
-            
+            // 未收到视频包时 last_video 保持 0，静默时间由发送处回退到起流时刻 t0。
             // 只用来数 IDR 的第二个拆包器：和收流并行跑一份，不参与任何判断路径。
             scrctl::rt::HevcRtpDepacketizer idr_scan(session->started().payload_type);
             uint64_t next_rr = t0;
@@ -1209,20 +971,16 @@ int main(int argc, char **argv) {
             // 的 RTP 时间戳、累计视频包数、以及"上一帧有多少个包"（marker 那一下结算）。
             uint32_t rtp_last_ts = 0;
             uint32_t rtp_packets = 0;
-            /// 我们**发出去**了多少个 RTCP。这一列是探针的自证：判活看的是设备那边的
-            /// SR 时钟，而"我这侧一个 RTCP 都没发出去"和"发了但设备不认"在那一列上完全
-            /// 一样——不记这个数，就会把"什么都没做"读成"做了没用"（lifetime_probe 栽过
-            /// 的那个坑，docs §13 记着）。
+            /// 仅计数成功写入隧道的 RTCP；它不表示设备已接收或接受该包。
+            /// 设备 SR 是独立的接收侧观测，需结合结束状态及 none 对照解释。
             uint64_t rtcp_sent = 0;
             uint32_t cur_frame_pkts = 0;
             uint32_t last_frame_pkts = 0;
             uint64_t next_rctl = t0;
-            // 我们自己的 SSRC：不能拿设备那个当发送者，否则设备按 SSRC 配对时会认为
-            // 这是它自己的报告而丢掉（也可能更糟：把两条流的报告当成同一条）。
+            // 自选 SSRC，用于相关对照臂或缺少协商字段时的现有回退。
             const uint32_t our_ssrc = 0x35c0ffeeu;
-            // 设备在 answer 里**已经给我们分配过一个 SSRC**（`LocalSSRC`），并且写明了
-            // 它那条流的 `RemoteSSRC`。上面那句注释的推理没错，但结论应该是"用设备分配的
-            // 那个"，而不是"自己编一个"。这两个数是 `bitrate_probe --dump-answer` 露出来的。
+            // 读取协商 SSRC，按实际 RTP 头核对角色：已测视频 LocalSSRC 为设备发送源，
+            // RemoteSSRC 为反馈发送者。字段名本身不替代本次测量。
             uint32_t neg_local_ssrc = 0, neg_remote_ssrc = 0, neg_rtcp_port = 0;
             uint32_t neg_source_port = 0;
             const bool has_local =
@@ -1230,84 +988,59 @@ int main(int argc, char **argv) {
             const bool has_remote =
                 stream_config_u32(session->started().answer, "RemoteSSRC", neg_remote_ssrc);
             stream_config_u32(session->started().answer, "RTCPRemotePort", neg_rtcp_port);
-            // **这里曾经写着一句假话**："answer 里有两个设备那边的端口，实测不一样（一次
-            // 跑出来是 54351 与 61422）"，并由此推出"rrsrc* 那几臂发到 SourcePort 是在换
-            // 目的端口"。把 /tmp/p3test 里 21 次跑的记录拉出来对：`connection.sender.port`
-            // 与 `streamConfig.SourcePort` **21/21 全部相等**，而那两个数在任何一份日志里
-            // 都不存在。所以 `rrsrc` 那几臂从来没换过端口，它们和 `rr` 臂是同一件事。
-            //
-            // 真正"不一样的第三个端口"是 `RTCPRemotePort`，而它**不是设备那边的端口，是我们
-            // 自己的收流端口**：苹果的视频腿 answer 里 RTCPRemotePort=49637=DestPort=
-            // receiver.port，而它的客户端把 RTCP 发到 56179=SourcePort=sender.port。我们
-            // 这边同样 DestPort=RTCPRemotePort、RTCP 发到 sender.port。**两边一模一样**，
-            // "设备是不是在另一个端口听 RTCP"这个怀疑就此了结——它不是答案。
+            // 已有 21 份记录的 sender.port 与 SourcePort 相等；不能据此假定所有设备相等。
+            // 已测 RTCPRemotePort/DestPort 为客户端接收端口，反馈发往设备 SourcePort。
+            // 这里仍读取并输出本次结果，历史核对见 docs/coredevice.md §13。
             const bool has_source_port =
                 stream_config_u32(session->started().answer, "SourcePort", neg_source_port);
-            // 那两个 RTCP 超时键是这一节全部推理的起点，所以要每臂都打出来看**它跟着谁变**：
-            // 如果 `RTCPTimeoutInterval` 跟着我们请求里的 `timeout` 走，那这条租期就不是
-            // 设备定的，是我们自己报的。
+            // 将请求 timeout 与 answer 的 RTCP 超时字段并排打印。
+            // 相等仅说明字段关系，不足以确定设备计时器的重置条件。
             uint32_t rtcp_interval = 0, rtcp_enabled = 0;
             const bool has_interval =
                 stream_config_u32(session->started().answer, "RTCPTimeoutInterval", rtcp_interval);
             stream_config_u32(session->started().answer, "RTCPTimeoutEnabled", rtcp_enabled);
             std::printf("  answer: LocalSSRC=%s RemoteSSRC=%s RTCPRemotePort=%u "
                         "connection.sender.port=%u streamConfig.SourcePort=%u\n",
-                        has_local ? std::to_string(neg_local_ssrc).c_str() : "(没有)",
-                        has_remote ? std::to_string(neg_remote_ssrc).c_str() : "(没有)",
+                        has_local ? std::to_string(neg_local_ssrc).c_str() : SCRCTL_TR("(missing)"),
+                        has_remote ? std::to_string(neg_remote_ssrc).c_str() : SCRCTL_TR("(missing)"),
                         neg_rtcp_port, session->started().sender_port, neg_source_port);
-            print_sync_tokens("视频腿", session->started().answer);
-            std::printf("  请求 timeout=%s -> answer RTCPTimeoutInterval=%s RTCPTimeoutEnabled=%s\n",
+            print_sync_tokens(SCRCTL_TR("video"), session->started().answer);
+            std::printf(SCRCTL_TR("  Requested timeout=%s -> answer RTCPTimeoutInterval=%s RTCPTimeoutEnabled=%s\n"),
                         lease_text.c_str(),
-                        has_interval ? std::to_string(rtcp_interval).c_str() : "(没有)",
-                        rtcp_enabled == 1 ? "真" : (rtcp_enabled == 0 ? "假/没读到" : "其它"));
+                        has_interval ? std::to_string(rtcp_interval).c_str() : SCRCTL_TR("(missing)"),
+                        rtcp_enabled == 1 ? SCRCTL_TR("true") : (rtcp_enabled == 0 ? SCRCTL_TR("false/not read") : SCRCTL_TR("other")));
             if (!no_timeout_key && has_interval && rtcp_interval != timeout_seconds) {
-                std::printf("  两者不等：设备没有照抄我们报的那个数\n");
+                std::printf(SCRCTL_TR("  Timeout values differ: the device did not echo the requested value\n"));
             }
             if (has_source_port && neg_source_port != session->started().sender_port) {
-                std::printf("  两个端口不同：rrsrc* 那几臂发到 streamConfig.SourcePort\n");
+                std::printf(SCRCTL_TR("  Ports differ: rrsrc* arms send to streamConfig.SourcePort\n"));
             }
-            // 我们发出去的特性串到底进没进协商，看设备回显的那一条。没有这一行的话，
-            // "设备收下了 VRAE:0"和"设备把它丢了"在结果上完全一样。
+            // 打印 feature 字符串回显；回显存在不代表每项能力均已启用。
             std::string echoed;
             if (stream_config_str(session->started().answer, "TxCodecFeatureListString", echoed)) {
-                std::printf("  我们发 %s -> 设备回显 TxCodecFeatureListString=%s\n",
+                std::printf(SCRCTL_TR("  Sent %s -> answer TxCodecFeatureListString=%s\n"),
                             avc_features.c_str(), echoed.c_str());
             }
 
-            // **UDP 金丝雀**：往一个我们确信没人监听的设备端口打三个数据报。
-            //
-            // 为什么要有它：设备的 `lastReceivedPacketTime` 是 nan，而"我们的包没被
-            // 隧道投递出去"和"投出去了但那个端口没人收"这两种成因，在媒体面上看到的
-            // 结果一模一样。唯一能把它们分开的是设备的内核会不会答话——打给一个确定
-            // 关闭的端口，它该回 ICMPv6 `type=1 code=4`（端口不可达），这条由
-            // `net::Stack` 直接打到 stderr。三种结果各有含义：
-            //   金丝雀有回信 + RTCP 无回信  → 隧道 UDP 通，媒体端口才是问题
-            //   金丝雀有回信 + RTCP 也有     → 我们发的那个端口上根本没人收（发错端口）
-            //   两种都没有回信              → 当时以为只剩"包没进内核"，**其实还有第四种，
-            //                                 而它才是答案：包自己是坏的**。校验和错的
-            //                                 UDP 包在进 UDP 层之前就被丢，走不到"没人听"
-            //                                 那一步，所以连 ICMP 都不发。
-            // **实测**：拼装修好之前 3 条全哑，修好之后 3 条全收到 `type=1 code=4`
-            // 且回带的内层四元组就是我们的发包（`58250->47891`）。同一段发包代码、同一个
-            // 靶、只改了 `build_udp_datagram`——这就是整件事的前后对照。
+            // 指定 UDP 端口探测只统计成功写入隧道；关闭端口可能产生 ICMPv6 反馈。
+            // 无反馈不等于未投递，需结合隧道计数及抓包；早期结果受 UDP 校验和缺陷影响。
             if (udp_canary) {
                 for (int i = 0; i < 3; ++i) {
                     std::string cerr;
                     const std::vector<uint8_t> junk = {0x80, 0xcc, 0x00, 0x03, 0, 0, 0, 0,
                                                        0, 0, 0, 0x5a};
                     const bool ok = session->send_rtp(junk, canary_port, cerr);
-                    std::printf("  金丝雀 #%d -> %u：%s\n", i + 1, canary_port,
-                                ok ? "已写入隧道" : ("写入失败 " + cerr).c_str());
+                    std::printf(SCRCTL_TR("  UDP probe #%d -> %u: %s\n"), i + 1, canary_port,
+                                ok ? SCRCTL_TR("written to tunnel") : (SCRCTL_TR("write failed: ") + cerr).c_str());
                     std::this_thread::sleep_for(400ms);
                 }
             }
 
             const uint64_t until = t0 + static_cast<uint64_t>(seconds) * 1000;
-            // 音频腿上每秒一个 RR+SDES 的节奏起点，和它自己收到的包/发出去的计数。
+            // 音频 RR+SDES 的 1 Hz 发送起点，以及音频收包和发送计数。
             uint64_t next_audio_rr = t0;
             uint64_t audio_rr_sent = 0;
-            // 每 10 秒打一行进度。长观察窗（分钟级）没有这一行的话，探针看起来像卡死，
-            // 而"它其实还在收包"正是本轮要报的答案——探针要能证明自己做了事。
+            // 每 10 秒输出实际接收、发送计数，不据此推断设备已接受反馈。
             uint64_t next_tick = t0 + 10000;
             uint64_t video_seen = 0;
             uint64_t sr_seen = 0;
@@ -1318,20 +1051,13 @@ int main(int argc, char **argv) {
                     ? neg_source_port
                     : session->started().sender_port + (port_plus_one ? 1 : 0));
             while (now_ms() < until) {
-                // 每圈最多收 kDrainPerRound 个包就回到外层。不封顶的话外层那些"到点就
-                // 发一个 RTCP"的判断**在忙画面上永远轮不到**：视频包一秒几百个地来，内层
-                // 的 `while (next_packet(...))` 一直不空,于是 --hz 10 实测只发出 21 个包
-                // （和 --hz 1 一模一样），"频率"这一维等于没测。
+                // 每轮最多排空 32 包，避免持续的视频流量阻塞 RTCP 定时发送。
                 constexpr int kDrainPerRound = 32;
                 for (int drained = 0; drained < kDrainPerRound; ++drained) {
                     if (!session->next_packet(packet, peer, 30, err)) {
                         break;
                     }
-                    // 出包循环里也要看时刻。**这一条是长租期暴露出来的 bug**：租期只有
-                    // 20 秒时，流一死 next_packet 就开始超时返回 false，内层循环必然退出，
-                    // 于是"内层循环会因为流一直活着而永不退出"这件事从来没暴露过。
-                    // 把 timeout 提到 3600 之后，探针在 150 秒的观察窗之后仍然卡在这一层
-                    // 收包——那一刻它其实已经给出了本轮最重要的答案：流还活着。
+                    // 排空循环内也检查观察截止时间，避免持续收包使本轮超过窗口。
                     if (now_ms() >= until) {
                         break;
                     }
@@ -1354,15 +1080,14 @@ int main(int argc, char **argv) {
                         }
                         if (this_has_idr && arm.first_request_ms != 0 &&
                             arm.idr_after_request_ms == 0) {
-                            // 只认"请求之后到的第一个 IDR"：起流那一下本来就有 IDR，
-                            // 把它记成请求的功劳就是自欺。
+                            // 只计首次计时请求之后的第一个 IDR，避免把起流 IDR 计入延迟。
                             arm.idr_after_request_ms = now - arm.first_request_ms;
                         }
                         ++video_seen;
                         ++rtp_packets;
                         rtp_last_ts = info.timestamp;
                         ++cur_frame_pkts;
-                        // 抓包里的伴随包（name=5）是**每帧一个**，跟着 marker 位走。
+                        // 抓包中的伴随包（name=5）按帧发送，以 RTP marker 标记帧结束。
                         if (info.marker && send_rctl) {
                             last_frame_pkts = cur_frame_pkts;
                             cur_frame_pkts = 0;
@@ -1371,7 +1096,7 @@ int main(int argc, char **argv) {
                                 mine_ssrc && has_remote ? neg_remote_ssrc : our_ssrc,
                                 rtp_last_ts);
                             if (!session->send_rtp(comp, dest_port, serr)) {
-                                arm.note = "RCTL 伴随包发送失败: " + serr;
+                                arm.note = SCRCTL_TR("Failed to send RCTL companion packet: ") + serr;
                             } else {
                                 ++rtcp_sent;
                             }
@@ -1394,7 +1119,7 @@ int main(int argc, char **argv) {
                         build_rctl(mine_ssrc && has_remote ? neg_remote_ssrc : our_ssrc,
                                    rtp_last_ts, last_frame_pkts, rtp_packets, clock_1024);
                     if (!session->send_rtp(rctl, dest_port, serr)) {
-                        arm.note = "RCTL 发送失败: " + serr;
+                        arm.note = SCRCTL_TR("Failed to send RCTL: ") + serr;
                     } else {
                         ++rtcp_sent;
                     }
@@ -1402,25 +1127,21 @@ int main(int argc, char **argv) {
                 if (send_rr && media_ssrc != 0 && now_ms() >= next_rr) {
                     next_rr += rr_period_ms;
                     std::string serr;
-                    // 发送者 SSRC：
-                    //   mine 臂用 answer 的 `RemoteSSRC`（设备给我们这端分配的）
-                    //   neg  臂用 `LocalSSRC`（上一轮证明那其实是设备自己的流，所以这臂
-                    //          是"填错人"的那一版，留着当对照）
-                    //   same 臂故意用设备的媒体 SSRC；其余用自己编的
+                    // mine 使用 RemoteSSRC，neg 使用 LocalSSRC，same 使用媒体 RTP SSRC；
+                    // 其它使用自选 SSRC。保留各臂的现有回退，以便逐项比较。
                     const uint32_t sender_ssrc =
                         mine_ssrc && has_remote ? neg_remote_ssrc
                         : neg_ssrc && has_local ? neg_local_ssrc
                         : same_ssrc             ? media_ssrc
                                                 : our_ssrc;
-                    // 报告块里指认的流：mine 臂指设备自己那条流（`LocalSSRC`），其余指实际
-                    // 收到的 RTP 头里那个。
+                    // 报告块：mine 优先 LocalSSRC，neg 优先 RemoteSSRC，其余或缺失时使用媒体 SSRC。
                     const uint32_t report_ssrc =
                         mine_ssrc && has_local ? neg_local_ssrc
                         : neg_ssrc && has_remote ? neg_remote_ssrc
                                                  : media_ssrc;
                     std::vector<uint8_t> rr;
                     if (send_sr) {
-                        rr = build_sr(sender_ssrc, 0, 0);  // 我们一个 RTP 都没发，如实报 0
+                        rr = build_sr(sender_ssrc, 0, 0);  // 本探针不发送媒体 RTP，发送计数为 0。
                     } else {
                         rr = build_rr(sender_ssrc, report_ssrc, highest_seq);
                         if (base == "rrminecname") {
@@ -1431,26 +1152,22 @@ int main(int argc, char **argv) {
                             rr.insert(rr.end(), sd.begin(), sd.end());
                         }
                     }
-                    // 命名口径的证据就打在第一次发包时：设备的 RTP 头 SSRC 到底等于
-                    // answer 里的哪一个。这一行决定了上面两种填法哪个才是"填对自己"。
+                    // 首次发包时打印 RTP SSRC 与协商字段的对照，不把不等于 Local 自动视为等于 Remote。
                     if (!ssrc_role_printed) {
                         ssrc_role_printed = true;
-                        std::printf("  RTP 头里的 SSRC %u == answer 的 %s（%s）\n", media_ssrc,
+                        std::printf(SCRCTL_TR("  RTP SSRC %u compared with answer %s (%s)\n"), media_ssrc,
                                     media_ssrc == neg_local_ssrc ? "LocalSSRC" : "RemoteSSRC",
-                                    media_ssrc == neg_local_ssrc ? "所以 Local 是设备自己那条流"
-                                                                 : "所以 Remote 是设备自己那条流");
+                                    media_ssrc == neg_local_ssrc ? SCRCTL_TR("matches LocalSSRC")
+                                                                 : SCRCTL_TR("LocalSSRC differs; compare RemoteSSRC with the value above"));
                     }
                     if (!session->send_rtp(rr, dest_port, serr)) {
-                        arm.note = "RTCP 发送失败: " + serr;
+                        arm.note = SCRCTL_TR("Failed to send RTCP: ") + serr;
                     } else {
                         ++rtcp_sent;
                     }
                 }
-                // 按 quiet/request_always 条件及请求周期发送 PLI 或标准 FIR。
-                // 标准 FIR 在 2026-10-07 单轮观察中，29 次请求期间出现 26 个 IDR，
-                // 首次计时请求后 32ms 观察到 IDR，并在同时发送 RR 的情况下存活 30 秒。
-                // 当轮没有同期 none/PLI 对照，不能据此比较优劣或判断单独的保活作用；
-                // 实验范围与后续对照见 docs/coredevice.md。
+                // 根据静默条件/request_always 及 --hz 周期发送 PLI 或标准 FIR。
+                // IDR 的出现是时间相关性，应结合同期对照；当前三轮记录见 docs/coredevice.md §30.3。
                 if ((send_pli || send_fir) && media_ssrc != 0) {
                     const uint64_t n = now_ms();
                     const uint64_t quiet = last_video != 0 ? n - last_video : n - t0;
@@ -1468,7 +1185,7 @@ int main(int argc, char **argv) {
                         }
                         std::string serr;
                         if (!session->send_rtp(req_packet, dest_port, serr)) {
-                            arm.note = "关键帧请求发送失败: " + serr;
+                            arm.note = SCRCTL_TR("Failed to send keyframe request: ") + serr;
                         } else {
                             ++arm.requests_sent;
                             // 起流后 3 秒内的请求不计入首次请求到 IDR 的延迟，
@@ -1476,16 +1193,15 @@ int main(int argc, char **argv) {
                             // 请求后出现 IDR 是时间相关性，需结合对照臂判断请求效果。
                             if (arm.first_request_ms == 0 && n - t0 >= 3000) {
                                 arm.first_request_ms = n;
-                                std::printf("  %s 第一次发出（画面已静止 %llums，之后每秒一次）\n",
+                                std::printf(SCRCTL_TR("  First %s sent (video quiet for %llums; later requests follow --hz)\n"),
                                             send_fir ? "FIR" : "PLI",
                                             static_cast<unsigned long long>(quiet));
                             }
                         }
                     }
                 }
-                // 音频腿这一段做两件事，顺序不能反：先把它**实际收到**的包记下来（这是
-                // "设备到底替不替我们建这条腿"的唯一一手证据——answer 回了不代表在推流），
-                // 再按苹果那个节奏每秒发一个 RR+SDES。
+                // 先接收并计数音频 RTP，再按 1Hz 发送音频 RR+SDES。
+                // 收包证明本轮存在音频流量，不能单独证明编码或播放正常。
                 if (audio) {
                     std::vector<uint8_t> ap;
                     uint16_t apeer = 0;
@@ -1500,8 +1216,8 @@ int main(int argc, char **argv) {
                             ++audio_seen;
                             audio_highest_seq = ai.sequence;
                             if (audio_dump != nullptr) {
-                                // 连 RTP 头一起写：认格式要看的正是头里的 PT/marker/时间戳
-                                // 与载荷的关系，只留载荷就把"一帧切成几包"这件事丢了。
+                                // 保留 RTP 头及载荷，供后续核对 PT、marker、时间戳
+                                // 和分包关系。记录长度包含头部。
                                 const uint16_t n = static_cast<uint16_t>(ap.size());
                                 const uint8_t len[2] = {static_cast<uint8_t>(n >> 8),
                                                         static_cast<uint8_t>(n & 0xFF)};
@@ -1518,7 +1234,7 @@ int main(int argc, char **argv) {
                         arr.insert(arr.end(), asd.begin(), asd.end());
                         std::string serr;
                         if (!audio->send_rtp(arr, audio_dest_port, serr)) {
-                            arm.note = "音频腿 RR 发送失败: " + serr;
+                            arm.note = SCRCTL_TR("Failed to send audio RR: ") + serr;
                         } else {
                             ++audio_rr_sent;
                         }
@@ -1538,8 +1254,7 @@ int main(int argc, char **argv) {
                     next_tick += 10000;
                     if (audio) {
                         std::printf(
-                            "  +%3llus 视频包 %6llu SR 心跳 %4llu 发出 RTCP %5llu"
-                            " 音频包 %6llu 音频 RR %3llu（租期 %s）\n",
+                            SCRCTL_TR("  +%3llus video packets %6llu SRs %4llu RTCP sent %5llu audio packets %6llu audio RR %3llu (requested timeout %s)\n"),
                             static_cast<unsigned long long>((now_ms() - t0) / 1000),
                             static_cast<unsigned long long>(video_seen),
                             static_cast<unsigned long long>(sr_seen),
@@ -1547,7 +1262,7 @@ int main(int argc, char **argv) {
                             static_cast<unsigned long long>(audio_seen),
                             static_cast<unsigned long long>(audio_rr_sent), lease_text.c_str());
                     } else {
-                        std::printf("  +%3llus 视频包 %6llu SR 心跳 %4llu 发出 RTCP %5llu（租期 %s）\n",
+                        std::printf(SCRCTL_TR("  +%3llus video packets %6llu SRs %4llu RTCP sent %5llu (requested timeout %s)\n"),
                                     static_cast<unsigned long long>((now_ms() - t0) / 1000),
                                     static_cast<unsigned long long>(video_seen),
                                     static_cast<unsigned long long>(sr_seen),
@@ -1556,12 +1271,9 @@ int main(int argc, char **argv) {
                     if (dump_status) {
                         std::string qerr;
                         const auto st = scrctl::media::StreamSession::status(*dev, qerr, verbose);
-                        // 把自己的 uuid 和表里每一条的 uuid 并排打出来。为什么要这么麻烦：
-                        // `probe()` 只回"在/不在/不知道"，而"不在"有两种完全不同的原因——
-                        // 会话真的结束了，和**我们的 uuid 没匹配上**（字节序、包装层级都
-                        // 能让这两种长得一模一样）。分不清这个，就会把一条活着的会话判成
-                        // 死了并重起，而这条判据是泵里救流那条路的依据。
-                        std::printf("    我们的 session_uuid = ");
+                        // 将本探针 UUID 与设备条目并排打印，检查匹配失败或其他客户端条目。
+                        // probe 的 Unknown 与 Missing 不能混为设备已经结束会话。
+                        std::printf(SCRCTL_TR("    Our session_uuid = "));
                         for (uint8_t b : session->started().session_uuid) {
                             std::printf("%02x", b);
                         }
@@ -1574,9 +1286,9 @@ int main(int argc, char **argv) {
                                           .find("avcMediaStreamOptionClientSessionID")
                                     : nullptr;
                                 const auto *u = w != nullptr ? w->find("uuid") : nullptr;
-                                std::printf("    表里第 %zu 条 uuid = ", i);
+                                std::printf(SCRCTL_TR("    Session table entry %zu uuid = "), i);
                                 if (u == nullptr) {
-                                    std::printf("(读不到)");
+                                    std::printf(SCRCTL_TR("(unavailable)"));
                                 } else {
                                     for (uint8_t b : u->data) {
                                         std::printf("%02x", b);
@@ -1585,21 +1297,17 @@ int main(int argc, char **argv) {
                                 std::printf("\n");
                             }
                         }
-                        walk(st, "状态", 0);
+                        walk(st, SCRCTL_TR("Status"), 0);
                     }
                 }
             }
-            // 收不到包的那一刻就先看表，不要等到最后。这一条是给"到底是到点死还是被顶掉"
-            // 留的证据——那一轮里 +16.99s 的死法和 20 秒租期对不上，事后才发现后台开着
-            // DeviceHub，而当时的输出没有任何一位能证明不是被抢的。
-            // 死的那一刻先看一眼表：这条会话到底是设备按租期摘掉的，还是被别的客户端
-            // （后台开着的 Xcode DeviceHub）顶掉的——两者的结论完全相反，而只看"我们收不
-            // 到包"根本分不开。
-            dump_sessions(*dev, session->started().session_uuid, "刚停");
+            // 在观察窗结束后查询会话归属，辅助核对最终状态。
+            // 此处不是断流瞬间的快照，不能独自确定更早中断的原因。
+            dump_sessions(*dev, session->started().session_uuid, SCRCTL_TR("observation ended"));
             if (dump_status) {
-                std::printf("  观察窗结束时的设备状态原文：\n");
+                std::printf(SCRCTL_TR("  Device status at the end of the observation window:\n"));
                 std::string qerr;
-                walk(scrctl::media::StreamSession::status(*dev, qerr, verbose), "状态", 0);
+                walk(scrctl::media::StreamSession::status(*dev, qerr, verbose), SCRCTL_TR("Status"), 0);
             }
             std::string perr;
             arm.alive_at_end = scrctl::media::StreamSession::probe(
@@ -1616,15 +1324,15 @@ int main(int argc, char **argv) {
             if (sub_thread.joinable()) {
                 sub_done.store(true);
                 sub_thread.join();
-                std::printf("  [sub] 显示订阅累计收到 %d 次推送%s\n", sub_elements.load(),
-                            sub_failed.load() ? "（订阅中途失败过）" : "");
+                std::printf(SCRCTL_TR("  [sub] Display updates received=%d%s\n"), sub_elements.load(),
+                            sub_failed.load() ? SCRCTL_TR(" (subscription failed during observation)") : "");
             }
             if (hold_thread.joinable()) {
                 hold_done.store(true);
                 hold_thread.join();
-                std::printf("  [hold] 这一臂握着连接：同一条连接上成功查到会话 %d 次，连接%s\n",
+                std::printf(SCRCTL_TR("  [hold] Successful session polls on the same connection=%d; connection %s\n"),
                             hold_polls.load(),
-                            hold_died_ms.load() < 0 ? "整场没断" : "中途断了");
+                            hold_died_ms.load() < 0 ? SCRCTL_TR("remained open") : SCRCTL_TR("closed during observation"));
             }
             std::string serr;
             session->stop(*dev, serr, verbose);
@@ -1632,9 +1340,9 @@ int main(int argc, char **argv) {
         }
     }
 
-    std::printf("\n汇总（活到观察结束的轮数 / 有效轮数）：\n");
+    std::printf(SCRCTL_TR("\nSummary (rounds alive at observation end / valid rounds):\n"));
     for (const auto &[w, t] : tally) {
-        std::printf("  %-6s 活着 %d / %d\n", w.c_str(), t.first - t.second, t.first);
+        std::printf(SCRCTL_TR("  %-6s alive %d / %d\n"), w.c_str(), t.first - t.second, t.first);
     }
     const auto alive_of = [&](const std::string &k) {
         auto it = tally.find(k);
@@ -1645,21 +1353,21 @@ int main(int argc, char **argv) {
         return it == tally.end() ? 0 : it->second.first;
     };
     if (total_of("none") > 0 && alive_of("none") == 0) {
-        std::printf("对照成立：什么都不发的臂每次都死。\n");
+        std::printf(SCRCTL_TR("Control condition met: the none arm ended in every observed valid round.\n"));
         for (const auto &k : {std::string("rr"), std::string("rrsame"), std::string("rrsdes"),
                        std::string("rrp1"), std::string("rrall"), std::string("poll"),
                        std::string("poll5")}) {
             if (total_of(k) == 0) {
                 continue;
             }
-            std::printf("  %-6s：%s\n", k.c_str(),
+            std::printf(SCRCTL_TR("  %-6s: %s\n"), k.c_str(),
                         alive_of(k) == total_of(k)
-                            ? "每次都活到观察结束 —— 这就是保活动作"
-                            : (alive_of(k) == 0 ? "每次都死 —— 它不是保活"
-                                                : "时活时死 —— 和间隔有关，要量出那个时限"));
+                            ? SCRCTL_TR("alive in every observed round; consistent with keepalive in this comparison")
+                            : (alive_of(k) == 0 ? SCRCTL_TR("ended in every observed round; no keepalive effect observed in this comparison")
+                                                : SCRCTL_TR("mixed outcomes; more controlled observations are needed")));
         }
     } else {
-        std::printf("对照组没死或没有对照，判据不成立。\n");
+        std::printf(SCRCTL_TR("Control condition not met: the none arm survived or no valid control round was recorded.\n"));
     }
     return 0;
 }

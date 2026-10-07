@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 03:26+0800\n"
+"POT-Creation-Date: 2026-10-08 04:06+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -54,7 +54,7 @@ msgstr ""
 msgid "Local audio playback disabled; receiving and decoding continue\n"
 msgstr ""
 
-#: src/app/Application.cpp:149
+#: src/app/Application.cpp:149 tools/rr_keepalive_probe.cpp:770
 msgid "failed"
 msgstr ""
 
@@ -82,50 +82,50 @@ msgstr ""
 msgid "--test-type failed: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:197
+#: src/app/Application.cpp:198
 #, c-format
 msgid "Input injection failed (further attempts disabled): %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:208
+#: src/app/Application.cpp:209
 #, c-format
 msgid "Reached --time-limit %d seconds\n"
 msgstr ""
 
-#: src/app/Application.cpp:212
+#: src/app/Application.cpp:213
 #, c-format
 msgid "Received exit signal; closing device session\n"
 msgstr ""
 
-#: src/app/Application.cpp:222
+#: src/app/Application.cpp:223
 #, c-format
 msgid ""
 "  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
 msgstr ""
 
-#: src/app/Application.cpp:247 src/app/Application.cpp:313
+#: src/app/Application.cpp:249 src/app/Application.cpp:315
 #, c-format
 msgid "Reached --exit-after %d\n"
 msgstr ""
 
-#: src/app/Application.cpp:262
+#: src/app/Application.cpp:264
 #, c-format
 msgid ""
 "Mouse input is unavailable: screenshot orientation or display dimensions are "
 "unknown or inconsistent\n"
 msgstr ""
 
-#: src/app/Application.cpp:292
+#: src/app/Application.cpp:294
 #, c-format
 msgid "Render rotation changed to %d degrees clockwise; window recreated\n"
 msgstr ""
 
-#: src/app/Application.cpp:324
+#: src/app/Application.cpp:329
 #, c-format
 msgid "Window readback was not reached (requested frame %d, rendered %d)\n"
 msgstr ""
 
-#: src/app/Application.cpp:328
+#: src/app/Application.cpp:333
 #, c-format
 msgid "Finished: rendered %d frames\n"
 msgstr ""
@@ -142,11 +142,11 @@ msgstr ""
 msgid "Audio output opened: %d Hz / %d channels, backend %s\n"
 msgstr ""
 
-#: src/app/Cli.cpp:17
+#: src/app/Cli.cpp:16
 msgid "iOS screen mirroring and control"
 msgstr ""
 
-#: src/app/Cli.cpp:19
+#: src/app/Cli.cpp:18
 msgid ""
 "With no arguments, mirror the connected device.\n"
 "The device chooses encoding dimensions, bitrate and frame rate; overrides "
@@ -157,217 +157,200 @@ msgid ""
 "device."
 msgstr ""
 
-#: src/app/Cli.cpp:24 tools/screenshot_probe.cpp:53
+#: src/app/Cli.cpp:23 tools/screenshot_probe.cpp:52
 msgid "Show help"
 msgstr ""
 
-#: src/app/Cli.cpp:25
+#: src/app/Cli.cpp:24
 msgid "Play an Annex-B HEVC file"
 msgstr ""
 
-#: src/app/Cli.cpp:26 tools/screenshot_probe.cpp:59
+#: src/app/Cli.cpp:25 tools/screenshot_probe.cpp:58
 msgid "Device UDID"
 msgstr ""
 
-#: src/app/Cli.cpp:27
+#: src/app/Cli.cpp:26
 msgid "LAN address (requires an existing pairing record)"
 msgstr ""
 
-#: src/app/Cli.cpp:28
+#: src/app/Cli.cpp:27
 msgid "Record the live stream as Annex-B"
 msgstr ""
 
-#: src/app/Cli.cpp:29
+#: src/app/Cli.cpp:28
 msgid ""
 "Launch bundle ID; ? matches name prefix, + terminates the previous instance"
 msgstr ""
 
-#: src/app/Cli.cpp:30
+#: src/app/Cli.cpp:29
 msgid "Window title"
 msgstr ""
 
-#: src/app/Cli.cpp:31
+#: src/app/Cli.cpp:30
 msgid "SDL render driver, e.g. metal / software"
 msgstr ""
 
-#: src/app/Cli.cpp:33
+#: src/app/Cli.cpp:32
 msgid "stream for live video or screenshot for polling; default: stream"
 msgstr ""
 
-#: src/app/Cli.cpp:35
+#: src/app/Cli.cpp:34
 msgid "Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"
 msgstr ""
 
-#: src/app/Cli.cpp:42
+#: src/app/Cli.cpp:41
 msgid "Inject home/lock/volup/voldn/mute"
 msgstr ""
 
-#: src/app/Cli.cpp:44
+#: src/app/Cli.cpp:43
 msgid "Inject ASCII text (device text field must have focus)"
 msgstr ""
 
-#: src/app/Cli.cpp:45
+#: src/app/Cli.cpp:44
 msgid "Force alternating video fallback and recovery at T1,T2,... seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:46
+#: src/app/Cli.cpp:45
 msgid "Write device clipboard and exit (supports Unicode)"
 msgstr ""
 
-#: src/app/Cli.cpp:47
+#: src/app/Cli.cpp:46
 msgid "List connected devices"
 msgstr ""
 
-#: src/app/Cli.cpp:48
+#: src/app/Cli.cpp:47
 msgid "Disable input control"
 msgstr ""
 
-#: src/app/Cli.cpp:49
+#: src/app/Cli.cpp:48
 msgid "List device apps"
 msgstr ""
 
-#: src/app/Cli.cpp:50
+#: src/app/Cli.cpp:49
 msgid "Show version"
 msgstr ""
 
-#: src/app/Cli.cpp:51
+#: src/app/Cli.cpp:50
 msgid "Desktop fullscreen"
 msgstr ""
 
-#: src/app/Cli.cpp:52
+#: src/app/Cli.cpp:51
 msgid "Keep window on top"
 msgstr ""
 
-#: src/app/Cli.cpp:53
+#: src/app/Cli.cpp:52
 msgid "Borderless window"
 msgstr ""
 
-#: src/app/Cli.cpp:54
+#: src/app/Cli.cpp:53
 msgid "Prevent local screen sleep while running"
 msgstr ""
 
-#: src/app/Cli.cpp:55
+#: src/app/Cli.cpp:54
 msgid "Do not start audio stream"
 msgstr ""
 
-#: src/app/Cli.cpp:56
+#: src/app/Cli.cpp:55
 msgid "Receive and decode audio without local playback"
 msgstr ""
 
-#: src/app/Cli.cpp:57
+#: src/app/Cli.cpp:56
 msgid "Run without a window"
 msgstr ""
 
-#: src/app/Cli.cpp:58
+#: src/app/Cli.cpp:57
 msgid "Use platform hardware decoder; default: software"
 msgstr ""
 
-#: src/app/Cli.cpp:59
+#: src/app/Cli.cpp:58
 msgid "Print input coordinates"
 msgstr ""
 
-#: src/app/Cli.cpp:60
+#: src/app/Cli.cpp:59
 msgid "Add tunnel diagnostics to --stats"
 msgstr ""
 
-#: src/app/Cli.cpp:61
+#: src/app/Cli.cpp:60
 msgid "Print statistics every second"
 msgstr ""
 
-#: src/app/Cli.cpp:62
+#: src/app/Cli.cpp:61
 msgid "Read device clipboard; with --copy, read back after writing"
 msgstr ""
 
-#: src/app/Cli.cpp:63
+#: src/app/Cli.cpp:62
 msgid "Window horizontal position; default: centered"
 msgstr ""
 
-#: src/app/Cli.cpp:64
+#: src/app/Cli.cpp:63
 msgid "Window vertical position; default: centered"
 msgstr ""
 
-#: src/app/Cli.cpp:65
+#: src/app/Cli.cpp:64
 msgid "Window width; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:66
+#: src/app/Cli.cpp:65
 msgid "Window height; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:67
+#: src/app/Cli.cpp:66
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:69
+#: src/app/Cli.cpp:68
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr ""
 
-#: src/app/Cli.cpp:71
+#: src/app/Cli.cpp:70
 msgid "Exit after N frames; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:73
+#: src/app/Cli.cpp:72
 msgid "Finite positive scale; default: fit screen"
 msgstr ""
 
-#: src/app/Cli.cpp:77
+#: src/app/Cli.cpp:76
 msgid ""
 "Clockwise display orientation; auto follows device and does not affect "
 "recording"
 msgstr ""
 
-#: src/app/Cli.cpp:79
+#: src/app/Cli.cpp:78
 msgid "Crop WxH+X+Y or W:H:X:Y"
 msgstr ""
 
-#: src/app/Cli.cpp:80
+#: src/app/Cli.cpp:79
 msgid "Background color #RRGGBB"
 msgstr ""
 
-#: src/app/Cli.cpp:81
+#: src/app/Cli.cpp:80
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr ""
 
-#: src/app/Cli.cpp:83 tools/screenshot_probe.cpp:61
-msgid "Message language: auto, en, zh-CN (default: environment, fallback: en)"
-msgstr ""
-
-#: src/app/Cli.cpp:89 tools/screenshot_probe.cpp:69
-msgid "--lang must be auto, en or zh-CN"
-msgstr ""
-
-#: src/app/Cli.cpp:102
+#: src/app/Cli.cpp:88
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr ""
 
-#: src/app/Cli.cpp:109
+#: src/app/Cli.cpp:95
 msgid "Requires a finite positive number"
 msgstr ""
 
-#: src/app/Cli.cpp:126
+#: src/app/Cli.cpp:112
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr ""
 
-#: src/app/Cli.cpp:133
+#: src/app/Cli.cpp:119
 msgid "Expected #RRGGBB"
 msgstr ""
 
-#: src/app/Cli.cpp:146
+#: src/app/Cli.cpp:132
 msgid "Frame number must be a positive integer"
 msgstr ""
 
-#: src/app/Cli.cpp:151
+#: src/app/Cli.cpp:137
 msgid "Requires a window; incompatible with --no-window"
-msgstr ""
-
-#: src/app/Cli.cpp:162 tools/screenshot_probe.cpp:90
-msgid "Usage"
-msgstr ""
-
-#: src/app/Cli.cpp:163 src/app/Cli.cpp:164 tools/screenshot_probe.cpp:92
-#: tools/screenshot_probe.cpp:93
-msgid "Options"
 msgstr ""
 
 #: src/app/Commands.cpp:40 src/app/Commands.cpp:63
@@ -481,7 +464,7 @@ msgstr ""
 msgid "Decoder backend: %s\n"
 msgstr ""
 
-#: src/app/FrameSource.h:21
+#: src/app/FrameSource.h:23
 msgid "Source ended"
 msgstr ""
 
@@ -991,6 +974,31 @@ msgstr ""
 msgid "RST_STREAM payload must be 4 bytes; got "
 msgstr ""
 
+#: src/i18n/CliLanguage.h:16
+msgid "Message language: auto, en, zh-CN (default: environment, fallback: en)"
+msgstr ""
+
+#: src/i18n/CliLanguage.h:30
+msgid "--lang must be auto, en or zh-CN"
+msgstr ""
+
+#: src/i18n/CliLanguage.h:35
+msgid "Cannot enable the requested message locale; using English"
+msgstr ""
+
+#: src/i18n/CliLanguage.h:47 src/i18n/CliLanguage.h:52
+#: src/i18n/CliLanguage.h:53
+msgid "Options"
+msgstr ""
+
+#: src/i18n/CliLanguage.h:51
+msgid "Usage"
+msgstr ""
+
+#: src/i18n/CliLanguage.h:54 src/i18n/CliLanguage.h:55
+msgid "Positionals"
+msgstr ""
+
 #: src/json/Json.cpp:15
 msgid "Input too large"
 msgstr ""
@@ -1125,6 +1133,7 @@ msgstr ""
 #: src/net/TcpStream.cpp:126 src/net/UdpSocket.cpp:109
 #: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:214
 #: src/transport/Socket.cpp:114 src/wifi/RemotePairing.cpp:35
+#: tools/rr_keepalive_probe.cpp:636
 msgid ")"
 msgstr ""
 
@@ -2836,93 +2845,718 @@ msgstr ""
 msgid ", received "
 msgstr ""
 
-#: tools/screenshot_probe.cpp:50
-msgid "Capture a device screenshot and save it as PNG"
+#: tools/rr_keepalive_probe.cpp:121 tools/rr_keepalive_probe.cpp:122
+#: tools/rr_keepalive_probe.cpp:1004 tools/rr_keepalive_probe.cpp:1005
+#: tools/rr_keepalive_probe.cpp:1010
+msgid "(missing)"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:52
+#: tools/rr_keepalive_probe.cpp:188
+msgid "false"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:188 tools/rr_keepalive_probe.cpp:1011
+msgid "true"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:202
+#, c-format
+msgid "    %s = <%zu bytes>\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:248
+#, c-format
 msgid ""
-"With no UDID, use the connected device. --help does not connect to a device."
+"  [%s] video received=%s IDRs=%llu last video +%llums last SR +%llums SRs "
+"during video quiet periods=%llu session at end=%s"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:54
-msgid "Print device connection and request details"
+#: tools/rr_keepalive_probe.cpp:249 tools/rr_keepalive_probe.cpp:307
+msgid "no"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:56
-msgid "Output PNG path (default: /tmp/scrctl-shot.png)"
+#: tools/rr_keepalive_probe.cpp:249 tools/rr_keepalive_probe.cpp:307
+msgid "yes"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:74
-msgid "Cannot enable the requested message locale; using English"
+#: tools/rr_keepalive_probe.cpp:254
+msgid "absent"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:91
-msgid "Positionals"
+#: tools/rr_keepalive_probe.cpp:254
+msgid "present"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:98
+#: tools/rr_keepalive_probe.cpp:256
+#, c-format
+msgid " keyframe requests=%llu first at +%llums subsequent IDR "
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:263
+msgid "not observed"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:264
+msgid "ms later"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:268
+#, c-format
+msgid " session polls reporting alive=%llu last at +%llums"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:286
+#, c-format
+msgid "  [%s] device session table: %zu entries\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:303
+#, c-format
+msgid "    [%zu] %s PT=%llu type=%s timeout key=%s run duration=%llus\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:304
+msgid "other client"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:304
+msgid "ours"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:306
+msgid "(missing; creation path may differ)"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:381
+msgid "Compare RTCP keepalive and keyframe request strategies over USB"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:382
+msgid "Show help and exit without connecting to a device"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:386
+msgid "Observation seconds per arm (default: 30)"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:388
+msgid "Number of rounds (default: 2)"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:390
+msgid "RR and keyframe request frequency in Hz (default: 1)"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:396
+msgid ""
+"must be a finite positive frequency with a representable millisecond period"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:400
+msgid "Negotiation timeout in seconds (default: 20)"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:401
+msgid "Comma-separated arms (default: none,rrsrc,rrsrcsd)"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:407
+msgid "must contain at least one arm"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:415
+msgid "unknown arm: "
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:422
+msgid "unknown arm flag: "
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:430
+msgid "Omit the timeout key from the request"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:431
+msgid "Print packet bytes and exit without connecting"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:432
+msgid "Print the full final session status"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:433
+msgid "Write length-prefixed audio RTP packets to FILE"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:434
+msgid "Start audio with the same client session ID as video"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:435
+msgid "Start audio and send RR+SDES on its port at 1 Hz"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:436
+msgid "Use FILE bytes as the negotiator offer"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:437
+msgid "AVConference feature string (default: FLS;SW:1;)"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:438
+msgid "Include a session event channel UUID"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:439
+msgid "Keep the stream-start connection open and service it"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:440
+msgid "Keep a display connection open without starting media"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:441
+msgid "Disable status polling on the held connection"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:442
+msgid "Subscribe to display updates before starting"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:443
+msgid "Attach HID before starting, without sending input"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:444
+msgid "Send five ICMPv6 echo requests before starting"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:445
+msgid "Send a unicast DNS query to device port 5353"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:447
+msgid "Send three UDP datagrams to optional PORT (default: 47891)"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:449
+msgid "Set a random IPv6 flow label"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:450
+msgid "Request keyframes even while video is arriving"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:451
+msgid "Print verbose protocol logging"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:452
+msgid ""
+"Arms: none, poll, poll5, rr, rrsame, rrsdes, rrp1, rrall, rrneg, rrnegp1,\n"
+"rrnegsr, rrmine, rrminep1, rrminesr, rrminesd, rrminecname, rrsrc, rrsrcsd,\n"
+"rctl, rctlrr, pli, fir. Append +fb and/or +ltrp to enable offer flags.\n"
+"Without --help or --dump-packets, this probe connects to the USB device."
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:462 tools/screenshot_probe.cpp:69
 #, c-format
 msgid "Invalid arguments: %s\n"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:106
+#: tools/rr_keepalive_probe.cpp:474
+msgid "timeout key omitted"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:489
+#, c-format
+msgid "sessionEventChannel = %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:502
+#, c-format
+msgid ""
+"Packet self-check: RR %zu bytes (length=%d) RR+SDES %zu bytes SR %zu bytes "
+"RCTL %zu bytes Companion %zu bytes\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:507
+#, c-format
+msgid ""
+"Unexpected packet shape (expected RR 32 / SDES 12 / SR 28 / RCTL 32 / "
+"Companion 16, RR length 7); this round is invalid\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:530
+#, c-format
+msgid "Companion %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:538
+#, c-format
+msgid "Failed to open offer file %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:547
+#, c-format
+msgid "Using %s as raw negotiatorOffer (%zu bytes; offer builder bypassed)\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:554 tools/screenshot_probe.cpp:77
 #, c-format
 msgid "Failed to establish device session: %s\n"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:109
+#: tools/rr_keepalive_probe.cpp:564
+#, c-format
+msgid "  Outbound IPv6 flow label: 0x%05x (default: 0)\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:572
+#, c-format
+msgid "  ping6 #%d write failed: %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:577
+#, c-format
+msgid "  ping6 -> %s: ICMP received=%llu echo replies=%llu%s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:581
+msgid " (non-TCP traffic received through the tunnel)"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:582
+msgid " (no echo reply; this does not establish UDP failure)"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:584
+#, c-format
+msgid "    Last message: %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:601
+#, c-format
+msgid "  udp-mdns: failed to bind a local port\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:634
+msgid " bytes from port "
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:634
+msgid "Reply received: "
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:635
+msgid "; client-to-device UDP delivery confirmed"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:636
+msgid "No reply ("
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:637
+#, c-format
+msgid "  udp-mdns: local port %u, queries sent=%d, %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:648
+#, c-format
+msgid "Failed to open connection: %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:656
+#, c-format
+msgid "[idle] First call: %s, reply type %d\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:657 tools/rr_keepalive_probe.cpp:680
+#: tools/rr_keepalive_probe.cpp:770
+msgid "succeeded"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:667
+#, c-format
+msgid "    [idle] Connection closed by peer at +%lldms: %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:678
+#, c-format
+msgid "    [idle] +%llus repeat call on the same connection: %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:686
+#, c-format
+msgid ""
+"[idle] Result: displayservice connection held for %lldms, %s, successful "
+"repeat calls=%d\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:688
+msgid "closed by device"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:688
+msgid "not closed by device"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:761
+#, c-format
+msgid "[%s] HID connection failed: %s (round invalid)\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:769
+#, c-format
+msgid ""
+"  HID attached without sending input (connectedServices query %s, "
+"surfaces=%zu)\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:785
+#, c-format
+msgid "Failed to open audio output file %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:801
+#, c-format
+msgid "[%s] Failed to start audio stream: %s (round invalid)\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:815
+#, c-format
+msgid ""
+"  Audio stream started: receive port=%u device send port=%u PT=%u "
+"RemoteSSRC=%u LocalSSRC=%u\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:817
+msgid "audio"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:820
+#, c-format
+msgid "  Full audio answer: %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:837
+#, c-format
+msgid "[%s] Failed to connect to deviceinfo: %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:866
+#, c-format
+msgid "    [sub] +%lldms display update: %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:876
+#, c-format
+msgid "    [sub] +%lldms subscription closed; reconnecting: %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:881
+#, c-format
+msgid "    [sub] Reconnection failed: %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:900
+#, c-format
+msgid "[%s] Failed to open connection: %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:908
+#, c-format
+msgid "[%s] Failed to start stream: %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:920
+#, c-format
+msgid "    [hold] Connection closed at +%lldms: %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:936
+#, c-format
+msgid "    [hold] +%lldms session entries on the same connection=%zu\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:942
+#, c-format
+msgid ""
+"    [hold] +%lldms status query on the same connection failed (%d): %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:950
+#, c-format
+msgid ""
+"Round %d [%s]: stream started, observing for %d seconds (leave the device "
+"idle) offer: allowRTCPFB=%d ltrpEnabled=%d\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1007
+msgid "video"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1008
+#, c-format
+msgid ""
+"  Requested timeout=%s -> answer RTCPTimeoutInterval=%s "
+"RTCPTimeoutEnabled=%s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1011
+msgid "false/not read"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1011
+msgid "other"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1013
+#, c-format
+msgid "  Timeout values differ: the device did not echo the requested value\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1016
+#, c-format
+msgid "  Ports differ: rrsrc* arms send to streamConfig.SourcePort\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1021
+#, c-format
+msgid "  Sent %s -> answer TxCodecFeatureListString=%s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1033
+#, c-format
+msgid "  UDP probe #%d -> %u: %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1034
+msgid "write failed: "
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1034
+msgid "written to tunnel"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1099
+msgid "Failed to send RCTL companion packet: "
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1122
+msgid "Failed to send RCTL: "
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1158
+#, c-format
+msgid "  RTP SSRC %u compared with answer %s (%s)\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1160
+msgid "matches LocalSSRC"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1161
+msgid "LocalSSRC differs; compare RemoteSSRC with the value above"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1164
+msgid "Failed to send RTCP: "
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1188
+msgid "Failed to send keyframe request: "
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1196
+#, c-format
+msgid "  First %s sent (video quiet for %llums; later requests follow --hz)\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1237
+msgid "Failed to send audio RR: "
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1257
+#, c-format
+msgid ""
+"  +%3llus video packets %6llu SRs %4llu RTCP sent %5llu audio packets %6llu "
+"audio RR %3llu (requested timeout %s)\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1265
+#, c-format
+msgid ""
+"  +%3llus video packets %6llu SRs %4llu RTCP sent %5llu (requested timeout "
+"%s)\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1276
+#, c-format
+msgid "    Our session_uuid = "
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1289
+#, c-format
+msgid "    Session table entry %zu uuid = "
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1291
+#, c-format
+msgid "(unavailable)"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1300 tools/rr_keepalive_probe.cpp:1310
+msgid "Status"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1306
+msgid "observation ended"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1308
+#, c-format
+msgid "  Device status at the end of the observation window:\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1327
+#, c-format
+msgid "  [sub] Display updates received=%d%s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1328
+msgid " (subscription failed during observation)"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1333
+#, c-format
+msgid ""
+"  [hold] Successful session polls on the same connection=%d; connection %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1335
+msgid "closed during observation"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1335
+msgid "remained open"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1343
+#, c-format
+msgid ""
+"\n"
+"Summary (rounds alive at observation end / valid rounds):\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1345
+#, c-format
+msgid "  %-6s alive %d / %d\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1356
+#, c-format
+msgid ""
+"Control condition met: the none arm ended in every observed valid round.\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1363
+#, c-format
+msgid "  %-6s: %s\n"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1365
+msgid ""
+"alive in every observed round; consistent with keepalive in this comparison"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1366
+msgid ""
+"ended in every observed round; no keepalive effect observed in this "
+"comparison"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1367
+msgid "mixed outcomes; more controlled observations are needed"
+msgstr ""
+
+#: tools/rr_keepalive_probe.cpp:1370
+#, c-format
+msgid ""
+"Control condition not met: the none arm survived or no valid control round "
+"was recorded.\n"
+msgstr ""
+
+#: tools/screenshot_probe.cpp:49
+msgid "Capture a device screenshot and save it as PNG"
+msgstr ""
+
+#: tools/screenshot_probe.cpp:51
+msgid ""
+"With no UDID, use the connected device. --help does not connect to a device."
+msgstr ""
+
+#: tools/screenshot_probe.cpp:53
+msgid "Print device connection and request details"
+msgstr ""
+
+#: tools/screenshot_probe.cpp:55
+msgid "Output PNG path (default: /tmp/scrctl-shot.png)"
+msgstr ""
+
+#: tools/screenshot_probe.cpp:80
 #, c-format
 msgid "Device: %s / iOS %s\n"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:121
+#: tools/screenshot_probe.cpp:92
 #, c-format
 msgid "Failed to capture screenshot: %s\n"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:124
+#: tools/screenshot_probe.cpp:95
 #, c-format
 msgid "Reply structure: %s\n"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:128
+#: tools/screenshot_probe.cpp:99
 msgid "Screenshot reply contains no image field"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:132
+#: tools/screenshot_probe.cpp:103
 msgid "Screenshot image contains no bytes"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:137
+#: tools/screenshot_probe.cpp:108
 #, c-format
 msgid "Image: %zu bytes, %s\n"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:138
+#: tools/screenshot_probe.cpp:109
 msgid "PNG header not recognized"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:138
+#: tools/screenshot_probe.cpp:109
 msgid "PNG header recognized"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:140
+#: tools/screenshot_probe.cpp:111
 #, c-format
 msgid "Image dimensions: %ux%u\n"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:146
+#: tools/screenshot_probe.cpp:117
 #, c-format
 msgid "Failed to open %s: %s\n"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:158
+#: tools/screenshot_probe.cpp:129
 #, c-format
 msgid "Failed to save %s: %s\n"
 msgstr ""
 
-#: tools/screenshot_probe.cpp:162
+#: tools/screenshot_probe.cpp:133
 #, c-format
 msgid "Saved to %s\n"
 msgstr ""

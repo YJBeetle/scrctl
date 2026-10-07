@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "i18n/Translation.h"
+#include "i18n/CliLanguage.h"
 #include "remote/Device.h"
 #include "xpc/XpcValue.h"
 
@@ -42,10 +43,8 @@ bool png_size(const std::vector<uint8_t> &b, uint32_t &w, uint32_t &h) {
 
 int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
-    scrctl::i18n::initialize();
     std::string udid;
     std::string out_path = "/tmp/scrctl-shot.png";
-    std::string requested_language = "auto";
     bool verbose = false;
     CLI::App app{SCRCTL_N_("Capture a device screenshot and save it as PNG")};
     app.footer(SCRCTL_N_(
@@ -57,47 +56,16 @@ int main(int argc, char **argv) {
         ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
     // 位置参数只有 UDID；多个 UDID 必须报错，不能静默选择最后一个。
     app.add_option("UDID", udid, SCRCTL_N_("Device UDID"));
-    auto *language_option = app.add_option("--lang", requested_language,
-        SCRCTL_N_("Message language: auto, en, zh-CN (default: environment, fallback: en)"))
-        ->check(CLI::IsMember({"auto", "en", "zh-CN"}));
-    // CLI11 收集完参数后才抛出帮助请求；从 results 选择语言，使 --help 前后
-    // 的 --lang 均生效。设备连接必须在解析、帮助和错误处理全部完成之后。
-    auto select_language = [&]() {
-        const auto &values = language_option->results();
-        const auto requested = values.empty() ? std::string("auto") : values.back();
-        if (requested != "auto" && requested != "en" && requested != "zh-CN") {
-            std::fprintf(stderr, "%s\n", SCRCTL_TR("--lang must be auto, en or zh-CN"));
-            return false;
-        }
-        if (!scrctl::i18n::initialize(requested)) {
-            std::fprintf(stderr, "%s\n", SCRCTL_TR(
-                "Cannot enable the requested message locale; using English"));
-        }
-        return true;
-    };
+    scrctl::i18n::CliLanguage language(app);
     try {
         app.parse(argc, argv);
-        if (!select_language()) return 2;
+        if (!language.select()) return 2;
     } catch (const CLI::CallForHelp &) {
-        if (!select_language()) return 2;
-        app.description(SCRCTL_TR(app.get_description().c_str()));
-        app.footer(SCRCTL_TR(app.get_footer().c_str()));
-        for (auto *option : app.get_options()) {
-            const auto description = option->get_description();
-            option->description(SCRCTL_TR(description.c_str()));
-            if (option->get_group() == "OPTIONS") {
-                option->group(SCRCTL_TR("Options"));
-            }
-        }
-        auto formatter = app.get_formatter();
-        formatter->label("Usage", SCRCTL_TR("Usage"));
-        formatter->label("POSITIONALS", SCRCTL_TR("Positionals"));
-        formatter->label("Options", SCRCTL_TR("Options"));
-        formatter->label("OPTIONS", SCRCTL_TR("Options"));
-        std::printf("%s", app.help().c_str());
+        if (!language.select()) return 2;
+        std::printf("%s", language.help().c_str());
         return 0;
     } catch (const CLI::ParseError &e) {
-        if (select_language()) {
+        if (language.select()) {
             std::fprintf(stderr, SCRCTL_TR("Invalid arguments: %s\n"), e.what());
         }
         return 2;
