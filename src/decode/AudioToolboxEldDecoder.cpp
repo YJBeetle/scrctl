@@ -1,10 +1,10 @@
 #include "i18n/Translation.h"
 // 当前 Apple 构建的 AAC-ELD 后端，输入与输出约定见 AudioDecoder.h。
 #include "decode/AudioDecoder.h"
+#include "decode/AudioToolboxStatus.h"
 
 #include <AudioToolbox/AudioToolbox.h>
 
-#include <cctype>
 #include <cstdlib>
 #include <cstring>
 
@@ -16,24 +16,6 @@ namespace {
            (static_cast<UInt32>(static_cast<unsigned char>(s[1])) << 16) |
            (static_cast<UInt32>(static_cast<unsigned char>(s[2])) << 8) |
            static_cast<UInt32>(static_cast<unsigned char>(s[3]));
-}
-
-/// 格式化 OSStatus；四个字节均可打印时附加四字符码，便于诊断 AudioToolbox 错误。
-std::string osstatus_text(OSStatus st) {
-    const auto u = static_cast<UInt32>(st);
-    const char raw[4] = {static_cast<char>((u >> 24) & 0xFF), static_cast<char>((u >> 16) & 0xFF),
-                         static_cast<char>((u >> 8) & 0xFF), static_cast<char>(u & 0xFF)};
-    std::string text = "0x" + std::to_string(static_cast<unsigned long long>(u));
-    bool printable = true;
-    for (const char c : raw) {
-        if (std::isprint(static_cast<unsigned char>(c)) == 0) {
-            printable = false;
-        }
-    }
-    if (printable) {
-        text += std::string(" ('") + raw + "')";
-    }
-    return text;
 }
 
 /// 一次 FillComplexBuffer 调用的输入状态。frame 内存由调用方拥有，Input 仅借用，
@@ -114,7 +96,7 @@ public:
             AudioConverterFillComplexBuffer(conv_, input_proc, &in, &frames, list, nullptr);
         if (st != noErr) {
             std::free(list);
-            err = SCRCTL_TR("AudioConverterFillComplexBuffer failed: ") + osstatus_text(st);
+            err = SCRCTL_TR("AudioConverterFillComplexBuffer failed: ") + scrctl::decode::detail::osstatus_text(st);
             return false;
         }
         const std::size_t samples =
@@ -161,7 +143,7 @@ std::unique_ptr<AudioDecoder> create_audio_decoder(int sample_rate, int channels
     AudioConverterRef conv = nullptr;
     const OSStatus st = AudioConverterNew(&src, &dst, &conv);
     if (st != noErr) {
-        err = SCRCTL_TR("AudioConverterNew failed: ") + osstatus_text(st);
+        err = SCRCTL_TR("AudioConverterNew failed: ") + scrctl::decode::detail::osstatus_text(st);
         return nullptr;
     }
     // 当前适配器不设置 kAudioConverterDecompressionMagicCookie，以上述 ASBD

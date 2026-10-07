@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "decode/AudioToolboxStatus.h"
 #include "media/AudioPump.h"
 #include "media/FramePump.h"
 #include "media/MediaOffer.h"
@@ -162,6 +163,27 @@ std::string as_text(const std::vector<uint8_t> &b) {
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     using namespace scrctl::media;
+
+    std::printf("== AudioToolbox 状态诊断 ==\n");
+    {
+        using scrctl::decode::detail::osstatus_text;
+        check(osstatus_text(0x21646174) == "560226676 ('!dat')",
+              "!dat 保留四字符码，数值按十进制显示");
+        check(osstatus_text(0x666d743f) == "1718449215 ('fmt?')",
+              "fmt? 只读取四个字节，不要求尾部 NUL");
+        check(osstatus_text(-50) == "-50", "负 OSStatus 保留有符号十进制");
+        check(osstatus_text(0) == "0", "零状态不附加不可打印的四字符码");
+        check(osstatus_text(0x41004243) == "1090536003",
+              "四字符码含 NUL 时只显示数值");
+        check(osstatus_text(0x1f414243) == "524370499",
+              "首字节为控制字符时不附加四字符码");
+        check(osstatus_text(0x4142437f) == "1094861695",
+              "尾字节为 DEL 时不附加四字符码");
+        check(osstatus_text(0x2041427e) == "541147774 (' AB~')",
+              "首尾可打印边界空格与波浪号均保留");
+        check(osstatus_text(0x7e414220) == "2118205984 ('~AB ')",
+              "四字符码末尾空格不被截断或省略");
+    }
 
     std::printf("\n== 编码帧到逻辑显示的裁剪 ==\n");
     {
