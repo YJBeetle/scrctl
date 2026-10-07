@@ -3234,6 +3234,29 @@ FIR `3914 / 3930 / 4011ms`，FIR+fb `3246 / 3924 / 3944ms`。
 本机证据为 `/tmp/scrctl-landscape-explicit-proof-20261008.json` 及对应
 `scrctl-landscape-explicit90-20261008.log/.err/.bmp`、`explicit180` 文件。
 
+### 30.6 启用音频接收的来源切换
+
+2026-10-08，Mac USB / iPhone14,4 / iOS 27.0，运行如下命令：
+
+```sh
+scrctl --lang en --no-window --no-audio-playback \
+  --test-degrade 10,25,40,55 --time-limit 65 --stats
+```
+
+运行完成两次截图回退和两次视频恢复，达到 65 秒时限后返回 0，stderr 为空。
+应用结束计数为 1273 帧；因为没有窗口，这个计数不构成实际渲染证明。两轮截图
+最后一次统计分别为 124 和 131 张、失败均为 0，不将采样统计当作 worker 最终总数。
+
+音频后端为 AudioToolbox / AAC-ELD。接收和解码速率持续约 100 包/秒，最终累计
+解码失败、丢包、迟到及音频重建均为 0，RR 发送 63 次、失败 0 次。输出关闭，
+未消费音频的旧样本按有限缓冲策略丢弃；本轮没有声卡播放、声音内容或可听质量
+判据，也没有输入操作、物理断线或无线连接。
+
+使用已构建的 `1e57dc7` 源码版本，进程二进制 SHA256 为
+`70c2592d4e9eaa453d4548adcf8314b705844970e2ad84cae4025c88b236f13f`。
+本机证据为 `/private/tmp/scrctl-audio-switch-20261008-proof.json` 及同名前缀
+`.log` / `.err` 文件；其后重建的可执行文件不用于这次运行的身份判断。
+
 ## 31. 设备长期身份校验的协议取证
 
 ### 31.1 USB PairVerify M2 解密
