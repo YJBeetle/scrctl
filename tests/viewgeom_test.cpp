@@ -291,6 +291,89 @@ void test_viewport_rotation() {
     }
 }
 
+/// 截图已经摆正，render=0 与像素方向不是同一件事。rot270 的尺寸与拖拽坐标
+/// 来自 docs §16.1；其他四分之一旋转用数学角点验证，不代表新增真机结论。
+void test_screenshot_geometry() {
+    std::printf("\n== 截图坐标与面板坐标 ==\n");
+    using scrctl::app::FrameGeometry;
+    using scrctl::app::make_frame_crop;
+    using scrctl::app::viewport_fraction_to_panel;
+    const FrameGeometry landscape{1125, 2436, 270, true};
+    const Crop shot = make_frame_crop(false, 0, 0, 0, 0, 2436, 1125, landscape);
+    check(shot.w == 2436 && shot.h == 1125 && shot.input_valid,
+          "横屏 PNG 显示全幅，不裁成 1125x1125 方形");
+    check(shot.display_w == 1125 && shot.display_h == 2436 && shot.pixel_degrees == 270,
+          "渲染角为零的截图仍保留面板分母与原始 rot270");
+    double fx = 0, fy = 0;
+    check(viewport_fraction_to_panel(0.30 * 2436, 0.7964 * 1125, shot, 0, fx, fy) &&
+              near(fx, 0.2036) && near(fy, 0.30),
+          "截图上的实测进度条点映射到面板 (0.2036,0.30)");
+    const Crop video = make_frame_crop(false, 0, 0, 0, 0, 1136, 2464,
+                                      FrameGeometry{1125, 2436, 270, false});
+    check(video.w == 1125 && video.h == 2436 && video.pixel_degrees == 0,
+          "恢复视频时继续去除 HEVC 填充，不保留截图预旋转");
+    double vx = 0, vy = 0;
+    check(viewport_fraction_to_panel(0.30 * 2436, 0.7964 * 1125, video, 270, vx, vy) &&
+              near(vx, fx) && near(vy, fy),
+          "同一 UI 点在视频与截图模式中得到相同的原生 HID 坐标");
+
+    const int angles[] = {0, 90, 180, 270};
+    const double corner_x[] = {0, 0, 1, 1}, corner_y[] = {0, 1, 1, 0};
+    for (int i = 0; i < 4; ++i) {
+        const bool swapped = angles[i] == 90 || angles[i] == 270;
+        const int iw = swapped ? 2436 : 1125, ih = swapped ? 1125 : 2436;
+        const Crop full = make_frame_crop(false, 0, 0, 0, 0, iw, ih,
+                                         FrameGeometry{1125, 2436, angles[i], true});
+        check(full.w == iw && full.h == ih && full.input_valid,
+              "PNG 全幅与原始角匹配 " + std::to_string(angles[i]));
+        check(viewport_fraction_to_panel(0, 0, full, 0, fx, fy) &&
+                  near(fx, corner_x[i]) && near(fy, corner_y[i]),
+              "PNG 左上角的面板坐标 " + std::to_string(angles[i]));
+        check(viewport_fraction_to_panel(iw, ih, full, 0, fx, fy) &&
+                  near(fx, 1 - corner_x[i]) && near(fy, 1 - corner_y[i]),
+              "PNG 右下角的面板坐标 " + std::to_string(angles[i]));
+    }
+
+    const Crop part = make_frame_crop(true, 600, 300, 500, 400, 2436, 1125, landscape);
+    check(part.x == 600 && part.y == 300 && part.w == 500 && part.h == 400 &&
+              part.display_w == 1125 && part.display_h == 2436,
+          "手工裁剪使用 PNG 源像素，保留整块面板分母");
+    check(viewport_fraction_to_panel(250, 200, part, 0, fx, fy) &&
+              near(fx, 1 - 500.0 / 1125) && near(fy, 850.0 / 2436),
+          "先加 PNG 裁剪偏移，再逆截图原始角");
+    check(viewport_fraction_to_panel(200, 250, part, 90, vx, vy) &&
+              near(vx, fx) && near(vy, fy),
+          "显式渲染旋转独立于 PNG 原始角，正确组合两个逆变换");
+
+    const Crop unknown = make_frame_crop(false, 0, 0, 0, 0, 2436, 1125,
+                                         FrameGeometry{1125, 2436, std::nullopt, true});
+    check(unknown.w == 2436 && unknown.h == 1125 && !unknown.input_valid,
+          "未知原始角时仍显示全图，但不猜 90 或 270");
+    fx = 13;
+    fy = 17;
+    check(!viewport_fraction_to_panel(200, 300, unknown, 90, fx, fy) && fx == 13 && fy == 17,
+          "显式 render=90 不冒充面板角，失败不发布部分坐标");
+    const Crop stale = make_frame_crop(false, 0, 0, 0, 0, 2436, 1125,
+                                       FrameGeometry{1125, 2436, 0, true});
+    check(stale.w == 2436 && stale.h == 1125 && !stale.input_valid,
+          "竖屏方向快照与横屏 PNG 不一致时禁用触摸，保持全幅渲染");
+    const Crop early = make_frame_crop(false, 0, 0, 0, 0, 1125, 2436, landscape);
+    check(!early.input_valid, "横屏方向快照与上一张竖屏 PNG 不一致时禁用触摸");
+    const Crop from_png = make_frame_crop(false, 0, 0, 0, 0, 2436, 1125,
+                                          FrameGeometry{0, 0, 270, true});
+    check(from_png.input_valid && from_png.display_w == 1125 && from_png.display_h == 2436,
+          "有已知方向但无面板尺寸时，从 PNG 可见区逆变换尺寸");
+    const Crop no_info = make_frame_crop(false, 0, 0, 0, 0, 2436, 1125,
+                                         FrameGeometry{0, 0, std::nullopt, true});
+    check(no_info.w == 2436 && no_info.h == 1125 && !no_info.input_valid,
+          "无设备几何时渲染仍不裁图，不从宽高推断方向");
+    check(scrctl::app::parse_orientation_degrees("rot0") == 0 &&
+              scrctl::app::parse_orientation_degrees("rot270") == 270 &&
+              !scrctl::app::parse_orientation_degrees("") &&
+              !scrctl::app::parse_orientation_degrees("landscape"),
+          "原始角解析区分 rot0 与缺失或未知值");
+}
+
 }  // namespace
 
 int main() {
@@ -300,6 +383,7 @@ int main() {
     test_cropped_viewport();
     test_manual_crop_keeps_the_display_denominator();
     test_viewport_rotation();
+    test_screenshot_geometry();
     test_degenerate();
     test_fit_window();
     test_requested_window_size();

@@ -19,29 +19,28 @@
 namespace scrctl::app {
 
 namespace {
-/// 按当前帧确定裁剪区域。优先使用设备报告的可见区尺寸；无法获取时，
-/// 使用 media::display_crop 的机型表。编码帧可能包含 HEVC 对齐填充，
-/// 直接按编码尺寸裁剪会影响画面边缘和触摸坐标。
-Crop resolve_crop(const Options &o, const scrctl::Frame &f, const FrameSource &source,
+/// 按当前帧确定裁剪区域。视频优先使用设备报告的可见区尺寸；无法获取时，
+/// 使用 media::display_crop 的机型表，去掉 HEVC 对齐填充。截图本身已经是
+/// 可见画面，默认保留完整 PNG；源像素方向用于将触摸坐标还原到设备面板。
+Crop resolve_crop(const Options &o, const scrctl::Frame &f, FrameGeometry geometry,
                   bool report_geometry) {
-    int display_w = 0, display_h = 0;
-    source.display_size(display_w, display_h);
+    int &display_w = geometry.display_w, &display_h = geometry.display_h;
     const bool from_device = display_w > 0 && display_h > 0;
-    if (!from_device) {
+    if (!from_device && !geometry.screenshot) {
         const auto fallback =
             scrctl::media::display_crop(static_cast<int>(f.width), static_cast<int>(f.height));
         display_w = fallback.w;
         display_h = fallback.h;
     }
-    if (report_geometry && !from_device && !o.crop_set &&
+    if (report_geometry && !from_device && !geometry.screenshot && !o.crop_set &&
         (static_cast<int>(f.width) != display_w || static_cast<int>(f.height) != display_h)) {
         std::printf(SCRCTL_TR("Visible area %ux%u -> %dx%d (device did not report dimensions; using model table)\n"), f.width,
                     f.height, display_w, display_h);
     }
-    // 几何与夹取全在 ViewGeom.h 的 make_crop 里，那边可以离线自检。
-    return scrctl::app::make_crop(o.crop_set, o.crop_x, o.crop_y, o.crop_w, o.crop_h,
-                                  static_cast<int>(f.width), static_cast<int>(f.height), display_w,
-                                  display_h);
+    // 裁剪范围与坐标变换集中在 make_frame_crop，可用离线用例覆盖。
+    return scrctl::app::make_frame_crop(o.crop_set, o.crop_x, o.crop_y, o.crop_w, o.crop_h,
+                                        static_cast<int>(f.width), static_cast<int>(f.height),
+                                        geometry);
 }
 
 } // namespace
@@ -69,7 +68,7 @@ int run(int argc, char **argv) {
     } else {
         auto made = std::make_unique<LiveSource>();
         std::string err;
-        if (!made->start(o.serial, o.wifi, o.record, o.hw_decode, !o.no_window && o.orientation < 0,
+        if (!made->start(o.serial, o.wifi, o.record, o.hw_decode, !o.no_window,
                          !o.no_audio, o.audio_buffer_ms, o.video_source, o.test_degrade, err)) {
             std::fprintf(stderr, SCRCTL_TR("Failed to start video: %s\n"), err.c_str());
             // 设备通话期间可能拒绝媒体流，错误码为 9022。曾观察到此时会话列表为空，
@@ -180,6 +179,7 @@ int run(int argc, char **argv) {
     int applied_degrees = -1;
     // 首次创建窗口不输出旋转提示。
     bool first_window = true;
+    bool input_geometry_warned = false;
     const Uint64 start = SDL_GetTicks64();
     Uint64 last_stats_at = SDL_GetTicks64();
     bool quit = false;
@@ -253,10 +253,20 @@ int run(int argc, char **argv) {
         // 朝向改变时重建 Presenter。SDL dummy 驱动下，单独改变窗口和 logical
         // size 不会同步更新绘制面，可能使画面缩到一角；重建可统一窗口与渲染尺寸。
         // 此操作只发生在旋转时，可能短暂闪烁。
-        const int degrees = o.orientation >= 0 ? o.orientation : source->orientation_degrees();
-        const Crop crop = resolve_crop(o, f, *source, degrees != applied_degrees);
+        const auto geometry = source->frame_geometry();
+        const int degrees = o.orientation >= 0 ? o.orientation :
+            (geometry.screenshot ? 0 : geometry.panel_degrees.value_or(0));
+        const Crop crop = resolve_crop(o, f, geometry, degrees != applied_degrees);
+        if (!crop.input_valid && control_enabled && !input_geometry_warned) {
+            std::fprintf(stderr, SCRCTL_TR(
+                "Mouse input is unavailable: screenshot orientation or display dimensions are unknown or inconsistent\n"));
+        }
+        input_geometry_warned = !crop.input_valid;
         if (degrees != applied_degrees) {
             applied_degrees = degrees;
+            if (presenter != nullptr) {
+                presenter->release_touch(on_touch);
+            }
             presenter.reset();
             presenter = std::make_unique<Presenter>();
             presenter->set_debug_input(o.debug_input);
@@ -279,12 +289,13 @@ int run(int argc, char **argv) {
             if (first_window) {
                 first_window = false;
             } else {
-                std::printf(SCRCTL_TR("Display orientation changed to %d degrees clockwise; window recreated\n"), degrees);
+                std::printf(SCRCTL_TR("Render rotation changed to %d degrees clockwise; window recreated\n"), degrees);
             }
         }
 
         const bool do_verify = o.verify_at > 0 && rendered + 1 == o.verify_at;
         if (!presenter->draw(f, crop, do_verify ? o.verify_path.c_str() : nullptr)) {
+            presenter->release_touch(on_touch);
             return 1;
         }
         ++rendered;
@@ -305,6 +316,9 @@ int run(int argc, char **argv) {
         quit = presenter->pump(on_touch);
     }
 
+    if (presenter != nullptr) {
+        presenter->release_touch(on_touch);
+    }
     if (o.verify_at > 0 && rendered < o.verify_at) {
         std::fprintf(stderr,
                      SCRCTL_TR("Window readback was not reached (requested frame %d, rendered %d)\n"),

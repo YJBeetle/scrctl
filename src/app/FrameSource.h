@@ -3,6 +3,7 @@
 #include "i18n/Translation.h"
 
 #include "decode/Decoder.h"
+#include "app/ViewGeom.h"
 #include <string>
 
 namespace scrctl::app {
@@ -23,17 +24,10 @@ class FrameSource {
     /// 输出统计；实现按各自时间基线计算速率，调用方按固定周期调用。
     virtual void print_stats() {}
 
-    /// 返回设备可见区尺寸，0/0 表示未知。实时源在起流前查询设备；
-    /// 文件回放无设备信息，由调用方使用机型表或编码尺寸。
-    virtual void display_size(int &width, int &height) const {
-        width = 0;
-        height = 0;
-    }
-
-    /// 返回将码流转正所需的顺时针角度；未知时返回 0。
-    /// 实测设备旋转时编码尺寸仍为 1136x2464，朝向由 currentOrientation 报告，
-    /// 不能仅从帧尺寸推断。currentMode.size 仍为 1125x2436，所以旋转不改变裁剪框。
-    virtual int orientation_degrees() const { return 0; }
+    /// 返回最近一次 next() 成功交付帧的几何，不读取后续改变的画面来源。
+    /// 实时源保存原始面板角与截图标志的软件快照；显式渲染角不改变这份输入依据。
+    /// 文件回放默认无设备尺寸且像素未旋转，由调用方使用裁剪表或编码尺寸。
+    virtual FrameGeometry frame_geometry() const { return {}; }
 };
 
 } // namespace scrctl::app

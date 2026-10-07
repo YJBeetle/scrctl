@@ -22,7 +22,8 @@ class LiveSource final : public FrameSource {
   public:
     ~LiveSource() override;
 
-    /// watch_display 启用显示变化订阅以跟随旋转；无窗口时可关闭，避免独占连接
+    /// watch_display 订阅原始显示方向，用于自动旋转及已转正截图的触摸映射；
+    /// 显式渲染角也需要这份原始方向。无窗口时可关闭，避免独占连接
     /// 及订阅线程。want_audio 决定是否建立独立音频会话；失败时视频继续。
     /// audio_buffer_ms 是音频预缓冲与目标水位对应的时长。
     bool start(const std::string &serial, const std::string &wifi, const std::string &record_path,
@@ -33,13 +34,8 @@ class LiveSource final : public FrameSource {
     /// 子系统初始化完成，因此单独提供该入口。
     bool start_playback(std::string &err);
 
-    /// 启动时查询的可见区尺寸；未知为 0/0，裁剪来源顺序见 resolve_crop。
-    void display_size(int &width, int &height) const override;
-
-    /// 返回当前顺时针转正角度。优先使用 watcher_ 最新推送，否则使用启动快照。
-    /// 目前仅动态更新朝向，尺寸在启动时确定；实测旋转不改变 currentMode.size，
-    /// 运行中变更尺寸还需同时更新裁剪与触摸映射，目前未实现。
-    [[nodiscard]] int orientation_degrees() const override;
+    /// 返回最近一次交付帧的面板尺寸、原始方向及截图标志。
+    FrameGeometry frame_geometry() const override { return delivered_geometry_; }
 
     bool next(scrctl::Frame &out, int timeout_ms) override;
 
@@ -71,6 +67,7 @@ class LiveSource final : public FrameSource {
   private:
     bool start_screenshot(bool capture_first, std::string &err);
     void update_picture_source();
+    FrameGeometry sample_geometry(bool screenshot) const;
 
     std::unique_ptr<scrctl::remote::Device> device_;
     std::unique_ptr<scrctl::media::FramePump> pump_;
@@ -82,8 +79,10 @@ class LiveSource final : public FrameSource {
     /// 设备可见区尺寸，未知为 0/0。
     int display_w_ = 0;
     int display_h_ = 0;
-    /// 启动查询得到的顺时针转正角度；未知时使用 0，与竖屏行为一致。
-    int degrees_ = 0;
+    /// 启动查询得到的原始面板角，未知不等于 rot0，也不被截图渲染角覆盖。
+    std::optional<int> panel_degrees_;
+    /// 仅在 next 成功时发布；后续 watcher 推送或来源切换不改变已交付帧的快照。
+    FrameGeometry delivered_geometry_;
     /// 几何信息所属显示屏，用于区分主屏和外部显示屏的尺寸来源。
     uint64_t display_id_ = 0;
     std::string display_name_;

@@ -143,6 +143,11 @@ bool Presenter::draw(const scrctl::Frame &f, const Crop &crop, const char *readb
     if (!ensure_texture(static_cast<int>(f.width), static_cast<int>(f.height))) {
         return false;
     }
+    // 坐标轴改变时先保留释放请求，待 pump 提供设备回调后发送原坐标的抬起。
+    if (dragging_ && (!crop.input_valid || crop.pixel_degrees != src_.pixel_degrees ||
+                     crop.display_w != src_.display_w || crop.display_h != src_.display_h)) {
+        release_pending_ = true;
+    }
     src_ = crop;
     int view_w = 0, view_h = 0;
     viewport_size(src_, degrees_, view_w, view_h);
@@ -241,6 +246,9 @@ void Presenter::report_input(int raw_x, int raw_y, double fx, double fy, const c
 }
 
 bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) {
+    if (release_pending_ || !src_.input_valid) {
+        release_touch(on_touch);
+    }
     SDL_Event e;
     bool quit = false;
     // 合并同一轮的鼠标移动事件，仅发送最后一个位置，减少高采样率鼠标带来的
@@ -259,8 +267,12 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) 
             break;
         case SDL_MOUSEBUTTONDOWN:
             if (e.button.button == SDL_BUTTON_LEFT && on_touch) {
+                if (!to_display(e.button.x, e.button.y, px, py)) {
+                    break;
+                }
                 dragging_ = true;
-                to_display(e.button.x, e.button.y, px, py);
+                last_touch_x_ = px;
+                last_touch_y_ = py;
                 if (debug_input_) {
                     report_input(e.button.x, e.button.y, px, py, SCRCTL_TR("down"));
                 }
@@ -269,7 +281,13 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) 
             break;
         case SDL_MOUSEMOTION:
             if (dragging_ && on_touch) {
-                to_display(e.motion.x, e.motion.y, px, py);
+                if (!to_display(e.motion.x, e.motion.y, px, py)) {
+                    pending_move = false;
+                    release_touch(on_touch);
+                    break;
+                }
+                last_touch_x_ = px;
+                last_touch_y_ = py;
                 if (debug_input_) {
                     report_input(e.motion.x, e.motion.y, px, py, SCRCTL_TR("move"));
                 }
@@ -277,14 +295,16 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) 
             }
             break;
         case SDL_MOUSEBUTTONUP:
-            if (e.button.button == SDL_BUTTON_LEFT && on_touch) {
-                dragging_ = false;
+            if (e.button.button == SDL_BUTTON_LEFT && dragging_ && on_touch) {
                 if (pending_move) {
                     pending_move = false;
                     on_touch(px, py, true);
                 }
-                to_display(e.button.x, e.button.y, px, py);
-                on_touch(px, py, false);
+                if (to_display(e.button.x, e.button.y, px, py)) {
+                    last_touch_x_ = px;
+                    last_touch_y_ = py;
+                }
+                release_touch(on_touch);
             }
             break;
         default:
@@ -295,7 +315,18 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) 
         pending_move = false;
         on_touch(px, py, true);
     }
+    if (quit) {
+        release_touch(on_touch);
+    }
     return quit;
+}
+
+void Presenter::release_touch(const std::function<void(double, double, bool)> &on_touch) {
+    if (dragging_ && on_touch) {
+        on_touch(last_touch_x_, last_touch_y_, false);
+    }
+    dragging_ = false;
+    release_pending_ = false;
 }
 
 Presenter::~Presenter() {
@@ -310,8 +341,8 @@ Presenter::~Presenter() {
     }
 }
 
-void Presenter::to_display(int raw_x, int raw_y, double &fx, double &fy) const {
-    scrctl::app::viewport_fraction_to_panel(raw_x, raw_y, src_, degrees_, fx, fy);
+bool Presenter::to_display(int raw_x, int raw_y, double &fx, double &fy) const {
+    return scrctl::app::viewport_fraction_to_panel(raw_x, raw_y, src_, degrees_, fx, fy);
 }
 
 } // namespace scrctl::app

@@ -13,6 +13,7 @@
 
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -465,6 +466,120 @@ void presenter_source_size_changes() {
     draw_and_check(video, video_crop, first_colors, "video-after-errors");
 }
 
+void presenter_releases_touch_when_geometry_changes() {
+    const scrctl::app::Crop crop{10, 20, 40, 60, 80, 120};
+    const Palette colors{kTopLeft, kTopRight, kBottomRight, kBottomLeft};
+    const auto frame = colored_frame(80, 120, crop, colors, 0);
+    scrctl::app::Presenter presenter;
+    scrctl::app::WindowSpec spec;
+    spec.want_w = crop.w;
+    spec.want_h = crop.h;
+    spec.want_readback = true;
+    const bool opened = presenter.open(frame.width, frame.height, crop, 0, 1, false, spec);
+    check(opened, "为 SDL 输入事件回归创建实际 Presenter");
+    if (!opened) return;
+    check(presenter.draw(frame, crop), "输入事件前绘制有效几何帧");
+    SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+
+    struct Touch {
+        double x, y;
+        bool down;
+    };
+    std::vector<Touch> callbacks;
+    const auto on_touch = [&](double x, double y, bool down) {
+        callbacks.push_back({x, y, down});
+        std::printf("     callback #%zu: native(%.6f, %.6f) %s\n", callbacks.size(), x, y,
+                    down ? "down" : "up");
+    };
+    const auto push_mouse = [&](Uint32 type, int x, int y) {
+        SDL_Event event{};
+        event.type = type;
+        // 不指定 windowID，直接注入 Presenter 使用的 logical size 坐标；
+        // 避免 SDL 的窗口事件 watch 再把坐标按窗口点数缩放一次。
+        if (type == SDL_MOUSEMOTION) {
+            event.motion.state = SDL_BUTTON_LMASK;
+            event.motion.x = x;
+            event.motion.y = y;
+        } else {
+            event.button.button = SDL_BUTTON_LEFT;
+            event.button.state = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
+            event.button.x = x;
+            event.button.y = y;
+        }
+        check(SDL_PushEvent(&event) == 1, "将鼠标事件送入实际 SDL 队列");
+    };
+    const auto check_touch = [&](std::size_t index, bool down, double x, double y,
+                                  const char *message) {
+        check(index < callbacks.size() && callbacks[index].down == down &&
+                  std::fabs(callbacks[index].x - x) < 1e-9 &&
+                  std::fabs(callbacks[index].y - y) < 1e-9,
+              message);
+    };
+
+    push_mouse(SDL_MOUSEBUTTONDOWN, 8, 12);
+    push_mouse(SDL_MOUSEMOTION, 20, 30);
+    check(!presenter.pump(on_touch), "有效几何下处理按下和移动事件");
+    check(callbacks.size() == 2, "按下与最后一次移动分别交付设备回调");
+    check_touch(0, true, 18.0 / 80, 32.0 / 120, "按下使用裁剪偏移后的面板坐标");
+    check_touch(1, true, 30.0 / 80, 50.0 / 120, "记录最后一次有效移动的设备坐标");
+
+    auto unknown = crop;
+    unknown.input_valid = false;
+    check(presenter.draw(frame, unknown), "未知方向仍可绘制画面");
+    push_mouse(SDL_MOUSEBUTTONDOWN, 4, 54);
+    push_mouse(SDL_MOUSEMOTION, 16, 12);
+    push_mouse(SDL_MOUSEBUTTONUP, 4, 54);
+    check(!presenter.pump(on_touch), "未知几何下处理队列并释放此前触摸");
+    check(callbacks.size() == 3, "未知几何只产生一次抬起，拒绝新的按下和移动");
+    check_touch(2, false, 30.0 / 80, 50.0 / 120, "抬起沿用旧的最后有效设备点");
+    presenter.pump(on_touch);
+    presenter.release_touch(on_touch);
+    check(callbacks.size() == 3, "重复 pump 或 release_touch 不重复抬起");
+
+    check(presenter.draw(frame, crop), "恢复已知方向的几何帧");
+    push_mouse(SDL_MOUSEBUTTONDOWN, 4, 48);
+    presenter.pump(on_touch);
+    check(callbacks.size() == 4, "几何恢复后可重新按下");
+    check_touch(3, true, 14.0 / 80, 68.0 / 120, "恢复后的按下仍使用当前面板坐标");
+
+    auto rotated = crop;
+    rotated.pixel_degrees = 180;
+    check(presenter.draw(frame, rotated), "源像素转向改变，窗口渲染角仍为零");
+    presenter.pump(on_touch);
+    check(callbacks.size() == 5, "源像素方向改变也释放已有触摸");
+    check_touch(4, false, 14.0 / 80, 68.0 / 120, "转向后的抬起不按新坐标轴重算旧触点");
+    presenter.release_touch(on_touch);
+    presenter.release_touch(on_touch);
+    check(callbacks.size() == 5, "转向释放后的 release_touch 保持幂等");
+
+    push_mouse(SDL_MOUSEBUTTONDOWN, 8, 12);
+    presenter.pump(on_touch);
+    check_touch(5, true, 1.0 - 18.0 / 80, 1.0 - 32.0 / 120,
+                "新按下使用源像素已旋转 180 度的逆变换");
+    auto resized_panel = rotated;
+    resized_panel.display_w = 160;
+    resized_panel.display_h = 240;
+    check(presenter.draw(frame, resized_panel), "面板尺寸改变但源像素与窗口尺寸保持不变");
+    presenter.pump(on_touch);
+    check(callbacks.size() == 7, "面板尺寸改变也释放已有触摸");
+    check_touch(6, false, 1.0 - 18.0 / 80, 1.0 - 32.0 / 120,
+                "尺寸改变后的抬起不使用新的归一化分母");
+    check(presenter.draw(frame, rotated), "恢复旋转后的面板尺寸");
+    push_mouse(SDL_MOUSEBUTTONDOWN, 8, 12);
+    presenter.pump(on_touch);
+    check_touch(7, true, 1.0 - 18.0 / 80, 1.0 - 32.0 / 120,
+                "尺寸恢复后可再次按下");
+    SDL_Event quit{};
+    quit.type = SDL_QUIT;
+    check(SDL_PushEvent(&quit) == 1, "将退出事件送入实际 SDL 队列");
+    check(presenter.pump(on_touch), "退出事件返回结束请求");
+    check(callbacks.size() == 9, "退出时释放一次仍按下的设备触点");
+    check_touch(8, false, 1.0 - 18.0 / 80, 1.0 - 32.0 / 120,
+                "退出抬起使用最后有效的旋转后设备坐标");
+    presenter.release_touch(on_touch);
+    check(callbacks.size() == 9, "退出后的重复释放不新增回调");
+}
+
 }  // namespace
 
 int main() {
@@ -511,6 +626,7 @@ int main() {
 
     check(letterbox_and_readback(), "等比留边的边上涂的是 --background-color，且回读覆盖整块输出");
     presenter_source_size_changes();
+    presenter_releases_touch_when_geometry_changes();
 
     SDL_Quit();
     if (failures != 0) {

@@ -54,12 +54,14 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             // id 对不上时退回主屏：外接屏的 displayId 是设备分配的，不保证连续。
             d = info->primary();
         }
+        if (d != nullptr) {
+            panel_degrees_ = scrctl::app::parse_orientation_degrees(d->orientation);
+        }
         if (d != nullptr && d->width > 0 && d->height > 0) {
             display_w_ = d->width;
             display_h_ = d->height;
             display_id_ = d->id;
             display_name_ = d->name;
-            degrees_ = scrctl::app::orientation_degrees(d->orientation);
         } else if (!coredevice_family_empty) {
             std::fprintf(stderr, SCRCTL_TR("Failed to query display dimensions: %s (using model crop table)\n"),
                          derr.empty() ? SCRCTL_TR("Update contains no usable dimensions") : derr.c_str());
@@ -117,15 +119,8 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             screenshot_.source.reset();
             return false;
         }
-        // 用局部序号读取首张截图，主循环仍可取得这张图。截图已裁到可见区并按
-        // 界面方向摆正，可在 deviceinfo 不可用时提供显示尺寸，例如 iOS 18 设备。
-        if (display_w_ == 0) {
-            display_w_ = static_cast<int>(first.width);
-            display_h_ = static_cast<int>(first.height);
-            display_id_ = options.display_id;
-            display_name_ = SCRCTL_TR("Screenshot is the visible area");
-            degrees_ = 0;
-        }
+        // 用局部序号读取首张截图，主循环仍可取得这张图。PNG 是已摆正的可见区，
+        // 不能直接用它覆盖面板轴上的尺寸与原始方向；取帧时分别发布这两种几何。
     } else if (!pump_->latest(first, 5000)) {
         err = SCRCTL_TR("No first decoded frame within 5 seconds");
         return false;
@@ -147,7 +142,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
                 "Display geometry: visible area %dx%d (displayId=%llu %s), UI rotation %d "
                 "degrees clockwise, stream %ux%u\n"),
             display_w_, display_h_, static_cast<unsigned long long>(display_id_),
-            display_name_.c_str(), degrees_, first.width, first.height);
+            display_name_.c_str(), panel_degrees_.value_or(0), first.width, first.height);
     }
     if (!record_path.empty()) {
         if (screenshot_.source != nullptr) {
@@ -246,24 +241,17 @@ bool LiveSource::button(uint16_t usage_page, uint16_t usage_code, std::string &e
     return buttons_->press(usage_page, usage_code, 90, err);
 }
 
-void LiveSource::display_size(int &width, int &height) const {
-    width = display_w_;
-    height = display_h_;
-}
-
-int LiveSource::orientation_degrees() const {
-    if (screenshot_.source != nullptr) {
-        // 截图已经按设备界面方向合成，不再应用实时码流的旋转。
-        // 启动截图和运行中切换到截图都使用同一条件。
-        return 0;
-    }
+FrameGeometry LiveSource::sample_geometry(bool screenshot) const {
+    FrameGeometry geometry{display_w_, display_h_, panel_degrees_, screenshot};
     if (watcher_ != nullptr) {
         const auto st = watcher_->latest();
-        if (!st.orientation.empty()) {
-            return scrctl::app::orientation_degrees(st.orientation);
+        if (st.width > 0 && st.height > 0) {
+            geometry.display_w = st.width;
+            geometry.display_h = st.height;
+            geometry.panel_degrees = scrctl::app::parse_orientation_degrees(st.orientation);
         }
     }
-    return degrees_;
+    return geometry;
 }
 
 bool LiveSource::start_screenshot(bool capture_first, std::string &err) {
@@ -315,7 +303,11 @@ void LiveSource::update_picture_source() {
 bool LiveSource::next(scrctl::Frame &out, int timeout_ms) {
     update_picture_source();
     if (screenshot_.source) {
-        return screenshot_.source->latest(out, screenshot_.serial, timeout_ms);
+        if (!screenshot_.source->latest(out, screenshot_.serial, timeout_ms)) {
+            return false;
+        }
+        delivered_geometry_ = sample_geometry(true);
+        return true;
     }
     if (!pump_) {
         return false;
@@ -325,6 +317,7 @@ bool LiveSource::next(scrctl::Frame &out, int timeout_ms) {
         return false;
     }
     serial_ = got;
+    delivered_geometry_ = sample_geometry(false);
     return true;
 }
 

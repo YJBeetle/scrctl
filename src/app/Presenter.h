@@ -25,8 +25,8 @@ class Presenter {
     /// 等比缩放时留边区域的背景色，在 open() 前设置；首帧前的 clear 也使用它。
     void set_background(uint8_t r, uint8_t g, uint8_t b);
 
-    /// degrees 是将设备画面转正所需的顺时针角度，同步用于窗口方向、渲染旋转
-    /// 和鼠标逆映射，三处必须一致。
+    /// degrees 是窗口对源图像施加的顺时针旋转，用于视口和鼠标的首次逆变换。
+    /// 截图已经应用的设备方向单独保留在 Crop.pixel_degrees 中，不能重复旋转。
     bool open(int frame_w, int frame_h, const Crop &crop, int degrees, double scale,
               bool scale_given, const WindowSpec &spec);
 
@@ -48,6 +48,8 @@ class Presenter {
     void report_input(int raw_x, int raw_y, double fx, double fy, const char *tag) const;
 
     bool pump(const std::function<void(double, double, bool)> &on_touch);
+    /// 在重建窗口、退出或坐标依据失效时，释放最后一个有效的设备触摸点。
+    void release_touch(const std::function<void(double, double, bool)> &on_touch);
 
     ~Presenter();
 
@@ -55,9 +57,9 @@ class Presenter {
     /// 将 SDL 鼠标逻辑坐标转换为设备整屏的 0..1 坐标。
     /// SDL_RenderSetLogicalSize 会把鼠标事件映射到逻辑空间。例如窗口为 457 点、
     /// 绘制面 914 像素时，事件右下角仍接近逻辑尺寸 1125x2436。
-    /// 此处只需逆旋转、加裁剪偏移并除以整屏尺寸，不能再次换算点数与像素。
-    /// 运行期保留越界核对，便于发现不同 SDL 版本的行为变化。
-    void to_display(int raw_x, int raw_y, double &fx, double &fy) const;
+    /// 先逆窗口旋转、加源像素裁剪偏移，再逆截图自身的旋转，得到设备面板坐标。
+    /// 不能再次换算点数与像素；截图的方向依据不完整时返回 false。
+    bool to_display(int raw_x, int raw_y, double &fx, double &fy) const;
     bool ensure_texture(int width, int height);
 
     uint8_t bg_[3] = {0, 0, 0};
@@ -66,7 +68,7 @@ class Presenter {
     SDL_Texture *texture_ = nullptr;
     int texture_w_ = 0, texture_h_ = 0;
     Crop src_{};
-    /// 顺时针转正角度，以及由它决定的视口尺寸（90/270 时宽高对调）。
+    /// 窗口对源像素施加的顺时针角度，以及视口尺寸（90/270 时宽高对调）。
     int degrees_ = 0;
     int view_w_ = 0, view_h_ = 0;
     int win_w_ = 0, win_h_ = 0;
@@ -74,6 +76,8 @@ class Presenter {
     static constexpr int win_w_fallback = 1 << 20;
     static constexpr int win_h_fallback = 1 << 20;
     bool dragging_ = false;
+    bool release_pending_ = false;
+    double last_touch_x_ = 0, last_touch_y_ = 0;
     bool debug_input_ = false;
 };
 
