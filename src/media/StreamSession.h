@@ -12,132 +12,89 @@
 
 namespace scrctl::media {
 
-/// 起一条设备屏幕的视频流。
+/// 建立一条设备视频或音频媒体会话，收发该会话使用的 UDP 数据报。
 ///
-/// 流程上有一个反直觉的地方：**必须先绑好 UDP 端口再发 startmediastream**。
-/// 设备一返回 answer 就开始往 receiverIP:receiverPort 推 RTP，晚绑一微秒就丢掉
-/// 开头几个包，而开头恰好是 VPS/SPS/PPS 和第一个关键帧——丢了后面整段都解不出来。
+/// UDP 端口先绑定，再调用 startmediastream。已测设备在起流回复后立即发送 RTP，
+/// 提前绑定可以接住视频参数集和首个关键帧，避免在后续恢复之前无法解码。
+/// 起流顺序见 [CoreDevice §11](../../docs/coredevice.md#11-屏幕视频流的线上细节实测iphone-144--ios-270--usb)。
 class StreamSession {
 public:
     struct Request {
-        uint16_t receiver_port = 0;  ///< 0 = 随机挑一个
+        uint16_t receiver_port = 0;  ///< 0 表示从 49152..65151 中随机选择端口
+        /// 视频目标的显示器 ID；音频请求不携带显示器 options。
         uint32_t display_id = 1;
-        /// 发往设备的 `timeout` 键：**这条会话的租期长度（秒）**，不是"等 answer 的超时"。
+        /// 发往设备的 timeout，单位为秒，是 RTCP 空闲超时，不是等待起流 RPC 回复的时限。
+        /// 已测设备在 answer 的 RTCPTimeoutInterval 中回显此值；有效 RR 可重置计时器。
+        /// UDP 发送修复后的续期对照见 [CoreDevice §13](../../docs/coredevice.md#修好之后第一次真测租期能续pli-有效fir-有害)。
         ///
-        /// 设备把它原样抄进 answer 的 `RTCPTimeoutInterval`，然后按"距离上次收到我们
-        /// RTCP 多久"倒数，到点就把这条会话从设备表里摘掉。**它会复位**——这一点是
-        /// 2026-09-27 才定下来的，此前这里的注释写着"中途不看我们发了什么：喂画面、回
-        /// 各种形状的 RTCP、查状态都改不了那个时刻"，那句**观测上成立而结论是错的**：
-        /// 那二十多臂发的 UDP 数据报一个都没到设备（`build_udp_datagram` 把长度字段和
-        /// 校验和都算错了范围，内核静默丢弃），所以"回 RTCP 不续命"测的其实是
-        /// "什么都没回"。修好之后同一台设备：什么都不发 +19.97s 死，每秒一个 RR 活过
-        /// 40 秒，设备侧 socket 的 `pkts in` 从 0 变成 41。完整推导在 FramePump.cpp 的
-        /// kSessionLeaseSeconds 上面。
+        /// 默认 3600 供未实现周期 RTCP 的一次性调用方使用。产品 FramePump 和 AudioPump
+        /// 显式使用 20 秒，并每秒发送 RR。默认值、保留起流连接或查询状态都不能替代 RTCP。
+        /// 视频和音频可以同时存在，各自有会话与续期状态，见
+        /// [CoreDevice §17.2](../../docs/coredevice.md#172-音频腿接进产品四个问题的真机读数toolsaudio_pump_probeasan-下跑)。
         ///
-        /// 所以这一位的真实含义变了：它不是"多久必须换一次会话"，而是**"我们回 RTCP 的
-        /// 容忍空档"**。报 20 并要求自己每秒发一个 RR，是苹果的做法（抓包里它的
-        /// `timeout` 就是 20），好处是进程被 SIGKILL 或崩掉时设备只被占住 20 秒——一台
-        /// 设备一次只容一条流，Xcode 的 DeviceHub 共用这一格。
-        ///
-        /// 默认值留着 3600 是给**不回 RTCP 的调用方**的（各探针、一次性抓帧的工具）：
-        /// 对它们来说租期就是唯一的时间边界，报 20 会让每次跑都断在 20 秒。真正在跑的
-        /// 产品路径（`media/FramePump`）显式报 20 并按秒回 RR。用这个默认值又想活得更久，
-        /// 就得自己发 RTCP——别把默认值当保活。
-        ///
-        /// **`nullopt` = 整个键都不发**。留着它不是为了用，是为了把一条测过的事实钉在
-        /// 可执行的探针上：这个键在 CoreDevice 的 feature 层是**必填**的，不发就起不了流
-        /// （`code 4865 / "Expected to find key timeout."`，两臂都撞在这上面）。
-        ///
-        /// 关于"那苹果为什么不断"，这一栏走过三次弯路，都记在这儿以免再走：
-        ///   ① 曾根据设备会话表里苹果条目没有 `timeout`/`type` 键，推断"苹果不走这个
-        ///      feature"。**错了**——抓它的请求原文，走的就是 `mediastreamstart`，`timeout`
-        ///      也报 20。会话表是回显，回显是子集不是同射。
-        ///   ② 曾把剩下的差异归到"苹果那条连接是 HTTP/2 而我们和 p3 是裸 XPC"。**也错了**：
-        ///      我们的服务连接同样是 HTTP/2 + DATA 帧装 XPC（remote/RemoteXpc.cpp），
-        ///      前置三帧 `0x1/0x201/0x400001` 和苹果的逐字节一致。
-        ///   ③ 曾把"我们 20 秒死而苹果 74 秒不断"读成设备侧有个我们没控住的结构性差异
-        ///      （音频腿、sessionEventChannel、LTRP、VRAE、宿主连接、流标签……八项逐一
-        ///      判完，全带数）。**根因在我们自己发出去的字节里**：那 74 秒里苹果每秒有
-        ///      RTCP 落到设备的 socket 上，而我们一个都没到。
-        /// 苹果的实测事实留着（同一台 iPhone 13 mini / iOS 27.0，一次 95.8 秒抓包）：报
-        /// 20 秒租期，视频 RTP 从起流一路发到抓包结束共 74 秒**一秒空档都没有**、SSRC 与
-        /// 两端端口全程不变、`startmediastream` 整场只有两次（音频一次 + 视频一次，不是
-        /// 重试），而那条 carrying 两次起流的连接从头到尾没有 FIN/RST。
-        /// （后来两条也都判完了：握着起流那条连接并持续 `service()`、在 `deviceinfo` 上挂
-        /// `displayinfoupdates` 订阅、在 `universalhidservice` 上附着，各自一臂全部照旧
-        /// 死在 19.97~20.00 秒；RCTL 的字段语义另外量出了我们填错的一位。见 docs §13。）
+        /// nullopt 表示省略整个键，保留给协议探针使用。已测 CoreDevice feature 在省略时
+        /// 返回 code 4865 / Expected to find key timeout，正常起流应提供此参数。
         std::optional<uint32_t> timeout_seconds = 3600;
-        /// 发往设备的 `sessionEventChannel` 键：**一个 XPC UUID**，不是端点句柄。
-        ///
-        /// 这是从设备侧抓包（utun7 上隧道已解封装，请求原文是明文）里挖出来的**我们和
-        /// Xcode DeviceHub 之间唯一差的那个键**：苹果的 `startmediastream` 请求里
-        /// `timeout` 也是 20、`type` 也是 audio/video，键集合和我们一样，只多了这个。
-        ///
-        /// 试过一臂：填一个我们这边没人登记的 UUID——**19.961 秒死**，所以"有个 UUID
-        /// 就够了"不成立。至于苹果那边这个 UUID 换来了什么，抓包给出的答案不是"续命"：
-        /// 全场唯一那条 `XPCSideChannel.uniqueIdentifier` + `sideChannelStatus` 推送落在
-        /// 设备端口 54583 = `com.apple.coredevice.deviceinfo` 上，而它的 feature 列表里有
-        /// `displayinfoupdates`——那是**显示器/方向/背光状态订阅**，和媒体会话的租期无关。
-        /// 所以这一位目前解释不了苹果的 74 秒不断，别把它当保活手段。
-        ///
-        /// 而且"苹果那边一定接了个对端"这个前提也是猜的：拿它那两条腿的两个 UUID 的
-        /// 16 字节原文在整场抓包里搜，**各只出现 1 次**，就是各自那条起流请求，
-        /// 之后设备与客户端都没再提过（对比 `ClientSessionID` 出现 6 次）。
-        /// 也就是说苹果自己也没在这个窗口里给它接上对端——我们填的悬空 UUID
-        /// 恰好就是苹果的形状，不是我们漏了一步。
+        /// 可选的 sessionEventChannel，值为 16 字节 XPC UUID；未提供或为空时省略。
+        /// 其事件通道的注册与对端语义尚未确认，不能把一个 UUID 本身当作保活机制。
+        /// 抓包中显示几何推送属于 deviceinfo 的 displayinfoupdates，不能据此推断此字段
+        /// 是否有对端；UUID 仅在抓包中出现一次也不能证明没有注册过程。
+        /// 相关观察见 [CoreDevice §13](../../docs/coredevice.md#13-停流关键帧请求与恢复实测) 和
+        /// [§16](../../docs/coredevice.md#16-displayinfoupdates设备自己报的显示几何实测iphone144--ios-270--usb)。
         std::optional<std::vector<uint8_t>> session_event_channel;
-        /// 申报给设备的主机能力位掩码。观测值是 140，而设备自己回
-        /// `supportedFeatures: 972`——差着的位里可能藏着更高档的编码器配置，
-        /// 所以这个数要能改，别焊死在常量上。
+        /// 申报的客户端能力位掩码，默认 140 来自可用请求的观测。
+        /// 设备回复的 supportedFeatures=972 是设备能力，不能直接当作客户端应申报的值。
+        /// 已测更改未获得稳定的编码提升；各位的含义尚未完整确认，见
+        /// [CoreDevice §11](../../docs/coredevice.md#11-屏幕视频流的线上细节实测iphone-144--ios-270--usb)。
         uint64_t client_supported_features = 140;
-        /// 起**音频腿**：`type:"audio"`、options 里不带那两个显示键、offer 走 mode 6。
+        /// 选择音频请求：type 为 audio，省略显示器 options，普通 offer 使用 mode 6。
+        /// 视频请求的 type 为 video，普通 offer 使用 mode 5。
         bool audio = false;
-        /// 共享的 `avcMediaStreamOptionClientSessionID`（16 字节 XPC UUID 原文）。
-        /// 空 = 本腿自己生成一个。苹果是两条腿用同一个，所以要做那组实验必须能传进来。
+        /// avcMediaStreamOptionClientSessionID 的 16 字节 XPC UUID 原文；为空时生成新 UUID。
+        /// 参考客户端曾为音视频共用此值；已测独立 UUID 同样可以并行起流，产品分别使用。
+        /// 若共享 UUID，probe() 的 Alive 只能表示至少一条同 UUID 会话存在，无法区分音视频。
+        /// 验证范围见 [CoreDevice §17.2](../../docs/coredevice.md#172-音频腿接进产品四个问题的真机读数toolsaudio_pump_probeasan-下跑)。
         std::vector<uint8_t> client_session_uuid;
+        /// 普通路径的 offer 参数。start() 会根据 audio 设置 is_audio，并为本次协商
+        /// 生成 session_id 和 call_id，覆盖传入 Offer 中这三个字段。
         Offer offer;
-        /// 非空时原样作为 negotiatorOffer 的 XPC Data，供抓包重放和格式对照。
-        /// 不修改样本中的 SSRC / CallID；发送 RTCP 时需与样本身份保持一致。
+        /// 非空时跳过 XML offer 构造，原样作为 negotiatorOffer 的 XPC Data。
+        /// 供抓包重放和 binary / XML 格式对照，不修改样本中的 SSRC、CallID 或其他内容。
+        /// 调用方负责选择与 audio 请求类型相符的样本。
+        /// 发送 RTCP 应使用本次 answer 的 SSRC，不能使用普通构造路径另外生成的身份。
+        /// 当前格式验证见 [BPLIST_COMPATIBILITY](../../docs/BPLIST_COMPATIBILITY.md#真机对照)。
         std::vector<uint8_t> raw_offer;
     };
 
     struct Started {
-        /// 设备侧发源的端口（answer 里带；answer 没带则为 0，表示任意源都收）。
+        /// answer 的 connection.sender.port，设备发送媒体使用的端口。
+        /// 缺失时为 0，接收端允许任意源端口；反馈目的端口需依据协商结果或实际对端确定。
         uint16_t sender_port = 0;
-        /// 协商出来的视频 payload type（answer 的 streamConfig.RxPayloadType）。
-        /// 拆包器只认这个 PT，其余（同端口到达的 RTCP）跳过。
+        /// 协商的媒体 RTP payload type，来自 streamConfig.RxPayloadType 的低七位。
+        /// 缺失时保留默认 100；音频也使用协商值。拆包前需区分同端口收到的裸 RTCP。
         uint8_t payload_type = 100;
-        /// answer 的 `streamConfig.LocalSSRC` —— **设备自己那条流的 SSRC**，也就是它推
-        /// 过来的每个 RTP 头里那个数（实测对上过）。名字是从**设备的视角**起的。
-        /// 我们发 RTCP 时要拿它当报告块里"指认哪条流"的那一位。
+        /// answer 的 streamConfig.LocalSSRC，名字采用设备视角。
+        /// 已测值与设备发送的 RTP SSRC 一致；客户端 RTCP 报告块用它指明被报告的媒体源。
         uint32_t local_ssrc = 0;
-        /// answer 的 `streamConfig.RemoteSSRC` —— 设备**给我们这一端分配的** SSRC。
-        /// 我们发出的 RTCP 的发送者 SSRC 必须填这个，不能自己编：填错了就等于"一个从没
-        /// 收过包的源发来的报告"，设备按 SSRC 配对时对不上号。
-        /// （这两个名字曾经被反着理解，于是所有 RTCP 臂都填错了人。）
+        /// answer 的 streamConfig.RemoteSSRC，表示客户端侧 SSRC。
+        /// 已测设备回显 offer 声明的 SSRC，不应理解为设备总会另行分配新值。
+        /// 客户端发送 RTCP 时使用本次回复的此值，避免与报告的会话身份不匹配。
         uint32_t remote_ssrc = 0;
-        /// answer 原文，供上层记录协商结果。
+        /// 起流回复原文，供上层读取和记录完整协商结果。
         scrctl::xpc::Value answer;
-        /// 我们这次起流用的会话号（`avcMediaStreamOptionClientSessionID`），
-        /// 16 字节的 XPC UUID 原文。stopmediastream 要拿它来指认是哪条会话。
+        /// 本次请求中 ClientSessionID 的 16 字节 XPC UUID 原文，用于 probe() 匹配会话。
+        /// 当前 stop() 使用 stopAll，不按此 UUID 筛选。
         std::vector<uint8_t> session_uuid;
     };
 
-    /// 在已经建好的会话（含隧道与 RSD 目录）上起流。
-    /// 失败时 err 带上设备说的人话（CoreDevice.error 里的 NSLocalizedDescription）。
+    /// 在已建立隧道并取得 RSD 目录的 Device 上起流，先绑定接收 UDP 端口。
+    /// 失败时返回 nullptr，并通过 err 提供传输或 CoreDevice 错误信息。
     ///
-    /// `on_conn` 是给"起流用哪条连接"留的口子：默认另开一条、调用完就丢（那是
-    /// Device::feature 的语义），传了它就在这条**由调用方持有**的连接上起流，并且
-    /// **不关掉它**。
-    ///
-    /// 这条口子的实测后果要写清楚，因为它是反直觉的（三臂 A/B/C，见 docs §13）：
-    ///   * 握着不放、之后**不再**在这条连接上发任何东西 —— 连接能活过整场（30 秒实测没断），
-    ///     但会话照旧死在自己报的那个秒数上，所以"有宿主连接"不延长租期；
-    ///   * 握着它、又在**同一条**连接上发第二次请求（哪怕只是一个只读的
-    ///     `getmediastreamserverstatus`）—— 连接和媒体会话**同时**在 +241ms 被设备带走，
-    ///     两次独立复现。视频包冻在 61–65 个、一个 SR 都没收到。
-    /// 所以规则是：**这条连接只能用来起流，任何后续请求都要另开连接**（和 `stop()` 那条
-    /// "必须另开"的已知规则同族）。传了 `on_conn` 又不守这条规则，等于自己把流戳死。
+    /// 默认通过 Device::feature 新建服务连接，调用结束后释放。on_conn 非空时借用
+    /// 调用方持有的连接，不取得所有权，也不在调用结束后关闭它。
+    /// 已测设备在同一起流连接上接收第二次请求时会关闭连接并结束媒体会话，因此后续
+    /// status、stop 等请求使用新连接；保留连接本身不能替代周期 RTCP。
+    /// 连接复用的观测范围见 [CoreDevice §13](../../docs/coredevice.md#13-停流关键帧请求与恢复实测)。
     static std::unique_ptr<StreamSession> start(scrctl::remote::Device &device,
                                                 const Request &request, std::string &err,
                                                 bool verbose = false,
@@ -146,51 +103,47 @@ public:
 
     ~StreamSession();
 
-    /// 取一个 RTP 包（UDP 数据报原文）。
+    /// 接收一个 UDP 数据报原文，可能是 RTP 或 RTCP；timeout_ms 为本次接收等待时限。
+    /// 协议分类与媒体拆包由调用方完成。
     bool next_packet(std::vector<uint8_t> &packet, int timeout_ms, std::string &err);
-    /// 同上，并带出对端端口——回 RTCP 时要发给"包是从哪个端口来的"，
-    /// 而不是猜一个。
+    /// 同上，并返回该数据报的源端口，供调用方识别对端和确定反馈目的地。
     bool next_packet(std::vector<uint8_t> &packet, uint16_t &peer_port, int timeout_ms,
                      std::string &err);
 
-    /// 往隧道对端的某个端口发一个数据报（RTCP 反馈用）。
+    /// 向隧道对端指定端口发送原始 UDP 载荷，当前用于 RTCP 反馈。
+    /// 不添加 RTP 头；调用方负责完整的 RTCP 编码、SSRC 和目的端口。
     bool send_rtp(const std::vector<uint8_t> &payload, uint16_t peer_port, std::string &err);
 
-    /// 停掉这条流。**必须另开一条连接**：设备侧对"复用发起 start 的那条连接发
-    /// stop"有崩溃前科。
-    ///
-    /// 入参形状是设备自己教的：四种形状都回 "Expected to find key stopAll."，
-    /// 带上 `stopAll: Bool` 就成功，回 `{serverInfo: {running: false...},
-    /// stoppedStreams: [<u32>]}`——那个 u32 就是 offer 里的 session_id，不是
-    /// 起流时那个 UUID。`stopAll` 给整数会被 Swift Codable 拒（"Expected to
-    /// decode Bool but found a OS_xpc_uint64"）。
+    /// 通过新服务连接发送 stopmediastream，当前入参固定为 stopAll: XPC Bool true。
+    /// 该操作停止设备上所有媒体会话，包括音频和视频，不只停止本对象对应的会话。
+    /// 已测设备要求 stopAll 为 Bool；回复 stoppedStreams 中的编号对应 offer 的
+    /// u32 session_id，而非 ClientSessionID UUID。复用起流连接发送 stop 曾导致设备服务异常。
+    /// 参数形状与作用范围见 [CoreDevice §13](../../docs/coredevice.md#13-停流关键帧请求与恢复实测)。
     bool stop(scrctl::remote::Device &device, std::string &err, bool verbose = false) const;
 
     [[nodiscard]] uint16_t receiver_port() const;
     [[nodiscard]] const Started &started() const { return started_; }
 
-    /// 设备侧媒体流服务的状态。**收不到包有两种完全不同的原因，必须分开**：
-    /// 静止画面上编码器本来就不发（流好着），以及设备把流结束掉了（流死了）。
-    /// 只看"多久没包"把它们混成一个，结果就是静止画面每 3 秒被无谓地重起一次。
+    /// 以设备 sessions 列表判断会话是否仍存在。
+    /// 媒体暂时无包不等于会话结束，例如静止画面可能不产生新的视频帧；
+    /// Alive 也不保证正在收包或已成功解码，上层需结合媒体与恢复状态判断。
     enum class ServerState {
-        /// 我们这条会话还在设备的 sessions 列表里。
+        /// 设备 sessions 列表中存在匹配 ClientSessionID 的会话。
         Alive,
-        /// 已经不在了——设备结束了流，必须重起才能再收到画面。
+        /// 已识别的 sessions 列表中未找到匹配 UUID，由上层决定是否重新协商。
         Ended,
-        /// 问不到，或回复形状不认识。按"未知"处理，别当成 Ended。
+        /// 查询失败或回复缺少可识别的 sessions 列表；不能等同于 Ended。
         Unknown,
     };
 
-    /// 问一次 getmediastreamserverstatus，看 `session_uuid` 还在不在设备的会话
-    /// 列表里。另开一条连接，理由同 stop()。
+    /// 通过新连接查询 getmediastreamserverstatus，并按 session_uuid 匹配 ClientSessionID。
+    /// 多个媒体流共用 UUID 时只能判断该组是否仍有会话，不能确定某条流的存活状态。
     [[nodiscard]] static ServerState probe(remote::Device &device,
                                            const std::vector<uint8_t> &session_uuid,
                                            std::string &err, bool verbose = false);
 
-    /// 设备回的状态原文（整个 `getmediastreamserverstatus` 的输出）。单独开这一条是
-    /// 为了"判活"之外的用途：`probe()` 只回一个三值枚举，而当我们想查"设备到底有没有
-    /// 收到我们发过去的 RTCP"时，需要的恰恰是它自己报的那些计数器——那种问题没法用
-    /// 枚举回答。取不到时返回 Null。
+    /// 通过新连接返回 getmediastreamserverstatus 的完整输出，失败时返回 Null。
+    /// 除会话匹配外，回复中的设备计数器可用于检查 RTCP 是否实际到达等传输问题。
     [[nodiscard]] static scrctl::xpc::Value status(remote::Device &device, std::string &err,
                                                    bool verbose = false);
 
@@ -202,8 +155,12 @@ private:
     Started started_;
 };
 
-/// 组装 startmediastream 的 CoreDevice.input。单独拆出来是为了能离线比对：
-/// 请求体里任何一个字段错了，设备的反应都是"不回话"或一个语义模糊的错误码。
+/// 组装 startmediastream 的 CoreDevice.input，不进行网络 I/O，供起流和离线协议校验使用。
+/// options 的参数按 int / string / uuid 标签包装；会话与事件通道 UUID 使用 16 字节
+/// XPC UUID 对象，不能用 UUID 文本代替。offer_bytes 原样放入 XPC Data，不转换 plist 格式。
+/// audio 决定请求类型及是否省略显示器 options；空共享 UUID 会生成新 ClientSessionID，
+/// 空事件通道 UUID 和 nullopt timeout 分别省略对应键。省略 timeout 在已测设备上被拒。
+/// 类型约束和请求样本见 [CoreDevice §13、§14](../../docs/coredevice.md#14-让设备自己交代入参形状toolsfeature_schema_probe)。
 [[nodiscard]] scrctl::xpc::Value build_start_request(const std::string &receiver_ip,
                                                      uint16_t receiver_port,
                                                      const std::string &sender_ip,
