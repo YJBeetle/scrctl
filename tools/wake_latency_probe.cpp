@@ -1,62 +1,53 @@
-// 探针：从"催一次流"到"拿到重起后的第一帧"到底要多久。
+// 测量接收静默后，wake() 到下一张新帧的耗时。
 //
-// 为什么单独量：自动化框架的循环是"截图 -> 识别 -> 动作"，而它的截图调用在等帧时
-// 用的是一个**固定预算**（MaaFW 那边是 800ms）。设备给每条会话的租期是起流后约 20 秒
-// （docs §13：喂画面、回 RTCP 都不续命），而静止画面上最后一个视频包之后约 7 秒就到
-// 这道线，所以"隔了一会儿再截图"这个最常见不过的时序，必然要走一次重起。预算给小了，
-// 截图就会退回"最新一帧"——也就是设备拆流前那一刻的旧画面，而调用方以为看到的是刚刚
-// 动作之后的结果。这个数必须量出来，不能猜。
-//
-// 用法：wake_latency_probe [--trials 5] [--verbose] [UDID]
+// FramePump 请求 20 秒 RTCP 空闲超时，正常产品每秒发送 RR 续期。
+// 本探针默认关闭 RR 和自动重建，观察无反馈对照；--rr 保留生产保活。
+// “请求了 20 秒”不能证明会话一定在起流后 20 秒结束，也不能仅凭静止视频判定断流。
+// 这里按全部数据报的计数等待静默，并设置独立总时限；未观察到静默就终止实验。
+#include "ProbeCli.h"
 #include <algorithm>
 #include <chrono>
-#include <cstdlib>
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include "ProbeWait.h"
 #include "media/FramePump.h"
 #include "remote/Device.h"
 
 namespace {
-
 uint64_t now_ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::steady_clock::now().time_since_epoch())
-        .count();
+               std::chrono::steady_clock::now().time_since_epoch()).count();
 }
-
 }  // namespace
 
 int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
-    std::string_view udid;
-    int trials = 5;
-    // 静默多久之后催一次。泵里"该不该重起"的判定用的是"最后一个数据报静默满 2 秒"
-    // （设备的 RTCP SR 每秒一个，连它都停了才算死），所以这个参数扫过 2 秒上下，
-    // 就能看出阈值是不是卡在正确的位置上：3000ms 那一档必须和 9000ms 那一档一样
-    // 一次就重起成功。
-    int quiet_target = 9000;
-    bool verbose = false;
-    for (int i = 1; i < argc; ++i) {
-        const std::string_view a = argv[i];
-        if (a == "-v" || a == "--verbose") {
-            verbose = true;
-        } else if (a == "--trials" && i + 1 < argc) {
-            trials = std::atoi(argv[++i]);
-        } else if (a == "--quiet" && i + 1 < argc) {
-            quiet_target = std::atoi(argv[++i]);
-        } else if (a == "-h" || a == "--help") {
-            std::printf("用法: %s [--trials N] [--quiet 毫秒] [-v] [UDID]\n", argv[0]);
-            return 0;
-        } else if (a.starts_with("-")) {
-            std::fprintf(stderr, "未知选项 %s\n", std::string(a).c_str());
-            return 2;
-        } else {
-            udid = a;
-        }
+    std::string udid;
+    int trials = 5, quiet_target = 9000, wait_ms = 45000;
+    bool verbose = false, rr = false, dry_run = false;
+    CLI::App app("测量接收静默后 wake() 到新帧的延迟");
+    app.add_option("UDID", udid, "设备 UDID");
+    app.add_option("--trials", trials, "测量次数（默认 5）")->transform(scrctl::probe::decimal_integer(1, std::numeric_limits<int>::max()));
+    app.add_option("--quiet", quiet_target, "数据报静默阈值，毫秒（默认 9000）")->transform(scrctl::probe::decimal_integer(1, std::numeric_limits<int>::max()));
+    app.add_option("--wait-ms", wait_ms, "每次等待静默的观察预算，毫秒（默认 45000；不含连接与清理）")->transform(scrctl::probe::decimal_integer(1, std::numeric_limits<int>::max()));
+    app.add_flag("--rr", rr, "发送 RR 保活对照；可能在总时限内不出现静默");
+    app.add_flag("-v,--verbose", verbose, "输出协议日志");
+    app.add_flag("--dry-run", dry_run, "只显示实验参数，不连接设备");
+    app.footer("需独占设备媒体服务：stopmediastream 使用 stopAll，会结束设备上的其它媒体会话。\n观察预算不包含连接、RPC 和停止媒体各自的协议时限。");
+    try { app.parse(argc, argv); }
+    catch (const CLI::CallForHelp &e) { return app.exit(e); }
+    catch (const CLI::ParseError &e) { std::fprintf(stderr, "参数错误：%s\n", e.what()); return 2; }
+    if (wait_ms <= quiet_target) {
+        std::fprintf(stderr, "--wait-ms 必须大于 --quiet，才能在总时限前观察到静默\n");
+        return 2;
     }
+    std::printf("实验参数：timeout=20 秒，RR=%s，trials=%d，quiet_ms=%d，wait_ms=%d\n",
+                rr ? "on" : "off", trials, quiet_target, wait_ms);
+    if (dry_run) { return 0; }
 
     std::string err;
     auto device = scrctl::remote::Device::establish(udid, err, verbose);
@@ -64,12 +55,12 @@ int main(int argc, char **argv) {
         std::fprintf(stderr, "建立会话失败: %s\n", err.c_str());
         return 1;
     }
-
-    // silence/stall 重起全关掉：这个探针要的就是"会话确实死透了，然后由 wake()
-    // 把它救回来"这一段，不能让泵自己先救。
+    // 自动重建与 RR 是不同开关。两项重建都关闭后，还需单独禁止 RR，
+    // 才能观察无反馈到期；保活对照则只改变这一项。
     scrctl::media::FramePump::Options options;
     options.silence_restart_ms = 0;
     options.stall_restart_ms = 0;
+    options.debug_suppress_rr = !rr;
     auto pump = scrctl::media::FramePump::start(*device, options, err, verbose);
     if (!pump) {
         std::fprintf(stderr, "起流失败: %s\n", err.c_str());
@@ -82,59 +73,50 @@ int main(int argc, char **argv) {
     }
 
     std::vector<int> samples;
-    for (int trial = 1; trial <= trials; ++trial) {
-        // 等到"一个包都不来"满 quiet_target。设备的 RTCP SR 每秒一个，所以
-        //   quiet_target=1500 落在"可疑区间"（该去问设备那一条）
-        //   quiet_target=4000 落在"两个心跳都没了"（该直接重起那一条）
-        // 两档都必须催回一帧，只是花的钱不一样。
-        uint64_t last_pkts = pump->stats().packets;
-        uint64_t last_change = now_ms();
-        while (now_ms() - last_change < static_cast<uint64_t>(quiet_target)) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(250));
-            const uint64_t got = pump->stats().packets;
-            if (got != last_pkts) {
-                last_pkts = got;
-                last_change = now_ms();
+    for (int trial = 0; trial < trials; ++trial) {
+        scrctl::probe::QuietWait wait(now_ms(), pump->stats().packets, quiet_target, wait_ms);
+        for (;;) {
+            const uint64_t now = now_ms();
+            const auto result = wait.observe(now, pump->stats().packets);
+            if (result == scrctl::probe::QuietResult::TimedOut) {
+                std::fprintf(stderr, "第 %d 次：%dms 内未观察到数据报静默；未调用 wake()，本次没有恢复延迟样本\n",
+                             trial + 1, wait_ms);
+                return 1;
             }
+            if (result == scrctl::probe::QuietResult::Quiet) { break; }
+            std::this_thread::sleep_for(std::chrono::milliseconds(std::min<uint64_t>(250, wait.remaining(now))));
         }
-        const uint64_t quiet = now_ms() - last_change;
-
+        const uint64_t quiet = wait.quiet_for(now_ms());
+        const auto before_stats = pump->stats();
         const uint64_t before = pump->serial();
         const auto t0 = now_ms();
         pump->wake();
-        // 轮着问，顺便把"泵有没有真的开始救流"这件事记下来：只量"到第一帧多久"的话，
-        // 分不清慢是在等 RPC 还是在等设备吐 IDR。
         scrctl::Frame f;
         uint64_t got_serial = 0;
         bool saw_reviving = false;
-        while (now_ms() - t0 < 8000) {
+        scrctl::probe::Deadline recovery(t0, 8000);
+        while (!recovery.expired(now_ms())) {
             saw_reviving = saw_reviving || pump->reviving();
             got_serial = pump->newer(f, before, 20);
-            if (got_serial != 0) {
-                break;
-            }
+            if (got_serial != 0) { break; }
         }
         const int ms = static_cast<int>(now_ms() - t0);
-        if (got_serial == 0) {
-            std::printf("第 %d 次：静默 %llums 后 wake()，8 秒内没有帧 —— 失败\n", trial,
-                        static_cast<unsigned long long>(quiet));
-            continue;
+        if (got_serial == 0 || recovery.expired(now_ms())) {
+            std::fprintf(stderr, "第 %d 次：静默 %llums 后 wake()，8 秒内没有新帧\n", trial + 1,
+                         static_cast<unsigned long long>(quiet));
+            return 1;
         }
         samples.push_back(ms);
-        std::printf("第 %d 次：静默 %llums -> wake() 到第一帧 %dms（%s，帧号 %llu -> %llu）\n", trial,
-                    static_cast<unsigned long long>(quiet), ms,
-                    saw_reviving ? "走到了重起" : "没走重起",
-                    static_cast<unsigned long long>(before),
-                    static_cast<unsigned long long>(got_serial));
-    }
-
-    if (samples.empty()) {
-        std::fprintf(stderr, "一次都没量到\n");
-        return 1;
+        const auto stats = pump->stats();
+        std::printf("第 %d 次：静默 %llums -> 新帧 %dms（%s，帧号 %llu -> %llu，重建增量 %llu，RR 成功 %llu/失败 %llu）\n",
+                    trial + 1, static_cast<unsigned long long>(quiet), ms,
+                    saw_reviving ? "观察到重建" : "未观察到重建",
+                    static_cast<unsigned long long>(before), static_cast<unsigned long long>(got_serial),
+                    static_cast<unsigned long long>(stats.restarts - before_stats.restarts),
+                    static_cast<unsigned long long>(stats.rtcp_sent), static_cast<unsigned long long>(stats.rtcp_failed));
     }
     std::sort(samples.begin(), samples.end());
-    std::printf("\n%d 次：中位 %dms，最大 %dms\n", static_cast<int>(samples.size()),
-                samples[samples.size() / 2], samples.back());
-    std::printf("截图等帧预算要大于这个最大值的两倍（重起期间设备屏幕还可能继续变）。\n");
+    std::printf("\n%d 次：中位 %dms，最大 %dms；这些是本次配置下的观测值\n",
+                static_cast<int>(samples.size()), samples[samples.size() / 2], samples.back());
     return 0;
 }

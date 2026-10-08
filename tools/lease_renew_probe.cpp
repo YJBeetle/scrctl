@@ -1,26 +1,12 @@
-// 探针：租期接续那一次"没有新帧"到底看不看得见。
+// 观察生产 FramePump 的无新帧间隔，以及这些间隔是否与会话重建重叠。
 //
-// 为什么要有这条：当时以为设备给每条媒体会话的租期是起流后约 20 秒、续不上（docs §13），
-// 所以每 20 秒必然要换一次会话，而换会话有约 300ms 拿不到新帧（`two_session_probe` 实测：
-// RPC 84ms + 首个 IDR 306ms，而且第二条一起来第一条就从设备表里消失，"先起新的再切"
-// 这种无缝交接不成立）。这笔钱非付不可，泵里能做的只有**挑时刻**：画面静止的时候接，
-// 用户看不见；画面在动的时候接，是一次看得见的顿挫。
-//
-// 于是"到点就重起"改成了"到点之后在剩下的 1.4 秒里等一个静止间隙，等不到才硬接"。
-// 这个改动对不对，只能实测两种画面下各发生什么：
-//
-//   --feed（画面一直在动） 接续那次应当是一条 ~300ms 的顿挫，且**顿挫里我们按过音量键**
-//                          ——按一下必然带来画面变化，没帧就是真吃掉了内容（这种顿挫
-//                          是租期逼出来的，不是策略选的）。
-//   不喂（画面静止）       接续仍然发生，但接续之前早就没新帧了：那 300ms 落在一张本来
-//                          就停着的画面上，不构成任何可见损失。
-//
-// 判据全取自泵对外的读数（serial 的间隔 + stats().restarts 的增量），不靠人眼看窗口。
-// 把顿挫归到"接续"头上靠的是 restarts 的增量：一次没有新帧的间隔里重起计数涨了，才是
-// 换会话造成的；没涨却静默很久，那是画面本来就静止。
-//
-// 用法：lease_renew_probe [--seconds N] [--feed] [--press-ms N] [--verbose] [UDID]
+// 产品请求 20 秒 RTCP 空闲超时，并每秒发送 RR 续期；不能预设每 20 秒一定重建。
+// 本工具保留正常 RR 和自动恢复。--feed 交替发送音量键，用于提供可观察的显示变化。
+// 不发送音量键时，长时间没有新视频帧可能只是画面静止，不能仅凭帧间隔判定断流。
+// 重建计数增量只能说明间隔中发生过重建，不能把整个间隔都归因于重建或声称丢失同样时长的内容。
+#include "ProbeCli.h"
 #include <algorithm>
+#include <limits>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -44,7 +30,7 @@ uint64_t now_ms() {
 struct Stall {
     uint64_t start_ms = 0;
     uint64_t end_ms = 0;
-    /// 这一段里重起了几次：>0 就说明这条顿挫是换会话换来的，而不是别的毛病。
+    /// 该无新帧间隔中发生的重建次数；仅用于相关性记录，不等同于故障成因。
     uint64_t restarts = 0;
     /// 这一段里按了几下音量键（只有 --feed 时才可能非 0）。
     int presses = 0;
@@ -56,31 +42,24 @@ struct Stall {
 
 int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
-    std::string_view udid;
-    int seconds = 50;
-    bool feed = false;
-    int press_every_ms = 400;
-    bool verbose = false;
-    for (int i = 1; i < argc; ++i) {
-        const std::string_view a = argv[i];
-        if (a == "-v" || a == "--verbose") {
-            verbose = true;
-        } else if (a == "--feed") {
-            feed = true;
-        } else if (a == "--seconds" && i + 1 < argc) {
-            seconds = std::atoi(argv[++i]);
-        } else if (a == "--press-ms" && i + 1 < argc) {
-            press_every_ms = std::atoi(argv[++i]);
-        } else if (a == "-h" || a == "--help") {
-            std::printf("用法: %s [--seconds N] [--feed] [--press-ms N] [-v] [UDID]\n", argv[0]);
-            return 0;
-        } else if (a.starts_with("-")) {
-            std::fprintf(stderr, "未知选项 %s\n", std::string(a).c_str());
-            return 2;
-        } else {
-            udid = a;
-        }
-    }
+    std::string udid;
+    int seconds = 50, press_every_ms = 400;
+    bool feed = false, verbose = false, dry_run = false;
+    CLI::App app("观察正常 RR 保活下的新帧间隔与会话重建");
+    app.add_option("UDID", udid, "设备 UDID");
+    app.add_option("--seconds", seconds, "观察秒数（默认 50）")->transform(scrctl::probe::decimal_integer(1, std::numeric_limits<int>::max()));
+    app.add_option("--press-ms", press_every_ms, "音量键发送间隔，毫秒（默认 400）")->transform(scrctl::probe::decimal_integer(1, std::numeric_limits<int>::max()));
+    app.add_flag("--feed", feed, "交替发送音量键，观察显示变化");
+    app.add_flag("-v,--verbose", verbose, "输出协议日志");
+    app.add_flag("--dry-run", dry_run, "只显示实验参数，不连接设备");
+    app.footer("需独占设备媒体服务：stopmediastream 使用 stopAll，会结束设备上的其它媒体会话。\n观察预算不包含连接、RPC 和停止媒体各自的协议时限。");
+    try { app.parse(argc, argv); }
+    catch (const CLI::CallForHelp &e) { return app.exit(e); }
+    catch (const CLI::ParseError &e) { std::fprintf(stderr, "参数错误：%s\n", e.what()); return 2; }
+    const uint64_t observation_ms = static_cast<uint64_t>(seconds) * 1000;
+    std::printf("实验参数：timeout=20 秒，RR=on（1Hz），observation_ms=%llu，feed=%s，press_ms=%d\n",
+                static_cast<unsigned long long>(observation_ms), feed ? "on" : "off", press_every_ms);
+    if (dry_run) { return 0; }
 
     std::string err;
     auto device = scrctl::remote::Device::establish(udid, err, verbose);
@@ -98,7 +77,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    // 泵用默认参数：silence_restart_ms=3000 > 0，租期接续那条分支才是活的。
+    // 使用生产默认参数：周期 RR 和静默/关键帧恢复保持启用。
     scrctl::media::FramePump::Options options;
     auto pump = scrctl::media::FramePump::start(*device, options, err, verbose);
     if (!pump) {
@@ -113,7 +92,7 @@ int main(int argc, char **argv) {
 
     const uint64_t t0 = now_ms();
     std::printf("泵已起流（收流端口 %u），观察 %d 秒，%s\n", pump->receiver_port(), seconds,
-                feed ? "每按一次音量键喂画面变化" : "不喂（让画面静止下来）");
+                feed ? "交替发送音量键" : "不发送音量键");
 
     std::vector<Stall> stalls;
     std::vector<uint64_t> press_at;
@@ -124,26 +103,28 @@ int main(int argc, char **argv) {
     uint64_t next_row = 1000;
     bool up = true;
     scrctl::Frame f;
-    while (now_ms() - t0 < static_cast<uint64_t>(seconds) * 1000) {
+    while (now_ms() - t0 < observation_ms) {
         const uint64_t got = pump->newer(f, prev_serial, 50);
         const uint64_t t = now_ms() - t0;
         if (feed && t >= next_press) {
             next_press = t + static_cast<uint64_t>(press_every_ms);
             std::string perr;
-            buttons->press(scrctl::hid::button::kUsagePageConsumer,
-                           up ? scrctl::hid::button::kVolumeUp : scrctl::hid::button::kVolumeDown,
-                           60, perr);
+            if (!buttons->press(scrctl::hid::button::kUsagePageConsumer,
+                                up ? scrctl::hid::button::kVolumeUp : scrctl::hid::button::kVolumeDown,
+                                60, perr)) {
+                std::fprintf(stderr, "音量键发送失败，不能维持实验条件: %s\n", perr.c_str());
+                return 1;
+            }
             up = !up;
             press_at.push_back(t);
         }
         if (got != 0) {
             const uint64_t now = now_ms();
-            // 只有"确实停了一下"才算顿挫：画面在动时两帧之间本来就几十毫秒，50ms 的
-            // 轮询粒度下不算异常。阈值 250ms 比一次接续短一些。
+            // 记录至少 250ms 的无新帧间隔；阈值是本探针的统计条件。
             if (now - last_frame_at >= 250) {
                 Stall s;
                 s.start_ms = (last_frame_at == t0 ? 0 : last_frame_at - t0);
-                s.end_ms = t;
+                s.end_ms = now - t0;
                 s.restarts = pump->stats().restarts - restarts_at_last_frame;
                 for (const uint64_t p : press_at) {
                     if (p >= s.start_ms && p <= s.end_ms) {
@@ -178,10 +159,10 @@ int main(int argc, char **argv) {
     std::printf("\n==== 顿挫（>=250ms 没有新帧）====\n");
     std::printf("观察 %d 秒：重起 %llu 次，按键 %zu 次，顿挫 %zu 条\n", seconds,
                 static_cast<unsigned long long>(st.restarts), press_at.size(), stalls.size());
-    uint64_t renewal_ms = 0;
+    uint64_t restart_overlap_ms = 0;
     for (const auto &s : stalls) {
         if (s.restarts > 0) {
-            renewal_ms += s.len_ms();
+            restart_overlap_ms += s.len_ms();
         }
         std::printf("  +%5llu -> %5llu ms 长 %5llu ms 其间重起 %llu 次",
                     static_cast<unsigned long long>(s.start_ms),
@@ -189,24 +170,22 @@ int main(int argc, char **argv) {
                     static_cast<unsigned long long>(s.len_ms()),
                     static_cast<unsigned long long>(s.restarts));
         if (s.presses > 0) {
-            std::printf(" 其间按键 %d 次（画面必然在变）", s.presses);
+            std::printf(" 其间成功发送音量键 %d 次", s.presses);
         }
         std::printf("\n");
     }
-    std::printf("\n判读：\n");
-    if (feed) {
-        std::printf("  画面全程在动（按了 %zu 次键），每一次租期接续都应当是一条 ~300ms 的"
-                    "顿挫、且落在按键流里 —— 这种是设备的租期逼出来的，不是策略挑的。\n",
-                    press_at.size());
-        std::printf("  接续一共吃掉 %llu ms / %d 秒，占 %.2f%%。\n",
-                    static_cast<unsigned long long>(renewal_ms), seconds,
-                    seconds > 0 ? 100.0 * static_cast<double>(renewal_ms) /
-                                      (1000.0 * static_cast<double>(seconds))
-                                : 0.0);
-    } else {
-        std::printf("  没有按键，画面是静止的：静止时设备一个视频包都不发，所以"
-                    "「长时间没有新帧」是常态而不是故障。要看的是那些重起是不是都发生了、"
-                    "以及每次重起之后帧号还在往前走。\n");
+    std::printf("RR 发送成功 %llu 次，失败 %llu 次\n", static_cast<unsigned long long>(st.rtcp_sent),
+                static_cast<unsigned long long>(st.rtcp_failed));
+    std::printf("与重建重叠的已闭合无新帧间隔共 %llums / %d 秒，占 %.2f%%；这不是实际丢帧时长。\n",
+                static_cast<unsigned long long>(restart_overlap_ms), seconds,
+                100.0 * static_cast<double>(restart_overlap_ms) / static_cast<double>(observation_ms));
+    if (now_ms() - last_frame_at >= 250) {
+        std::printf("观察结束时仍有一个未闭合的新帧间隔，持续 %llums；未计入上面的已闭合间隔。\n",
+                    static_cast<unsigned long long>(now_ms() - last_frame_at));
     }
+    if (st.restarts == 0) {
+        std::printf("本次未观察到会话重建；正常 RR 保活不要求每 20 秒更换会话。\n");
+    }
+    std::printf("音量键共成功发送 %zu 次；显示变化和触摸结果仍需结合画面观察。\n", press_at.size());
     return 0;
 }

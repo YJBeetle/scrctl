@@ -193,6 +193,10 @@ public:
     /// 返回值表示发送结果，不确认设备动作；中途失败不自动补发 UP。
     bool press(uint16_t usage_page, uint16_t usage_code, int hold_ms, std::string &err);
 
+    /// 单独发送 UP，供调用方在 press() 中途失败后尝试释放。
+    /// 返回值仍只表示发送结果；连接断开时无法保证设备收到释放消息。
+    bool release(uint16_t usage_page, uint16_t usage_code, std::string &err);
+
     [[nodiscard]] bool available() const { return conn_ != nullptr; }
 
 private:

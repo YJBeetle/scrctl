@@ -1,25 +1,28 @@
-// 探针：这条流认不认 RTCP PLI？
+// 发送一次标准 RTCP PLI，比较请求前后接收到的视频 RTP 和完整 IRAP NAL。
+// 报文复用产品构造器，目的端口和 SSRC 使用本次起流协商结果。
 //
-// 为什么先问这个：流里没有周期性 IDR，所以一旦丢包把参考链打断，画面就永久坏掉。
-// 恢复只有两条路——(a) 发 PLI 请设备立刻给一个关键帧；(b) 拆掉重起媒体会话，
-// 新会话必然从 IDR 开始。(a) 便宜得多（一个 12 字节的 UDP 包），但前提是设备理我们。
-// 所以先测，测出来再决定库里写什么。
+// 本探针会在基线和请求后的窗口内持续发送触摸移动。运行前应打开允许测试的
+// 空白画布，并选择合适的绘图或移动工具；相同触摸在其它界面可能触发其它操作，
+// 不能保证只移动视图。触摸写入成功也不证明画面发生变化，需要结合视频接收观察。
 //
-// 判据要成立，观察窗里必须**有画面在动**：编码器在静止画面上根本不出帧，
-// "PLI 之后没收到 IDR"就分不清是"设备不理"还是"没东西可发"。第一版就栽在这儿
-// ——对着静止的无边记画布测，4 秒后一个包都收不到，差点得出错误结论。所以
-// 观察窗里由本探针自己拖动画布制造持续变化（只碰画布，不碰别的）。
+// 请求后的 IRAP 只是时间相关性，单轮结果不能证明它由 PLI 触发；未观察到 IRAP
+// 也不能证明设备不支持 PLI。重复对照和 RR 保活实验使用 rr_keepalive_probe。
+// 本次实验显式请求 20 秒 RTCP 空闲超时，不发送周期 RR，也不调用会影响并存音视频
+// 的 stopAll。超过该超时的观察可能遇到设备停流，不能把停流归因于 PLI。
+#include <CLI/CLI.hpp>
 #include <chrono>
 #include <cstdio>
-#include <cstdlib>
+#include <limits>
 #include <set>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include "ProbeCli.h"
 #include "hid/Hid.h"
 #include "media/StreamSession.h"
 #include "remote/Device.h"
+#include "rt/Rtcp.h"
 #include "rt/RtpHevc.h"
 
 namespace {
@@ -30,26 +33,9 @@ uint64_t now_ms() {
         .count();
 }
 
-/// RFC 4585 的 PLI：公共头（V=2,P=0,RC=1 / PT=206 / length=2）+ FCI 一个媒体 SSRC。
-std::vector<uint8_t> build_pli(uint32_t sender_ssrc, uint32_t media_ssrc) {
-    auto put32 = [](std::vector<uint8_t> &v, uint32_t x) {
-        v.push_back(static_cast<uint8_t>(x >> 24));
-        v.push_back(static_cast<uint8_t>(x >> 16));
-        v.push_back(static_cast<uint8_t>(x >> 8));
-        v.push_back(static_cast<uint8_t>(x));
-    };
-    std::vector<uint8_t> p;
-    p.push_back(0x81);
-    p.push_back(206);
-    // length 按 32 位字计且不含公共头：sender SSRC + media SSRC = 2。
-    put32(p, 2u);
-    put32(p, sender_ssrc);
-    put32(p, media_ssrc);
-    return p;
-}
-
-/// 从 Annex-B 串里数出 IDR 帧（NAL type 19/20/21）。
-std::set<int> idr_types_in(const std::vector<uint8_t> &annexb) {
+/// 记录完整 Annex-B NAL 中已定义的 IRAP 类型：BLA 16..18、IDR 19..20、CRA 21。
+/// 此处只记录类型，不解码画面，也不统计完整图像数量。
+std::set<int> irap_types_in(const std::vector<uint8_t> &annexb) {
     std::set<int> found;
     for (std::size_t i = 0; i + 5 < annexb.size(); ++i) {
         if (annexb[i] == 0 && annexb[i + 1] == 0 && annexb[i + 2] == 0 && annexb[i + 3] == 1) {
@@ -62,6 +48,32 @@ std::set<int> idr_types_in(const std::vector<uint8_t> &annexb) {
     return found;
 }
 
+/// 正常结束时显式检查抬起报告发送结果；析构在提前退出时补发抬起。
+struct TouchRelease {
+    scrctl::hid::Service &hid;
+    double x = 0.5;
+    double y = 0.45;
+    bool contact = false;
+
+    bool close(std::string &err) {
+        if (!contact) {
+            err.clear();
+            return true;
+        }
+        if (!hid.touch(scrctl::hid::kSurfaceMainTouchscreen, x, y, false, err)) return false;
+        contact = false;
+        return true;
+    }
+
+    ~TouchRelease() {
+        if (!contact) return;
+        std::string err;
+        if (!close(err)) {
+            std::fprintf(stderr, "释放触摸失败: %s\n", err.c_str());
+        }
+    }
+};
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -69,16 +81,40 @@ int main(int argc, char **argv) {
     int baseline_s = 3;
     int watch_s = 6;
     bool random_sender = false;
-    for (int i = 1; i < argc; ++i) {
-        const std::string a = argv[i];
-        if (a == "--random-sender") {
-            random_sender = true;
-        } else if (a == "-t" && i + 1 < argc) {
-            baseline_s = std::stoi(argv[++i]);
-        } else if (a == "-w" && i + 1 < argc) {
-            watch_s = std::stoi(argv[++i]);
-        }
+    bool dry_run = false;
+    CLI::App app("发送单次 PLI 并观察请求前后的视频 RTP 和 IRAP");
+    app.footer("本次请求使用 20 秒 RTCP 空闲超时，不发送周期 RR。\n"
+               "--help 和 --dry-run 不连接设备，也不发送触摸。\n"
+               "请求后的 IRAP 只表示时间相关性；重复对照请使用 rr_keepalive_probe。");
+    // 共用转换器保留旧参数的十进制含义，并完整校验输入和范围。
+    app.add_option("-t", baseline_s, "请求前的基线秒数，0 表示立即请求（默认 3）")
+        ->transform(scrctl::probe::decimal_integer(0, std::numeric_limits<int>::max()))
+        ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
+    app.add_option("-w", watch_s, "请求后的观察秒数，至少 1 秒（默认 6）")
+        ->transform(scrctl::probe::decimal_integer(1, std::numeric_limits<int>::max()))
+        ->multi_option_policy(CLI::MultiOptionPolicy::TakeLast);
+    app.add_flag("--random-sender", random_sender, "用固定自选 SSRC 替代协商发送者，作为对照");
+    app.add_flag("--dry-run", dry_run, "只显示实验参数和时间预算，不连接设备");
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::CallForHelp &error) {
+        return app.exit(error);
+    } catch (const CLI::ParseError &error) {
+        std::fprintf(stderr, "参数错误：%s\n", error.what());
+        return 2;
     }
+    // 两个参数已限制到 int 的非负范围，先提升再乘加；最大总时长为
+    // 2 * INT_MAX * 1000 毫秒，能够用 uint64_t 表示，不在有符号 int 中计算。
+    const uint64_t baseline_ms = static_cast<uint64_t>(baseline_s) * 1000;
+    const uint64_t watch_ms = static_cast<uint64_t>(watch_s) * 1000;
+    const uint64_t total_ms = baseline_ms + watch_ms;
+    std::printf("实验参数：timeout=20 秒，RR=off，baseline_ms=%llu，watch_ms=%llu，"
+                "total_ms=%llu，sender=%s\n",
+                static_cast<unsigned long long>(baseline_ms),
+                static_cast<unsigned long long>(watch_ms),
+                static_cast<unsigned long long>(total_ms),
+                random_sender ? "fixed-experimental" : "negotiated");
+    if (dry_run) return 0;
 
     std::string err;
     auto device = scrctl::remote::Device::establish({}, err);
@@ -87,99 +123,138 @@ int main(int argc, char **argv) {
         return 1;
     }
     scrctl::media::StreamSession::Request req;
+    req.timeout_seconds = 20;  // 本次单次请求实验的条件，不沿用低层 3600 秒默认值。
     auto session = scrctl::media::StreamSession::start(*device, req, err);
     if (session == nullptr) {
         std::fprintf(stderr, "起流失败: %s\n", err.c_str());
         return 1;
     }
-    std::printf("流已建立：收流端口=%u PT=%u 设备发送端口=%u\n", session->receiver_port(),
-                session->started().payload_type, session->started().sender_port);
+    const auto &started = session->started();
+    const auto &config = started.answer.at("connection").at("streamConfig");
+    if (started.sender_port == 0 || config.find("LocalSSRC") == nullptr ||
+        config.find("RemoteSSRC") == nullptr) {
+        std::fprintf(stderr, "协商回复缺少反馈端口或 SSRC，无法发送本次会话的 PLI。\n");
+        return 2;
+    }
+    std::printf("流已建立：收流端口=%u PT=%u 反馈目的端口=%u LocalSSRC=%08x RemoteSSRC=%08x\n",
+                session->receiver_port(), started.payload_type, started.sender_port,
+                started.local_ssrc, started.remote_ssrc);
+    std::printf("本次只发送一条 PLI，不发送周期 RR；起流请求 timeout=%u 秒。\n",
+                req.timeout_seconds.value_or(0));
+    std::printf("观察时间超过 RTCP 空闲超时时可能停流；本轮不据此判断 PLI 行为。\n");
 
-    // 观察窗里要一直有画面变化，所以起一条 HID 连接来回拖画布。
+    // 基线和请求后的窗口使用相同触摸移动，避免只在请求后引入额外画面变化。
     auto hid = scrctl::hid::Service::open(*device, err);
     if (hid == nullptr) {
-        std::fprintf(stderr, "打开 HID 服务失败（没有画面变化，判据不成立）: %s\n", err.c_str());
+        std::fprintf(stderr, "打开 HID 服务失败，无法执行触摸移动: %s\n", err.c_str());
         return 1;
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    TouchRelease release{*hid};
 
     scrctl::rt::HevcRtpDepacketizer dep{session->started().payload_type};
-    uint32_t ssrc = 0;
-    uint16_t rtcp_peer_port = 0;
-    std::set<int> baseline_idr;
-    std::set<int> after_idr;
+    std::set<int> baseline_irap;
+    std::set<int> after_irap;
     long baseline_pkts = 0, after_pkts = 0;
+    long baseline_sr = 0, after_sr = 0;
+    long depacketize_errors = 0;
+    bool ssrc_observed = false;
     bool sent = false;
     const uint64_t t0 = now_ms();
+    uint64_t next_touch = t0;
+    std::size_t step = 0;
     std::vector<uint8_t> packet;
     std::vector<std::pair<double, double>> wiggle;
     for (int i = 0; i <= 16; ++i) {
         const double t = i / 16.0;
-        // 画布中部的一小段来回，幅度不大，只在无边记里挪动视图。
+        // 画布中部的一小段来回，具体是绘图还是移动由当前工具决定。
         wiggle.emplace_back(0.35 + 0.25 * (t < 0.5 ? t * 2 : (1 - t) * 2), 0.45);
     }
 
-    while (now_ms() - t0 < static_cast<uint64_t>((baseline_s + watch_s) * 1000)) {
-        uint16_t peer_port = 0;
-        const bool got = session->next_packet(packet, peer_port, 100, err);
-        const bool in_baseline = now_ms() - t0 < static_cast<uint64_t>(baseline_s * 1000);
-        if (got) {
-            scrctl::rt::PacketInfo info{};
-            if (scrctl::rt::parse_rtp_header(packet, info) &&
-                info.payload_type == session->started().payload_type) {
-                ssrc = info.ssrc;
-            } else {
-                // 非视频载荷：RTCP 从设备的哪个端口来，PLI 就回哪儿去。
-                rtcp_peer_port = peer_port;
-            }
-            std::vector<uint8_t> annexb;
-            dep.push(packet, annexb, err);
-            for (int t : idr_types_in(annexb)) {
-                (in_baseline ? baseline_idr : after_idr).insert(t);
-            }
-            ++(in_baseline ? baseline_pkts : after_pkts);
-        }
-
-        if (!sent && !in_baseline) {
-            sent = true;
-            // RTCP 的源端口没观测到就按惯例猜 sender_port+1（RFC 3550：RTP 偶、RTCP 奇）。
-            const uint16_t dst = rtcp_peer_port != 0
-                                     ? rtcp_peer_port
-                                     : static_cast<uint16_t>(session->started().sender_port + 1);
-            const uint32_t sender = random_sender ? 0x12345678u : ssrc;
-            std::printf("\n>> 发 PLI：目的端口=%u（%s）media SSRC=%08x sender SSRC=%08x\n", dst,
-                        rtcp_peer_port != 0 ? "RTCP 实测源端口" : "按 sender+1 猜", ssrc, sender);
-            if (!session->send_rtp(build_pli(sender, ssrc), dst, err)) {
+    while (now_ms() - t0 < total_ms) {
+        if (!sent && now_ms() - t0 >= baseline_ms) {
+            // 已测设备将 RTP 和 RTCP 复用到 sender.port；不猜测 sender.port+1，
+            // RTCPRemotePort 是客户端接收端口，也不是反馈目的地。
+            const uint32_t sender = random_sender ? 0x12345678u : started.remote_ssrc;
+            std::printf("\n发送 PLI：目的端口=%u media SSRC=%08x sender SSRC=%08x（%s）\n",
+                        started.sender_port, started.local_ssrc, sender,
+                        random_sender ? "固定自选发送者，对照模式" : "本次协商的发送者");
+            if (!session->send_rtp(scrctl::rt::build_pli(sender, started.local_ssrc),
+                                   started.sender_port, err)) {
                 std::fprintf(stderr, "发 PLI 失败: %s\n", err.c_str());
                 return 1;
             }
+            sent = true;
+            std::printf("PLI 已写入隧道；这不证明设备已收到或处理。\n");
         }
-        if (!in_baseline && got) {
-            // 每收到一个包就推进一格 wiggle，等于用画面变化给编码器持续喂内容。
-            static size_t step = 0;
+        if (now_ms() >= next_touch) {
+            next_touch = now_ms() + 100;
+            release.x = wiggle[step].first;
+            release.y = wiggle[step].second;
+            release.contact = true;
+            if (!hid->touch(scrctl::hid::kSurfaceMainTouchscreen, release.x, release.y, true,
+                            err)) {
+                std::fprintf(stderr, "触摸移动发送失败: %s\n", err.c_str());
+                return 1;
+            }
             step = (step + 1) % wiggle.size();
-            std::string derr;
-            hid->touch(scrctl::hid::kSurfaceMainTouchscreen, wiggle[step].first,
-                       wiggle[step].second, true, derr);
+        }
+        uint16_t peer_port = 0;
+        const bool got = session->next_packet(packet, peer_port, 100, err);
+        if (got) {
+            if (scrctl::rt::is_rtcp_sr(packet)) {
+                ++(sent ? after_sr : baseline_sr);
+                continue;
+            }
+            scrctl::rt::PacketInfo info{};
+            if (scrctl::rt::parse_rtp_header(packet, info) &&
+                info.payload_type == session->started().payload_type) {
+                if (info.ssrc != started.local_ssrc) {
+                    std::fprintf(stderr, "视频 RTP SSRC=%08x 与协商 LocalSSRC=%08x 不一致，"
+                                        "停止本轮观察。\n", info.ssrc, started.local_ssrc);
+                    return 2;
+                }
+                if (!ssrc_observed) {
+                    ssrc_observed = true;
+                    std::printf("已观察到视频 RTP：源端口=%u SSRC=%08x（匹配 LocalSSRC）。\n",
+                                peer_port, info.ssrc);
+                }
+                ++(sent ? after_pkts : baseline_pkts);
+                std::vector<uint8_t> annexb;
+                if (!dep.push(packet, annexb, err)) {
+                    ++depacketize_errors;
+                    continue;
+                }
+                for (int t : irap_types_in(annexb)) {
+                    (sent ? after_irap : baseline_irap).insert(t);
+                }
+            }
         }
     }
-    std::string derr;
-    hid->touch(scrctl::hid::kSurfaceMainTouchscreen, 0.5, 0.45, false, derr);
 
-    std::printf("\n基线 %d 秒：包 %ld，IRAP 类型:", baseline_s, baseline_pkts);
-    for (int t : baseline_idr) std::printf(" %d", t);
-    std::printf("\nPLI 后 %d 秒：包 %ld，IRAP 类型:", watch_s, after_pkts);
-    for (int t : after_idr) std::printf(" %d", t);
-    std::printf("\n");
-    if (after_pkts == 0) {
-        std::printf("判据不成立：观察窗里一个包都没有，画面没在动。\n");
+    if (!release.close(err)) {
+        std::fprintf(stderr, "释放触摸失败，无法正常结束本轮观察: %s\n", err.c_str());
+        return 1;
+    }
+    std::printf("\n基线 %d 秒：视频 RTP %ld，SR %ld，IRAP 类型:", baseline_s, baseline_pkts,
+                baseline_sr);
+    for (int t : baseline_irap) std::printf(" %d", t);
+    std::printf("\nPLI 后 %d 秒：视频 RTP %ld，SR %ld，IRAP 类型:", watch_s, after_pkts,
+                after_sr);
+    for (int t : after_irap) std::printf(" %d", t);
+    std::printf("\n视频拆包失败次数：%ld\n", depacketize_errors);
+    if (!sent) {
+        std::printf("本轮未发送 PLI，没有请求后观察结果。\n");
         return 2;
     }
-    if (!after_idr.empty()) {
-        std::printf("结论：PLI 之后的观察窗里出现了 IRAP —— 设备认 PLI，恢复可以走这条路。\n");
+    if (after_pkts == 0) {
+        std::printf("请求后未收到视频 RTP，无法判断关键帧响应；SR 本身不代表有新画面。\n");
+        return 2;
+    }
+    if (!after_irap.empty()) {
+        std::printf("请求后的接收窗口内观察到 IRAP；本轮没有同期对照，不能确定由 PLI 触发。\n");
     } else {
-        std::printf("结论：画面在动、包也在来，但 PLI 之后没有 IRAP —— 这条路不通，"
-                    "恢复要靠重起媒体会话。\n");
+        std::printf("请求后收到视频 RTP，但未观察到完整 IRAP NAL；不能据此判定设备不支持 PLI。\n");
     }
     return 0;
 }

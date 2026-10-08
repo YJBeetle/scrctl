@@ -272,6 +272,10 @@ bool Buttons::press(uint16_t usage_page, uint16_t usage_code, int hold_ms, std::
     return send(kButtonStateUp, usage_page, usage_code, err);
 }
 
+bool Buttons::release(uint16_t usage_page, uint16_t usage_code, std::string &err) {
+    return send(kButtonStateUp, usage_page, usage_code, err);
+}
+
 std::vector<std::vector<uint16_t>> text_reports(const std::string &text) {
     // usage 来自 USB-IF HID Usage Tables page 0x07，字符映射采用 US 键盘布局。
     // shifted 表示生成该字符需要先按左 Shift，再按对应的主键。

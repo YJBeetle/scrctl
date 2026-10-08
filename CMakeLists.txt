@@ -227,10 +227,10 @@ add_executable(rr_keepalive_probe tools/rr_keepalive_probe.cpp)
 target_link_libraries(rr_keepalive_probe PRIVATE scrctl_core CLI11::CLI11)
 
 add_executable(two_session_probe tools/two_session_probe.cpp)
-target_link_libraries(two_session_probe PRIVATE scrctl_core)
+target_link_libraries(two_session_probe PRIVATE scrctl_core CLI11::CLI11)
 
 add_executable(lease_renew_probe tools/lease_renew_probe.cpp)
-target_link_libraries(lease_renew_probe PRIVATE scrctl_core)
+target_link_libraries(lease_renew_probe PRIVATE scrctl_core CLI11::CLI11)
 
 add_executable(stream_probe tools/stream_probe.cpp)
 target_link_libraries(stream_probe PRIVATE scrctl_core)
@@ -242,28 +242,34 @@ add_executable(app_launch_probe tools/app_launch_probe.cpp)
 target_link_libraries(app_launch_probe PRIVATE scrctl_core CLI11::CLI11)
 
 add_executable(hid_probe tools/hid_probe.cpp)
-target_link_libraries(hid_probe PRIVATE scrctl_core)
+target_link_libraries(hid_probe PRIVATE scrctl_core CLI11::CLI11)
+target_include_directories(hid_probe PRIVATE tools)
 
 add_executable(hid_gate_probe tools/hid_gate_probe.cpp)
-target_link_libraries(hid_gate_probe PRIVATE scrctl_core)
+target_link_libraries(hid_gate_probe PRIVATE scrctl_core CLI11::CLI11)
+target_include_directories(hid_gate_probe PRIVATE tools)
 
 add_executable(wake_latency_probe tools/wake_latency_probe.cpp)
-target_link_libraries(wake_latency_probe PRIVATE scrctl_core)
+target_link_libraries(wake_latency_probe PRIVATE scrctl_core CLI11::CLI11)
+target_include_directories(wake_latency_probe PRIVATE tools)
 
 add_executable(pli_probe tools/pli_probe.cpp)
-target_link_libraries(pli_probe PRIVATE scrctl_core)
+target_link_libraries(pli_probe PRIVATE scrctl_core CLI11::CLI11)
+target_include_directories(pli_probe PRIVATE tools)
 
 add_executable(rtcp_probe tools/rtcp_probe.cpp)
 target_link_libraries(rtcp_probe PRIVATE scrctl_core)
 
 add_executable(lifetime_probe tools/lifetime_probe.cpp)
-target_link_libraries(lifetime_probe PRIVATE scrctl_core)
+target_link_libraries(lifetime_probe PRIVATE scrctl_core CLI11::CLI11)
+target_include_directories(lifetime_probe PRIVATE tools)
 
 add_executable(fir_probe tools/fir_probe.cpp)
 target_link_libraries(fir_probe PRIVATE scrctl_core)
 
 add_executable(restart_gap_probe tools/restart_gap_probe.cpp)
-target_link_libraries(restart_gap_probe PRIVATE scrctl_core)
+target_link_libraries(restart_gap_probe PRIVATE scrctl_core CLI11::CLI11)
+target_include_directories(restart_gap_probe PRIVATE tools)
 
 add_executable(bitrate_probe tools/bitrate_probe.cpp)
 target_link_libraries(bitrate_probe PRIVATE scrctl_core)
@@ -296,6 +302,23 @@ if(SCRCTL_BUILD_TESTS)
     endif()
 
     find_package(Python3 3.7 REQUIRED COMPONENTS Interpreter)
+    add_executable(probe_wait_test tests/probe_wait_test.cpp)
+    target_include_directories(probe_wait_test PRIVATE tools)
+    target_link_libraries(probe_wait_test PRIVATE CLI11::CLI11)
+    add_test(NAME probe_wait COMMAND probe_wait_test)
+    add_test(NAME pli_probe_cli COMMAND "${Python3_EXECUTABLE}"
+        "${PROJECT_SOURCE_DIR}/tests/pli_probe_cli_test.py" "$<TARGET_FILE:pli_probe>")
+    set_tests_properties(pli_probe_cli PROPERTIES TIMEOUT 30)
+    add_test(NAME lifecycle_probe_cli COMMAND "${Python3_EXECUTABLE}"
+        "${PROJECT_SOURCE_DIR}/tests/lifecycle_probe_cli_test.py"
+        "$<TARGET_FILE:wake_latency_probe>" "$<TARGET_FILE:hid_gate_probe>"
+        "$<TARGET_FILE:restart_gap_probe>" "$<TARGET_FILE:lease_renew_probe>"
+        "$<TARGET_FILE:lifetime_probe>" "$<TARGET_FILE:two_session_probe>")
+    # 六个真实可执行文件的参数边界共用一组回归；sanitizer 启动每个进程较慢。
+    set_tests_properties(lifecycle_probe_cli PROPERTIES TIMEOUT 90)
+    add_test(NAME hid_probe_cli COMMAND "${Python3_EXECUTABLE}"
+        "${PROJECT_SOURCE_DIR}/tests/hid_probe_cli_test.py" "$<TARGET_FILE:hid_probe>")
+    set_tests_properties(hid_probe_cli PROPERTIES TIMEOUT 30)
     add_test(NAME rr_probe_cli COMMAND "${Python3_EXECUTABLE}"
         "${PROJECT_SOURCE_DIR}/tests/rr_probe_cli_test.py" "$<TARGET_FILE:rr_keepalive_probe>")
     set_tests_properties(rr_probe_cli PROPERTIES TIMEOUT 30)

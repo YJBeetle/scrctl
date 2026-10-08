@@ -1,25 +1,13 @@
-// 探针：设备上能不能**同时**跑两条媒体会话。
+// 在同一设备连接中依次启动两条视频会话，观察它们是否同时继续发送。
 //
-// 为什么问这个：一条会话当时看起来是"起流后约 20 秒的硬租期"，喂画面和回 RTCP 都不续命
-// （docs §13）。所以镜像每 18 秒必须换一条会话，换的时候有约 0.4 秒没有新帧——画面在动的
-// 时候这是看得见的顿挫。唯一的消解办法是**先起新的、再停旧的**：如果两条会话能并存几秒，
-// 交接就可以做到不丢帧（新会话的第一个 IDR 一到就切过去，旧会话随后停掉）。
-//
-// 这个探针的问题本身后来被拆掉了：那 20 秒是我们在 `startmediastream` 请求里自己报的
-// `timeout`，报多长就活多长（docs §13 末）。但它的结论**仍然要留着**，因为它回答的是另一
-// 件事——"能不能先起新的再切"，答案是不能（第二次 startmediastream 会把第一条从设备表里
-// 顶掉）。这件事在长租期之下依然成立，只是现在几乎不需要换会话了。
-//
-// 判据用包计数，但**必须按时刻判**：窗口内计数 > 0 不够，因为一条已经被人顶掉的会话
-// 照样能交出几百个包——那是它从起流到那一刻攒在 socket 缓冲区里的欠账，不是活性。
-// 所以起 B 之前先把 A 收空（拿到基准线），窗口里只看"最后一个视频包落在哪"，后半段
-// 还在发才算并存。两条都有 = 可以并存，交接方案成立；第二条一起来第一条就断流 =
-// 设备一条隧道只给一条流，方案作废，那 0.4 秒的顿挫就得换个方式省（比如挪到画面本来
-// 就静止的时候做）。顺带对账两条会话的 RTP SSRC 和它们在设备会话表里的状态，用来区分
-// "两条独立的流抢一份资源"和"同一条流被复制了一份"。
-//
-// 用法：two_session_probe [--gap MS] [--verbose]
+// 本实验显式请求 3600 秒 RTCP 空闲超时且不发送 RR，以减少短超时对六秒并发观察的影响。
+// 20 秒并不是视频会话的固定寿命；正常产品的 RR 可以续期，不应据此预设定时更换会话。
+// 起 B 前先记录并排空 A 的接收数据；窗口末的近期视频、SSRC 和会话表状态共同参与判断。
+// 窗口前半段积存的包不能证明持续并存，第二次 RPC 失败也不能证明设备只允许一条流。
+// 本次观察只涵盖这台设备与当前配置，不直接证明可以无丢帧交接。
+#include "ProbeCli.h"
 #include <algorithm>
+#include <limits>
 #include <chrono>
 #include <cstdio>
 #include <memory>
@@ -127,15 +115,17 @@ void report(const char *label, const Counters &c, uint64_t base) {
 int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     int gap_ms = 1500;
-    bool verbose = false;
-    for (int i = 1; i < argc; ++i) {
-        const std::string a = argv[i];
-        if (a == "--gap" && i + 1 < argc) {
-            gap_ms = std::stoi(argv[++i]);
-        } else if (a == "-v" || a == "--verbose") {
-            verbose = true;
-        }
-    }
+    bool verbose = false, dry_run = false;
+    CLI::App app("观察同一连接中的两条视频会话是否并存");
+    app.add_option("--gap", gap_ms, "启动 B 前观察 A 的毫秒数（默认 1500）")->transform(scrctl::probe::decimal_integer(0, std::numeric_limits<int>::max()));
+    app.add_flag("-v,--verbose", verbose, "输出协议日志");
+    app.add_flag("--dry-run", dry_run, "只显示实验参数，不连接设备");
+    app.footer("需独占设备媒体服务：stopmediastream 使用 stopAll，会结束设备上的其它媒体会话。\n观察预算不包含连接、RPC 和停止媒体各自的协议时限。");
+    try { app.parse(argc, argv); }
+    catch (const CLI::CallForHelp &e) { return app.exit(e); }
+    catch (const CLI::ParseError &e) { std::fprintf(stderr, "参数错误：%s\n", e.what()); return 2; }
+    std::printf("实验参数：timeout=3600 秒，RR=off，gap_ms=%d，concurrent_ms=6000\n", gap_ms);
+    if (dry_run) { return 0; }
 
     std::string err;
     auto dev = scrctl::remote::Device::establish({}, err, verbose);
@@ -169,6 +159,7 @@ int main(int argc, char **argv) {
     };
 
     scrctl::media::StreamSession::Request req;
+    req.timeout_seconds = 3600;
     std::string e1;
     auto a = scrctl::media::StreamSession::start(*dev, req, e1, verbose);
     if (!a) {
@@ -197,10 +188,10 @@ int main(int argc, char **argv) {
     if (!b) {
         std::printf("  B 起不来（%llu ms）：%s\n",
                     static_cast<unsigned long long>(now_ms() - b_start), e2.c_str());
-        std::printf("结论：设备不接受第二条并发会话，无缝交接方案作废。\n");
+        std::fprintf(stderr, "第二条起流请求失败，本次无法判断视频会话能否并存。\n");
         std::string serr;
         a->stop(*dev, serr, verbose);
-        return 0;
+        return 1;
     }
     std::printf("  B 起流 RPC 用了 %llu ms（端口 %u）；接下来 6 秒两条轮流收\n",
                 static_cast<unsigned long long>(now_ms() - b_start), b->receiver_port());
@@ -216,10 +207,8 @@ int main(int argc, char **argv) {
     report("A", ca, b_start);
     report("B", cb, b_start);
 
-    // 两条会话各自的 UUID 在设备的会话表里还在不在。这决定"交接"到底可不可行：
-    // 若 A 被顶得连表里都没了，那第二次 startmediastream 是**替换**而不是并存，
-    // 换会话必然有一次断流；若 A 还在表里只是不发包，那还有一试的余地（比如它只是
-    // 把流改道到新端口，我们可以再把端口换回来）。
+    // 会话表为包计数提供独立证据。只看到旧会话消失不能量出交接丢帧时长，
+    // 只看到 UUID 仍在表中也不能证明它持续发送；结论需要与窗口末的视频活动结合。
     std::string aerr, berr2;
     const auto sa = scrctl::media::StreamSession::probe(*dev, a->started().session_uuid, aerr, verbose);
     const auto sb = scrctl::media::StreamSession::probe(*dev, b->started().session_uuid, berr2, verbose);
@@ -236,17 +225,23 @@ int main(int argc, char **argv) {
     const bool distinct = ca.ssrc != 0 && cb.ssrc != 0 && ca.ssrc != cb.ssrc;
     std::printf("判读：窗口末 A %s、B %s；SSRC%s。\n", a_still ? "仍在发" : "已停",
                 b_still ? "仍在发" : "已停", distinct ? "不同（真是两条流）" : "相同或为 0");
-    if (a_still && b_still) {
-        std::printf("结论：两条会话可以并存 —— 交接方案成立，先起新的、拿到 IDR 再切过去，"
-                    "旧的随后停掉，换会话做到不丢帧。\n");
+    const bool both_alive = sa == scrctl::media::StreamSession::ServerState::Alive &&
+                            sb == scrctl::media::StreamSession::ServerState::Alive;
+    const bool a_ended = sa == scrctl::media::StreamSession::ServerState::Ended;
+    const bool b_alive = sb == scrctl::media::StreamSession::ServerState::Alive;
+    bool conclusive = false;
+    if (a_still && b_still && distinct && both_alive) {
+        std::printf("本次观察：两条不同 SSRC 的会话均在表中且窗口末仍有视频；尚未验证无丢帧交接。\n");
+        conclusive = true;
+    } else if (!a_still && b_still && a_ended && b_alive) {
+        std::printf("本次观察：启动 B 后 A 已结束，B 继续发送；当前配置未观察到持续并存。\n");
+        conclusive = true;
     } else {
-        std::printf("结论：设备一条隧道只给一条流 —— 无缝交接不成立。换一次会话的瞎眼时间"
-                    "就是上面 B 那行的「首个 IDR」，只能另想办法藏（比如挪到画面本来就静止"
-                    "的时候做）。\n");
+        std::fprintf(stderr, "近期视频、SSRC 或会话表证据不足，本次无法判断持续并存。\n");
     }
 
     std::string serr;
-    a->stop(*dev, serr, verbose);
-    b->stop(*dev, serr, verbose);
-    return 0;
+    // stop() 发送 stopAll，一次即可停止当前设备的媒体；需要独占使用。
+    if (!b->stop(*dev, serr, verbose)) { std::fprintf(stderr, "stopAll 失败: %s\n", serr.c_str()); return 1; }
+    return conclusive ? 0 : 1;
 }

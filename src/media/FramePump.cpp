@@ -221,8 +221,8 @@ void FramePump::loop() {
 
     /// 丢包后优先用 12 字节 PLI 请求 IDR，再等待完整关键帧解码；重建作为后备。
     /// 真机 PLI 响应曾为 20–35 ms，重建会话 RPC 约 37–90 ms，另需等待首帧。
-    /// 不发送 FIR：当前设备实测 FIR 未生成 IDR，且影响 RTCP 租期保活，
-    /// 即使设备 socket 计数确认收到。详细对照见 docs/coredevice.md §13。
+    /// 产品继续使用已验证的 RR 保活和 PLI 恢复。早期错误构造的 FIR
+    /// 不能证明标准 FIR 不可用；标准 FIR 对照及验证范围见 docs/coredevice.md §30.3。
     auto request_keyframe = [&] {
         // 在所有提前返回之前记录本轮等待起点，包括探针禁止 PLI 的情况。
         // 后备超时从首次请求计算，不能使用每秒重发都会更新的 last_pli_ms_。
@@ -555,7 +555,7 @@ void FramePump::loop() {
         // 调度置于每轮循环，不能依赖读包超时，否则连续视频包会阻止发送。
         // 沿用真机验证的 32 字节裸 RR：发送者为 answer.RemoteSSRC，
         // 报告块指向设备 LocalSSRC，发至 sender.port（已验证与 SourcePort 一致）。
-        if (now_ms() >= next_rtcp_ms_) {
+        if (!options_.debug_suppress_rr && now_ms() >= next_rtcp_ms_) {
             next_rtcp_ms_ += kRtcpPeriodMs;
             const auto rr = scrctl::rt::build_rr(session_->started().remote_ssrc,
                                                  session_->started().local_ssrc,

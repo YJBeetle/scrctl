@@ -387,7 +387,7 @@ void test_rtcp_shapes() {
     // 正是建立在形状未经核对的包上——先把形状钉死，再去问设备。
     const auto pli = scrctl::rt::build_pli(our, media);
     check(pli.size() == 12, "PLI 是 12 字节: " + std::to_string(pli.size()));
-    check(pli[0] == 0x81 && pli[1] == 206, "PLI 首两字节 0x81 PT=206（RTPFB）/FMT=1");
+    check(pli[0] == 0x81 && pli[1] == 206, "PLI 首两字节 0x81 PT=206（PSFB）/FMT=1");
     check((pli[2] << 8 | pli[3]) == 2, "PLI 长度字段=2");
     check(pli.size() == std::size_t(4 + 2 * 4), "PLI 长度字段与真实字节数自洽");
     check(pli[4] == 0x11 && pli[11] == 0x88, "PLI 后面是发送者 SSRC + 媒体 SSRC");

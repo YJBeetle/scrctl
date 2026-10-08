@@ -77,6 +77,9 @@ public:
         bool debug_fail_any_keyframe = false;
         /// 首次注入解码失败后禁用后续 PLI，避免下一次正常 IDR 恢复掩盖后备重建路径。
         bool debug_suppress_pli_after_fail = false;
+        /// 仅供无反馈到期实验：禁止周期 RR，默认 false 保留生产保活。
+        /// 关闭自动重建不会关闭 RR；探针必须单独选择此项。
+        bool debug_suppress_rr = false;
     };
 
     struct Stats {
