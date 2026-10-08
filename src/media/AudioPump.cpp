@@ -404,7 +404,7 @@ void AudioPump::loop() {
 
         if (session_ == nullptr) {
             if (options_.recorder != nullptr) {
-                options_.recorder->fail("Audio session was recreated during container recording");
+                options_.recorder->fail(SCRCTL_TR("Audio session was recreated during container recording"));
             }
             std::string rerr;
             if (start_session(rerr)) {
@@ -447,7 +447,7 @@ void AudioPump::loop() {
                                                     perr, verbose_);
             if (state == StreamSession::ServerState::Ended) {
                 if (options_.recorder != nullptr) {
-                    options_.recorder->fail("Device ended the recorded audio session");
+                    options_.recorder->fail(SCRCTL_TR("Device ended the recorded audio session"));
                 }
                 std::fprintf(stderr, SCRCTL_TR("Audio: device session ended (%llu ms without audio); recreating session\n"),
                              static_cast<unsigned long long>(quiet));
@@ -544,7 +544,7 @@ void AudioPump::loop() {
             continue;
         }
         if (verdict == scrctl::rt::RtpSeq::Verdict::kGap && options_.recorder != nullptr) {
-            options_.recorder->fail("Audio packet loss ended container recording");
+            options_.recorder->fail(SCRCTL_TR("Audio packet loss ended container recording"));
         }
         // 当前 ELD 每包承载一帧（10 ms），不做重组或重传，只统计序号缺口。
         const auto payload = std::span<const uint8_t>(datagram).subspan(

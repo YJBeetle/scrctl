@@ -96,7 +96,7 @@ std::unique_ptr<FramePump> FramePump::start(remote::Device &device, const Option
                                             std::string &err, bool verbose) {
     auto pump = std::unique_ptr<FramePump>(new FramePump(device, options, verbose));
     if (options.recorder != nullptr && !options.record_path.empty()) {
-        err = "Raw HEVC and container recording cannot write to the same video pump";
+        err = SCRCTL_TR("Raw HEVC and container recording cannot write to the same video pump");
         return nullptr;
     }
     // 缺少解码后端时不建立设备媒体会话，避免占用设备资源。
@@ -222,7 +222,7 @@ void FramePump::write_recording_nal(std::span<const uint8_t> bytes) {
 bool FramePump::restart(std::string &err) {
     if (worker_running_ && options_.recorder != nullptr) {
         // 重建 RPC 可能失败，必须先封闭旧录制 epoch，再停止旧设备会话。
-        options_.recorder->fail("Video session was recreated during container recording");
+        options_.recorder->fail(SCRCTL_TR("Video session was recreated during container recording"));
     }
     /// 开始重建时标记恢复中，新会话首帧输出后清除，供调用方区分恢复和静止。
     reviving_ = true;
@@ -306,7 +306,7 @@ void FramePump::loop() {
     // 编译期能力检查拦截，此处仍保留防御检查。
     if (decoder == nullptr) {
         if (options_.recorder != nullptr) {
-            options_.recorder->fail("Video reception stopped because no decoder is available");
+            options_.recorder->fail(SCRCTL_TR("Video reception stopped because no decoder is available"));
         }
         std::fprintf(stderr, "%s", SCRCTL_TR(scrctl::kNoDecoderMessage));
         return;
@@ -376,7 +376,7 @@ void FramePump::loop() {
         }
         loss_seen_ = loss_now;
         if (options_.recorder != nullptr) {
-            options_.recorder->fail("Video packet loss or damaged payload ended container recording");
+            options_.recorder->fail(SCRCTL_TR("Video packet loss or damaged payload ended container recording"));
         }
         if (!need_keyframe_) {
             // 仅在进入关键帧等待状态时输出一次。
@@ -409,7 +409,7 @@ void FramePump::loop() {
                     }
                 }
                 if (!media_source || !unit.sampling_timestamp) {
-                    options_.recorder->fail("Complete video access unit has no bound sampling timestamp");
+                    options_.recorder->fail(SCRCTL_TR("Complete video access unit has no bound sampling timestamp"));
                 } else {
                     (void)options_.recorder->video(session_->started().session_uuid, *media_source,
                         *unit.sampling_timestamp, au, *vps, *sps, *pps);
@@ -933,7 +933,7 @@ void FramePump::loop() {
             const auto timestamp = sampling_clock.observe(nal.timestamp);
             if (!timestamp) {
                 if (options_.recorder != nullptr) {
-                    options_.recorder->fail("Video sampling timestamp became ambiguous");
+                    options_.recorder->fail(SCRCTL_TR("Video sampling timestamp became ambiguous"));
                 }
                 if (!need_keyframe_) {
                     std::fputs(SCRCTL_TR("Video sampling timestamp is ambiguous; discarding the access unit and requesting a keyframe.\n"), stderr);
@@ -950,12 +950,12 @@ void FramePump::loop() {
                     default: break;
                 }
                 if (previous != nullptr && !previous->empty() && *previous != nal.bytes) {
-                    options_.recorder->fail("HEVC parameters changed during container recording");
+                    options_.recorder->fail(SCRCTL_TR("HEVC parameters changed during container recording"));
                 }
             }
             if (!parser_->push_nal(std::move(nal.bytes), timestamp, nal.ends_access_unit)) {
                 if (options_.recorder != nullptr) {
-                    options_.recorder->fail("Video access-unit input became inconsistent");
+                    options_.recorder->fail(SCRCTL_TR("Video access-unit input became inconsistent"));
                 }
                 if (!need_keyframe_) {
                     std::fputs(SCRCTL_TR("Video access-unit input is inconsistent; discarding the access unit and requesting a keyframe.\n"), stderr);

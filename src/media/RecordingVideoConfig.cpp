@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "media/RecordingVideoConfig.h"
 
 #include <array>
@@ -71,21 +72,21 @@ RecordingVideoConfig inspect_recording_video_config(const Nal& vps, const Nal& s
     for (std::size_t i = 0; i < parameters.size(); ++i) {
         const auto nal = parameters[i];
         if (nal.size() > kMaxRecordingVideoParameterBytes - parameter_bytes) {
-            return failure(Status::Invalid, "HEVC parameter sets exceed the 1 MiB recording budget");
+            return failure(Status::Invalid, SCRCTL_TR("HEVC parameter sets exceed the 1 MiB recording budget"));
         }
         parameter_bytes += nal.size();
         if (!valid_header(nal, static_cast<uint8_t>(32 + i)) || !single_nal(nal)) {
             return failure(Status::Invalid,
-                           "Recording requires one complete raw VPS, SPS and PPS with valid NAL headers");
+                           SCRCTL_TR("Recording requires one complete raw VPS, SPS and PPS with valid NAL headers"));
         }
         const int layer = ((nal[0] & 1) << 5) | (nal[1] >> 3);
         if (layer != 0 || (nal[1] & 7) != 1) {
             return failure(Status::Unsupported,
-                           "Recording supports only HEVC base layer 0 and temporal ID 0");
+                           SCRCTL_TR("Recording supports only HEVC base layer 0 and temporal ID 0"));
         }
     }
     if (vps.size() < 4) {
-        return failure(Status::Invalid, "HEVC VPS is truncated before its layer configuration");
+        return failure(Status::Invalid, SCRCTL_TR("HEVC VPS is truncated before its layer configuration"));
     }
     // 这几个固定字段在 RBSP 开头，不涉及 profile_tier_level 或 Exp-Golomb。
     // VPS: 4-bit ID、两条 base-layer 标志、6-bit max_layers、3-bit max_sub_layers。
@@ -95,19 +96,19 @@ RecordingVideoConfig inspect_recording_video_config(const Nal& vps, const Nal& s
     const int sps_sub_layers = (sps[2] >> 1) & 7;
     if (vps_layers != 0 || vps_sub_layers != 0 || sps_sub_layers != 0) {
         return failure(Status::Unsupported,
-                       "Recording requires single-layer HEVC VPS/SPS temporal configurations");
+                       SCRCTL_TR("Recording requires single-layer HEVC VPS/SPS temporal configurations"));
     }
 
 #ifndef SCRCTL_HAVE_LIBAV
-    return failure(Status::Unsupported, "HEVC recording configuration checks require libavcodec");
+    return failure(Status::Unsupported, SCRCTL_TR("HEVC recording configuration checks require libavcodec"));
 #else
     const AVCodec* codec = avcodec_find_decoder_by_name("hevc");
     if (codec == nullptr) {
-        return failure(Status::Unsupported, "libavcodec has no software HEVC decoder");
+        return failure(Status::Unsupported, SCRCTL_TR("libavcodec has no software HEVC decoder"));
     }
     std::unique_ptr<AVCodecContext, ContextDeleter> context(avcodec_alloc_context3(codec));
     if (context == nullptr) {
-        return failure(Status::Unsupported, "Cannot allocate the HEVC configuration context");
+        return failure(Status::Unsupported, SCRCTL_TR("Cannot allocate the HEVC configuration context"));
     }
     context->thread_count = 1;
     context->err_recognition = AV_EF_EXPLODE;
@@ -116,7 +117,7 @@ RecordingVideoConfig inspect_recording_video_config(const Nal& vps, const Nal& s
     context->extradata = static_cast<uint8_t*>(
         av_mallocz(extradata_bytes + AV_INPUT_BUFFER_PADDING_SIZE));
     if (context->extradata == nullptr) {
-        return failure(Status::Unsupported, "Cannot allocate HEVC configuration extradata");
+        return failure(Status::Unsupported, SCRCTL_TR("Cannot allocate HEVC configuration extradata"));
     }
     context->extradata_size = static_cast<int>(extradata_bytes);
     auto* output = context->extradata;
@@ -132,33 +133,33 @@ RecordingVideoConfig inspect_recording_video_config(const Nal& vps, const Nal& s
     // 不设置修改选项、不提交图像、不访问 CBS 私有对象，也不解析日志。
     const AVBitStreamFilter* filter = av_bsf_get_by_name("hevc_metadata");
     if (filter == nullptr) {
-        return failure(Status::Unsupported, "libavcodec has no HEVC parameter syntax filter");
+        return failure(Status::Unsupported, SCRCTL_TR("libavcodec has no HEVC parameter syntax filter"));
     }
     AVBSFContext* allocated_filter = nullptr;
     const int allocated = av_bsf_alloc(filter, &allocated_filter);
     std::unique_ptr<AVBSFContext, FilterDeleter> syntax(allocated_filter);
     if (allocated < 0 || syntax == nullptr) {
-        return failure(Status::Unsupported, "Cannot allocate the HEVC parameter syntax filter");
+        return failure(Status::Unsupported, SCRCTL_TR("Cannot allocate the HEVC parameter syntax filter"));
     }
     const int copied = avcodec_parameters_from_context(syntax->par_in, context.get());
     if (copied < 0) {
-        return failure(Status::Unsupported, "Cannot copy HEVC parameter extradata: " + codec_error(copied));
+        return failure(Status::Unsupported, SCRCTL_TR("Cannot copy HEVC parameter extradata: ") + codec_error(copied));
     }
     const int checked = av_bsf_init(syntax.get());
     if (checked < 0) {
-        return failure(Status::Invalid, "Invalid HEVC recording parameter syntax: " + codec_error(checked));
+        return failure(Status::Invalid, SCRCTL_TR("Invalid HEVC recording parameter syntax: ") + codec_error(checked));
     }
     // BSF 的输出可能重新序列化参数；只使用检查状态，仍保留调用者的原始字节。
     syntax.reset();
     const int opened = avcodec_open2(context.get(), codec, nullptr);
     if (opened < 0) {
-        return failure(Status::Invalid, "Invalid HEVC recording parameter sets: " + codec_error(opened));
+        return failure(Status::Invalid, SCRCTL_TR("Invalid HEVC recording parameter sets: ") + codec_error(opened));
     }
     // 空或未解析配置也可能 open 成功且 has_b_frames 默认 0。必须先确认此 fresh
     // context 实际导出了尺寸和格式，不设置先验尺寸或 LOW_DELAY 去影响探测。
     if (context->width <= 0 || context->height <= 0 || context->pix_fmt == AV_PIX_FMT_NONE ||
         context->has_b_frames < 0) {
-        return failure(Status::Invalid, "HEVC decoder did not export a usable recording configuration");
+        return failure(Status::Invalid, SCRCTL_TR("HEVC decoder did not export a usable recording configuration"));
     }
     RecordingVideoConfig result;
     result.status = context->has_b_frames == 0 ? Status::NoReorder : Status::Reorder;

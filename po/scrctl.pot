@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-09 00:04+0800\n"
+"POT-Creation-Date: 2026-10-09 02:44+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -224,213 +224,213 @@ msgid ""
 "Record to .mkv (HEVC and audio); other extensions save raw HEVC without audio"
 msgstr ""
 
-#: src/app/Cli.cpp:43
+#: src/app/Cli.cpp:44
 msgid ""
 "Launch bundle ID; ? matches name prefix, + terminates the previous instance"
 msgstr ""
 
-#: src/app/Cli.cpp:44
+#: src/app/Cli.cpp:45
 msgid "Window title"
 msgstr ""
 
-#: src/app/Cli.cpp:45
+#: src/app/Cli.cpp:46
 msgid "SDL render driver, e.g. metal / software"
 msgstr ""
 
-#: src/app/Cli.cpp:47
+#: src/app/Cli.cpp:48
 msgid ""
 "display for live video (default), screenshot for polling; stream is an alias "
 "for display"
 msgstr ""
 
-#: src/app/Cli.cpp:49
+#: src/app/Cli.cpp:50
 msgid "Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"
 msgstr ""
 
-#: src/app/Cli.cpp:56
+#: src/app/Cli.cpp:57
 msgid "Inject home/lock/volup/voldn/mute"
 msgstr ""
 
-#: src/app/Cli.cpp:58
+#: src/app/Cli.cpp:59
 msgid "Inject ASCII text (device text field must have focus)"
 msgstr ""
 
-#: src/app/Cli.cpp:59
+#: src/app/Cli.cpp:60
 msgid "Force alternating video fallback and recovery at T1,T2,... seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:60
+#: src/app/Cli.cpp:61
 msgid "Write device clipboard and exit (supports Unicode)"
 msgstr ""
 
-#: src/app/Cli.cpp:62
+#: src/app/Cli.cpp:63
 msgid "List USB and RemotePairing devices; wireless scan defaults to 3 seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:64
+#: src/app/Cli.cpp:65
 msgid ""
 "Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"
 msgstr ""
 
-#: src/app/Cli.cpp:66
+#: src/app/Cli.cpp:67
 msgid "Disable input control"
 msgstr ""
 
-#: src/app/Cli.cpp:68
+#: src/app/Cli.cpp:69
 msgid "List device apps"
 msgstr ""
 
-#: src/app/Cli.cpp:69
+#: src/app/Cli.cpp:70
 msgid "Show version"
 msgstr ""
 
-#: src/app/Cli.cpp:70
+#: src/app/Cli.cpp:71
 msgid "Desktop fullscreen"
 msgstr ""
 
-#: src/app/Cli.cpp:71
+#: src/app/Cli.cpp:72
 msgid "Keep window on top"
 msgstr ""
 
-#: src/app/Cli.cpp:72
+#: src/app/Cli.cpp:73
 msgid "Borderless window"
 msgstr ""
 
-#: src/app/Cli.cpp:73
+#: src/app/Cli.cpp:74
 msgid "Prevent local screen sleep while running"
 msgstr ""
 
-#: src/app/Cli.cpp:74
+#: src/app/Cli.cpp:75
 msgid "Do not start audio stream"
 msgstr ""
 
-#: src/app/Cli.cpp:76
+#: src/app/Cli.cpp:77
 msgid "Keep audio playing on the phone while forwarding it to the computer"
 msgstr ""
 
-#: src/app/Cli.cpp:78
+#: src/app/Cli.cpp:79
 msgid "Receive and decode audio without local playback"
 msgstr ""
 
-#: src/app/Cli.cpp:79
+#: src/app/Cli.cpp:80
 msgid "Run without a window"
 msgstr ""
 
-#: src/app/Cli.cpp:80
+#: src/app/Cli.cpp:81
 msgid "Use platform hardware decoder; default: software"
 msgstr ""
 
-#: src/app/Cli.cpp:81
+#: src/app/Cli.cpp:82
 msgid "Print input coordinates"
 msgstr ""
 
-#: src/app/Cli.cpp:82
+#: src/app/Cli.cpp:83
 msgid "Add tunnel diagnostics to --stats"
 msgstr ""
 
-#: src/app/Cli.cpp:83
+#: src/app/Cli.cpp:84
 msgid "Print statistics every second"
 msgstr ""
 
-#: src/app/Cli.cpp:84
+#: src/app/Cli.cpp:85
 msgid "Read device clipboard; with --copy, read back after writing"
 msgstr ""
 
-#: src/app/Cli.cpp:87
+#: src/app/Cli.cpp:88
 msgid "Window horizontal position; integer or auto (default)"
 msgstr ""
 
-#: src/app/Cli.cpp:89
+#: src/app/Cli.cpp:90
 msgid "Window vertical position; integer or auto (default)"
 msgstr ""
 
-#: src/app/Cli.cpp:91
+#: src/app/Cli.cpp:92
 msgid ""
 "Shortcut modifiers, separated by commas: lctrl, rctrl, lalt, ralt, lsuper, "
 "rsuper; default: lalt,lsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:92
+#: src/app/Cli.cpp:93
 msgid "Window width; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:93
+#: src/app/Cli.cpp:94
 msgid "Window height; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:94
+#: src/app/Cli.cpp:95
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:96
+#: src/app/Cli.cpp:97
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr ""
 
-#: src/app/Cli.cpp:98
+#: src/app/Cli.cpp:99
 msgid "Exit after N frames; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:100
+#: src/app/Cli.cpp:101
 msgid "Finite positive scale; default: fit screen"
 msgstr ""
 
-#: src/app/Cli.cpp:104
+#: src/app/Cli.cpp:105
 msgid ""
 "Clockwise display rotation; auto follows the device; recording is unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:107
+#: src/app/Cli.cpp:108
 msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:109
+#: src/app/Cli.cpp:110
 msgid "Background color: RGB or RRGGBB, with optional #"
 msgstr ""
 
-#: src/app/Cli.cpp:110
+#: src/app/Cli.cpp:111
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr ""
 
-#: src/app/Cli.cpp:121 src/app/LiveSource.cpp:56
+#: src/app/Cli.cpp:122 src/app/LiveSource.cpp:56
 msgid ""
 "MKV recording requires live video; screenshot polling cannot be recorded"
 msgstr ""
 
-#: src/app/Cli.cpp:124
+#: src/app/Cli.cpp:125
 msgid "Use a manual LAN address; auto uses discovered SRV ports"
 msgstr ""
 
-#: src/app/Cli.cpp:135
+#: src/app/Cli.cpp:136
 msgid "Expected an integer or auto"
 msgstr ""
 
-#: src/app/Cli.cpp:155
+#: src/app/Cli.cpp:156
 msgid ""
 "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:166
+#: src/app/Cli.cpp:167
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr ""
 
-#: src/app/Cli.cpp:173
+#: src/app/Cli.cpp:174
 msgid "Requires a finite positive number"
 msgstr ""
 
-#: src/app/Cli.cpp:190
+#: src/app/Cli.cpp:191
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr ""
 
-#: src/app/Cli.cpp:199
+#: src/app/Cli.cpp:200
 msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
 msgstr ""
 
-#: src/app/Cli.cpp:213
+#: src/app/Cli.cpp:214
 msgid "Frame number must be a positive integer"
 msgstr ""
 
-#: src/app/Cli.cpp:218
+#: src/app/Cli.cpp:219
 msgid "Requires a window; incompatible with --no-window"
 msgstr ""
 
@@ -648,6 +648,10 @@ msgid ""
 "Failed to subscribe to display changes: %s (automatic rotation unavailable)\n"
 msgstr ""
 
+#: src/app/LiveSource.cpp:160 src/app/LiveSource.cpp:386
+msgid "Live video unavailable; recording stopped"
+msgstr ""
+
 #: src/app/LiveSource.cpp:165
 #, c-format
 msgid "Media stream unavailable: %s\n"
@@ -756,6 +760,10 @@ msgstr ""
 #: src/app/LiveSource.cpp:281
 msgid ""
 "No playable audio stream (disabled, failed to start, or unsupported build)"
+msgstr ""
+
+#: src/app/LiveSource.cpp:295
+msgid "Audio capture stopped before recording finished"
 msgstr ""
 
 #: src/app/LiveSource.cpp:315
@@ -1318,6 +1326,10 @@ msgstr ""
 msgid "Audio clock compensation failed: %s; continuing playback\n"
 msgstr ""
 
+#: src/media/AudioPump.cpp:407
+msgid "Audio session was recreated during container recording"
+msgstr ""
+
 #: src/media/AudioPump.cpp:415
 #, c-format
 msgid "Audio session recreated, receive port=%u\n"
@@ -1333,6 +1345,10 @@ msgstr ""
 msgid "Failed to recreate audio session: %s (retry in 1 second)\n"
 msgstr ""
 
+#: src/media/AudioPump.cpp:450
+msgid "Device ended the recorded audio session"
+msgstr ""
+
 #: src/media/AudioPump.cpp:452
 #, c-format
 msgid ""
@@ -1342,6 +1358,10 @@ msgstr ""
 #: src/media/AudioPump.cpp:480
 #, c-format
 msgid "Failed to send audio RTCP keepalive: %s\n"
+msgstr ""
+
+#: src/media/AudioPump.cpp:547
+msgid "Audio packet loss ended container recording"
 msgstr ""
 
 #: src/media/AudioPump.cpp:566
@@ -1393,6 +1413,10 @@ msgid ""
 "Install FFmpeg development packages and reconfigure the build.\n"
 msgstr ""
 
+#: src/media/FramePump.cpp:99
+msgid "Raw HEVC and container recording cannot write to the same video pump"
+msgstr ""
+
 #: src/media/FramePump.cpp:117
 msgid "Cannot open recording file "
 msgstr ""
@@ -1416,6 +1440,10 @@ msgstr ""
 msgid "Cannot write recording file "
 msgstr ""
 
+#: src/media/FramePump.cpp:225
+msgid "Video session was recreated during container recording"
+msgstr ""
+
 #: src/media/FramePump.cpp:240
 #, c-format
 msgid "Failed to stop previous video session (still attempting restart): %s\n"
@@ -1432,9 +1460,17 @@ msgstr ""
 msgid "Video session recreated, receive port=%u\n"
 msgstr ""
 
+#: src/media/FramePump.cpp:309
+msgid "Video reception stopped because no decoder is available"
+msgstr ""
+
 #: src/media/FramePump.cpp:354
 #, c-format
 msgid "Failed to send PLI: %s\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:379
+msgid "Video packet loss or damaged payload ended container recording"
 msgstr ""
 
 #: src/media/FramePump.cpp:383
@@ -1442,6 +1478,10 @@ msgstr ""
 msgid ""
 "Video packet loss or payload damage detected: requesting keyframe, wait "
 "limit %d ms\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:412
+msgid "Complete video access unit has no bound sampling timestamp"
 msgstr ""
 
 #: src/media/FramePump.cpp:434
@@ -1563,21 +1603,397 @@ msgstr ""
 msgid "Receive silence timeout"
 msgstr ""
 
-#: src/media/FramePump.cpp:913
+#: src/media/FramePump.cpp:905
 #, c-format
 msgid "Test: dropped video packet %d to inject a sequence gap\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:947
+#: src/media/FramePump.cpp:936
+msgid "Video sampling timestamp became ambiguous"
+msgstr ""
+
+#: src/media/FramePump.cpp:939
 msgid ""
 "Video sampling timestamp is ambiguous; discarding the access unit and "
 "requesting a keyframe.\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:969
+#: src/media/FramePump.cpp:953
+msgid "HEVC parameters changed during container recording"
+msgstr ""
+
+#: src/media/FramePump.cpp:958
+msgid "Video access-unit input became inconsistent"
+msgstr ""
+
+#: src/media/FramePump.cpp:961
 msgid ""
 "Video access-unit input is inconsistent; discarding the access unit and "
 "requesting a keyframe.\n"
+msgstr ""
+
+#: src/media/Recorder.cpp:106
+msgid "Recording failed"
+msgstr ""
+
+#: src/media/Recorder.cpp:128
+msgid "Recorder input exceeds its encoded-byte or event budget"
+msgstr ""
+
+#: src/media/Recorder.cpp:144
+msgid "Cannot allocate the Recorder input buffer"
+msgstr ""
+
+#: src/media/Recorder.cpp:153
+msgid "Recording media belongs to a missing or changed session"
+msgstr ""
+
+#: src/media/Recorder.cpp:177 src/media/Recorder.cpp:293
+msgid "Recording early sender-report budget exceeded"
+msgstr ""
+
+#: src/media/Recorder.cpp:187
+msgid "Recording sender report has no usable NTP/RTP clock"
+msgstr ""
+
+#: src/media/Recorder.cpp:209 src/media/Recorder.cpp:232
+msgid "Recording media source changed within the session"
+msgstr ""
+
+#: src/media/Recorder.cpp:213
+msgid "Recording media timestamps do not advance within the track"
+msgstr ""
+
+#: src/media/Recorder.cpp:236
+msgid "Recording HEVC parameter sets changed"
+msgstr ""
+
+#: src/media/Recorder.cpp:246
+msgid "Recording HEVC requires a no-reorder configuration"
+msgstr ""
+
+#: src/media/Recorder.cpp:266
+msgid "Recording track session was started again"
+msgstr ""
+
+#: src/media/Recorder.cpp:276
+msgid "Recording audio RTP timestamp has an ambiguous wrap or overflows"
+msgstr ""
+
+#: src/media/Recorder.cpp:314
+msgid "A selected recording track has no approved media"
+msgstr ""
+
+#: src/media/Recorder.cpp:319
+msgid "Cannot map the first recording packet from trusted sender reports"
+msgstr ""
+
+#: src/media/Recorder.cpp:341
+msgid "Recording time cannot be represented as nonnegative microseconds"
+msgstr ""
+
+#: src/media/Recorder.cpp:356
+msgid "Recording clock cannot map a packet within its SR/extrapolation budget"
+msgstr ""
+
+#: src/media/Recorder.cpp:362
+msgid "Recording audio duration is not positive after clock mapping"
+msgstr ""
+
+#: src/media/Recorder.cpp:449
+msgid "A selected recording track did not produce a completed packet"
+msgstr ""
+
+#: src/media/Recorder.cpp:454
+msgid "Recording waited too long for approved media or trusted sender reports"
+msgstr ""
+
+#: src/media/Recorder.cpp:458
+msgid "Recording worker could not process its input"
+msgstr ""
+
+#: src/media/Recorder.cpp:470
+msgid "MKV recording requires libavformat and libavcodec"
+msgstr ""
+
+#: src/media/Recorder.cpp:478
+msgid "Invalid Recorder path or bounded buffering/clock limits"
+msgstr ""
+
+#: src/media/Recorder.cpp:486
+msgid "Cannot create the recording worker"
+msgstr ""
+
+#: src/media/Recorder.cpp:500
+msgid "Recording track selection or session UUID is invalid"
+msgstr ""
+
+#: src/media/Recorder.cpp:512
+msgid "Recording session UUID is invalid"
+msgstr ""
+
+#: src/media/Recorder.cpp:517
+msgid "Recording HEVC AU is incomplete or exceeds the packet budget"
+msgstr ""
+
+#: src/media/Recorder.cpp:521
+msgid "Recording HEVC AU has an invalid or unsupported layer header"
+msgstr ""
+
+#: src/media/Recorder.cpp:525
+msgid "Recording HEVC AU is empty"
+msgstr ""
+
+#: src/media/Recorder.cpp:529
+msgid "Recording HEVC parameters exceed the configuration budget"
+msgstr ""
+
+#: src/media/Recorder.cpp:556
+msgid "Recording AAC-ELD track, session or payload is invalid"
+msgstr ""
+
+#: src/media/Recorder.cpp:572
+msgid "Recording sender-report track or session is invalid"
+msgstr ""
+
+#: src/media/RecordingClock.cpp:43
+msgid "Invalid recording clock limits"
+msgstr ""
+
+#: src/media/RecordingClock.cpp:55
+msgid "Sender report belongs to another media source"
+msgstr ""
+
+#: src/media/RecordingClock.cpp:57
+msgid "Sender report has no NTP clock"
+msgstr ""
+
+#: src/media/RecordingClock.cpp:60
+msgid "Sender report clock has an ambiguous wrap cycle"
+msgstr ""
+
+#: src/media/RecordingClock.cpp:71
+msgid "Sender report clocks do not advance together"
+msgstr ""
+
+#: src/media/RecordingClock.cpp:74
+msgid "Sender report clock gap exceeds the recording budget"
+msgstr ""
+
+#: src/media/RecordingClock.cpp:77
+msgid "Recording clock anchor limit reached"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:24
+msgid "Container recording requires libavformat and libavcodec"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:42 src/media/RecordingVideoConfig.cpp:107
+msgid "libavcodec has no software HEVC decoder"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:47
+msgid "Cannot allocate the HEVC recording context"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:57
+msgid "Cannot allocate HEVC recording extradata"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:71
+msgid "Cannot open the HEVC recording configuration: "
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:76
+msgid "Cannot export HEVC recording parameters: "
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:105
+msgid "Cannot allocate AAC-ELD recording extradata"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:150
+msgid "The recording file has already been closed"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:153
+msgid "This recording has no audio track"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:155
+msgid "Recording access unit is empty or exceeds the 16 MiB packet budget"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:160
+msgid "HEVC recording requires an Annex-B access unit"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:162
+msgid "This HEVC configuration requires equal recording PTS and DTS"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:165
+msgid "MP4 recording requires a known positive HEVC access unit duration"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:172
+msgid "Recording timestamps or duration are invalid or overflow"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:175
+msgid "Matroska recording requires a nonnegative common origin for both tracks"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:179
+msgid "Cannot allocate a recording packet: "
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:196
+msgid "Recording timestamps cannot be represented in the container time base"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:200
+msgid ""
+"Recording DTS must increase within each track and its container time base"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:210
+msgid "Recording sample duration or DTS interval exceeds the MP4 range"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:215
+msgid "Cannot write a recording packet: "
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:216
+msgid "Cannot write the recording file"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:228
+msgid "Cannot finish the recording container: "
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:229
+msgid "Cannot finish the recording file"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:233
+msgid "Cannot flush the recording file"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:235
+msgid "Cannot close the recording file: "
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:275
+msgid "Recording requires a nonempty local file path without NUL bytes"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:282
+msgid "Unsupported recording container format"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:287
+msgid ""
+"AAC-ELD recording supports only 48 kHz stereo with 480 or 512 samples per "
+"packet"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:293
+msgid "Recording HEVC with frame reordering is not supported"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:294
+msgid "Cannot validate the HEVC recording configuration: "
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:302
+msgid "Cannot allocate the recording container: "
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:315
+msgid "Cannot allocate the HEVC recording track"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:328
+msgid "Cannot allocate the AAC-ELD recording track"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:339
+msgid "Cannot allocate the recording packet"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:346
+msgid "Cannot restrict recording output to local files: "
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:352
+msgid "Cannot open the recording file: "
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:358
+msgid "Cannot write the recording header: "
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:362
+msgid "Cannot write the recording header"
+msgstr ""
+
+#: src/media/RecordingVideoConfig.cpp:75
+msgid "HEVC parameter sets exceed the 1 MiB recording budget"
+msgstr ""
+
+#: src/media/RecordingVideoConfig.cpp:80
+msgid ""
+"Recording requires one complete raw VPS, SPS and PPS with valid NAL headers"
+msgstr ""
+
+#: src/media/RecordingVideoConfig.cpp:85
+msgid "Recording supports only HEVC base layer 0 and temporal ID 0"
+msgstr ""
+
+#: src/media/RecordingVideoConfig.cpp:89
+msgid "HEVC VPS is truncated before its layer configuration"
+msgstr ""
+
+#: src/media/RecordingVideoConfig.cpp:99
+msgid "Recording requires single-layer HEVC VPS/SPS temporal configurations"
+msgstr ""
+
+#: src/media/RecordingVideoConfig.cpp:103
+msgid "HEVC recording configuration checks require libavcodec"
+msgstr ""
+
+#: src/media/RecordingVideoConfig.cpp:111
+msgid "Cannot allocate the HEVC configuration context"
+msgstr ""
+
+#: src/media/RecordingVideoConfig.cpp:120
+msgid "Cannot allocate HEVC configuration extradata"
+msgstr ""
+
+#: src/media/RecordingVideoConfig.cpp:136
+msgid "libavcodec has no HEVC parameter syntax filter"
+msgstr ""
+
+#: src/media/RecordingVideoConfig.cpp:142
+msgid "Cannot allocate the HEVC parameter syntax filter"
+msgstr ""
+
+#: src/media/RecordingVideoConfig.cpp:146
+msgid "Cannot copy HEVC parameter extradata: "
+msgstr ""
+
+#: src/media/RecordingVideoConfig.cpp:150
+msgid "Invalid HEVC recording parameter syntax: "
+msgstr ""
+
+#: src/media/RecordingVideoConfig.cpp:156
+msgid "Invalid HEVC recording parameter sets: "
+msgstr ""
+
+#: src/media/RecordingVideoConfig.cpp:162
+msgid "HEVC decoder did not export a usable recording configuration"
 msgstr ""
 
 #: src/media/ScreenshotSource.cpp:38

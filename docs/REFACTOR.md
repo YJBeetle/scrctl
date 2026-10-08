@@ -3,7 +3,7 @@
 scrctl 是独立产品，也是设备协议与恢复行为的验证项目。MaaFramework 后续倾向于
 参考验证过的实现独立接入；本轮不引入公共 SDK、稳定 C ABI 或插件机制。
 
-## 原讨论清单状态（2026-10-08）
+## 原讨论清单状态（2026-10-09）
 
 | 项目 | 当前状态 | 剩余工作 |
 | --- | --- | --- |
@@ -17,6 +17,7 @@ scrctl 是独立产品，也是设备协议与恢复行为的验证项目。MaaF
 | 配对密码运算 | HKDF、SRP 摘要和 Ed25519 使用 OpenSSL；正式 M6/M2 已校验并保存设备原始标识和长期公钥 | USB 新建配对保存/重连、严格 Wi-Fi 身份校验及隧道/RSD 已通过；旧记录缺设备身份须 USB 重配，其他设备版本待验证 |
 | 恢复策略和旧 review 问题 | 可追溯旧项已逐项复查，线程信息和剪贴板边界本轮补修 | 长时间、物理断线和真实无线重连仍待验证，具体结论见下表 |
 | 注释与命令行文案 | 主要模块注释已整理；应用、核心输出及十个常用诊断工具支持 en / zh-CN / auto，默认跟随 locale | 归档实验、零散注释与历史文档继续整理 |
+| 容器录制 | MKV 已接入公共时钟及解码前 HEVC / AAC 原包；Mac USB 音视频短测和跨平台离线检查通过 | MP4 接入、物理音画同步、Windows / Wi-Fi 录制及长时间运行继续验证 |
 | MaaFramework | 按用户安排暂缓 | 后续参考 scrctl 验证过的实现，当前未修改 MaaFramework |
 
 XPC、OPACK、Apple 配对和控制语义、SRP 的 Apple 适配、Deflate 小工具暂时保留。
@@ -1740,3 +1741,21 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   这不是输入容器的重复 DTS。
 - 本轮不代表物理声画同步、默认 mode 10 录制、Windows / Wi-Fi 录制和长时运行
   已验收。独立审查、完整捕获和 USB 短测证据归档至仓库外夹具的 `recorder/`。
+
+## 第一百零一轮：录制诊断本地化及安装包回归
+
+- Recorder、RecordingMuxer、RecordingClock 和 RecordingVideoConfig 的项目诊断，
+  以及媒体泵和 LiveSource 的录制失败提示，接入既有 gettext 目录；新增 103 条中文
+  翻译。保留 FFmpeg 和系统提供的原始错误详情，未改变时钟、封装和错误处理流程。
+- 翻译目录检查、相关核心和应用构建、五项相关 CTest 通过；实际模块的 en / zh-CN
+  检查覆盖参数错误、来源错误、文件打开失败和 worker 收尾失败。无 libavformat
+  构建也验证了两种语言的依赖提示。本轮无需真机操作。
+- 前一轮准确提交 `826668a` 的 GitHub CI 四个任务各通过 51 项测试；Mac、Windows
+  和 sanitizer 的完整日志确认 Recorder 340 项、Muxer 1195 项内部检查无失败。
+  Ubuntu 日志未提供内部计数，不将 CTest 成功扩写为直接读取了这些计数。
+- Windows 实际产物包含 98 个 ARM64 DLL，新增 libavformat 及 14 个传递依赖，
+  所有非系统导入闭合；源码归档与准确提交的 289 个文件一致。CI 搬移后的独立目录
+  启动及语言选择通过。Mac 搬移检查包含 25 个 dylib 路径条目、签名、dyld 和语言；
+  最低系统版本仍为 macOS 15.0。这些结果不代替 Windows 真机录制验收。
+- 证据：本地夹具的 `recorder/ci-826668a.json`，以及
+  `/private/tmp/scrctl-recording-localization-20261009/`。

@@ -157,7 +157,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
         // 其他错误保留原失败结果，例如会话被占用；用户也可显式选择截图模式。
         const bool version_gate = err.find("requires iOS") != std::string::npos;
         if (version_gate || force_screenshot) {
-            if (recorder_ != nullptr) recorder_->fail("Live video unavailable; recording stopped");
+            if (recorder_ != nullptr) recorder_->fail(SCRCTL_TR("Live video unavailable; recording stopped"));
             const std::string stream_err = err;
             std::string serr;
             if (start_screenshot(/*capture_first=*/true, serr)) {
@@ -231,7 +231,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     }
     if (want_audio && screenshot_.source == nullptr) {
         if (!scrctl::kHaveAudioDecoder) {
-            if (recorder_ != nullptr) recorder_->fail(scrctl::kNoAudioDecoderMessage);
+            if (recorder_ != nullptr) recorder_->fail(SCRCTL_TR(scrctl::kNoAudioDecoderMessage));
             std::fprintf(stderr, "%s\n", SCRCTL_TR(scrctl::kNoAudioDecoderMessage));
         } else {
             scrctl::media::AudioPump::Options ao;
@@ -292,7 +292,7 @@ void LiveSource::abandon_audio() {
     // 先关闭回调，确保它不再持有随后销毁的 AudioPump。
     audio_out_.close();
     if (audio_ != nullptr && recorder_ != nullptr) {
-        recorder_->fail("Audio capture stopped before recording finished");
+        recorder_->fail(SCRCTL_TR("Audio capture stopped before recording finished"));
     }
     audio_.reset();
 }
@@ -383,7 +383,7 @@ void LiveSource::update_picture_source() {
         screenshot_.source != nullptr, since_failure);
     switch (action) {
     case scrctl::app::SourcePick::kToShot: {
-        if (recorder_ != nullptr) recorder_->fail("Live video unavailable; recording stopped");
+        if (recorder_ != nullptr) recorder_->fail(SCRCTL_TR("Live video unavailable; recording stopped"));
         std::string err;
         // 运行中切换异步取首张，窗口继续显示最后一帧；启动时则同步取得尺寸。
         if (start_screenshot(/*capture_first=*/false, err)) {

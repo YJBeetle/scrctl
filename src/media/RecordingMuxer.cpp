@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "media/RecordingMuxer.h"
 
 #include "media/RecordingVideoConfig.h"
@@ -20,7 +21,7 @@ extern "C" {
 
 namespace scrctl::media {
 namespace {
-[[maybe_unused]] constexpr const char* unavailable = "Container recording requires libavformat and libavcodec";
+[[maybe_unused]] constexpr const char* unavailable = SCRCTL_N_("Container recording requires libavformat and libavcodec");
 
 #ifdef SCRCTL_HAVE_LIBAVFORMAT
 std::string libav_error(int code) {
@@ -38,12 +39,12 @@ bool video_parameters(AVCodecParameters* output, const RecordingMuxer::Options& 
                       std::string& error) {
     const AVCodec* codec = avcodec_find_decoder_by_name("hevc");
     if (codec == nullptr) {
-        error = "libavcodec has no software HEVC decoder";
+        error = SCRCTL_TR("libavcodec has no software HEVC decoder");
         return false;
     }
     std::unique_ptr<AVCodecContext, ContextDeleter> context(avcodec_alloc_context3(codec));
     if (context == nullptr) {
-        error = "Cannot allocate the HEVC recording context";
+        error = SCRCTL_TR("Cannot allocate the HEVC recording context");
         return false;
     }
     context->thread_count = 1;
@@ -53,7 +54,7 @@ bool video_parameters(AVCodecParameters* output, const RecordingMuxer::Options& 
     const std::size_t size = options.vps.size() + options.sps.size() + options.pps.size() + 12;
     context->extradata = static_cast<uint8_t*>(av_mallocz(size + AV_INPUT_BUFFER_PADDING_SIZE));
     if (context->extradata == nullptr) {
-        error = "Cannot allocate HEVC recording extradata";
+        error = SCRCTL_TR("Cannot allocate HEVC recording extradata");
         return false;
     }
     context->extradata_size = static_cast<int>(size);
@@ -67,12 +68,12 @@ bool video_parameters(AVCodecParameters* output, const RecordingMuxer::Options& 
     }
     const int opened = avcodec_open2(context.get(), codec, nullptr);
     if (opened < 0) {
-        error = "Cannot open the HEVC recording configuration: " + libav_error(opened);
+        error = SCRCTL_TR("Cannot open the HEVC recording configuration: ") + libav_error(opened);
         return false;
     }
     const int copied = avcodec_parameters_from_context(output, context.get());
     if (copied < 0) {
-        error = "Cannot export HEVC recording parameters: " + libav_error(copied);
+        error = SCRCTL_TR("Cannot export HEVC recording parameters: ") + libav_error(copied);
         return false;
     }
     return true;
@@ -101,7 +102,7 @@ bool audio_parameters(AVCodecParameters* output, const RecordingMuxer::Audio& au
         0xf8, 0xe6, static_cast<uint8_t>(audio.frame_samples == 480 ? 0x50 : 0x40), 0x00};
     output->extradata = static_cast<uint8_t*>(av_mallocz(asc.size() + AV_INPUT_BUFFER_PADDING_SIZE));
     if (output->extradata == nullptr) {
-        error = "Cannot allocate AAC-ELD recording extradata";
+        error = SCRCTL_TR("Cannot allocate AAC-ELD recording extradata");
         return false;
     }
     std::memcpy(output->extradata, asc.data(), asc.size());
@@ -146,36 +147,36 @@ struct RecordingMuxer::Impl {
         error.clear();
         if (!first_error.empty()) return fail(first_error, error);
         if (closed) {
-            error = "The recording file has already been closed";
+            error = SCRCTL_TR("The recording file has already been closed");
             return false;
         }
-        if (stream == nullptr) return fail("This recording has no audio track", error);
+        if (stream == nullptr) return fail(SCRCTL_TR("This recording has no audio track"), error);
         if (bytes.empty() || bytes.size() > kMaxRecordingMuxerPacketBytes) {
-            return fail("Recording access unit is empty or exceeds the 16 MiB packet budget", error);
+            return fail(SCRCTL_TR("Recording access unit is empty or exceeds the 16 MiB packet budget"), error);
         }
         if (is_video) {
             const bool annex_b = bytes.size() >= 4 && bytes[0] == 0 && bytes[1] == 0 &&
                 (bytes[2] == 1 || (bytes[2] == 0 && bytes[3] == 1));
-            if (!annex_b) return fail("HEVC recording requires an Annex-B access unit", error);
+            if (!annex_b) return fail(SCRCTL_TR("HEVC recording requires an Annex-B access unit"), error);
             if (timing.pts_us != timing.dts_us) {
-                return fail("This HEVC configuration requires equal recording PTS and DTS", error);
+                return fail(SCRCTL_TR("This HEVC configuration requires equal recording PTS and DTS"), error);
             }
             if (format == Format::Mp4 && timing.duration_us == 0) {
-                return fail("MP4 recording requires a known positive HEVC access unit duration", error);
+                return fail(SCRCTL_TR("MP4 recording requires a known positive HEVC access unit duration"), error);
             }
         }
         if (timing.pts_us == AV_NOPTS_VALUE || timing.dts_us == AV_NOPTS_VALUE ||
             timing.duration_us < 0 || (!is_video && timing.duration_us == 0) ||
             timing.pts_us > std::numeric_limits<int64_t>::max() - timing.duration_us ||
             timing.dts_us > std::numeric_limits<int64_t>::max() - timing.duration_us) {
-            return fail("Recording timestamps or duration are invalid or overflow", error);
+            return fail(SCRCTL_TR("Recording timestamps or duration are invalid or overflow"), error);
         }
         if (format == Format::Matroska && (timing.pts_us < 0 || timing.dts_us < 0)) {
-            return fail("Matroska recording requires a nonnegative common origin for both tracks", error);
+            return fail(SCRCTL_TR("Matroska recording requires a nonnegative common origin for both tracks"), error);
         }
         av_packet_unref(packet);
         const int allocated = av_new_packet(packet, static_cast<int>(bytes.size()));
-        if (allocated < 0) return fail("Cannot allocate a recording packet: " + libav_error(allocated), error);
+        if (allocated < 0) return fail(SCRCTL_TR("Cannot allocate a recording packet: ") + libav_error(allocated), error);
         std::memcpy(packet->data, bytes.data(), bytes.size());
         packet->stream_index = stream->index;
         packet->pts = timing.pts_us;
@@ -192,11 +193,11 @@ struct RecordingMuxer::Impl {
             packet->pts > std::numeric_limits<int64_t>::max() - packet->duration ||
             packet->dts > std::numeric_limits<int64_t>::max() - packet->duration) {
             av_packet_unref(packet);
-            return fail("Recording timestamps cannot be represented in the container time base", error);
+            return fail(SCRCTL_TR("Recording timestamps cannot be represented in the container time base"), error);
         }
         if (last_dts.has_value() && packet->dts <= *last_dts) {
             av_packet_unref(packet);
-            return fail("Recording DTS must increase within each track and its container time base", error);
+            return fail(SCRCTL_TR("Recording DTS must increase within each track and its container time base"), error);
         }
         // movenc 的 sample duration 使用有符号 32 位差值；超限应明确失败，
         // 不能让未知时长或极大时间间隔在写 trailer 时触发库内部断言。
@@ -206,13 +207,13 @@ struct RecordingMuxer::Impl {
               *last_dts <= std::numeric_limits<int64_t>::max() - std::numeric_limits<int>::max() &&
               packet->dts > *last_dts + std::numeric_limits<int>::max()))) {
             av_packet_unref(packet);
-            return fail("Recording sample duration or DTS interval exceeds the MP4 range", error);
+            return fail(SCRCTL_TR("Recording sample duration or DTS interval exceeds the MP4 range"), error);
         }
         const int64_t written_dts = packet->dts;
         const int written = av_interleaved_write_frame(context, packet);
         av_packet_unref(packet);
-        if (written < 0) remember("Cannot write a recording packet: " + libav_error(written));
-        check_io("Cannot write the recording file");
+        if (written < 0) remember(SCRCTL_TR("Cannot write a recording packet: ") + libav_error(written));
+        check_io(SCRCTL_TR("Cannot write the recording file"));
         if (!first_error.empty()) return fail(first_error, error);
         last_dts = written_dts;
         return true;
@@ -224,14 +225,14 @@ struct RecordingMuxer::Impl {
         if (!closed) {
             if (context != nullptr && header_written) {
                 const int trailer = av_write_trailer(context);
-                if (trailer < 0) remember("Cannot finish the recording container: " + libav_error(trailer));
-                check_io("Cannot finish the recording file");
+                if (trailer < 0) remember(SCRCTL_TR("Cannot finish the recording container: ") + libav_error(trailer));
+                check_io(SCRCTL_TR("Cannot finish the recording file"));
             }
             if (context != nullptr && context->pb != nullptr) {
                 avio_flush(context->pb);
-                check_io("Cannot flush the recording file");
+                check_io(SCRCTL_TR("Cannot flush the recording file"));
                 const int closed_io = avio_closep(&context->pb);
-                if (closed_io < 0) remember("Cannot close the recording file: " + libav_error(closed_io));
+                if (closed_io < 0) remember(SCRCTL_TR("Cannot close the recording file: ") + libav_error(closed_io));
             }
             av_packet_free(&packet);
             avformat_free_context(context);
@@ -241,7 +242,7 @@ struct RecordingMuxer::Impl {
         }
 #else
         closed = true;
-        if (first_error.empty()) first_error = unavailable;
+        if (first_error.empty()) first_error = SCRCTL_TR(unavailable);
 #endif
         error = first_error;
         return first_error.empty();
@@ -267,30 +268,30 @@ std::unique_ptr<RecordingMuxer> RecordingMuxer::open(const Options& options, std
     error.clear();
 #ifndef SCRCTL_HAVE_LIBAVFORMAT
     (void)options;
-    error = unavailable;
+    error = SCRCTL_TR(unavailable);
     return nullptr;
 #else
     if (options.path.empty() || options.path.find('\0') != std::string::npos) {
-        error = "Recording requires a nonempty local file path without NUL bytes";
+        error = SCRCTL_TR("Recording requires a nonempty local file path without NUL bytes");
         return nullptr;
     }
     const char* format = nullptr;
     switch (options.format) {
         case Format::Mp4: format = "mp4"; break;
         case Format::Matroska: format = "matroska"; break;
-        default: error = "Unsupported recording container format"; return nullptr;
+        default: error = SCRCTL_TR("Unsupported recording container format"); return nullptr;
     }
     if (options.audio.has_value() &&
         (options.audio->sample_rate != 48000 || options.audio->channels != 2 ||
          (options.audio->frame_samples != 480 && options.audio->frame_samples != 512))) {
-        error = "AAC-ELD recording supports only 48 kHz stereo with 480 or 512 samples per packet";
+        error = SCRCTL_TR("AAC-ELD recording supports only 48 kHz stereo with 480 or 512 samples per packet");
         return nullptr;
     }
     const auto checked = inspect_recording_video_config(options.vps, options.sps, options.pps);
     if (!checked.permits_equal_dts_pts()) {
         error = checked.status == RecordingVideoConfig::Status::Reorder
-            ? "Recording HEVC with frame reordering is not supported"
-            : "Cannot validate the HEVC recording configuration: " + checked.error;
+            ? SCRCTL_TR("Recording HEVC with frame reordering is not supported")
+            : SCRCTL_TR("Cannot validate the HEVC recording configuration: ") + checked.error;
         return nullptr;
     }
     auto result = std::unique_ptr<RecordingMuxer>(new RecordingMuxer(std::make_unique<Impl>()));
@@ -298,7 +299,7 @@ std::unique_ptr<RecordingMuxer> RecordingMuxer::open(const Options& options, std
     impl.format = options.format;
     const int allocated = avformat_alloc_output_context2(&impl.context, nullptr, format, options.path.c_str());
     if (allocated < 0 || impl.context == nullptr) {
-        impl.fail("Cannot allocate the recording container: " + libav_error(allocated), error);
+        impl.fail(SCRCTL_TR("Cannot allocate the recording container: ") + libav_error(allocated), error);
         return nullptr;
     }
 #ifdef AVFMT_AVOID_NEG_TS_DISABLED
@@ -311,7 +312,7 @@ std::unique_ptr<RecordingMuxer> RecordingMuxer::open(const Options& options, std
     impl.context->max_interleave_delta = 100000;
     impl.video = avformat_new_stream(impl.context, nullptr);
     if (impl.video == nullptr) {
-        impl.fail("Cannot allocate the HEVC recording track", error);
+        impl.fail(SCRCTL_TR("Cannot allocate the HEVC recording track"), error);
         return nullptr;
     }
     if (!video_parameters(impl.video->codecpar, options, error)) {
@@ -324,7 +325,7 @@ std::unique_ptr<RecordingMuxer> RecordingMuxer::open(const Options& options, std
     if (options.audio.has_value()) {
         impl.audio = avformat_new_stream(impl.context, nullptr);
         if (impl.audio == nullptr) {
-            impl.fail("Cannot allocate the AAC-ELD recording track", error);
+            impl.fail(SCRCTL_TR("Cannot allocate the AAC-ELD recording track"), error);
             return nullptr;
         }
         if (!audio_parameters(impl.audio->codecpar, *options.audio, error)) {
@@ -335,30 +336,30 @@ std::unique_ptr<RecordingMuxer> RecordingMuxer::open(const Options& options, std
     }
     impl.packet = av_packet_alloc();
     if (impl.packet == nullptr) {
-        impl.fail("Cannot allocate the recording packet", error);
+        impl.fail(SCRCTL_TR("Cannot allocate the recording packet"), error);
         return nullptr;
     }
     AVDictionary* io_options = nullptr;
     const int limited = av_dict_set(&io_options, "protocol_whitelist", "file", 0);
     if (limited < 0) {
         av_dict_free(&io_options);
-        impl.fail("Cannot restrict recording output to local files: " + libav_error(limited), error);
+        impl.fail(SCRCTL_TR("Cannot restrict recording output to local files: ") + libav_error(limited), error);
         return nullptr;
     }
     const int opened = avio_open2(&impl.context->pb, options.path.c_str(), AVIO_FLAG_WRITE, nullptr, &io_options);
     av_dict_free(&io_options);
     if (opened < 0) {
-        impl.fail("Cannot open the recording file: " + libav_error(opened), error);
+        impl.fail(SCRCTL_TR("Cannot open the recording file: ") + libav_error(opened), error);
         return nullptr;
     }
     // 普通 MP4 保留完整 AAC roll sample groups；不通过分片或关闭 edit list
     // 绕过尾帧/priming 约束。未知视频时长在 write 前明确拒绝，由调用方处理。
     const int header = avformat_write_header(impl.context, nullptr);
-    if (header < 0) impl.remember("Cannot write the recording header: " + libav_error(header));
+    if (header < 0) impl.remember(SCRCTL_TR("Cannot write the recording header: ") + libav_error(header));
     impl.header_written = header >= 0;
     // 部分协议使用缓冲写入。显式 flush 才能在 open 阶段识别真正的头部 I/O 失败。
     avio_flush(impl.context->pb);
-    impl.check_io("Cannot write the recording header");
+    impl.check_io(SCRCTL_TR("Cannot write the recording header"));
     if (!impl.first_error.empty()) {
         error = impl.first_error;
         return nullptr;
@@ -373,7 +374,7 @@ bool RecordingMuxer::write_video(std::span<const uint8_t> bytes, Timing timing,
     return impl_->write(bytes, timing, impl_->video, impl_->video_dts, true, keyframe, error);
 #else
     (void)bytes; (void)timing; (void)keyframe;
-    return impl_->fail(unavailable, error);
+    return impl_->fail(SCRCTL_TR(unavailable), error);
 #endif
 }
 
@@ -382,7 +383,7 @@ bool RecordingMuxer::write_audio(std::span<const uint8_t> bytes, Timing timing, 
     return impl_->write(bytes, timing, impl_->audio, impl_->audio_dts, false, true, error);
 #else
     (void)bytes; (void)timing;
-    return impl_->fail(unavailable, error);
+    return impl_->fail(SCRCTL_TR(unavailable), error);
 #endif
 }
 

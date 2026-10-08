@@ -1,3 +1,4 @@
+#include "i18n/Translation.h"
 #include "media/RecordingClock.h"
 #include "rt/RtpTimestamp.h"
 
@@ -39,7 +40,7 @@ RecordingClock::RecordingClock(uint32_t source, uint64_t reference, Limits limit
     : source_(source), reference_(reference), limits_(limits) {
     if (limits_.boundary_extrapolation.count() < 0 || limits_.report_gap.count() <= 0 ||
         limits_.anchors < 2) {
-        error_ = "Invalid recording clock limits";
+        error_ = SCRCTL_TR("Invalid recording clock limits");
     }
 }
 
@@ -51,12 +52,12 @@ RecordingClock::ReportResult RecordingClock::fail(std::string_view reason) {
 RecordingClock::ReportResult RecordingClock::add_report(const rt::SenderReport& report,
                                                         int64_t media_reference) {
     if (!error_.empty()) return ReportResult::Error;
-    if (report.ssrc != source_) return fail("Sender report belongs to another media source");
+    if (report.ssrc != source_) return fail(SCRCTL_TR("Sender report belongs to another media source"));
     const uint64_t ntp = (uint64_t{report.ntp_seconds} << 32) | report.ntp_fraction;
-    if (ntp == 0) return fail("Sender report has no NTP clock");
+    if (ntp == 0) return fail(SCRCTL_TR("Sender report has no NTP clock"));
     const auto ticks = rt::RtpTimestamp::nearest(report.rtp_timestamp, media_reference);
     const auto time = relative_us(ntp, reference_);
-    if (!ticks || !time) return fail("Sender report clock has an ambiguous wrap cycle");
+    if (!ticks || !time) return fail(SCRCTL_TR("Sender report clock has an ambiguous wrap cycle"));
     if (std::any_of(anchors_.begin(), anchors_.end(), [&](const Anchor& anchor) {
             return ntp == anchor.ntp && *ticks == anchor.ticks;
         })) {
@@ -67,13 +68,13 @@ RecordingClock::ReportResult RecordingClock::add_report(const rt::SenderReport& 
         const auto ntp_delta = ntp - previous.ntp;
         if (ntp_delta == 0 || ntp_delta >= ntp_half_cycle || *ticks <= previous.ticks ||
             *time <= previous.time_us) {
-            return fail("Sender report clocks do not advance together");
+            return fail(SCRCTL_TR("Sender report clocks do not advance together"));
         }
         if (static_cast<long double>(ntp_delta) * q32_to_us > limits_.report_gap.count()) {
-            return fail("Sender report clock gap exceeds the recording budget");
+            return fail(SCRCTL_TR("Sender report clock gap exceeds the recording budget"));
         }
     }
-    if (anchors_.size() >= limits_.anchors) return fail("Recording clock anchor limit reached");
+    if (anchors_.size() >= limits_.anchors) return fail(SCRCTL_TR("Recording clock anchor limit reached"));
     anchors_.push_back({ntp, *ticks, *time});
     return ReportResult::Accepted;
 }
