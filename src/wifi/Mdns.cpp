@@ -523,7 +523,11 @@ bool send_query(QuerySocket &socket, uint16_t type, std::string_view name, std::
 
 BrowseResult browse(const BrowseOptions &options) {
     BrowseResult result;
-    result.cancelled = options.stop_token.stop_requested();
+    const auto stop_requested = [&] {
+        if (!result.cancelled && options.should_cancel) result.cancelled = options.should_cancel();
+        return result.cancelled;
+    };
+    result.cancelled = stop_requested();
     if (result.cancelled || options.timeout.count() == 0) return result;
     if (options.timeout.count() < 0 || options.timeout > std::chrono::seconds(60)) {
         result.warnings.push_back(SCRCTL_TR("mDNS timeout must be between 0 and 60000 ms"));
@@ -535,12 +539,12 @@ BrowseResult browse(const BrowseOptions &options) {
         const auto deadline = detail::RecordCache::Clock::now() + options.timeout;
         std::vector<std::unique_ptr<QuerySocket>> sockets;
         for (const auto &iface : interfaces(result.warnings)) {
-            if (options.stop_token.stop_requested()) break;
+            if (stop_requested()) break;
             auto socket = open_socket(iface, result.warnings);
             if (socket && send_query(*socket, MDNS_RECORDTYPE_PTR, kService, result.warnings)) sockets.push_back(std::move(socket));
         }
         if (sockets.empty()) {
-            result.cancelled = options.stop_token.stop_requested();
+            result.cancelled = stop_requested();
             if (!result.cancelled) warn(result.warnings, SCRCTL_TR("No multicast interface is available for mDNS"));
             return result;
         }
@@ -548,7 +552,7 @@ BrowseResult browse(const BrowseOptions &options) {
         detail::RecordCache cache;
         alignas(uint32_t) std::array<uint8_t, kMaxPacket + 1> packet{};
         size_t received = 0;
-        while (!options.stop_token.stop_requested() && detail::RecordCache::Clock::now() < deadline) {
+        while (!stop_requested() && detail::RecordCache::Clock::now() < deadline) {
 #ifdef _WIN32
             std::vector<WSAPOLLFD> ready;
             for (const auto &socket : sockets) ready.push_back({socket->fd, POLLRDNORM, 0});
@@ -568,10 +572,10 @@ BrowseResult browse(const BrowseOptions &options) {
                 warn(result.warnings, std::string(SCRCTL_TR("mDNS receive wait: ")) + transport::socket_error_message());
                 break;
             }
-            for (size_t i = 0; i < sockets.size() && !options.stop_token.stop_requested(); ++i) {
+            for (size_t i = 0; i < sockets.size() && !stop_requested(); ++i) {
                 if (!ready[i].revents) continue;
                 // 每轮每个 socket 至多读取 16 包；高流量接口不能拖延取消和其他接口。
-                for (int batch = 0; batch < 16 && !options.stop_token.stop_requested(); ++batch) {
+                for (int batch = 0; batch < 16 && !stop_requested(); ++batch) {
                     sockaddr_storage from{};
                     socklen_t from_size = sizeof(from);
                     const auto size = recvfrom(sockets[i]->fd, reinterpret_cast<char *>(packet.data()),
@@ -599,20 +603,20 @@ BrowseResult browse(const BrowseOptions &options) {
                 auto queries = cache.queries(socket->iface.cache_index);
                 queries.emplace_back(MDNS_RECORDTYPE_PTR, std::string(kService));
                 for (const auto &[type, name] : queries) {
-                    if (options.stop_token.stop_requested() || detail::RecordCache::Clock::now() >= deadline) break;
+                    if (stop_requested() || detail::RecordCache::Clock::now() >= deadline) break;
                     const auto found = socket->sent.find({type, name});
                     if (found == socket->sent.end() || query_time - found->second >= std::chrono::seconds(1))
                         send_query(*socket, type, name, result.warnings);
                 }
             }
         }
-        result.cancelled = options.stop_token.stop_requested();
+        result.cancelled = stop_requested();
         result.advertisements = cache.snapshot();
         for (const auto &warning : cache.warnings()) warn(result.warnings, warning);
     } catch (const std::exception &error) {
         warn(result.warnings, std::string(SCRCTL_TR("mDNS browse: ")) + error.what());
     }
-    result.cancelled = options.stop_token.stop_requested();
+    result.cancelled = stop_requested();
     return result;
 }
 

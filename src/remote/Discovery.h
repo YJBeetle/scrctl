@@ -2,7 +2,7 @@
 
 #include <chrono>
 #include <cstdint>
-#include <stop_token>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -46,7 +46,8 @@ struct DiscoveredDevice {
 
 struct DiscoveryOptions {
     std::chrono::milliseconds timeout{3000};
-    std::stop_token stop_token;
+    /// 留空表示不取消。回调应快速返回且不抛异常；共享状态由调用方同步。
+    std::function<bool()> should_cancel;
     std::string pairing_directory;  ///< 空值使用默认记录目录，不创建目录。
     bool include_usb = true;
     bool include_wifi = true;
@@ -80,7 +81,7 @@ DiscoveryResult merge_discovery(const std::vector<transport::DeviceRecord> &usb_
 /// 密钥、记录内容或设备标识。缺失目录返回空列表且不产生 warning。
 /// 单独提供这条内部边界以便离线检查加载行为，不创建或修改任何文件。
 std::vector<wifi::PairRecord> load_discovery_records(const std::string &directory,
-                                                   std::stop_token stop_token,
+                                                   const std::function<bool()> &should_cancel,
                                                    std::vector<std::string> &warnings,
                                                    bool &cancelled);
 

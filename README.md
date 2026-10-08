@@ -183,7 +183,8 @@ scrctl --help
 设备已出现在 usbmux 中但连接失败时，保留原错误，不悄悄改连无线会话。
 
 核心接口为 `remote::discover_devices()`（`remote/Discovery.h`），返回设备、连接候选、
-来源可用状态和诊断；调用方可用 `std::stop_token` 取消，保留已经发现的快照。
+来源可用状态和诊断；调用方通过 `should_cancel` 回调取消，保留已经发现的快照。
+该回调可读取原子标志，或捕获工具链支持的 `std::stop_token`，不要求系统 C++ 库提供后者。
 
 ## 剪贴板
 

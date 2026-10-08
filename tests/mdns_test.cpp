@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
@@ -276,10 +277,13 @@ void no_io_options() {
     check(!result.available && !result.warnings.empty(), "negative timeout rejected without IO");
     result = browse({60001ms, {}});
     check(!result.available && !result.warnings.empty(), "oversized timeout rejected without IO");
-    std::stop_source cancel;
-    cancel.request_stop();
+    std::atomic_bool cancel{false};
+    const auto should_cancel = [&] { return cancel.load(std::memory_order_relaxed); };
+    result = browse({0ms, should_cancel});
+    check(!result.cancelled && !result.available, "unset atomic cancellation leaves zero-timeout snapshot unchanged");
+    cancel.store(true, std::memory_order_relaxed);
     const auto start = RecordCache::Clock::now();
-    result = browse({60000ms, cancel.get_token()});
+    result = browse({60000ms, should_cancel});
     check(result.cancelled && !result.available && result.advertisements.empty(), "pre-cancelled browse does not scan");
     check(RecordCache::Clock::now() - start < 100ms, "pre-cancelled browse returns within 100 ms");
 }

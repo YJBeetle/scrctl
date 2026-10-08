@@ -2,11 +2,11 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
 #include <span>
-#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -37,7 +37,9 @@ struct Advertisement {
 
 struct BrowseOptions {
     std::chrono::milliseconds timeout{3000};
-    std::stop_token stop_token;
+    /// 留空表示不取消。回调应快速返回且不抛异常；共享状态由调用方同步。
+    /// 可捕获 std::stop_token 或原子标志，不要求系统 libc++ 已公开 stop_token。
+    std::function<bool()> should_cancel;
 };
 
 struct BrowseResult {

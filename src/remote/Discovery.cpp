@@ -121,12 +121,13 @@ DiscoveryResult detail::merge_discovery(const std::vector<transport::DeviceRecor
 }
 
 std::vector<wifi::PairRecord> detail::load_discovery_records(const std::string &directory,
-                                                           std::stop_token stop_token,
+                                                           const std::function<bool()> &should_cancel,
                                                            std::vector<std::string> &warnings,
                                                            bool &cancelled) {
     std::vector<wifi::PairRecord> records;
     auto stop = [&] {
-        if (!stop_token.stop_requested()) return false;
+        if (cancelled) return true;
+        if (!should_cancel || !should_cancel()) return false;
         cancelled = true;
         return true;
     };
@@ -203,7 +204,11 @@ std::vector<wifi::PairRecord> detail::load_discovery_records(const std::string &
 
 DiscoveryResult discover_devices(const DiscoveryOptions &options) {
     DiscoveryResult result;
-    if (options.stop_token.stop_requested()) {
+    const auto stop_requested = [&] {
+        if (!result.cancelled && options.should_cancel) result.cancelled = options.should_cancel();
+        return result.cancelled;
+    };
+    if (stop_requested()) {
         result.cancelled = true;
         return result;
     }
@@ -225,15 +230,15 @@ DiscoveryResult discover_devices(const DiscoveryOptions &options) {
         }
         if (!error.empty()) warn(result.warnings, SCRCTL_TR("USB device enumeration is unavailable"));
     }
-    if (options.stop_token.stop_requested()) result.cancelled = true;
+    if (stop_requested()) result.cancelled = true;
     if (options.include_wifi && options.timeout.count() > 0 && !result.cancelled) {
         // 先读取本地匹配材料，扫描中取消后仍能识别已收到的广播。
         // 不把没有本次广播的离线记录列为设备。
         pair_records = detail::load_discovery_records(
             options.pairing_directory.empty() ? wifi::default_record_dir() : options.pairing_directory,
-            options.stop_token, result.warnings, result.cancelled);
+            options.should_cancel, result.warnings, result.cancelled);
         if (!result.cancelled) {
-            auto browse = wifi::mdns::browse({options.timeout, options.stop_token});
+            auto browse = wifi::mdns::browse({options.timeout, options.should_cancel});
             advertisements = std::move(browse.advertisements);
             result.wifi_available = browse.available;
             result.cancelled = browse.cancelled;
@@ -243,7 +248,7 @@ DiscoveryResult discover_devices(const DiscoveryOptions &options) {
     auto merged = detail::merge_discovery(usb_records, advertisements, pair_records);
     result.devices = std::move(merged.devices);
     for (auto &warning : merged.warnings) warn(result.warnings, std::move(warning));
-    if (options.stop_token.stop_requested()) result.cancelled = true;
+    if (stop_requested()) result.cancelled = true;
     return result;
 }
 

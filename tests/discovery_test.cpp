@@ -199,9 +199,7 @@ void test_record_loading() {
     records = remote::detail::load_discovery_records(path, {}, warnings, cancelled);
     check(records.empty() && warnings.size() == 1, "non-directory record path reports category warning");
     warnings.clear();
-    std::stop_source source;
-    source.request_stop();
-    records = remote::detail::load_discovery_records(path, source.get_token(), warnings, cancelled);
+    records = remote::detail::load_discovery_records(path, [] { return true; }, warnings, cancelled);
     check(records.empty() && warnings.empty() && cancelled, "pre-cancelled record load does not inspect path");
 
     TempDirectory limited;
@@ -211,17 +209,25 @@ void test_record_loading() {
     records = remote::detail::load_discovery_records(limited.path.string(), {}, warnings, cancelled);
     check(records.size() == 256 && warnings.size() == 1,
           "pairing file limit bounds reads while preserving already loaded records");
+
+    warnings.clear();
+    cancelled = false;
+    int cancel_checks = 0;
+    records = remote::detail::load_discovery_records(limited.path.string(),
+        [&] { return ++cancel_checks >= 6; }, warnings, cancelled);
+    check(cancelled && !records.empty() && records.size() < 256 && warnings.empty(),
+          "cancellation callback preserves records loaded before cancellation");
 }
 
 void test_non_network_paths() {
     remote::DiscoveryOptions options;
-    options.stop_token = [] { std::stop_source source; source.request_stop(); return source.get_token(); }();
+    options.should_cancel = [] { return true; };
     options.pairing_directory = "unused-invalid-path";
     auto result = remote::discover_devices(options);
     check(result.cancelled && result.devices.empty() && result.warnings.empty() &&
               !result.usb_available && !result.wifi_available,
           "pre-cancelled discovery does not enumerate USB, scan Wi-Fi or read records");
-    options.stop_token = {};
+    options.should_cancel = {};
     options.include_usb = false;
     options.timeout = std::chrono::milliseconds(0);
     result = remote::discover_devices(options);
