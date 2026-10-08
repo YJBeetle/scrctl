@@ -221,21 +221,6 @@ int main(int argc, char **argv) {
                 dgrams.size(), rate, channels);
 
     std::unique_ptr<scrctl::AudioDecoder> dec;
-    if (backend == "ffmpeg") {
-#if defined(SCRCTL_HAVE_LIBAV)
-        dec = scrctl::create_ffmpeg_eld_decoder(rate, channels, 480, err);
-#else
-        err = SCRCTL_TR("FFmpeg AAC-ELD decoding is unavailable in this build; enable libav support");
-#endif
-    } else {
-        dec = scrctl::create_audio_decoder(rate, channels, 480, err);
-    }
-    if (dec == nullptr) {
-        std::fprintf(stderr, SCRCTL_TR("Failed to create audio decoder: %s\n"), err.c_str());
-        return 1;
-    }
-    std::printf(SCRCTL_TR("Audio decoder: %s\n"), dec->backend_name());
-
     std::vector<int16_t> pcm;
     uint64_t frames = 0;
     uint64_t empty = 0;
@@ -252,6 +237,24 @@ int main(int argc, char **argv) {
         if (pt != 101) {
             ++other_pt;  // 跳过该端口上 PT 不是 101 的包，包括 RTCP。
             continue;
+        }
+        // 只有 AAC-ELD 载荷需要解码器。仅含其他 PT 的 dump 仍可输出空 WAV，
+        // 不应为统计包数或验证文件写入而初始化系统媒体组件。
+        if (!dec) {
+            if (backend == "ffmpeg") {
+#if defined(SCRCTL_HAVE_LIBAV)
+                dec = scrctl::create_ffmpeg_eld_decoder(rate, channels, 480, err);
+#else
+                err = SCRCTL_TR("FFmpeg AAC-ELD decoding is unavailable in this build; enable libav support");
+#endif
+            } else {
+                dec = scrctl::create_audio_decoder(rate, channels, 480, err);
+            }
+            if (!dec) {
+                std::fprintf(stderr, SCRCTL_TR("Failed to create audio decoder: %s\n"), err.c_str());
+                return 1;
+            }
+            std::printf(SCRCTL_TR("Audio decoder: %s\n"), dec->backend_name());
         }
         const std::size_t before = pcm.size();
         std::string derr;

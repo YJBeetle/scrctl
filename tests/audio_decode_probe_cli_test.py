@@ -125,44 +125,55 @@ with tempfile.TemporaryDirectory(prefix="scrctl-audio-decode-cli-") as temp:
         assert "/dev/stdin" in result.stderr and "Cannot seek input file" in result.stderr, result.stderr
         assert protected_output.read_bytes() == sentinel
 
-    # 一条 PT100 RTPv2 数据报，不向解码器提交载荷；附加不完整尾记录用于保留有效前缀。
+    # 一条 PT100 RTPv2 数据报，不创建或调用解码器。无媒体后端的构建也应完整
+    # 验证 WAV 写入；附加不完整尾记录用于保留有效前缀。
     packet = b"\x80\x64" + b"\0" * 10 + b"x"
     dump = root / "valid prefix.rtp"
     dump.write_bytes(struct.pack(">H", len(packet)) + packet + b"\x00\x08x")
     wav = root / "empty PCM.wav"
     result = run([dump, wav])
     assert "Loaded 1 datagrams" in result.stdout, (result.stdout, result.stderr)
+    assert "Audio decoder:" not in result.stdout, result.stdout
+    assert result.returncode == 1 and not result.stderr, (result.stdout, result.stderr)
+    assert f"Saved WAV: {wav}" in result.stdout
+    data = wav.read_bytes()
+    assert len(data) == 44 and data[:4] == b"RIFF" and data[8:16] == b"WAVEfmt "
+    assert struct.unpack_from("<I", data, 4)[0] == 36
+    assert struct.unpack_from("<HHIIHH", data, 20) == (1, 2, 48000, 192000, 4, 16)
+    assert data[36:40] == b"data" and struct.unpack_from("<I", data, 40)[0] == 0
+    for output in (root, root / "missing directory" / "output.wav"):
+        result = run([dump, output])
+        assert result.returncode == 1 and f"Failed to write WAV '{output}'" in result.stderr, (
+            result.stdout, result.stderr)
+        assert "Saved WAV:" not in result.stdout
+    if os.name == "posix":
+        import resource
+        import signal
+
+        def limit_child_output():
+            # 限制仅作用于测试子进程，用真实 stdio 刷新失败验证 fclose 检查。
+            signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
+            resource.setrlimit(resource.RLIMIT_FSIZE, (16, 16))
+
+        failed_wav = root / "close failure.wav"
+        result = run([dump, failed_wav], preexec_fn=limit_child_output)
+        assert result.returncode == 1 and "Failed to close output file" in result.stderr, (
+            result.stdout, result.stderr)
+        assert str(failed_wav) in result.stderr and "Saved WAV:" not in result.stdout
+    print("WAV writer integration checks passed (valid prefix, header, open and flush failures)")
+
+    # PT101 仍会创建所选后端；这里只提交无效载荷验证入口，不代替真实 AAC-ELD 验证。
+    audio_packet = b"\x80\x65" + b"\0" * 10 + b"x"
+    audio_dump = root / "invalid audio.rtp"
+    audio_dump.write_bytes(struct.pack(">H", len(audio_packet)) + audio_packet)
+    audio_wav = root / "invalid audio.wav"
+    result = run([audio_dump, audio_wav, "--backend", "ffmpeg"])
+    assert result.returncode == 1, (result.returncode, result.stdout, result.stderr)
     if "Failed to create audio decoder" in result.stderr:
-        assert result.returncode == 1 and not wav.exists()
-        print("Audio decoder unavailable in this environment; WAV writer integration checks skipped")
+        assert not audio_wav.exists()
     else:
-        assert result.returncode == 1 and not result.stderr, (result.stdout, result.stderr)
-        assert f"Saved WAV: {wav}" in result.stdout
-        data = wav.read_bytes()
-        assert len(data) == 44 and data[:4] == b"RIFF" and data[8:16] == b"WAVEfmt "
-        assert struct.unpack_from("<I", data, 4)[0] == 36
-        assert struct.unpack_from("<HHIIHH", data, 20) == (1, 2, 48000, 192000, 4, 16)
-        assert data[36:40] == b"data" and struct.unpack_from("<I", data, 40)[0] == 0
-        for output in (root, root / "missing directory" / "output.wav"):
-            result = run([dump, output])
-            assert result.returncode == 1 and f"Failed to write WAV '{output}'" in result.stderr, (
-                result.stdout, result.stderr)
-            assert "Saved WAV:" not in result.stdout
-        if os.name == "posix":
-            import resource
-            import signal
-
-            def limit_child_output():
-                # 限制仅作用于测试子进程，用真实 stdio 刷新失败验证 fclose 检查。
-                signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
-                resource.setrlimit(resource.RLIMIT_FSIZE, (16, 16))
-
-            failed_wav = root / "close failure.wav"
-            result = run([dump, failed_wav], preexec_fn=limit_child_output)
-            assert result.returncode == 1 and "Failed to close output file" in result.stderr, (
-                result.stdout, result.stderr)
-            assert str(failed_wav) in result.stderr and "Saved WAV:" not in result.stdout
-        print("WAV writer integration checks passed (valid prefix, header, open and flush failures)")
+        assert "Audio decoder: libavcodec/aac-eld" in result.stdout, result.stdout
+        assert audio_wav.is_file()
 
 if not english_only:
     result = run(["missing.rtp", "out.wav", "bad", "--lang", "zh-CN"])
