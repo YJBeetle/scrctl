@@ -166,6 +166,13 @@ void LiveStats::print(const Snapshot &snapshot) {
                     static_cast<unsigned long long>(as.rtcp_failed),
                     static_cast<unsigned long long>(as.restarts), audio.buffered_frames,
                     audio_secs);
+        std::printf(SCRCTL_TR(
+            "      Playback totals: startup trim %llu frames, preroll silence %llu frames, "
+            "underrun silence %llu frames in %llu callbacks\n"),
+                    static_cast<unsigned long long>(as.startup_trimmed),
+                    static_cast<unsigned long long>(audio.preroll_silence),
+                    static_cast<unsigned long long>(audio.underrun_silence),
+                    static_cast<unsigned long long>(audio.underrun_callbacks));
         last_audio_packets_ = as.packets;
         last_audio_decoded_ = as.decoded;
         last_audio_delivered_ = audio.delivered;

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 17:02+0800\n"
+"POT-Creation-Date: 2026-10-08 17:39+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -130,7 +130,7 @@ msgstr ""
 msgid "Finished: processed %d frames\n"
 msgstr ""
 
-#: src/app/AudioOut.cpp:39
+#: src/app/AudioOut.cpp:38
 #, c-format
 msgid ""
 "Audio device returned %d Hz / %d channels / format 0x%x; stream requires %d "
@@ -139,7 +139,9 @@ msgstr ""
 
 #: src/app/AudioOut.cpp:47
 #, c-format
-msgid "Audio output opened: %d Hz / %d channels, backend %s\n"
+msgid ""
+"Audio output opened: %d Hz / %d channels, backend %s, callback %u frames (%u "
+"bytes)\n"
 msgstr ""
 
 #: src/app/Cli.cpp:16
@@ -812,6 +814,13 @@ msgid ""
 "%llu, restarts %llu, buffered %zu frames, interval %.1f s\n"
 msgstr ""
 
+#: src/app/LiveStats.cpp:170
+#, c-format
+msgid ""
+"      Playback totals: startup trim %llu frames, preroll silence %llu "
+"frames, underrun silence %llu frames in %llu callbacks\n"
+msgstr ""
+
 #: src/app/Presenter.cpp:38
 #, c-format
 msgid ""
@@ -1183,40 +1192,40 @@ msgstr ""
 msgid "Nesting too deep"
 msgstr ""
 
-#: src/media/AudioPump.cpp:75
+#: src/media/AudioPump.cpp:98
 #, c-format
 msgid "Clamped --audio-buffer %d to %d ms and adjusted buffer capacity\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:112
+#: src/media/AudioPump.cpp:135
 #, c-format
 msgid ""
 "Audio answer missing SSRC (RemoteSSRC=%u LocalSSRC=%u); session renewal may "
 "fail\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:273
+#: src/media/AudioPump.cpp:297
 #, c-format
 msgid "Audio session recreated, receive port=%u\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:281
+#: src/media/AudioPump.cpp:305
 #, c-format
 msgid "Failed to recreate audio session: %s (retry in 1 second)\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:308
+#: src/media/AudioPump.cpp:332
 #, c-format
 msgid "Failed to send audio RTCP keepalive: %s\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:321
+#: src/media/AudioPump.cpp:345
 #, c-format
 msgid ""
 "Audio: device session ended (%llu ms without audio); recreating session\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:368
+#: src/media/AudioPump.cpp:392
 #, c-format
 msgid "Audio decode failed (%zu-byte payload): %s\n"
 msgstr ""
@@ -1868,55 +1877,55 @@ msgstr ""
 msgid "Cannot match mDNS advertisements to pairing records"
 msgstr ""
 
-#: src/remote/Discovery.cpp:144
+#: src/remote/Discovery.cpp:145
 msgid "Cannot access pairing record directory"
 msgstr ""
 
-#: src/remote/Discovery.cpp:148
+#: src/remote/Discovery.cpp:149
 msgid "Pairing record path is not a directory"
 msgstr ""
 
-#: src/remote/Discovery.cpp:153
+#: src/remote/Discovery.cpp:154
 msgid "Cannot read pairing record directory"
 msgstr ""
 
-#: src/remote/Discovery.cpp:163
+#: src/remote/Discovery.cpp:164
 msgid "Pairing record directory entry limit reached"
 msgstr ""
 
-#: src/remote/Discovery.cpp:168
+#: src/remote/Discovery.cpp:169
 msgid "Cannot inspect a pairing record directory entry"
 msgstr ""
 
-#: src/remote/Discovery.cpp:175
+#: src/remote/Discovery.cpp:176
 msgid "Pairing record file limit reached"
 msgstr ""
 
-#: src/remote/Discovery.cpp:180
+#: src/remote/Discovery.cpp:181
 msgid "Cannot read a pairing record file"
 msgstr ""
 
-#: src/remote/Discovery.cpp:183
+#: src/remote/Discovery.cpp:184
 msgid "Skipped an oversized pairing record file"
 msgstr ""
 
-#: src/remote/Discovery.cpp:188
+#: src/remote/Discovery.cpp:189
 msgid "Skipped an unreadable or invalid pairing record file"
 msgstr ""
 
-#: src/remote/Discovery.cpp:194
+#: src/remote/Discovery.cpp:195
 msgid "Reading pairing record directory was interrupted"
 msgstr ""
 
-#: src/remote/Discovery.cpp:199
+#: src/remote/Discovery.cpp:200
 msgid "Cannot read pairing records for device discovery"
 msgstr ""
 
-#: src/remote/Discovery.cpp:211
+#: src/remote/Discovery.cpp:216
 msgid "Device discovery timeout must be between 0 and 60000 ms"
 msgstr ""
 
-#: src/remote/Discovery.cpp:226
+#: src/remote/Discovery.cpp:231
 msgid "USB device enumeration is unavailable"
 msgstr ""
 
@@ -2882,27 +2891,27 @@ msgstr ""
 msgid "mDNS query on interface "
 msgstr ""
 
-#: src/wifi/Mdns.cpp:529
+#: src/wifi/Mdns.cpp:533
 msgid "mDNS timeout must be between 0 and 60000 ms"
 msgstr ""
 
-#: src/wifi/Mdns.cpp:544
+#: src/wifi/Mdns.cpp:548
 msgid "No multicast interface is available for mDNS"
 msgstr ""
 
-#: src/wifi/Mdns.cpp:568
+#: src/wifi/Mdns.cpp:572
 msgid "mDNS receive wait: "
 msgstr ""
 
-#: src/wifi/Mdns.cpp:582
+#: src/wifi/Mdns.cpp:586
 msgid "mDNS receive on interface "
 msgstr ""
 
-#: src/wifi/Mdns.cpp:596
+#: src/wifi/Mdns.cpp:600
 msgid "mDNS packet limit reached"
 msgstr ""
 
-#: src/wifi/Mdns.cpp:613
+#: src/wifi/Mdns.cpp:617
 msgid "mDNS browse: "
 msgstr ""
 

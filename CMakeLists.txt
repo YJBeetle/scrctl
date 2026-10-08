@@ -421,6 +421,10 @@ if(SCRCTL_BUILD_TESTS)
     # 保留整个边界用例，给较慢的 CI runner 留出时间，仍用有限时限检测卡死。
     set_tests_properties(remote_channel PROPERTIES TIMEOUT 60)
 
+    scrctl_add_test_executable(audio_buffer_test tests/audio_buffer_test.cpp)
+    target_link_libraries(audio_buffer_test PRIVATE scrctl_core)
+    add_test(NAME audio_buffer COMMAND audio_buffer_test)
+
     scrctl_add_test_executable(decode_test tests/decode_test.cpp)
     target_link_libraries(decode_test PRIVATE scrctl_core)
 

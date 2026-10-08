@@ -48,12 +48,15 @@
 | Wi-Fi | `--list-devices` 用 mDNS 枚举；`--pair` 经 USB 创建/验证记录，`--wifi auto -s <UDID>` 自动选择无线候选；手动地址可用 `--wifi-port` 指定端口。scrctl 承担配对与连接，Android 的对应入口由 ADB 提供 |
 | 编码控制 | 当前 Apple 服务决定尺寸、码率、FPS 和编码器，未提供相应覆盖参数 |
 | 视频解码 | 默认软件解码；VideoToolbox 适配存在 NAL 长度限制，见 README |
+| 音频路由 | scrcpy 默认把设备输出送到电脑并停止设备播放，`--audio-dup` 可双端发声；scrctl 当前双端发声，尚未验证 CoreDevice 的独立扬声器控制，手机音量调零也可能同时消掉捕获声音 |
 
 scrcpy 的 `--orientation` 可以同时改变显示和录制；它的 crop 作用于采集，录制可以
 包含 MP4 / MKV 容器及音频。scrctl 的原始码流录制尚不能承担这些含义，所以帮助中
 明确显示与录制的区别。参见
 [视频方向](https://github.com/Genymobile/scrcpy/blob/v5.0/doc/video.md#orientation)、
 [录制](https://github.com/Genymobile/scrcpy/blob/v5.0/doc/recording.md)。
+
+音频路由区别见 [scrcpy 音频说明](https://github.com/Genymobile/scrcpy/blob/master/doc/audio.md#source)。
 
 ## 后续对齐顺序
 

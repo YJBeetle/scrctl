@@ -36,6 +36,9 @@ class LiveStats {
         /// 同一次采样用于速率和下次基线，避免漏掉两次读取之间的交付。
         uint64_t delivered = 0;
         uint64_t silence = 0;
+        uint64_t preroll_silence = 0;
+        uint64_t underrun_silence = 0;
+        uint64_t underrun_callbacks = 0;
         std::size_t buffered_frames = 0;
         bool output_open = false;
         std::string output_driver;

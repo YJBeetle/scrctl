@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 17:02+0800\n"
+"POT-Creation-Date: 2026-10-08 17:39+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -126,7 +126,7 @@ msgstr "未执行窗口回读：要求第 %d 帧，实际显示了 %d 帧\n"
 msgid "Finished: processed %d frames\n"
 msgstr "完成：处理 %d 帧\n"
 
-#: src/app/AudioOut.cpp:39
+#: src/app/AudioOut.cpp:38
 #, c-format
 msgid ""
 "Audio device returned %d Hz / %d channels / format 0x%x; stream requires %d "
@@ -137,8 +137,10 @@ msgstr ""
 
 #: src/app/AudioOut.cpp:47
 #, c-format
-msgid "Audio output opened: %d Hz / %d channels, backend %s\n"
-msgstr "音频输出已打开：%d Hz / %d 声道，后端 %s\n"
+msgid ""
+"Audio output opened: %d Hz / %d channels, backend %s, callback %u frames (%u "
+"bytes)\n"
+msgstr "音频输出已打开：%d Hz / %d 声道，后端 %s，回调 %u 帧（%u 字节）\n"
 
 #: src/app/Cli.cpp:16
 msgid "iOS screen mirroring and control"
@@ -833,6 +835,15 @@ msgstr ""
 "%llu，静音填充 %llu RR 成功/失败 %llu/%llu，重启 %llu，缓冲 %zu 帧，窗口 "
 "%.1f s\n"
 
+#: src/app/LiveStats.cpp:170
+#, c-format
+msgid ""
+"      Playback totals: startup trim %llu frames, preroll silence %llu "
+"frames, underrun silence %llu frames in %llu callbacks\n"
+msgstr ""
+"      播放累计：启动丢弃 %llu 帧，预缓冲静音 %llu 帧，欠载静音 %llu 帧（%llu "
+"次回调）\n"
+
 #: src/app/Presenter.cpp:38
 #, c-format
 msgid ""
@@ -1212,12 +1223,12 @@ msgstr "输入过大"
 msgid "Nesting too deep"
 msgstr "嵌套过深"
 
-#: src/media/AudioPump.cpp:75
+#: src/media/AudioPump.cpp:98
 #, c-format
 msgid "Clamped --audio-buffer %d to %d ms and adjusted buffer capacity\n"
 msgstr "已将 --audio-buffer %d 限制为 %d ms，并按此配置缓冲容量\n"
 
-#: src/media/AudioPump.cpp:112
+#: src/media/AudioPump.cpp:135
 #, c-format
 msgid ""
 "Audio answer missing SSRC (RemoteSSRC=%u LocalSSRC=%u); session renewal may "
@@ -1225,28 +1236,28 @@ msgid ""
 msgstr ""
 "音频协商响应缺少 SSRC（RemoteSSRC=%u LocalSSRC=%u），音频会话可能无法续期\n"
 
-#: src/media/AudioPump.cpp:273
+#: src/media/AudioPump.cpp:297
 #, c-format
 msgid "Audio session recreated, receive port=%u\n"
 msgstr "音频会话已重建，收流端口=%u\n"
 
-#: src/media/AudioPump.cpp:281
+#: src/media/AudioPump.cpp:305
 #, c-format
 msgid "Failed to recreate audio session: %s (retry in 1 second)\n"
 msgstr "重建音频会话失败: %s（1 秒后再试）\n"
 
-#: src/media/AudioPump.cpp:308
+#: src/media/AudioPump.cpp:332
 #, c-format
 msgid "Failed to send audio RTCP keepalive: %s\n"
 msgstr "音频 RTCP 保活包发送失败: %s\n"
 
-#: src/media/AudioPump.cpp:321
+#: src/media/AudioPump.cpp:345
 #, c-format
 msgid ""
 "Audio: device session ended (%llu ms without audio); recreating session\n"
 msgstr "音频：设备会话已结束（%llu ms 未收到音频），重建会话\n"
 
-#: src/media/AudioPump.cpp:368
+#: src/media/AudioPump.cpp:392
 #, c-format
 msgid "Audio decode failed (%zu-byte payload): %s\n"
 msgstr "音频解码失败（载荷 %zu 字节）: %s\n"
@@ -1910,55 +1921,55 @@ msgstr " 没有声明 feature "
 msgid "Cannot match mDNS advertisements to pairing records"
 msgstr "无法将 mDNS 广播与配对记录匹配"
 
-#: src/remote/Discovery.cpp:144
+#: src/remote/Discovery.cpp:145
 msgid "Cannot access pairing record directory"
 msgstr "无法访问配对记录目录"
 
-#: src/remote/Discovery.cpp:148
+#: src/remote/Discovery.cpp:149
 msgid "Pairing record path is not a directory"
 msgstr "配对记录路径不是目录"
 
-#: src/remote/Discovery.cpp:153
+#: src/remote/Discovery.cpp:154
 msgid "Cannot read pairing record directory"
 msgstr "无法读取配对记录目录"
 
-#: src/remote/Discovery.cpp:163
+#: src/remote/Discovery.cpp:164
 msgid "Pairing record directory entry limit reached"
 msgstr "配对记录目录条目数量已达到上限"
 
-#: src/remote/Discovery.cpp:168
+#: src/remote/Discovery.cpp:169
 msgid "Cannot inspect a pairing record directory entry"
 msgstr "无法检查配对记录目录中的条目"
 
-#: src/remote/Discovery.cpp:175
+#: src/remote/Discovery.cpp:176
 msgid "Pairing record file limit reached"
 msgstr "配对记录文件数量已达到上限"
 
-#: src/remote/Discovery.cpp:180
+#: src/remote/Discovery.cpp:181
 msgid "Cannot read a pairing record file"
 msgstr "无法读取配对记录文件"
 
-#: src/remote/Discovery.cpp:183
+#: src/remote/Discovery.cpp:184
 msgid "Skipped an oversized pairing record file"
 msgstr "已跳过过大的配对记录文件"
 
-#: src/remote/Discovery.cpp:188
+#: src/remote/Discovery.cpp:189
 msgid "Skipped an unreadable or invalid pairing record file"
 msgstr "已跳过无法读取或格式无效的配对记录文件"
 
-#: src/remote/Discovery.cpp:194
+#: src/remote/Discovery.cpp:195
 msgid "Reading pairing record directory was interrupted"
 msgstr "配对记录目录读取中断"
 
-#: src/remote/Discovery.cpp:199
+#: src/remote/Discovery.cpp:200
 msgid "Cannot read pairing records for device discovery"
 msgstr "设备发现时无法读取配对记录"
 
-#: src/remote/Discovery.cpp:211
+#: src/remote/Discovery.cpp:216
 msgid "Device discovery timeout must be between 0 and 60000 ms"
 msgstr "设备扫描时间必须在 0 到 60000 毫秒之间"
 
-#: src/remote/Discovery.cpp:226
+#: src/remote/Discovery.cpp:231
 msgid "USB device enumeration is unavailable"
 msgstr "无法枚举 USB 设备"
 
@@ -2933,27 +2944,27 @@ msgstr "mDNS 查询名称过长"
 msgid "mDNS query on interface "
 msgstr "mDNS 查询失败，网卡 "
 
-#: src/wifi/Mdns.cpp:529
+#: src/wifi/Mdns.cpp:533
 msgid "mDNS timeout must be between 0 and 60000 ms"
 msgstr "mDNS 扫描时间必须在 0 到 60000 毫秒之间"
 
-#: src/wifi/Mdns.cpp:544
+#: src/wifi/Mdns.cpp:548
 msgid "No multicast interface is available for mDNS"
 msgstr "没有可用于 mDNS 的组播网卡"
 
-#: src/wifi/Mdns.cpp:568
+#: src/wifi/Mdns.cpp:572
 msgid "mDNS receive wait: "
 msgstr "等待 mDNS 数据失败："
 
-#: src/wifi/Mdns.cpp:582
+#: src/wifi/Mdns.cpp:586
 msgid "mDNS receive on interface "
 msgstr "接收 mDNS 数据失败，网卡 "
 
-#: src/wifi/Mdns.cpp:596
+#: src/wifi/Mdns.cpp:600
 msgid "mDNS packet limit reached"
 msgstr "mDNS 数据包数量已达到上限"
 
-#: src/wifi/Mdns.cpp:613
+#: src/wifi/Mdns.cpp:617
 msgid "mDNS browse: "
 msgstr "mDNS 扫描失败："
 
@@ -5913,6 +5924,10 @@ msgstr "不可用"
 #~ msgstr ""
 #~ "此平台没有 AAC-ELD 解码后端。本项目在 macOS 使用 AudioToolbox；已测试的 "
 #~ "FFmpeg 原生 AAC 解码器不支持 ELD。视频可继续运行。"
+
+#, c-format
+#~ msgid "Audio output opened: %d Hz / %d channels, backend %s\n"
+#~ msgstr "音频输出已打开：%d Hz / %d 声道，后端 %s\n"
 
 #~ msgid "Background color #RRGGBB"
 #~ msgstr "背景色 #RRGGBB"

@@ -28,6 +28,10 @@ class AudioOut {
     [[nodiscard]] bool dev_open() const { return dev_ != 0; }
     [[nodiscard]] uint64_t delivered() const { return delivered_.load(); }
     [[nodiscard]] uint64_t silence() const { return silence_.load(); }
+    [[nodiscard]] uint64_t preroll_silence() const { return preroll_silence_.load(); }
+    [[nodiscard]] uint64_t underrun_silence() const { return underrun_silence_.load(); }
+    /// 返回输出不足、需要补静音的回调次数；不是传输丢包数。
+    [[nodiscard]] uint64_t underrun_callbacks() const { return underrun_callbacks_.load(); }
 
   private:
     static void fill(void *userdata, Uint8 *stream, int len);
@@ -39,6 +43,9 @@ class AudioOut {
     std::atomic<bool> started_{false};
     std::atomic<uint64_t> delivered_{0};
     std::atomic<uint64_t> silence_{0};
+    std::atomic<uint64_t> preroll_silence_{0};
+    std::atomic<uint64_t> underrun_silence_{0};
+    std::atomic<uint64_t> underrun_callbacks_{0};
 };
 
 } // namespace scrctl::app

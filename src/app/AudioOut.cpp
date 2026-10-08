@@ -20,9 +20,8 @@ bool AudioOut::open(scrctl::media::AudioPump &pump, std::string &err) {
     want.callback = &AudioOut::fill;
     want.userdata = this;
     SDL_AudioSpec have{};
-    // 输出端没有重采样器，因此不允许 SDL 改变采样率、声道数或样本格式。
-    // 例如把 48 kHz 的 PCM 按 44.1 kHz 播放，会改变速度和音调；
-    // 协商失败时由调用方继续接收和解码音频，禁用本机播放。
+    // 应用回调始终提交流所用的格式；allowed_changes=0 时 SDL 可在内部
+    // 转换为硬件格式，因此 have 的格式不等同于硬件的原生格式。
     dev_ = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0);
     if (dev_ == 0) {
         pump_ = nullptr;
@@ -43,9 +42,11 @@ bool AudioOut::open(scrctl::media::AudioPump &pump, std::string &err) {
         err = buf;
         return false;
     }
+    started_.store(false, std::memory_order_relaxed);
     SDL_PauseAudioDevice(dev_, 0);
-    std::printf(SCRCTL_TR("Audio output opened: %d Hz / %d channels, backend %s\n"), have.freq, have.channels,
-                SDL_GetCurrentAudioDriver());
+    std::printf(SCRCTL_TR("Audio output opened: %d Hz / %d channels, backend %s, callback %u frames (%u bytes)\n"),
+                have.freq, have.channels, SDL_GetCurrentAudioDriver(),
+                static_cast<unsigned>(have.samples), static_cast<unsigned>(have.size));
     return true;
 }
 
@@ -72,6 +73,7 @@ void AudioOut::fill(void *userdata, Uint8 *stream, int len) {
         self->pump_->buffered_frames() < self->preroll_) {
         std::memset(dst, 0, frames * frame_bytes);
         self->silence_.fetch_add(frames, std::memory_order_relaxed);
+        self->preroll_silence_.fetch_add(frames, std::memory_order_relaxed);
         return;
     }
     self->started_.store(true, std::memory_order_relaxed);
@@ -79,6 +81,8 @@ void AudioOut::fill(void *userdata, Uint8 *stream, int len) {
     if (got < frames) {
         std::memset(dst + got * self->channels_, 0, (frames - got) * frame_bytes);
         self->silence_.fetch_add(frames - got, std::memory_order_relaxed);
+        self->underrun_silence_.fetch_add(frames - got, std::memory_order_relaxed);
+        self->underrun_callbacks_.fetch_add(1, std::memory_order_relaxed);
     }
     self->delivered_.fetch_add(got, std::memory_order_relaxed);
 }

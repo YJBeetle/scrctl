@@ -39,7 +39,8 @@ public:
         ///
         /// 目标水位限制实时播放延迟。启动时消费方可能晚于接收线程准备好，
         /// 额外积累的音频不会在生产、消费速率相等时自动减少；read() 通过
-        /// 跳过旧采样控制积压，也用于缓解两个时钟的漂移。
+        /// 仅在初次读取或积压明显超出目标时裁去旧采样。正常包到达与音频回调
+        /// 的节拍差不应触发逐回调丢样本；长期时钟漂移尚未用重采样补偿。
         ///
         /// 延迟开放消费端的验证见 docs/coredevice.md §17.2：read() 应将
         /// 超过两倍目标的积压在一次调用内降至目标附近，而后维持稳定水位。
@@ -58,6 +59,19 @@ public:
 
     /// 根据选项计算水位及容量，不访问设备，可在 tests/media_test 离线验证。
     [[nodiscard]] static Waterline compute_waterline(const Options &options);
+
+    struct ReadTrim {
+        std::size_t frames = 0;
+        bool startup = false;
+    };
+
+    /// 以本次读取后的剩余帧数判断积压。初次输出可裁去启动期间积累的旧数据；
+    /// 后续只处理超过两倍目标加一个编码帧的大积压，正常回调不跳过样本。
+    /// 纯函数供离线节拍和缓冲策略验证，不访问设备或修改缓冲。
+    [[nodiscard]] static ReadTrim compute_read_trim(std::size_t buffered,
+                                                   std::size_t requested,
+                                                   std::size_t target,
+                                                   int frame_length, bool first_read);
 
     struct Stats {
         /// 载荷类型与音频配置匹配的 RTP 包数，包括解码失败的包。
@@ -78,7 +92,9 @@ public:
         std::uint64_t rtcp_failed = 0;
         /// 缓冲满时丢弃的最旧音频帧数；一帧是 channels 个采样点。
         std::uint64_t dropped_stale = 0;
-        /// read() 为维持目标水位而跳过的音频帧数。
+        /// 首次输出前裁去的旧音频帧数，不计入运行时的积压调整。
+        std::uint64_t startup_trimmed = 0;
+        /// 开始输出后，为控制过大积压而跳过的音频帧数。
         std::uint64_t steered = 0;
         std::uint64_t restarts = 0;
     };
@@ -164,6 +180,7 @@ private:
     std::size_t write_ = 0;
     std::size_t read_ = 0;
     std::size_t used_ = 0;
+    bool read_started_ = false;
     std::size_t target_frames_ = 0;
     /// 环容量（音频帧），与目标水位由 compute_waterline() 一起计算。
     std::size_t capacity_frames_ = 0;

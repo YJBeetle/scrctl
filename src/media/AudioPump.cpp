@@ -67,6 +67,29 @@ AudioPump::Waterline AudioPump::compute_waterline(const Options &options) {
     return w;
 }
 
+AudioPump::ReadTrim AudioPump::compute_read_trim(std::size_t buffered,
+                                                std::size_t requested,
+                                                std::size_t target,
+                                                int frame_length, bool first_read) {
+    if (requested == 0 || buffered <= requested) {
+        return {};
+    }
+    const std::size_t remaining = buffered - requested;
+    if (remaining <= target) {
+        return {};
+    }
+    const std::size_t excess = remaining - target;
+    if (first_read) {
+        return {excess, true};
+    }
+    const std::size_t packet_frames = frame_length > 0 ? static_cast<std::size_t>(frame_length) : 480;
+    // 等价于 remaining > 2 * target + packet_frames，但分步相减避免极值相加溢出。
+    if (excess > target && excess - target > packet_frames) {
+        return {excess, false};
+    }
+    return {};
+}
+
 std::unique_ptr<AudioPump> AudioPump::start(remote::Device &device, const Options &options,
                                            std::string &err, bool verbose) {
     // 起流前计算并提示被限制的配置，与构造函数采用相同纯函数。
@@ -196,20 +219,18 @@ std::size_t AudioPump::read(int16_t *dst, std::size_t frames) {
     if (ring_.empty() || frames == 0) {
         return 0;
     }
-    // 按积压程度跳过旧音频以控制延迟：超过两倍目标时一次降至目标，
-    // 适合消费方晚启动形成的大积压；目标与两倍之间则每次少量跳过，
-    // 用于渐进消除时钟漂移。该策略不做重采样，跳过的采样不会播放。
-    std::size_t skip = 0;
-    if (used_ > target_frames_ && used_ >= frames) {
-        // 先确认缓冲足够本次读取，再计算差值，避免无符号减法下溢。
-        const std::size_t excess = used_ - target_frames_;
-        skip = used_ > target_frames_ * 2 ? excess : std::min<std::size_t>(excess / 20, 8);
-        skip = std::min(skip, used_ - frames);  // 保留本次需要输出的帧数。
-    }
-    if (skip > 0) {
-        read_ = (read_ + skip) % capacity_frames_;
-        used_ -= skip;
-        stats_.steered += skip;
+    // 本次将播放的 frames 不是额外积压；将它也算入目标会在正常节拍下反复
+    // 丢掉少量样本。普通回调保持连续 PCM，仅裁初始或明显过大的积压。
+    const auto trim = compute_read_trim(used_, frames, target_frames_, options_.frame_length,
+                                       !read_started_);
+    if (trim.frames > 0) {
+        read_ = (read_ + trim.frames) % capacity_frames_;
+        used_ -= trim.frames;
+        if (trim.startup) {
+            stats_.startup_trimmed += trim.frames;
+        } else {
+            stats_.steered += trim.frames;
+        }
     }
     const std::size_t take = frames < used_ ? frames : used_;
     for (std::size_t f = 0; f < take; ++f) {
@@ -220,6 +241,9 @@ std::size_t AudioPump::read(int16_t *dst, std::size_t frames) {
     }
     read_ = (read_ + take) % capacity_frames_;
     used_ -= take;
+    if (take > 0) {
+        read_started_ = true;
+    }
     return take;
 }
 
