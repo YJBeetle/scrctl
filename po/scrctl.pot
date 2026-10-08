@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 06:57+0800\n"
+"POT-Creation-Date: 2026-10-08 13:44+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -159,8 +159,9 @@ msgstr ""
 
 #: src/app/Cli.cpp:23 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
 #: tools/audio_decode_probe.cpp:189 tools/audio_pump_probe.cpp:85
-#: tools/feature_probe.cpp:61 tools/screenshot_probe.cpp:52
-#: tools/stall_probe.cpp:59 tools/wifi_probe.cpp:642
+#: tools/feature_probe.cpp:61 tools/hid_probe.cpp:184
+#: tools/screenshot_probe.cpp:52 tools/stall_probe.cpp:59
+#: tools/wifi_probe.cpp:642
 msgid "Show help"
 msgstr ""
 
@@ -1417,7 +1418,7 @@ msgstr ""
 msgid "UDP send failed (lwIP "
 msgstr ""
 
-#: src/net/UdpSocket.cpp:147
+#: src/net/UdpSocket.cpp:147 tools/hid_probe.cpp:40
 msgid "UDP receive timed out"
 msgstr ""
 
@@ -3004,6 +3005,7 @@ msgid ""
 msgstr ""
 
 #: tools/app_launch_probe.cpp:32 tools/applist_probe.cpp:35
+#: tools/hid_probe.cpp:193
 msgid "Print connection and request details"
 msgstr ""
 
@@ -3035,13 +3037,14 @@ msgstr ""
 
 #: tools/app_launch_probe.cpp:62 tools/applist_probe.cpp:51
 #: tools/audio_pump_probe.cpp:114 tools/feature_probe.cpp:89
-#: tools/rr_keepalive_probe.cpp:554 tools/screenshot_probe.cpp:65
-#: tools/stall_probe.cpp:133
+#: tools/hid_probe.cpp:269 tools/rr_keepalive_probe.cpp:554
+#: tools/screenshot_probe.cpp:65 tools/stall_probe.cpp:133
 #, c-format
 msgid "Failed to establish device session: %s\n"
 msgstr ""
 
 #: tools/app_launch_probe.cpp:65 tools/applist_probe.cpp:54
+#: tools/hid_probe.cpp:272
 #, c-format
 msgid "Device session ready: %s / iOS %s\n"
 msgstr ""
@@ -3505,6 +3508,291 @@ msgstr ""
 
 #: tools/feature_probe.cpp:135
 msgid "One or more media queries failed"
+msgstr ""
+
+#: tools/hid_probe.cpp:42
+msgid "Packet receive failed without an error message"
+msgstr ""
+
+#: tools/hid_probe.cpp:124
+#, c-format
+msgid "Dry run: no device connection or input was sent.\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:153
+#, c-format
+msgid "Cannot open screenshot file %s: %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:166
+#, c-format
+msgid "Failed to save screenshot file %s: %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:167
+msgid "Incomplete write"
+msgstr ""
+
+#: tools/hid_probe.cpp:170
+#, c-format
+msgid "Saved screenshot: %zu bytes -> %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:183
+msgid "Send HID input in command-line order and capture screenshots"
+msgstr ""
+
+#: tools/hid_probe.cpp:186
+msgid ""
+"Queries and actions run in command-line order. --tap defaults to the center; "
+"otherwise provide both X and Y.\n"
+"For a center tap on a specific device, put UDID before --tap, or use --tap "
+"-- UDID.\n"
+"Without actions or queries, show help. --no-stream alone opens the HID "
+"service without sending input.\n"
+"The auxiliary video requests a 20-second RTCP idle timeout and sends no RR; "
+"it may stop during a long test.\n"
+"Exit closes the local receiver without calling stopAll, which would stop "
+"other media sessions on the device.\n"
+"A successful send does not confirm input took effect. No --probe-reply "
+"response does not prove input failed.\n"
+"--dry-run checks arguments and prints the plan without connecting to a "
+"device."
+msgstr ""
+
+#: tools/hid_probe.cpp:194
+msgid "Do not start auxiliary video"
+msgstr ""
+
+#: tools/hid_probe.cpp:195
+msgid "Check arguments and print the ordered plan without connecting"
+msgstr ""
+
+#: tools/hid_probe.cpp:196
+msgid "Device identifier; omit to select the only connected device"
+msgstr ""
+
+#: tools/hid_probe.cpp:201
+msgid "List the device's HID surfaces"
+msgstr ""
+
+#: tools/hid_probe.cpp:202
+msgid "Print the raw connectedServices reply and list HID surfaces"
+msgstr ""
+
+#: tools/hid_probe.cpp:203
+msgid "Draw a short diagonal line near the center"
+msgstr ""
+
+#: tools/hid_probe.cpp:204
+msgid "Send a center touch and wait for raw replies (diagnostic)"
+msgstr ""
+
+#: tools/hid_probe.cpp:205
+msgid "Send Command+V; focus the destination text field first"
+msgstr ""
+
+#: tools/hid_probe.cpp:210
+msgid "Press home, lock, volup, voldn or mute once"
+msgstr ""
+
+#: tools/hid_probe.cpp:224
+msgid "Tap normalized X Y in [0, 1], holding for 90 ms; defaults to the center"
+msgstr ""
+
+#: tools/hid_probe.cpp:232
+msgid "Draw a line from X0 Y0 to X1 Y1 using normalized coordinates in [0, 1]"
+msgstr ""
+
+#: tools/hid_probe.cpp:239
+msgid "Save a PNG from screencaptureservice to FILE"
+msgstr ""
+
+#: tools/hid_probe.cpp:245
+msgid "Type a b c on the specified keyboard surface ID"
+msgstr ""
+
+#: tools/hid_probe.cpp:251
+msgid "Drag horizontally for N seconds; 0 sends no drag"
+msgstr ""
+
+#: tools/hid_probe.cpp:282
+#, c-format
+msgid "Failed to start auxiliary video: %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:286
+#, c-format
+msgid ""
+"Auxiliary video: requested 20-second RTCP idle timeout, RR=off; exit does "
+"not call stopAll.\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:288
+#, c-format
+msgid ""
+"Auxiliary video received %llu packets; packet reception or a successful send "
+"does not confirm input took effect.\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:290
+#, c-format
+msgid "Auxiliary video is disabled for this session.\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:297
+#, c-format
+msgid "Auxiliary video receive failed: %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:301
+#, c-format
+msgid "%s failed: %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:304
+#, c-format
+msgid "Failed to release touch after an error: %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:308
+#, c-format
+msgid "Keyboard input failed: %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:311
+#, c-format
+msgid "Failed to release keyboard keys after an error: %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:325
+#, c-format
+msgid "Failed to query the raw HID reply: %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:328
+#, c-format
+msgid ""
+"Raw connectedServices reply:\n"
+"%s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:333
+#, c-format
+msgid "Failed to list HID surfaces: %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:337
+#, c-format
+msgid "  Surface %llu (0x%llx)  %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:346 tools/hid_probe.cpp:469
+#, c-format
+msgid "Failed to open the HID service: %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:349
+#, c-format
+msgid "Connected to universalhidservice\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:355
+#, c-format
+msgid "Failed to open the hardware button service: %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:359
+#, c-format
+msgid "Press hardware button: %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:361
+#, c-format
+msgid "Hardware button input failed: %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:364
+#, c-format
+msgid "Failed to release the hardware button after an error: %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:370
+#, c-format
+msgid "Tap (%.3f, %.3f)\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:372
+msgid "Tap"
+msgstr ""
+
+#: tools/hid_probe.cpp:375
+#, c-format
+msgid "Draw line (%.3f, %.3f) -> (%.3f, %.3f)\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:383
+msgid "Line drawing"
+msgstr ""
+
+#: tools/hid_probe.cpp:395
+#, c-format
+msgid "Screenshot failed: %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:401
+#, c-format
+msgid "Screenshot reply contains no image data\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:409
+#, c-format
+msgid "Draw a short diagonal line near the center\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:412 tools/hid_probe.cpp:427
+msgid "Drag"
+msgstr ""
+
+#: tools/hid_probe.cpp:432
+#, c-format
+msgid "Completed %llu horizontal drag requests\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:436
+#, c-format
+msgid "Type a b c on surface %llu\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:450
+msgid "Report reply query"
+msgstr ""
+
+#: tools/hid_probe.cpp:451
+#, c-format
+msgid "Reply for report state=0x%02x: %s\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:456
+#, c-format
+msgid "Send Command+V\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:472
+#, c-format
+msgid "Connected to universalhidservice; no input was sent.\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:476
+#, c-format
+msgid "Auxiliary video received %llu packets in total\n"
+msgstr ""
+
+#: tools/hid_probe.cpp:477
+#, c-format
+msgid ""
+"Requested operations completed. Check the device screen or a screenshot to "
+"confirm input.\n"
 msgstr ""
 
 #: tools/rr_keepalive_probe.cpp:188

@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "hid/Hid.h"
+#include "i18n/CliLanguage.h"
 #include "i18n/Translation.h"
 #include "media/StreamSession.h"
 #include "remote/Device.h"
@@ -38,7 +39,7 @@ public:
                     ++packets_;
                 } else if (err != SCRCTL_TR("UDP receive timed out")) {
                     std::lock_guard lock(error_mutex_);
-                    error_ = err.empty() ? "收包失败，未提供错误原因" : err;
+                    error_ = err.empty() ? SCRCTL_TR("Packet receive failed without an error message") : err;
                     break;
                 }
             }
@@ -85,17 +86,17 @@ uint16_t button_code(const std::string &name) {
 }
 
 void check_coordinates(const std::vector<double> &values, const char *option, size_t count) {
-    if (values.size() != count) throw CLI::ValidationError(option, "需要提供完整的坐标组");
+    if (values.size() != count) throw CLI::ValidationError(option, "Provide all coordinates");
     for (const auto value : values) {
         if (!std::isfinite(value) || value < 0 || value > 1)
-            throw CLI::ValidationError(option, "坐标必须是 0..1 范围内的有限数值");
+            throw CLI::ValidationError(option, "Coordinates must be finite numbers in [0, 1]");
     }
 }
 
 CLI::Validator nonempty_coordinate() {
     return CLI::Validator([](std::string &text) -> std::string {
         return text.find_first_not_of(" \t\r\n\v\f") == std::string::npos
-                   ? "坐标不能为空" : std::string{};
+                   ? "Coordinates cannot be empty" : std::string{};
     }, "COORDINATE", "nonempty_coordinate");
 }
 
@@ -113,14 +114,14 @@ CLI::Validator surface_id() {
         uint64_t parsed = 0;
         const auto result = std::from_chars(value.data(), value.data() + value.size(), parsed, 10);
         if (value.empty() || result.ec != std::errc{} || result.ptr != value.data() + value.size() ||
-            parsed == 0) return "键盘面 ID 必须是 1..18446744073709551615 的完整十进制整数";
+            parsed == 0) return "Keyboard surface ID must be a decimal integer in [1, 18446744073709551615]";
         text = std::to_string(parsed);
         return {};
     }, "DECIMAL", "surface_id");
 }
 
 void print_plan(const std::vector<QueuedAction> &queue, bool with_stream, bool explicit_device) {
-    std::printf("离线预演：未连接设备，以下计划不表示输入已经生效。\n");
+    std::printf(SCRCTL_TR("Dry run: no device connection or input was sent.\n"));
     std::printf("device=%s stream=%s timeout=20 RR=off\n",
                 explicit_device ? "explicit" : "auto", with_stream ? "on" : "off");
     size_t index = 0;
@@ -149,7 +150,7 @@ void print_plan(const std::vector<QueuedAction> &queue, bool with_stream, bool e
 bool save_screenshot(const std::string &path, const std::vector<uint8_t> &data) {
     std::FILE *fp = std::fopen(path.c_str(), "wb");
     if (fp == nullptr) {
-        std::fprintf(stderr, "无法打开截图文件 %s: %s\n", path.c_str(), std::strerror(errno));
+        std::fprintf(stderr, SCRCTL_TR("Cannot open screenshot file %s: %s\n"), path.c_str(), std::strerror(errno));
         return false;
     }
     errno = 0;
@@ -162,11 +163,11 @@ bool save_screenshot(const std::string &path, const std::vector<uint8_t> &data) 
     const int close_error = errno;
     if (write_failed || close_result != 0) {
         const int reason = write_failed ? write_error : close_error;
-        std::fprintf(stderr, "保存截图文件 %s 失败: %s\n", path.c_str(),
-                     reason ? std::strerror(reason) : "写入长度不足");
+        std::fprintf(stderr, SCRCTL_TR("Failed to save screenshot file %s: %s\n"), path.c_str(),
+                     reason ? std::strerror(reason) : SCRCTL_TR("Incomplete write"));
         return false;
     }
-    std::printf("截图 %zu 字节 -> %s\n", data.size(), path.c_str());
+    std::printf(SCRCTL_TR("Saved screenshot: %zu bytes -> %s\n"), data.size(), path.c_str());
     return true;
 }
 
@@ -179,33 +180,34 @@ int main(int argc, char **argv) {
     bool dry_run = false;
     std::vector<QueuedAction> queue;
     std::string serial;
-    CLI::App cli{"按指定顺序发送 HID 动作并截图核对"};
-    cli.set_help_flag("-h,--help", "显示帮助");
-    cli.footer("所有查询和动作按参数出现顺序执行。--tap 不带坐标时点击中心；带坐标时必须提供 X Y。\n"
-               "中心点击并指定设备时，将 UDID 放在 --tap 前，或使用 --tap -- UDID。\n"
-               "不提供动作或查询时显示帮助；--no-stream 单独使用可检查无媒体流的服务连接。\n"
-               "辅助视频显式请求 20 秒 RTCP 空闲超时，不发送 RR，不保证长时间持续收包。\n"
-               "退出仅关闭本地接收端，不调用 stopAll；stopAll 会停止设备上其它媒体会话。\n"
-               "发送成功不确认输入已生效；--probe-reply 无回信也不能单独证明输入失败。\n"
-               "--dry-run 只检查参数并显示计划，不连接设备。");
-    cli.add_flag("-v,--verbose", verbose, "显示连接详情")->disable_flag_override();
-    cli.add_flag("--no-stream", no_stream, "不启动辅助视频流")->disable_flag_override();
-    cli.add_flag("--dry-run", dry_run, "只检查参数并显示有序计划")->disable_flag_override();
-    cli.add_option("UDID", serial, "设备标识；省略时选择唯一已连接设备");
+    CLI::App cli{SCRCTL_N_("Send HID input in command-line order and capture screenshots")};
+    cli.set_help_flag("-h,--help", SCRCTL_N_("Show help"));
+    cli.footer(SCRCTL_N_(
+        "Queries and actions run in command-line order. --tap defaults to the center; otherwise provide both X and Y.\n"
+        "For a center tap on a specific device, put UDID before --tap, or use --tap -- UDID.\n"
+        "Without actions or queries, show help. --no-stream alone opens the HID service without sending input.\n"
+        "The auxiliary video requests a 20-second RTCP idle timeout and sends no RR; it may stop during a long test.\n"
+        "Exit closes the local receiver without calling stopAll, which would stop other media sessions on the device.\n"
+        "A successful send does not confirm input took effect. No --probe-reply response does not prove input failed.\n"
+        "--dry-run checks arguments and prints the plan without connecting to a device."));
+    cli.add_flag("-v,--verbose", verbose, SCRCTL_N_("Print connection and request details"))->disable_flag_override();
+    cli.add_flag("--no-stream", no_stream, SCRCTL_N_("Do not start auxiliary video"))->disable_flag_override();
+    cli.add_flag("--dry-run", dry_run, SCRCTL_N_("Check arguments and print the ordered plan without connecting"))->disable_flag_override();
+    cli.add_option("UDID", serial, SCRCTL_N_("Device identifier; omit to select the only connected device"));
     const auto add_action_flag = [&](const char *name, QueuedAction::Kind kind, const char *help) {
         cli.add_flag_callback(name, [&, kind] { queue.push_back(QueuedAction{kind}); }, help)
             ->trigger_on_parse()->disable_flag_override();
     };
-    add_action_flag("--list", QueuedAction::kList, "列出设备注册的 HID 面");
-    add_action_flag("--raw", QueuedAction::kRaw, "输出 connectedServices 原始回复并列出 HID 面");
-    add_action_flag("--stroke", QueuedAction::kStroke, "在屏幕中央画一条短斜线");
-    add_action_flag("--probe-reply", QueuedAction::kReply, "发送中心触摸并等待原始回复（诊断用途）");
-    add_action_flag("--paste", QueuedAction::kPaste, "发送 Command+V，目标输入框须已有焦点");
+    add_action_flag("--list", QueuedAction::kList, SCRCTL_N_("List the device's HID surfaces"));
+    add_action_flag("--raw", QueuedAction::kRaw, SCRCTL_N_("Print the raw connectedServices reply and list HID surfaces"));
+    add_action_flag("--stroke", QueuedAction::kStroke, SCRCTL_N_("Draw a short diagonal line near the center"));
+    add_action_flag("--probe-reply", QueuedAction::kReply, SCRCTL_N_("Send a center touch and wait for raw replies (diagnostic)"));
+    add_action_flag("--paste", QueuedAction::kPaste, SCRCTL_N_("Send Command+V; focus the destination text field first"));
     cli.add_option_function<std::string>("--button", [&](const std::string &name) {
         auto action = QueuedAction{QueuedAction::kButton};
         action.arg = name;
         queue.push_back(std::move(action));
-    }, "按一次 home/lock/volup/voldn/mute")
+    }, SCRCTL_N_("Press home, lock, volup, voldn or mute once"))
         ->check(CLI::IsMember({"home", "lock", "volup", "voldn", "mute"}))->trigger_on_parse();
     CLI::Option *tap_option = nullptr;
     tap_option = cli.add_option_function<std::vector<double>>("--tap", [&](const std::vector<double> &values) {
@@ -213,13 +215,13 @@ int main(int argc, char **argv) {
         // 在解析回调中检查原始结果，区分未提供参数的中心默认值和显式空坐标。
         for (const auto &raw : tap_option->results()) {
             if (raw.find_first_not_of(" \t\r\n\v\f") == std::string::npos)
-                throw CLI::ValidationError("--tap", "坐标不能为空");
+                throw CLI::ValidationError("--tap", "Coordinates cannot be empty");
         }
         check_coordinates(values, "--tap", 2);
         auto action = QueuedAction{QueuedAction::kTap};
         std::copy(values.begin(), values.end(), action.v.begin());
         queue.push_back(std::move(action));
-    }, "点击归一化坐标 X Y（0..1）；省略时为中心，按住 90ms")
+    }, SCRCTL_N_("Tap normalized X Y in [0, 1], holding for 90 ms; defaults to the center"))
         ->expected(0, 2)->allow_extra_args(false)->delimiter(',')->default_str("0.5,0.5")
         ->check(nonempty_coordinate())->trigger_on_parse();
     cli.add_option_function<std::vector<double>>("--line", [&](const std::vector<double> &values) {
@@ -227,54 +229,47 @@ int main(int argc, char **argv) {
         auto action = QueuedAction{QueuedAction::kLine};
         std::copy(values.begin(), values.end(), action.v.begin());
         queue.push_back(std::move(action));
-    }, "沿 X0 Y0 X1 Y1 画插值直线；坐标为 0..1")
+    }, SCRCTL_N_("Draw a line from X0 Y0 to X1 Y1 using normalized coordinates in [0, 1]"))
         ->expected(4)->allow_extra_args(false)->check(nonempty_coordinate())->trigger_on_parse();
     cli.add_option_function<std::string>("--shot", [&](const std::string &path) {
-        if (path.empty()) throw CLI::ValidationError("--shot", "需要提供非空文件路径");
+        if (path.empty()) throw CLI::ValidationError("--shot", "Provide a nonempty file path");
         auto action = QueuedAction{QueuedAction::kShot};
         action.arg = path;
         queue.push_back(std::move(action));
-    }, "将 screencaptureservice PNG 保存到 FILE")
+    }, SCRCTL_N_("Save a PNG from screencaptureservice to FILE"))
         ->type_size(0, 1)->expected(1)->trigger_on_parse();
     cli.add_option_function<uint64_t>("--keys", [&](uint64_t surface) {
         auto action = QueuedAction{QueuedAction::kKeys};
         action.surface = surface;
         queue.push_back(std::move(action));
-    }, "向指定键盘面 ID 发送 a b c")
+    }, SCRCTL_N_("Type a b c on the specified keyboard surface ID"))
         ->transform(surface_id())->trigger_on_parse();
     cli.add_option_function<int>("--swipe-loop", [&](int seconds) {
         auto action = QueuedAction{QueuedAction::kSwipe};
         action.seconds = seconds;
         queue.push_back(std::move(action));
-    }, "连续横向拖动 N 秒；0 表示不拖动")
+    }, SCRCTL_N_("Drag horizontally for N seconds; 0 sends no drag"))
         ->transform(scrctl::probe::decimal_integer(0, std::numeric_limits<int>::max()))->trigger_on_parse();
 
-    try {
-        cli.parse(argc, argv);
-    } catch (const CLI::CallForHelp &) {
-        std::printf("%s", cli.help().c_str());
-        return 0;
-    } catch (const CLI::ParseError &error) {
-        std::fprintf(stderr, "参数无效: %s\n", error.what());
-        return 2;
-    }
+    scrctl::i18n::CliLanguage language(cli);
+    if (auto code = language.parse(argc, argv)) return *code;
     const bool with_stream = !no_stream;
     if (dry_run) {
         print_plan(queue, with_stream, !serial.empty());
         return 0;
     }
     if (queue.empty() && with_stream) {
-        std::printf("%s", cli.help().c_str());
+        std::printf("%s", language.help().c_str());
         return 0;
     }
 
     std::string err;
     auto device = scrctl::remote::Device::establish(serial, err, verbose);
     if (!device) {
-        std::fprintf(stderr, "建立会话失败: %s\n", err.c_str());
+        std::fprintf(stderr, SCRCTL_TR("Failed to establish device session: %s\n"), err.c_str());
         return 1;
     }
-    std::printf("会话就绪：%s / iOS %s\n", device->property("ProductType").c_str(),
+    std::printf(SCRCTL_TR("Device session ready: %s / iOS %s\n"), device->property("ProductType").c_str(),
                 device->property("OSVersion").c_str());
 
     std::unique_ptr<scrctl::media::StreamSession> session;
@@ -284,36 +279,36 @@ int main(int argc, char **argv) {
         req.timeout_seconds = 20;
         session = scrctl::media::StreamSession::start(*device, req, err, verbose);
         if (session == nullptr) {
-            std::fprintf(stderr, "起流失败: %s\n", err.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to start auxiliary video: %s\n"), err.c_str());
             return 1;
         }
         drainer = std::make_unique<Drainer>(*session);
-        std::printf("辅助视频：请求 20 秒 RTCP 空闲超时，RR=off；退出不调用 stopAll。\n");
+        std::printf(SCRCTL_TR("Auxiliary video: requested 20-second RTCP idle timeout, RR=off; exit does not call stopAll.\n"));
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
-        std::printf("辅助视频已收 %llu 个包；收包或发送成功不确认输入已生效。\n", drainer->packets());
+        std::printf(SCRCTL_TR("Auxiliary video received %llu packets; packet reception or a successful send does not confirm input took effect.\n"), drainer->packets());
     } else {
-        std::printf("本次会话不启动辅助视频流。\n");
+        std::printf(SCRCTL_TR("Auxiliary video is disabled for this session.\n"));
     }
 
     std::unique_ptr<scrctl::hid::Service> hid;
     const auto receiver_ok = [&] {
         const auto failure = drainer ? drainer->error() : std::string{};
         if (failure.empty()) return true;
-        std::fprintf(stderr, "辅助视频收包失败: %s\n", failure.c_str());
+        std::fprintf(stderr, SCRCTL_TR("Auxiliary video receive failed: %s\n"), failure.c_str());
         return false;
     };
     const auto touch_failed = [&](const char *label, double x, double y) {
-        std::fprintf(stderr, "%s失败: %s\n", label, err.c_str());
+        std::fprintf(stderr, SCRCTL_TR("%s failed: %s\n"), label, err.c_str());
         std::string release_error;
         if (!hid->touch(scrctl::hid::kSurfaceMainTouchscreen, x, y, false, release_error))
-            std::fprintf(stderr, "补发触摸抬起失败: %s\n", release_error.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to release touch after an error: %s\n"), release_error.c_str());
         return 1;
     };
     const auto keyboard_failed = [&](uint64_t surface) {
-        std::fprintf(stderr, "键盘发送失败: %s\n", err.c_str());
+        std::fprintf(stderr, SCRCTL_TR("Keyboard input failed: %s\n"), err.c_str());
         std::string release_error;
         if (!hid->send_report(surface, scrctl::hid::keyboard_report({}), release_error))
-            std::fprintf(stderr, "补发键盘松键失败: %s\n", release_error.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to release keyboard keys after an error: %s\n"), release_error.c_str());
         return 1;
     };
 
@@ -327,19 +322,19 @@ int main(int argc, char **argv) {
                 auto query = scrctl::hid::Service::open(*device, err, verbose);
                 scrctl::xpc::Value reply;
                 if (!query || !query->raw_connected_services(reply, err)) {
-                    std::fprintf(stderr, "取 HID 原文失败: %s\n", err.c_str());
+                    std::fprintf(stderr, SCRCTL_TR("Failed to query the raw HID reply: %s\n"), err.c_str());
                     return 1;
                 }
-                std::printf("connectedServices 原文:\n%s\n", scrctl::xpc::describe(reply).c_str());
+                std::printf(SCRCTL_TR("Raw connectedServices reply:\n%s\n"), scrctl::xpc::describe(reply).c_str());
             }
             auto query = scrctl::hid::Service::open(*device, err, verbose);
             std::vector<scrctl::hid::Service::Surface> surfaces;
             if (!query || !query->surfaces(surfaces, err)) {
-                std::fprintf(stderr, "列面失败: %s\n", err.c_str());
+                std::fprintf(stderr, SCRCTL_TR("Failed to list HID surfaces: %s\n"), err.c_str());
                 return 1;
             }
             for (const auto &surface : surfaces) {
-                std::printf("  面 %llu (0x%llx)  %s\n",
+                std::printf(SCRCTL_TR("  Surface %llu (0x%llx)  %s\n"),
                             static_cast<unsigned long long>(surface.service_id),
                             static_cast<unsigned long long>(surface.service_id), surface.name.c_str());
             }
@@ -348,36 +343,36 @@ int main(int argc, char **argv) {
         if (!hid) {
             hid = scrctl::hid::Service::open(*device, err, verbose);
             if (!hid) {
-                std::fprintf(stderr, "打开 HID 服务失败: %s\n", err.c_str());
+                std::fprintf(stderr, SCRCTL_TR("Failed to open the HID service: %s\n"), err.c_str());
                 return 1;
             }
-            std::printf("universalhidservice 已连接\n");
+            std::printf(SCRCTL_TR("Connected to universalhidservice\n"));
         }
         switch (action.kind) {
         case QueuedAction::kButton: {
             auto buttons = scrctl::hid::Buttons::open(*device, err, verbose);
             if (!buttons) {
-                std::fprintf(stderr, "打开按键面失败: %s\n", err.c_str());
+                std::fprintf(stderr, SCRCTL_TR("Failed to open the hardware button service: %s\n"), err.c_str());
                 return 1;
             }
             const auto code = button_code(action.arg);
-            std::printf("按硬件键 %s\n", action.arg.c_str());
+            std::printf(SCRCTL_TR("Press hardware button: %s\n"), action.arg.c_str());
             if (!buttons->press(scrctl::hid::button::kUsagePageConsumer, code, 90, err)) {
-                std::fprintf(stderr, "按键失败: %s\n", err.c_str());
+                std::fprintf(stderr, SCRCTL_TR("Hardware button input failed: %s\n"), err.c_str());
                 std::string release_error;
                 if (!buttons->release(scrctl::hid::button::kUsagePageConsumer, code, release_error))
-                    std::fprintf(stderr, "补发硬件按键抬起失败: %s\n", release_error.c_str());
+                    std::fprintf(stderr, SCRCTL_TR("Failed to release the hardware button after an error: %s\n"), release_error.c_str());
                 return 1;
             }
             break;
         }
         case QueuedAction::kTap:
-            std::printf("点击 (%.3f, %.3f)\n", action.v[0], action.v[1]);
+            std::printf(SCRCTL_TR("Tap (%.3f, %.3f)\n"), action.v[0], action.v[1]);
             if (!hid->tap(action.v[0], action.v[1], 90, err))
-                return touch_failed("点击", action.v[0], action.v[1]);
+                return touch_failed(SCRCTL_TR("Tap"), action.v[0], action.v[1]);
             break;
         case QueuedAction::kLine: {
-            std::printf("画线 (%.3f,%.3f) -> (%.3f,%.3f)\n",
+            std::printf(SCRCTL_TR("Draw line (%.3f, %.3f) -> (%.3f, %.3f)\n"),
                         action.v[0], action.v[1], action.v[2], action.v[3]);
             std::vector<std::pair<double, double>> points;
             for (int i = 0; i <= 24; ++i) {
@@ -385,7 +380,7 @@ int main(int argc, char **argv) {
                 points.emplace_back(action.v[0] + (action.v[2] - action.v[0]) * t,
                                     action.v[1] + (action.v[3] - action.v[1]) * t);
             }
-            if (!hid->stroke(points, 12, err)) return touch_failed("画线", action.v[2], action.v[3]);
+            if (!hid->stroke(points, 12, err)) return touch_failed(SCRCTL_TR("Line drawing"), action.v[2], action.v[3]);
             break;
         }
         case QueuedAction::kShot: {
@@ -397,13 +392,13 @@ int main(int argc, char **argv) {
                                  "com.apple.coredevice.feature.capturescreenshot",
                                  "com.apple.coredevice.action.capturescreenshot", input, out, err,
                                  verbose, 15000)) {
-                std::fprintf(stderr, "截图失败: %s\n", err.c_str());
+                std::fprintf(stderr, SCRCTL_TR("Screenshot failed: %s\n"), err.c_str());
                 return 1;
             }
             const auto *image = out.find("image");
             if (!image || (image->type != scrctl::xpc::Type::Data &&
                            image->type != scrctl::xpc::Type::FileTransfer) || image->data.empty()) {
-                std::fprintf(stderr, "截图回信里没有 image 字节\n");
+                std::fprintf(stderr, SCRCTL_TR("Screenshot reply contains no image data\n"));
                 return 1;
             }
             if (!save_screenshot(action.arg, image->data)) return 1;
@@ -411,10 +406,10 @@ int main(int argc, char **argv) {
         }
         case QueuedAction::kStroke: {
             // 保持在画面中部，减少误触系统边缘手势的可能。
-            std::printf("画一条中央短斜线\n");
+            std::printf(SCRCTL_TR("Draw a short diagonal line near the center\n"));
             const std::vector<std::pair<double, double>> points = {
                 {0.44, 0.44}, {0.47, 0.46}, {0.50, 0.48}, {0.53, 0.50}, {0.56, 0.52}};
-            if (!hid->stroke(points, 16, err)) return touch_failed("拖动", 0.56, 0.52);
+            if (!hid->stroke(points, 16, err)) return touch_failed(SCRCTL_TR("Drag"), 0.56, 0.52);
             break;
         }
         case QueuedAction::kSwipe: {
@@ -429,16 +424,16 @@ int main(int argc, char **argv) {
                 std::vector<std::pair<double, double>> points;
                 for (int i = 0; i <= 16; ++i)
                     points.emplace_back(x0 + (x1 - x0) * (i / 16.0), 0.55);
-                if (!hid->stroke(points, 14, err)) return touch_failed("拖动", x1, 0.55);
+                if (!hid->stroke(points, 14, err)) return touch_failed(SCRCTL_TR("Drag"), x1, 0.55);
                 rightward = !rightward;
                 ++flips;
                 std::this_thread::sleep_for(std::chrono::milliseconds(240));
             }
-            std::printf("横向拖动请求完成 %llu 次\n", flips);
+            std::printf(SCRCTL_TR("Completed %llu horizontal drag requests\n"), flips);
             break;
         }
         case QueuedAction::kKeys:
-            std::printf("在面 %llu 上发送 a b c\n", static_cast<unsigned long long>(action.surface));
+            std::printf(SCRCTL_TR("Type a b c on surface %llu\n"), static_cast<unsigned long long>(action.surface));
             for (uint16_t usage : {scrctl::hid::key::kA, uint16_t{scrctl::hid::key::kA + 1},
                                   uint16_t{scrctl::hid::key::kA + 2}}) {
                 if (!hid->type(action.surface, {usage}, 60, err)) return keyboard_failed(action.surface);
@@ -452,13 +447,13 @@ int main(int argc, char **argv) {
                 const auto report = scrctl::hid::touchscreen_report(
                     state, scrctl::hid::normalize(0.5), scrctl::hid::normalize(0.5));
                 if (!hid->send_report(scrctl::hid::kSurfaceMainTouchscreen, report, err, &reply))
-                    return touch_failed("报告回复查询", 0.5, 0.5);
-                std::printf("报告 state=0x%02x 有回信: %s\n", state,
+                    return touch_failed(SCRCTL_TR("Report reply query"), 0.5, 0.5);
+                std::printf(SCRCTL_TR("Reply for report state=0x%02x: %s\n"), state,
                             scrctl::xpc::describe(reply).substr(0, 500).c_str());
             }
             break;
         case QueuedAction::kPaste:
-            std::printf("发送 Command+V\n");
+            std::printf(SCRCTL_TR("Send Command+V\n"));
             if (!hid->press_chord(scrctl::hid::kSurfaceKeyboard,
                                   {scrctl::hid::key::kGuiLeft, uint16_t{scrctl::hid::key::kA + 21}},
                                   60, err)) return keyboard_failed(scrctl::hid::kSurfaceKeyboard);
@@ -471,14 +466,14 @@ int main(int argc, char **argv) {
     if (queue.empty()) {
         hid = scrctl::hid::Service::open(*device, err, verbose);
         if (!hid) {
-            std::fprintf(stderr, "打开 HID 服务失败: %s\n", err.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to open the HID service: %s\n"), err.c_str());
             return 1;
         }
-        std::printf("universalhidservice 已连接；未发送输入。\n");
+        std::printf(SCRCTL_TR("Connected to universalhidservice; no input was sent.\n"));
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     if (!receiver_ok()) return 1;
-    if (drainer) std::printf("结束时辅助视频已收 %llu 个包\n", drainer->packets());
-    std::printf("计划已发送；输入效果请在设备画面或截图中确认。\n");
+    if (drainer) std::printf(SCRCTL_TR("Auxiliary video received %llu packets in total\n"), drainer->packets());
+    std::printf(SCRCTL_TR("Requested operations completed. Check the device screen or a screenshot to confirm input.\n"));
     return 0;
 }

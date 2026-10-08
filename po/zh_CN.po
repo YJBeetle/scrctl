@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 06:57+0800\n"
+"POT-Creation-Date: 2026-10-08 13:44+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -160,8 +160,9 @@ msgstr ""
 
 #: src/app/Cli.cpp:23 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
 #: tools/audio_decode_probe.cpp:189 tools/audio_pump_probe.cpp:85
-#: tools/feature_probe.cpp:61 tools/screenshot_probe.cpp:52
-#: tools/stall_probe.cpp:59 tools/wifi_probe.cpp:642
+#: tools/feature_probe.cpp:61 tools/hid_probe.cpp:184
+#: tools/screenshot_probe.cpp:52 tools/stall_probe.cpp:59
+#: tools/wifi_probe.cpp:642
 msgid "Show help"
 msgstr "显示帮助"
 
@@ -1452,7 +1453,7 @@ msgstr "UDP 绑定失败（lwIP "
 msgid "UDP send failed (lwIP "
 msgstr "UDP 发送失败（lwIP "
 
-#: src/net/UdpSocket.cpp:147
+#: src/net/UdpSocket.cpp:147 tools/hid_probe.cpp:40
 msgid "UDP receive timed out"
 msgstr "UDP 接收超时"
 
@@ -3054,6 +3055,7 @@ msgstr ""
 "com.example.App 的启动请求，不连接设备。--help 同样无需连接设备。"
 
 #: tools/app_launch_probe.cpp:32 tools/applist_probe.cpp:35
+#: tools/hid_probe.cpp:193
 msgid "Print connection and request details"
 msgstr "显示连接和请求详情"
 
@@ -3085,13 +3087,14 @@ msgstr "需要提供应用 bundle ID，使用 --shape 时可省略（详见 --he
 
 #: tools/app_launch_probe.cpp:62 tools/applist_probe.cpp:51
 #: tools/audio_pump_probe.cpp:114 tools/feature_probe.cpp:89
-#: tools/rr_keepalive_probe.cpp:554 tools/screenshot_probe.cpp:65
-#: tools/stall_probe.cpp:133
+#: tools/hid_probe.cpp:269 tools/rr_keepalive_probe.cpp:554
+#: tools/screenshot_probe.cpp:65 tools/stall_probe.cpp:133
 #, c-format
 msgid "Failed to establish device session: %s\n"
 msgstr "建立设备会话失败：%s\n"
 
 #: tools/app_launch_probe.cpp:65 tools/applist_probe.cpp:54
+#: tools/hid_probe.cpp:272
 #, c-format
 msgid "Device session ready: %s / iOS %s\n"
 msgstr "设备会话已就绪：%s / iOS %s\n"
@@ -3583,6 +3586,303 @@ msgstr "两项媒体查询均成功"
 #: tools/feature_probe.cpp:135
 msgid "One or more media queries failed"
 msgstr "有媒体查询失败"
+
+#: tools/hid_probe.cpp:42
+msgid "Packet receive failed without an error message"
+msgstr "收包失败，接收端未提供错误原因"
+
+#: tools/hid_probe.cpp:124
+#, c-format
+msgid "Dry run: no device connection or input was sent.\n"
+msgstr "离线预演：未连接设备，也未发送输入。\n"
+
+#: tools/hid_probe.cpp:153
+#, c-format
+msgid "Cannot open screenshot file %s: %s\n"
+msgstr "无法打开截图文件 %s：%s\n"
+
+#: tools/hid_probe.cpp:166
+#, c-format
+msgid "Failed to save screenshot file %s: %s\n"
+msgstr "保存截图文件 %s 失败：%s\n"
+
+#: tools/hid_probe.cpp:167
+msgid "Incomplete write"
+msgstr "文件未完整写入"
+
+#: tools/hid_probe.cpp:170
+#, c-format
+msgid "Saved screenshot: %zu bytes -> %s\n"
+msgstr "截图已保存：%zu 字节 -> %s\n"
+
+#: tools/hid_probe.cpp:183
+msgid "Send HID input in command-line order and capture screenshots"
+msgstr "按命令行顺序发送 HID 输入，并用截图核对"
+
+#: tools/hid_probe.cpp:186
+msgid ""
+"Queries and actions run in command-line order. --tap defaults to the center; "
+"otherwise provide both X and Y.\n"
+"For a center tap on a specific device, put UDID before --tap, or use --tap "
+"-- UDID.\n"
+"Without actions or queries, show help. --no-stream alone opens the HID "
+"service without sending input.\n"
+"The auxiliary video requests a 20-second RTCP idle timeout and sends no RR; "
+"it may stop during a long test.\n"
+"Exit closes the local receiver without calling stopAll, which would stop "
+"other media sessions on the device.\n"
+"A successful send does not confirm input took effect. No --probe-reply "
+"response does not prove input failed.\n"
+"--dry-run checks arguments and prints the plan without connecting to a "
+"device."
+msgstr ""
+"查询和动作按参数出现的顺序执行。--tap 不带坐标时点击中心；带坐标时请同时提供 "
+"X 和 Y。\n"
+"指定设备并点击中心时，请把 UDID 放在 --tap 前，或使用 --tap -- UDID。\n"
+"没有动作或查询时显示帮助。单独使用 --no-stream 只连接 HID 服务，不发送输"
+"入。\n"
+"辅助视频流请求 20 秒 RTCP 空闲超时，不发送 RR；测试时间较长时，流可能停止。\n"
+"退出时关闭本地接收端，不调用 stopAll；该调用会停止设备上的其他媒体会话。\n"
+"发送成功不能确认输入已生效；--probe-reply 没有收到回复，也不能证明输入失"
+"败。\n"
+"--dry-run 只检查参数并显示计划，不连接设备。"
+
+#: tools/hid_probe.cpp:194
+msgid "Do not start auxiliary video"
+msgstr "不启动辅助视频流"
+
+#: tools/hid_probe.cpp:195
+msgid "Check arguments and print the ordered plan without connecting"
+msgstr "只检查参数并显示执行顺序，不连接设备"
+
+#: tools/hid_probe.cpp:196
+msgid "Device identifier; omit to select the only connected device"
+msgstr "设备标识；省略时选择唯一已连接的设备"
+
+#: tools/hid_probe.cpp:201
+msgid "List the device's HID surfaces"
+msgstr "列出设备的 HID 输入面"
+
+#: tools/hid_probe.cpp:202
+msgid "Print the raw connectedServices reply and list HID surfaces"
+msgstr "显示 connectedServices 原始回复，并列出 HID 输入面"
+
+#: tools/hid_probe.cpp:203
+msgid "Draw a short diagonal line near the center"
+msgstr "在画面中央附近画一条短斜线"
+
+#: tools/hid_probe.cpp:204
+msgid "Send a center touch and wait for raw replies (diagnostic)"
+msgstr "向屏幕中心发送触摸并等待原始回复（用于诊断）"
+
+#: tools/hid_probe.cpp:205
+msgid "Send Command+V; focus the destination text field first"
+msgstr "发送 Command+V；请先让目标输入框获得焦点"
+
+#: tools/hid_probe.cpp:210
+msgid "Press home, lock, volup, voldn or mute once"
+msgstr "按一次 home、lock、volup、voldn 或 mute"
+
+#: tools/hid_probe.cpp:224
+msgid "Tap normalized X Y in [0, 1], holding for 90 ms; defaults to the center"
+msgstr "点击归一化坐标 X Y（0..1），按住 90 毫秒；不提供坐标时点击中心"
+
+#: tools/hid_probe.cpp:232
+msgid "Draw a line from X0 Y0 to X1 Y1 using normalized coordinates in [0, 1]"
+msgstr "从 X0 Y0 向 X1 Y1 画直线，坐标使用 0..1 的归一化值"
+
+#: tools/hid_probe.cpp:239
+msgid "Save a PNG from screencaptureservice to FILE"
+msgstr "将 screencaptureservice 返回的 PNG 保存到 FILE"
+
+#: tools/hid_probe.cpp:245
+msgid "Type a b c on the specified keyboard surface ID"
+msgstr "在指定的键盘输入面 ID 上发送 a b c"
+
+#: tools/hid_probe.cpp:251
+msgid "Drag horizontally for N seconds; 0 sends no drag"
+msgstr "连续横向拖动 N 秒；0 表示不拖动"
+
+#: tools/hid_probe.cpp:282
+#, c-format
+msgid "Failed to start auxiliary video: %s\n"
+msgstr "启动辅助视频流失败：%s\n"
+
+#: tools/hid_probe.cpp:286
+#, c-format
+msgid ""
+"Auxiliary video: requested 20-second RTCP idle timeout, RR=off; exit does "
+"not call stopAll.\n"
+msgstr "辅助视频流：请求 20 秒 RTCP 空闲超时，RR=off；退出时不调用 stopAll。\n"
+
+#: tools/hid_probe.cpp:288
+#, c-format
+msgid ""
+"Auxiliary video received %llu packets; packet reception or a successful send "
+"does not confirm input took effect.\n"
+msgstr "辅助视频流已收到 %llu 个包；收包或发送成功都不能确认输入已生效。\n"
+
+#: tools/hid_probe.cpp:290
+#, c-format
+msgid "Auxiliary video is disabled for this session.\n"
+msgstr "本次会话不启动辅助视频流。\n"
+
+#: tools/hid_probe.cpp:297
+#, c-format
+msgid "Auxiliary video receive failed: %s\n"
+msgstr "辅助视频流收包失败：%s\n"
+
+#: tools/hid_probe.cpp:301
+#, c-format
+msgid "%s failed: %s\n"
+msgstr "%s失败：%s\n"
+
+#: tools/hid_probe.cpp:304
+#, c-format
+msgid "Failed to release touch after an error: %s\n"
+msgstr "出错后补发触摸抬起失败：%s\n"
+
+#: tools/hid_probe.cpp:308
+#, c-format
+msgid "Keyboard input failed: %s\n"
+msgstr "发送键盘输入失败：%s\n"
+
+#: tools/hid_probe.cpp:311
+#, c-format
+msgid "Failed to release keyboard keys after an error: %s\n"
+msgstr "出错后补发键盘松键失败：%s\n"
+
+#: tools/hid_probe.cpp:325
+#, c-format
+msgid "Failed to query the raw HID reply: %s\n"
+msgstr "查询 HID 原始回复失败：%s\n"
+
+#: tools/hid_probe.cpp:328
+#, c-format
+msgid ""
+"Raw connectedServices reply:\n"
+"%s\n"
+msgstr ""
+"connectedServices 原始回复：\n"
+"%s\n"
+
+#: tools/hid_probe.cpp:333
+#, c-format
+msgid "Failed to list HID surfaces: %s\n"
+msgstr "列出 HID 输入面失败：%s\n"
+
+#: tools/hid_probe.cpp:337
+#, c-format
+msgid "  Surface %llu (0x%llx)  %s\n"
+msgstr "  输入面 %llu (0x%llx)  %s\n"
+
+#: tools/hid_probe.cpp:346 tools/hid_probe.cpp:469
+#, c-format
+msgid "Failed to open the HID service: %s\n"
+msgstr "打开 HID 服务失败：%s\n"
+
+#: tools/hid_probe.cpp:349
+#, c-format
+msgid "Connected to universalhidservice\n"
+msgstr "已连接 universalhidservice\n"
+
+#: tools/hid_probe.cpp:355
+#, c-format
+msgid "Failed to open the hardware button service: %s\n"
+msgstr "打开硬件按键服务失败：%s\n"
+
+#: tools/hid_probe.cpp:359
+#, c-format
+msgid "Press hardware button: %s\n"
+msgstr "按下硬件按键：%s\n"
+
+#: tools/hid_probe.cpp:361
+#, c-format
+msgid "Hardware button input failed: %s\n"
+msgstr "发送硬件按键输入失败：%s\n"
+
+#: tools/hid_probe.cpp:364
+#, c-format
+msgid "Failed to release the hardware button after an error: %s\n"
+msgstr "出错后补发硬件按键抬起失败：%s\n"
+
+#: tools/hid_probe.cpp:370
+#, c-format
+msgid "Tap (%.3f, %.3f)\n"
+msgstr "点击 (%.3f, %.3f)\n"
+
+#: tools/hid_probe.cpp:372
+msgid "Tap"
+msgstr "点击"
+
+#: tools/hid_probe.cpp:375
+#, c-format
+msgid "Draw line (%.3f, %.3f) -> (%.3f, %.3f)\n"
+msgstr "画线 (%.3f, %.3f) -> (%.3f, %.3f)\n"
+
+#: tools/hid_probe.cpp:383
+msgid "Line drawing"
+msgstr "画线"
+
+#: tools/hid_probe.cpp:395
+#, c-format
+msgid "Screenshot failed: %s\n"
+msgstr "截图失败：%s\n"
+
+#: tools/hid_probe.cpp:401
+#, c-format
+msgid "Screenshot reply contains no image data\n"
+msgstr "截图回复中没有图像数据\n"
+
+#: tools/hid_probe.cpp:409
+#, c-format
+msgid "Draw a short diagonal line near the center\n"
+msgstr "在画面中央附近画一条短斜线\n"
+
+#: tools/hid_probe.cpp:412 tools/hid_probe.cpp:427
+msgid "Drag"
+msgstr "拖动"
+
+#: tools/hid_probe.cpp:432
+#, c-format
+msgid "Completed %llu horizontal drag requests\n"
+msgstr "已完成 %llu 次横向拖动请求\n"
+
+#: tools/hid_probe.cpp:436
+#, c-format
+msgid "Type a b c on surface %llu\n"
+msgstr "在输入面 %llu 上发送 a b c\n"
+
+#: tools/hid_probe.cpp:450
+msgid "Report reply query"
+msgstr "报告回复查询"
+
+#: tools/hid_probe.cpp:451
+#, c-format
+msgid "Reply for report state=0x%02x: %s\n"
+msgstr "报告 state=0x%02x 的回复：%s\n"
+
+#: tools/hid_probe.cpp:456
+#, c-format
+msgid "Send Command+V\n"
+msgstr "发送 Command+V\n"
+
+#: tools/hid_probe.cpp:472
+#, c-format
+msgid "Connected to universalhidservice; no input was sent.\n"
+msgstr "已连接 universalhidservice；未发送输入。\n"
+
+#: tools/hid_probe.cpp:476
+#, c-format
+msgid "Auxiliary video received %llu packets in total\n"
+msgstr "辅助视频流共收到 %llu 个包\n"
+
+#: tools/hid_probe.cpp:477
+#, c-format
+msgid ""
+"Requested operations completed. Check the device screen or a screenshot to "
+"confirm input.\n"
+msgstr "请求的操作已完成。请在设备画面或截图中确认输入效果。\n"
 
 #: tools/rr_keepalive_probe.cpp:188
 msgid "false"

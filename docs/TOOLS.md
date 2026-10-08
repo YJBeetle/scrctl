@@ -68,10 +68,20 @@ CI 显式开启常用诊断和历史实验，检查它们的编译与离线参�
 | `app_launch_probe` | 应用启动服务 |
 | `hid_probe` | 按命令行顺序执行触摸、按键、文本与服务查询 |
 
-九个工具已支持 `--lang auto/en/zh-CN`；`hid_probe` 的输出翻译仍待整理。
+十个工具均支持 `--lang auto/en/zh-CN`；不指定时按 locale 自动选择。
+帮助、状态和错误提示支持中英文；CLI11 校验正文、系统错误及设备响应保留原文。
 先看各工具的 `--help`。`hid_probe --dry-run` 可以检查动作计划而不连接设备。
 该工具已移除无参数时自动输入的演示：无参数显示帮助；`--no-stream` 单独使用
 只连接 HID 服务，不自动发送动作。
+
+```sh
+# 先检查执行顺序，不连接设备
+./build-tools/tools/hid_probe --lang zh-CN \
+  --shot before.png --line 0.2 0.4 0.4 0.6 --shot after.png --dry-run
+```
+
+去掉 `--dry-run` 后会执行计划。输入是否生效要看设备画面或前后截图；
+没有辅助媒体会话时，已测设备可能不接受输入，`--no-stream` 不保证输入生效。
 
 ## 归档实验
 
