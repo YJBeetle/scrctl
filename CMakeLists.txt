@@ -137,6 +137,7 @@ add_library(scrctl_core STATIC
         src/media/RecordingClock.cpp
         src/media/RecordingVideoConfig.cpp
         src/media/RecordingMuxer.cpp
+        src/media/Recorder.cpp
         src/rt/RtpHevc.cpp
         src/rt/RtpSeq.cpp
         src/rt/RtpTimestamp.cpp
@@ -346,6 +347,10 @@ if(SCRCTL_BUILD_TESTS)
     scrctl_add_test_executable(recording_muxer_test tests/recording_muxer_test.cpp)
     target_link_libraries(recording_muxer_test PRIVATE scrctl_core)
     add_test(NAME recording_muxer COMMAND recording_muxer_test)
+
+    scrctl_add_test_executable(recorder_test tests/recorder_test.cpp)
+    target_link_libraries(recorder_test PRIVATE scrctl_core)
+    add_test(NAME recorder COMMAND recorder_test)
 
     scrctl_add_test_executable(pasteboard_test tests/pasteboard_test.cpp)
     target_link_libraries(pasteboard_test PRIVATE scrctl_core)

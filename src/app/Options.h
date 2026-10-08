@@ -17,7 +17,7 @@ struct Options {
     uint16_t wifi_port = 49152; ///< 手动 --wifi 地址的 RemotePairing 端口；发现模式采用 SRV 端口。
     bool pair = false; ///< --pair：经 USB 建立或验证远程配对记录，随后退出。
     bool repair_pairing = false; ///< --repair-pairing：允许更新被拒绝或缺少设备身份的旧记录。
-    std::string record; ///< 录制实时 Annex-B 码流
+    std::string record; ///< .mkv 为容器录制，其余路径兼容裸 HEVC；不改变显示裁剪和旋转
     bool list_devices = false;
     int discovery_timeout_ms = 3000; ///< --list-devices 的无线扫描时限；0 只列 usbmux
     bool no_control = false; ///< --no-control：关闭输入控制

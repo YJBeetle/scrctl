@@ -176,6 +176,19 @@ void wraps_and_signed_extremes() {
 }
 
 void retention_and_limits() {
+    Clock recent(7, reference);
+    for (int i = 0; i < 8; ++i) {
+        add(recent, reference + (uint64_t{static_cast<uint32_t>(i)} << 32), i * 24000);
+        recent.discard_before(i * 24000, 7);
+    }
+    check(recent.anchor_count() == 7, "explicit recent history reserves space within the eight-anchor budget");
+    ready(recent, 72000, 74400, 3000000, 3100000);
+    check(recent.map_interval(0, 2400).state == Clock::State::Error,
+          "recent retention does not extrapolate already evicted history");
+    add(recent, reference + (uint64_t{8} << 32), 192000);
+    check(recent.anchor_count() == 8, "recent retention does not raise the clock anchor limit");
+    recent.discard_before(48000, 7);
+    ready(recent, 48000, 50400, 2000000, 2100000);
     Clock::Limits limits;
     limits.anchors = 3;
     Clock clock(7, reference, limits);

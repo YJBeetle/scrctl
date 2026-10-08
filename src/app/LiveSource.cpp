@@ -3,8 +3,10 @@
 
 #include "app/DeviceConnection.h"
 #include "app/Reap.h"
+#include "app/RecordFormat.h"
 #include "app/SourcePick.h"
 #include "app/ViewGeom.h"
+#include "media/RecordingMuxer.h"
 #include <cstdio>
 
 namespace scrctl::app {
@@ -12,11 +14,26 @@ namespace scrctl::app {
 LiveSource::~LiveSource() = default;
 
 bool LiveSource::finish_recording(std::string &err) {
-    if (pump_ != nullptr) {
-        return pump_->finish_recording(err);
+    audio_out_.close();
+    if (audio_ != nullptr) {
+        audio_->stop();
     }
-    err.clear();
-    return true;
+    std::string video_error;
+    const bool video_ok = pump_ == nullptr || pump_->finish_recording(video_error);
+    if (recorder_ != nullptr) {
+        if (finished()) recorder_->fail(end_reason());
+        std::string recording_error;
+        const bool recording_ok = recorder_->finish(recording_error);
+        if (!recording_ok && !recording_error_reported_) {
+            std::fprintf(stderr, SCRCTL_TR("Recording failed: %s. The file may be incomplete.\n"),
+                         recording_error.c_str());
+            recording_error_reported_ = true;
+        }
+        err = video_ok ? recording_error : video_error;
+        return video_ok && recording_ok;
+    }
+    err = video_error;
+    return video_ok;
 }
 
 bool LiveSource::start(const std::string &serial, const std::string &wifi,
@@ -32,6 +49,15 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
         return true;
     };
     if (cancelled()) {
+        return false;
+    }
+    const bool container_recording = is_matroska_path(record_path);
+    if (container_recording && video_source == "screenshot") {
+        err = SCRCTL_TR("MKV recording requires live video; screenshot polling cannot be recorded");
+        return false;
+    }
+    if (container_recording && !scrctl::media::RecordingMuxer::available()) {
+        err = SCRCTL_TR("MKV recording is unavailable in this build (libavformat required)");
         return false;
     }
     // 连接设备前校验降级时刻表。非法参数应明确失败，避免测试实际未启用。
@@ -60,7 +86,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     }
 
     scrctl::media::FramePump::Options options;
-    options.record_path = record_path;
+    if (!container_recording) options.record_path = record_path;
     options.use_hardware = hw_decode;
 
     // 起流前查询显示几何。编码尺寸包含 HEVC 对齐填充，设备报告的可见区
@@ -109,6 +135,14 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     // --video-source=screenshot 强制使用截图轮询，不尝试建立媒体流。
     const bool force_screenshot = video_source == "screenshot";
     if (!force_screenshot) {
+        if (container_recording) {
+            scrctl::media::Recorder::Options ro;
+            ro.path = record_path;
+            ro.include_audio = want_audio;
+            recorder_ = scrctl::media::Recorder::start(ro, err);
+            if (recorder_ == nullptr) return false;
+            options.recorder = recorder_.get();
+        }
         pump_ = scrctl::media::FramePump::start(*device_, options, err);
         if (pump_ != nullptr) {
             // 创建媒体泵时建立统计时间基线，首次速率使用真实经过的时间。
@@ -123,6 +157,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
         // 其他错误保留原失败结果，例如会话被占用；用户也可显式选择截图模式。
         const bool version_gate = err.find("requires iOS") != std::string::npos;
         if (version_gate || force_screenshot) {
+            if (recorder_ != nullptr) recorder_->fail("Live video unavailable; recording stopped");
             const std::string stream_err = err;
             std::string serr;
             if (start_screenshot(/*capture_first=*/true, serr)) {
@@ -182,9 +217,9 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             display_name_.c_str(), panel_degrees_.value_or(0), first.width, first.height);
     }
     if (!record_path.empty()) {
-        if (screenshot_.source != nullptr) {
+        if (screenshot_.source != nullptr && !container_recording) {
             std::printf(SCRCTL_TR("Screenshot mode cannot record Annex-B; ignoring --record\n"));
-        } else {
+        } else if (screenshot_.source == nullptr) {
             std::printf(SCRCTL_TR("Recording to %s\n"), record_path.c_str());
         }
     }
@@ -196,11 +231,13 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     }
     if (want_audio && screenshot_.source == nullptr) {
         if (!scrctl::kHaveAudioDecoder) {
+            if (recorder_ != nullptr) recorder_->fail(scrctl::kNoAudioDecoderMessage);
             std::fprintf(stderr, "%s\n", SCRCTL_TR(scrctl::kNoAudioDecoderMessage));
         } else {
             scrctl::media::AudioPump::Options ao;
             ao.target_backlog_ms = audio_buffer_ms;
             ao.audio_dup = audio_dup;
+            ao.recorder = recorder_.get();
             if (!audio_dup) {
                 std::printf(SCRCTL_TR(
                     "Forwarding audio to the computer. Switching routes may pause the phone's "
@@ -212,6 +249,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             }
             audio_ = scrctl::media::AudioPump::start(*device_, ao, aerr);
             if (audio_ == nullptr) {
+                if (recorder_ != nullptr) recorder_->fail(aerr);
                 std::fprintf(stderr, SCRCTL_TR("Failed to start audio: %s (video continues)\n"), aerr.c_str());
             } else {
                 // 音频统计使用独立时间基线。切到截图期间音频仍在独立线程接收和解码，
@@ -244,7 +282,7 @@ bool LiveSource::start_playback(std::string &err) {
         return false;
     }
     if (!audio_out_.open(*audio_, err)) {
-        abandon_audio();
+        if (recorder_ == nullptr) abandon_audio();
         return false;
     }
     return true;
@@ -253,6 +291,9 @@ bool LiveSource::start_playback(std::string &err) {
 void LiveSource::abandon_audio() {
     // 先关闭回调，确保它不再持有随后销毁的 AudioPump。
     audio_out_.close();
+    if (audio_ != nullptr && recorder_ != nullptr) {
+        recorder_->fail("Audio capture stopped before recording finished");
+    }
     audio_.reset();
 }
 
@@ -342,6 +383,7 @@ void LiveSource::update_picture_source() {
         screenshot_.source != nullptr, since_failure);
     switch (action) {
     case scrctl::app::SourcePick::kToShot: {
+        if (recorder_ != nullptr) recorder_->fail("Live video unavailable; recording stopped");
         std::string err;
         // 运行中切换异步取首张，窗口继续显示最后一帧；启动时则同步取得尺寸。
         if (start_screenshot(/*capture_first=*/false, err)) {
@@ -366,6 +408,14 @@ void LiveSource::update_picture_source() {
 
 bool LiveSource::next(scrctl::Frame &out, int timeout_ms) {
     update_picture_source();
+    if (recorder_ != nullptr && !recording_error_reported_) {
+        const auto error = recorder_->error();
+        if (!error.empty()) {
+            std::fprintf(stderr, SCRCTL_TR("Recording failed: %s. Mirroring continues; the file is incomplete.\n"),
+                         error.c_str());
+            recording_error_reported_ = true;
+        }
+    }
     if (screenshot_.source) {
         if (!screenshot_.source->latest(out, screenshot_.serial, timeout_ms)) {
             return false;

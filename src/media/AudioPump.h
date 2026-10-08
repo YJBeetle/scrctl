@@ -15,11 +15,15 @@
 
 namespace scrctl::media {
 
+class Recorder;
+
 /// 独立接收并解码音频，使用环形缓冲向调用方提供 PCM。
 /// 音频工作线程与视频帧循环分离，避免静止画面阻塞音频接收。
 class AudioPump {
 public:
     struct Options {
+        /// 借用拥有者的容器录制器；旁路解码前原包。销毁录制器前须 stop/join。
+        Recorder *recorder = nullptr;
         /// false 将手机音频转到电脑（negotiator mode 10）；true 保留手机播放（mode 6）。
         /// 起流和会话重建使用相同策略，不自动切换为双端播放。
         bool audio_dup = false;

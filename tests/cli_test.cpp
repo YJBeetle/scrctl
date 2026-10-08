@@ -78,6 +78,18 @@ int main() {
     check(parse({"scrctl", "--video-source=screenshot"}, screenshot_source) == ParseResult::Run &&
               screenshot_source.video_source == "screenshot",
           "screenshot polling remains a distinct extension");
+    Options mkv;
+    check(parse({"scrctl", "-r", "capture.MkV", "--no-audio"}, mkv) == ParseResult::Run &&
+              mkv.record == "capture.MkV" && mkv.no_audio,
+          "container recording accepts a video-only request and preserves its path");
+    Options invalid_mkv;
+    check(parse({"scrctl", "-r", "capture.MKV", "--video-source=screenshot"}, invalid_mkv) ==
+              ParseResult::Error,
+          "screenshot container recording is rejected before connecting to a device");
+    Options playback_recording;
+    check(parse({"scrctl", "--play", "input.hevc", "--record", "output.mkv"},
+                playback_recording) == ParseResult::Error,
+          "file playback cannot silently ignore a requested recording");
     Options positions;
     check(parse({"scrctl", "--window-x", "-30", "--window-y=50"}, positions) ==
               ParseResult::Run && positions.win_x == -30 && positions.win_y == 50,

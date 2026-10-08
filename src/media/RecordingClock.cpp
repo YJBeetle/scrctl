@@ -117,8 +117,9 @@ RecordingClock::Interval RecordingClock::map_interval(int64_t begin, int64_t end
     return {State::Ready, first.time_us, last.time_us};
 }
 
-void RecordingClock::discard_before(int64_t earliest_pending_ticks) {
-    while (anchors_.size() > 2 && anchors_[1].ticks <= earliest_pending_ticks) {
+void RecordingClock::discard_before(int64_t earliest_pending_ticks, std::size_t keep_recent) {
+    const auto retained = std::max(std::size_t{2}, keep_recent);
+    while (anchors_.size() > retained && anchors_[1].ticks <= earliest_pending_ticks) {
         anchors_.pop_front();
         pruned_ = true;
     }

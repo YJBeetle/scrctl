@@ -1,5 +1,6 @@
 #include "i18n/Translation.h"
 #include "media/AudioPump.h"
+#include "media/Recorder.h"
 
 #include <algorithm>
 #include <chrono>
@@ -190,6 +191,10 @@ bool AudioPump::start_session(std::string &err) {
                      started.remote_ssrc, started.local_ssrc);
     }
     session_ = std::move(session);
+    if (options_.recorder != nullptr && !worker_.joinable()) {
+        (void)options_.recorder->begin_track(Recorder::Track::Audio, started.session_uuid,
+            started.has_local_ssrc ? std::optional<uint32_t>(started.local_ssrc) : std::nullopt);
+    }
     if (regulator_ != nullptr) {
         regulator_->reset();
         std::lock_guard<std::mutex> lock(mutex_);
@@ -398,6 +403,9 @@ void AudioPump::loop() {
         const uint64_t now = now_ms();
 
         if (session_ == nullptr) {
+            if (options_.recorder != nullptr) {
+                options_.recorder->fail("Audio session was recreated during container recording");
+            }
             std::string rerr;
             if (start_session(rerr)) {
                 {
@@ -438,6 +446,9 @@ void AudioPump::loop() {
             const auto state = StreamSession::probe(device_, session_->started().session_uuid,
                                                     perr, verbose_);
             if (state == StreamSession::ServerState::Ended) {
+                if (options_.recorder != nullptr) {
+                    options_.recorder->fail("Device ended the recorded audio session");
+                }
                 std::fprintf(stderr, SCRCTL_TR("Audio: device session ended (%llu ms without audio); recreating session\n"),
                              static_cast<unsigned long long>(quiet));
                 session_.reset();
@@ -484,7 +495,10 @@ void AudioPump::loop() {
                 for (const auto &report : reports) {
                     if (media_source && report.ssrc == *media_source) {
                         last_packet_ms = now_ms();
-                        break;
+                        if (options_.recorder != nullptr) {
+                            (void)options_.recorder->sender_report(Recorder::Track::Audio,
+                                session_->started().session_uuid, report);
+                        }
                     }
                 }
                 std::lock_guard<std::mutex> lock(mutex_);
@@ -529,9 +543,16 @@ void AudioPump::loop() {
         if (verdict == scrctl::rt::RtpSeq::Verdict::kLate) {
             continue;
         }
+        if (verdict == scrctl::rt::RtpSeq::Verdict::kGap && options_.recorder != nullptr) {
+            options_.recorder->fail("Audio packet loss ended container recording");
+        }
         // 当前 ELD 每包承载一帧（10 ms），不做重组或重传，只统计序号缺口。
         const auto payload = std::span<const uint8_t>(datagram).subspan(
             info.payload_offset, info.payload_size);
+        if (options_.recorder != nullptr) {
+            (void)options_.recorder->audio(session_->started().session_uuid, *media_source,
+                info.timestamp, payload);
+        }
         std::vector<int16_t> pcm;
         std::string derr;
         if (!decoder_->decode(payload, pcm, derr)) {

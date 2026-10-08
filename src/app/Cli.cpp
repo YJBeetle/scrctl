@@ -1,6 +1,7 @@
 #include "i18n/Translation.h"
 #include "i18n/CliLanguage.h"
 #include "app/Cli.h"
+#include "app/RecordFormat.h"
 #include "hid/Hid.h"
 #include <CLI/CLI.hpp>
 #include <algorithm>
@@ -22,7 +23,7 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         "Audio is forwarded to the computer by default; --audio-dup keeps phone playback. "
         "Switching routes may pause the phone's player; resume it if needed.\n"
         "The device chooses encoding dimensions, bitrate and frame rate. Display rotation and crop "
-        "leave recordings unchanged; recording writes raw HEVC Annex-B without a container or audio.\n"
+        "leave recordings unchanged. Record to .mkv for HEVC with audio, or .hevc for raw video.\n"
         "Wireless use requires pairing. --help / --version do not connect to the device."));
     app.set_help_flag("-h,--help", SCRCTL_N_("Show help"));
     app.add_option("--play", o.path, SCRCTL_N_("Play an Annex-B HEVC file"));
@@ -37,7 +38,9 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.add_flag("--repair-pairing", o.repair_pairing,
                  SCRCTL_N_("Allow replacing an incomplete or rejected pairing record; requires --pair"))
         ->needs("--pair");
-    app.add_option("-r,--record", o.record, SCRCTL_N_("Record the live stream as Annex-B"));
+    app.add_option("-r,--record", o.record, SCRCTL_N_(
+        "Record to .mkv (HEVC and audio); other extensions save raw HEVC without audio"))
+        ->excludes("--play");
     app.add_option("--start-app", o.start_app, SCRCTL_N_("Launch bundle ID; ? matches name prefix, + terminates the previous instance"));
     app.add_option("--window-title,--title", o.title, SCRCTL_N_("Window title"));
     app.add_option("--render-driver", o.render_driver, SCRCTL_N_("SDL render driver, e.g. metal / software"));
@@ -114,6 +117,10 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         app.parse(argc, argv);
         if (!language.select()) return ParseResult::Error;
         if (o.video_source == "display") o.video_source = "stream";
+        if (is_matroska_path(o.record) && o.video_source == "screenshot") {
+            throw CLI::ValidationError("--record", SCRCTL_TR(
+                "MKV recording requires live video; screenshot polling cannot be recorded"));
+        }
         if (o.wifi == "auto" && app.count("--wifi-port")) {
             throw CLI::ValidationError("--wifi-port", SCRCTL_TR("Use a manual LAN address; auto uses discovered SRV ports"));
         }

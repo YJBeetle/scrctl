@@ -5,6 +5,7 @@
 #include "app/LiveStats.h"
 #include "hid/Hid.h"
 #include "media/FramePump.h"
+#include "media/Recorder.h"
 #include "media/ScreenshotSource.h"
 #include "media/StreamSession.h"
 #include "remote/Device.h"
@@ -37,13 +38,15 @@ class LiveSource final : public FrameSource {
                const std::function<bool()> &should_cancel = {});
 
     /// 打开音频输出。应用先准备 SDL 音频子系统，再调用 start() 建立媒体会话；
-    /// 取得 AudioPump 后才可打开声卡。输出失败会停止本地音频接收和续期。
+    /// 取得 AudioPump 后才可打开声卡。输出失败时，容器录制继续接收音频；
+    /// 未录制时停止本地音频接收和续期。
     bool start_playback(std::string &err);
     /// 停止声卡、音频收包和 RR 续期，不调用会中断视频的 stopAll。
     /// 设备侧需等待音频会话到期（当前租期 20 秒）；播放器可能需要手动继续。
     void abandon_audio();
 
-    /// 退出专用：停止视频 worker 并检查录制文件收尾，重复调用保留同一错误。
+    /// 退出专用：先关闭声卡，停止并等待两个收包线程，再检查录制文件收尾。
+    /// 重复调用保留同一结果；禁止在收包线程仍可投递数据时封闭 Recorder。
     /// 录制写入失败期间镜像仍继续，退出状态由调用者根据此结果决定。
     bool finish_recording(std::string &err);
 
@@ -84,6 +87,8 @@ class LiveSource final : public FrameSource {
     FrameGeometry sample_geometry(bool screenshot) const;
 
     std::unique_ptr<scrctl::remote::Device> device_;
+    /// 两个媒体泵借用此对象；逆序析构必须先停止媒体泵，再销毁录制器。
+    std::unique_ptr<scrctl::media::Recorder> recorder_;
     std::unique_ptr<scrctl::media::FramePump> pump_;
     /// 音频泵引用 Device，声卡回调引用 AudioPump。按声明逆序析构，必须在
     /// Device 之后声明，并先关闭声卡、停止音频线程，再销毁设备。
@@ -109,6 +114,7 @@ class LiveSource final : public FrameSource {
     std::unique_ptr<scrctl::hid::Buttons> buttons_;
     bool hid_unavailable_ = false;
     uint64_t serial_ = 0;
+    bool recording_error_reported_ = false;
 
     // 截图源的序号和失败状态随每次新源一起重置，只由 start_screenshot 安装。
     struct ScreenshotState {

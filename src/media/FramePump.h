@@ -18,6 +18,7 @@
 namespace scrctl::media {
 
 class StreamSession;
+class Recorder;
 }
 
 namespace scrctl::remote {
@@ -48,6 +49,9 @@ public:
         uint32_t display_id = 1;
         /// 非空时将 Annex-B 码流录制到文件。
         std::string record_path;
+        /// 可选容器消费者，由拥有者管理。必须在本泵停止并 join 后再销毁；
+        /// 与 record_path 的裸 HEVC 写入互斥，未启用时不复制编码 AU。
+        Recorder *recorder = nullptr;
         /// 丢包后等待干净关键帧的最长时间，0 禁用此项后备重建。
         /// 优先发 PLI 请求 IDR，超时后重建会话。早期“设备不响应 PLI”的结论
         /// 来自错误的 UDP 封包；修复后真机已确认 PLI 有效，见 docs/coredevice.md §13。

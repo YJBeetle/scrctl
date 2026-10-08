@@ -68,6 +68,10 @@ int main() {
               "next runtime does not inherit previous exit request");
     }
     SDL_setenv("SDL_AUDIODRIVER", "scrctl-invalid-audio-driver", 1);
+    check(run({"scrctl", "--record", "must-not-create.mkv", "--serial", "must-not-connect",
+               "--no-window"}) == 1 && !std::filesystem::exists("must-not-create.mkv"),
+          "audio output startup failure cannot silently turn requested AV recording into video-only");
+    check(SDL_WasInit(0) == 0, "rejected AV recording cleans SDL before device connection");
     {
         scrctl::app::SdlRuntime runtime;
         std::string err;

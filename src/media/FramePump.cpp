@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "bitstream/AnnexB.h"
+#include "media/Recorder.h"
 #include "media/StreamSession.h"
 #include "remote/Device.h"
 #include "rt/Rtcp.h"
@@ -94,6 +95,10 @@ FramePump::FramePump(remote::Device &device, Options options, bool verbose)
 std::unique_ptr<FramePump> FramePump::start(remote::Device &device, const Options &options,
                                             std::string &err, bool verbose) {
     auto pump = std::unique_ptr<FramePump>(new FramePump(device, options, verbose));
+    if (options.recorder != nullptr && !options.record_path.empty()) {
+        err = "Raw HEVC and container recording cannot write to the same video pump";
+        return nullptr;
+    }
     // 缺少解码后端时不建立设备媒体会话，避免占用设备资源。
     // 使用编译期能力常量，无需创建平台解码会话试探。
     if (!scrctl::kHaveDecoder) {
@@ -116,6 +121,11 @@ std::unique_ptr<FramePump> FramePump::start(remote::Device &device, const Option
     }
     // 首次关键帧尚未到达时不立即判定停顿；last_packet_ms_ 由 restart() 设置。
     pump->last_decoded_keyframe_ms_ = now_ms();
+    if (options.recorder != nullptr) {
+        const auto &started = pump->session_->started();
+        (void)options.recorder->begin_track(Recorder::Track::Video, started.session_uuid,
+            started.has_local_ssrc ? std::optional<uint32_t>(started.local_ssrc) : std::nullopt);
+    }
     pump->worker_running_ = true;
     pump->worker_ = std::thread(&FramePump::loop, pump.get());
     return pump;
@@ -210,6 +220,10 @@ void FramePump::write_recording_nal(std::span<const uint8_t> bytes) {
 }
 
 bool FramePump::restart(std::string &err) {
+    if (worker_running_ && options_.recorder != nullptr) {
+        // 重建 RPC 可能失败，必须先封闭旧录制 epoch，再停止旧设备会话。
+        options_.recorder->fail("Video session was recreated during container recording");
+    }
     /// 开始重建时标记恢复中，新会话首帧输出后清除，供调用方区分恢复和静止。
     reviving_ = true;
     {
@@ -291,6 +305,9 @@ void FramePump::loop() {
     // 两种后端都不可用时退出，避免解引用空 decoder。start() 通常已通过
     // 编译期能力检查拦截，此处仍保留防御检查。
     if (decoder == nullptr) {
+        if (options_.recorder != nullptr) {
+            options_.recorder->fail("Video reception stopped because no decoder is available");
+        }
         std::fprintf(stderr, "%s", SCRCTL_TR(scrctl::kNoDecoderMessage));
         return;
     }
@@ -358,6 +375,9 @@ void FramePump::loop() {
             return;
         }
         loss_seen_ = loss_now;
+        if (options_.recorder != nullptr) {
+            options_.recorder->fail("Video packet loss or damaged payload ended container recording");
+        }
         if (!need_keyframe_) {
             // 仅在进入关键帧等待状态时输出一次。
             std::printf(SCRCTL_TR("Video packet loss or payload damage detected: requesting keyframe, wait limit %d ms\n"),
@@ -374,6 +394,26 @@ void FramePump::loop() {
             {
                 std::lock_guard<std::mutex> lock(mutex_);
                 ++stats_.aus;
+            }
+            if (options_.recorder != nullptr) {
+                // 容器接收完整原始 AU，不继承显示后端的尺寸、丢帧或恢复门限。
+                // 借用本 AU 或当前 epoch 的参数；Recorder 在返回前完成有界复制。
+                const Nal *vps = &parser_->vps(), *sps = &parser_->sps(), *pps = &parser_->pps();
+                for (const auto &nal : au) {
+                    if (nal.size() < 2) continue;
+                    switch ((nal[0] >> 1) & 0x3f) {
+                        case 32: vps = &nal; break;
+                        case 33: sps = &nal; break;
+                        case 34: pps = &nal; break;
+                        default: break;
+                    }
+                }
+                if (!media_source || !unit.sampling_timestamp) {
+                    options_.recorder->fail("Complete video access unit has no bound sampling timestamp");
+                } else {
+                    (void)options_.recorder->video(session_->started().session_uuid, *media_source,
+                        *unit.sampling_timestamp, au, *vps, *sps, *pps);
+                }
             }
             // NAL 超过平台后端的长度上限时尝试软件解码。实测 IDR 可达
             // 49652–70101 字节，转场中的非关键帧切片也曾达到 256278 字节。
@@ -797,6 +837,18 @@ void FramePump::loop() {
             return (uint32_t(datagram[off]) << 24) | (uint32_t(datagram[off + 1]) << 16) |
                    (uint32_t(datagram[off + 2]) << 8) | datagram[off + 3];
         };
+        // 录制按严格复合包解析后逐条匹配来源；首个 SR 可能属于其他来源，
+        // 不能先沿用旧心跳的首包过滤而丢掉后续本源锚点。
+        std::vector<scrctl::rt::SenderReport> reports;
+        const bool valid_rtcp = scrctl::rt::parse_sender_reports(datagram, reports);
+        if (options_.recorder != nullptr && media_source && valid_rtcp) {
+            for (const auto &report : reports) {
+                if (report.ssrc == *media_source) {
+                    (void)options_.recorder->sender_report(Recorder::Track::Video,
+                        session_->started().session_uuid, report);
+                }
+            }
+        }
         if (is_sr) {
             // 未协商来源时不能用心跳猜测媒体源，等待第一条合法同 PT 的视频 RTP。
             if (!media_source || be32(4) != *media_source) {
@@ -805,8 +857,7 @@ void FramePump::loop() {
         } else {
             // 合法的短 RR 等控制包不占用 RTP 序号，也不能让待提交 AU 失效。
             // 保留上述设备心跳分类；这里仅将其他已验证 RTCP 隔离出视频拆包路径。
-            std::vector<scrctl::rt::SenderReport> reports;
-            if (scrctl::rt::parse_sender_reports(datagram, reports)) {
+            if (valid_rtcp) {
                 continue;
             }
             scrctl::rt::PacketInfo info;
@@ -881,13 +932,31 @@ void FramePump::loop() {
             write_recording_nal(nal.bytes);
             const auto timestamp = sampling_clock.observe(nal.timestamp);
             if (!timestamp) {
+                if (options_.recorder != nullptr) {
+                    options_.recorder->fail("Video sampling timestamp became ambiguous");
+                }
                 if (!need_keyframe_) {
                     std::fputs(SCRCTL_TR("Video sampling timestamp is ambiguous; discarding the access unit and requesting a keyframe.\n"), stderr);
                 }
                 discard_for_recovery();
                 continue;
             }
+            if (options_.recorder != nullptr && nal.bytes.size() >= 2) {
+                const Nal *previous = nullptr;
+                switch ((nal.bytes[0] >> 1) & 0x3f) {
+                    case 32: previous = &parser_->vps(); break;
+                    case 33: previous = &parser_->sps(); break;
+                    case 34: previous = &parser_->pps(); break;
+                    default: break;
+                }
+                if (previous != nullptr && !previous->empty() && *previous != nal.bytes) {
+                    options_.recorder->fail("HEVC parameters changed during container recording");
+                }
+            }
             if (!parser_->push_nal(std::move(nal.bytes), timestamp, nal.ends_access_unit)) {
+                if (options_.recorder != nullptr) {
+                    options_.recorder->fail("Video access-unit input became inconsistent");
+                }
                 if (!need_keyframe_) {
                     std::fputs(SCRCTL_TR("Video access-unit input is inconsistent; discarding the access unit and requesting a keyframe.\n"), stderr);
                 }

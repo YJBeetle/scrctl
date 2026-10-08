@@ -50,8 +50,10 @@ public:
                                         Mode mode = Mode::Running) const;
 
     /// 所有较早样本已消费后释放锚点；保留该位置左侧的一点和至少末尾两点。
+    /// keep_recent 可保留更多近期历史，供完整 AU 晚于其采样时刻到达时使用；
+    /// 它不增加 anchors 总预算，也不承诺固定秒数的采样历史。
     /// 调用方不能释放仍有待定样本需要的锚点。释放后的旧时间不会重新外推。
-    void discard_before(int64_t earliest_pending_ticks);
+    void discard_before(int64_t earliest_pending_ticks, std::size_t keep_recent = 2);
 
     [[nodiscard]] std::size_t anchor_count() const noexcept { return anchors_.size(); }
     [[nodiscard]] std::string_view error() const noexcept { return error_; }

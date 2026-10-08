@@ -13,6 +13,7 @@
 #include "app/FileSource.h"
 #include "app/LiveSource.h"
 #include "app/Presenter.h"
+#include "app/RecordFormat.h"
 #include "app/SdlRuntime.h"
 #include "media/StreamSession.h"
 
@@ -92,6 +93,12 @@ int run(int argc, char **argv) {
     if (!audio_init_error.empty()) {
         std::fprintf(stderr, SCRCTL_TR("Failed to initialize audio output: %s (audio disabled; video continues)\n"),
                      audio_init_error.c_str());
+        if (is_matroska_path(o.record) && !o.no_audio) {
+            std::fprintf(stderr, "%s\n", SCRCTL_TR(
+                "MKV audio recording requires an audio stream. Use --no-audio-playback to record "
+                "without a sound device, or --no-audio to record video only."));
+            return 1;
+        }
     }
     if (exit_requested()) {
         return 0;
@@ -159,11 +166,17 @@ int run(int argc, char **argv) {
     if (live != nullptr && live->has_audio() && !o.no_audio_playback) {
         std::string aerr;
         if (!live->start_playback(aerr)) {
-            std::fprintf(stderr, SCRCTL_TR(
-                "Failed to open audio output: %s (audio disabled; video continues). The phone's "
-                "audio route may remain active until session expiry (about 20 seconds); resume "
-                "its player if needed.\n"),
-                aerr.c_str());
+            if (is_matroska_path(o.record)) {
+                std::fprintf(stderr, SCRCTL_TR(
+                    "Failed to open audio output: %s (recording and audio reception continue)\n"),
+                    aerr.c_str());
+            } else {
+                std::fprintf(stderr, SCRCTL_TR(
+                    "Failed to open audio output: %s (audio disabled; video continues). The phone's "
+                    "audio route may remain active until session expiry (about 20 seconds); resume "
+                    "its player if needed.\n"),
+                    aerr.c_str());
+            }
         }
     } else if (live != nullptr && live->has_audio() && o.no_audio_playback) {
         std::printf(SCRCTL_TR("Local audio playback disabled; receiving and decoding continue\n"));
