@@ -82,13 +82,17 @@ SipHash 使用 OpenSSL；扫描器只负责网卡/socket 适配、本次记录�
 
 当前 `--record` 保存裸 Annex-B HEVC，无容器和音轨，`--play` 播放同一格式。
 下一步使用 libavformat。离线 HEVC + AAC-ELD 的 MP4 / MKV 封装实验已通过，
-MP4 使用 hvc1；仍需将 RTP 时间戳、完整 AU、会话 epoch 和音视频共同时间轴
-接入生产，再验证断流恢复、磁盘失败和退出收尾。
+真实 USB 捕获的可变视频间隔、共同 SR 时间轴及原始 AAC 封装也已通过，MP4 使用
+hvc1。本机 AVFoundation 可解码 MP4，不能打开 MKV；容器 PTS 保留不代表听画同步
+已验收。仍需将完整 AU、AAC 原包、会话 epoch 和公共时间轴接入生产，验证
+断流恢复、磁盘失败和退出收尾。实验边界见 [REFACTOR.md](REFACTOR.md) 第九十二轮。
 
 视频泵已直接接收完整 NAL 并保留每个 AU 的采样 ticks，按会话隔离来源与回绕状态；
 SR 解析也已通过离线及真实捕获回放。下一步旁路解码前 AAC，将 SR 与样本一同
 交给录制器，建立两轨时间轴和写入有界队列。
 视频频率从有效 SR 验证，不将本台设备观测到的约 24 kHz 写成通用常量。
+SR 等待、缓存和首尾外推必须有预算；无可信时钟或配置变化时明确结束录制。
+首版 DTS=PTS 仅用于确实无重排序的配置，一般 HEVC DTS 仍需独立实现。
 
 AAC-ELD 原包可直存，离线 FFmpeg 解码及本机 AVFoundation MP4 解码通过；
 其他播放器兼容性不能由这组结果代替。录制方向与 --orientation 语义一起推进。
