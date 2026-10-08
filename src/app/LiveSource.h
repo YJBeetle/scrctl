@@ -28,7 +28,8 @@ class LiveSource final : public FrameSource {
     /// audio_buffer_ms 是音频预缓冲与目标水位对应的时长。
     bool start(const std::string &serial, const std::string &wifi, const std::string &record_path,
                bool hw_decode, bool watch_display, bool want_audio, int audio_buffer_ms,
-               const std::string &video_source, const std::string &test_degrade, std::string &err);
+               const std::string &video_source, const std::string &test_degrade, std::string &err,
+               uint16_t wifi_port = 49152);
 
     /// 打开音频输出。start() 在 SDL 初始化前建立画面源；播放必须等 SDL 音频
     /// 子系统初始化完成，因此单独提供该入口。

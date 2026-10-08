@@ -14,14 +14,14 @@ LiveSource::~LiveSource() = default;
 bool LiveSource::start(const std::string &serial, const std::string &wifi,
                        const std::string &record_path, bool hw_decode, bool watch_display,
                        bool want_audio, int audio_buffer_ms, const std::string &video_source,
-                       const std::string &test_degrade, std::string &err) {
+                       const std::string &test_degrade, std::string &err, uint16_t wifi_port) {
     // 连接设备前校验降级时刻表。非法参数应明确失败，避免测试实际未启用。
     if (!test_degrade.empty() &&
         !scrctl::app::parse_degrade_marks(test_degrade, degrade_marks_, err)) {
         err = SCRCTL_TR("Invalid --test-degrade: ") + err;
         return false;
     }
-    auto dev = open_device(serial, wifi, err);
+    auto dev = open_device(serial, wifi, err, wifi_port);
     if (!dev) {
         return false;
     }

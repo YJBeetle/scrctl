@@ -14,8 +14,12 @@ struct Options {
     /// --wifi 指定局域网地址，使用远程配对验证和 TLS-PSK 隧道。
     /// 本机需要该设备的远程配对记录，无需在无线使用时保持 USB 连接。
     std::string wifi;
+    uint16_t wifi_port = 49152; ///< 手动 --wifi 地址的 RemotePairing 端口；发现模式采用 SRV 端口。
+    bool pair = false; ///< --pair：经 USB 建立或验证远程配对记录，随后退出。
+    bool repair_pairing = false; ///< --repair-pairing：允许更新被拒绝或缺少设备身份的旧记录。
     std::string record; ///< 录制实时 Annex-B 码流
     bool list_devices = false;
+    int discovery_timeout_ms = 3000; ///< --list-devices 的无线扫描时限；0 只列 usbmux
     bool no_control = false; ///< --no-control：关闭输入控制
     /// 任意一个选定的修饰键按下时启用窗口快捷键；默认与 scrcpy 一致。
     uint16_t shortcut_mods = KMOD_LALT | KMOD_LGUI;

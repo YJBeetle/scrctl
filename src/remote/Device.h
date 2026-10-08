@@ -18,6 +18,15 @@ namespace scrctl::remote {
 /// 根据 lockdown 错误选择连接提示，区分锁屏、未信任和服务不可用。
 std::string proxy_failure_hint(std::string_view lockdown_error);
 
+namespace detail {
+/// usbmux 的 USB/Network 条目按非空原始 UDID 归为同一设备。无 serial 时要求
+/// 唯一设备，有 serial 时精确匹配；同一设备优先唯一 USB 条目。所选传输重复时
+/// 返回错误，不任取一个 device_id。usb_only 先过滤非 USB 条目，错误只显示脱敏 UDID。
+std::optional<transport::DeviceRecord> select_usbmux_device(
+    const std::vector<transport::DeviceRecord> &records, std::string_view serial,
+    std::string &error, bool usb_only = false);
+} // namespace detail
+
 /// 持有一次设备会话的配对连接、包隧道、IPv6 协议栈和 RSD 目录。
 /// USB 经 lockdown/CoreDeviceProxy 建立隧道，Wi-Fi 经远程配对和 TLS-PSK 建立。
 /// 服务连接及引用 Device 的媒体源、订阅者必须先于 Device 销毁。
@@ -35,10 +44,12 @@ public:
     /// 读取 usbmux 当前列出的设备；失败时返回空列表并填写 err。
     static std::vector<transport::DeviceRecord> list(std::string &err);
 
-    /// 建立 USB 会话。udid 为空时自动选择唯一设备，多台设备时返回候选列表。
+    /// 经 usbmux 建立会话。udid 为空时自动选择唯一真实 UDID；同设备优先 USB，
+    /// 多台设备时返回脱敏候选列表，同一传输条目重复时要求解决歧义后重试。
+    /// usb_only 过滤 Network 条目，供首次远程配对等必须使用 USB 的操作调用。
     /// verbose 向 stderr 报告各阶段进展；失败时已取得的资源随局部对象释放。
     static std::optional<Device> establish(std::string_view udid, std::string &err,
-                                           bool verbose = false);
+                                           bool verbose = false, bool usb_only = false);
 
     /// 使用远程配对记录，经 pair-verify、设备监听端口和 TLS-PSK 建立局域网隧道。
     /// address/port 指向设备 RemotePairing 服务；隧道建立后复用同一套 Stack/RSD。

@@ -2,6 +2,8 @@
 #include "remote/Device.h"
 
 #include <cstdio>
+#include <algorithm>
+#include <map>
 #include <memory>
 
 #include "remote/RemoteXpc.h"
@@ -46,6 +48,67 @@ std::string mask(std::string_view value, std::size_t keep) {
     return "****" + std::string(value.substr(value.size() - keep));
 }
 
+std::optional<transport::DeviceRecord> detail::select_usbmux_device(
+    const std::vector<transport::DeviceRecord> &records, std::string_view serial,
+    std::string &error, bool usb_only) {
+    error.clear();
+    std::map<std::string, std::vector<const transport::DeviceRecord *>> devices;
+    bool missing_udid = false;
+    for (const auto &record : records) {
+        if (usb_only && !record.is_usb()) continue;
+        if (record.udid.empty()) { missing_udid = true; continue; }
+        devices[record.udid].push_back(&record);
+    }
+    if (devices.empty()) {
+        if (missing_udid) {
+            error = SCRCTL_TR("Connected usbmux entries have no usable device UDID");
+        } else {
+            // usbmux 为空或 USB 过滤后为空时沿用原来的连接提示。
+            error = SCRCTL_TR(
+                "No USB device found (usbmux list is empty). Check the data cable and USB "
+                "connection, then reconnect the device. Untrusted devices normally appear in "
+                "this list too.");
+        }
+        return std::nullopt;
+    }
+    auto candidates = [&] {
+        std::string value;
+        for (const auto &[udid, unused] : devices) value += " " + mask(udid);
+        return value;
+    };
+    auto selected = devices.begin();
+    if (serial.empty()) {
+        if (devices.size() > 1) {
+            error = SCRCTL_TR("Connected devices: ") + std::to_string(devices.size()) +
+                    SCRCTL_TR("; select one: ") + candidates();
+            return std::nullopt;
+        }
+    } else {
+        selected = devices.find(std::string(serial));
+        if (selected == devices.end()) {
+            error = SCRCTL_TR("No connected device matches ") + mask(serial) +
+                    SCRCTL_TR("; connected devices: ") + candidates() +
+                    SCRCTL_TR(" (total ") + std::to_string(devices.size()) +
+                    SCRCTL_TR("). Check the selected UDID and USB connection.");
+            return std::nullopt;
+        }
+    }
+    const auto &connections = selected->second;
+    const bool has_usb = std::any_of(connections.begin(), connections.end(), [](const auto *record) {
+        return record->is_usb();
+    });
+    const transport::DeviceRecord *chosen = nullptr;
+    for (const auto *record : connections) {
+        if (has_usb && !record->is_usb()) continue;
+        if (chosen) {
+            error = SCRCTL_TR("Cannot choose a unique usbmux connection for device ") + mask(selected->first);
+            return std::nullopt;
+        }
+        chosen = record;
+    }
+    return *chosen;
+}
+
 Device::Device(Device &&) noexcept = default;
 Device &Device::operator=(Device &&other) noexcept {
     if (this == &other) {
@@ -78,7 +141,8 @@ std::vector<transport::DeviceRecord> Device::list(std::string &err) {
     return out;
 }
 
-std::optional<Device> Device::establish(std::string_view udid, std::string &err, bool verbose) {
+std::optional<Device> Device::establish(std::string_view udid, std::string &err, bool verbose,
+                                      bool usb_only) {
     auto mux = transport::Usbmux::open(err);
     if (!mux) {
         return std::nullopt;
@@ -87,43 +151,8 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
     if (!mux->list_devices(devices, err)) {
         return std::nullopt;
     }
-    if (devices.empty()) {
-        // usbmux 列表为空时提示检查数据线和 USB 连接；配对在后续阶段处理。
-        err = SCRCTL_TR(
-            "No USB device found (usbmux list is empty). Check the data cable and USB "
-            "connection, then reconnect the device. Untrusted devices normally appear in "
-            "this list too.");
-        return std::nullopt;
-    }
-
-    // 未指定 UDID 时只接受唯一设备；选择失败时附带脱敏的候选标识。
-    const transport::DeviceRecord *chosen = nullptr;
-    if (udid.empty()) {
-        if (devices.size() > 1) {
-            err = SCRCTL_TR("Connected devices: ") + std::to_string(devices.size()) + SCRCTL_TR("; select one: ");
-            for (const auto &d : devices) {
-                err += " " + mask(d.udid);
-            }
-            return std::nullopt;
-        }
-        chosen = &devices.front();
-    } else {
-        for (const auto &d : devices) {
-            if (d.udid == udid) {
-                chosen = &d;
-                break;
-            }
-        }
-        if (chosen == nullptr) {
-            // UDID 未匹配属于设备选择阶段，此时尚未建立 lockdown 配对会话。
-            err = SCRCTL_TR("No connected device matches ") + std::string(mask(udid)) + SCRCTL_TR("; connected devices: ");
-            for (const auto &d : devices) {
-                err += " " + mask(d.udid);
-            }
-            err += SCRCTL_TR(" (total ") + std::to_string(devices.size()) + SCRCTL_TR("). Check the selected UDID and USB connection.");
-            return std::nullopt;
-        }
-    }
+    const auto chosen = detail::select_usbmux_device(devices, udid, err, usb_only);
+    if (!chosen) return std::nullopt;
 
     std::optional<Device> dev;
     dev.emplace();

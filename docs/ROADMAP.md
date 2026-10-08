@@ -14,7 +14,7 @@
   构建、安装检查及下载的真实 Release 包独立启动已通过；USB 竖屏下的 HID 绘图及
   SDL 窗口鼠标触摸也已通过；USB / Wi-Fi 横屏视频输入及 Wi-Fi 横屏截图回读通过。
   日常键盘输入、硬件按键、Windows 新建配对、DDI 初始安装、
-  x64 和 MSVC 待验证。当前没有 Windows 音频后端，需要先实现，见
+  x64 和 MSVC 待验证。FFmpeg 音频后端已接入，真实音乐解码及短时 USB 发声通过，持续连接待查，见
   [Windows 说明](WINDOWS.md)。发布产物还需完善对应第三方源码及分发材料。
 - lwIP：离线模拟已覆盖丢包、重传、多个连接 / 网络接口和取消等待；USB / Wi-Fi
   真机短测及三分钟强制截图往返已通过。真实弱网、物理拔插、多台设备及长时间运行待测。
@@ -53,45 +53,39 @@
   帮助、运行提示和文件错误也已完成双语整理。新增提示使用翻译目录维护检查。
 - 图像裁剪：评估读取 SPS conformance window，减少机型尺寸表依赖。需要保留设备可见区、
   编码填充、界面朝向和触摸坐标之间的对应关系。
-- 远程配对：产品当前只有连接已有记录的入口；新建配对仍通过研究探针。产品命令需要
-  明确记录选择、用户确认、错误和保存流程，再做真机验证。
-- 音频：当前仅有 macOS AudioToolbox 后端。已有 FFmpeg 测试不能证明其他库不支持 ELD；
-  [FDK AAC 的接口说明](https://github.com/mstorsjo/fdk-aac/blob/master/libAACdec/include/aacdecoder_lib.h)
-  提供低延迟 AAC 支持，可独立评估配置与真机码流兼容性，尚未接入生产。
+- 远程配对：`--pair` 经 USB 验证/新建记录，旧记录重配须显式 `--repair-pairing`；
+  新记录验证后才保存。macOS 正式命令的确认、新建及复用已通过，更多设备和 Windows 待验证。
+- 音频：macOS 使用 AudioToolbox，Windows / Linux 使用 FFmpeg AAC-ELD 与 libswresample。
+  已修正旧 ASC 配置错误，真实音乐双后端对照通过；Windows USB 已实际发声，
+  持续连接、无线播放、Linux 真机及其他 ELD 配置仍需验证。
 - 其他 CLI 功能：录制方向、水平翻转、录制随时起停等需要按具体需求推进；参数范围以
   当前 `scrctl --help` 为准。
 
-## 暂缓
-
 ### 无线发现与记录匹配
 
-当前使用 `--wifi <地址>`，未指定 serial 时仅在存在唯一配对记录时自动选择。
-发现需要处理多网卡、IPv6 scope、广播地址和配对记录匹配，当前暂缓。
-恢复时优先评估现成 DNS-SD 与 SipHash 实现，不将旧文档的手写方案视为约束。
+已接入约 3 秒的可取消扫描；`--list-devices` 合并 USB 与无线候选，
+`remote::discover_devices()` 提供公共快照接口。DNS 编解码使用 mjansson/mdns，
+SipHash 使用 OpenSSL；扫描器只负责网卡/socket 适配、本次记录关联和设备归并。
+保留 SRV 端口、多地址、接口及 IPv6 scope，不把第一个地址当成已验证连接。
 
-已有设备观察可供后续验证使用：
+仅唯一 authTag 匹配能关联 UDID；标识直接相等只作为旧记录线索，不选择密钥。
+发现匹配不代替 PairVerify。正式配对及无线自动选择已接入产品：`--wifi auto -s`
+只发现无线，手动地址仍可配合 `--wifi-port`；默认优先已有 usbmux 候选。
+多台设备、多个匹配记录均要求明确选择，不取列表首项。
 
-- 服务类型 `_remotepairing._tcp`，端口应从 SRV 获取；49152 只是已有设备的观察值。
-- TXT `identifier` 为不透明 UUID，不是 UDID；记录中分别保留 UDID 与广播 identifier。
-- `authTag` 使用记录的 altIRK 与 identifier 做 SipHash-2-4，再按设备约定取六字节。
-- 一次 browse 可能缺少 Wi-Fi 地址，需多轮累积并按 SRV target 聚合；USB NCM 地址
-  与 Wi-Fi 地址可能同时出现，连接后仍需确认实际路径。
-- mDNS 组地址为 IPv4 `224.0.0.251`、IPv6 `ff02::fb`，端口 5353；
-  规范见 [RFC 6762](https://www.rfc-editor.org/rfc/rfc6762.html)。
-
-此前的 CLI 方案为先列发现结果，再按设备选择连接。恢复开发时重新确认方案，
-日志只显示设备尾号，不输出配对记录或密钥。
+## 后续容器录制
 
 ### 容器录制
 
 当前 `--record` 保存裸 Annex-B HEVC，无容器和音轨，`--play` 播放同一格式。
-MP4 等容器录制暂缓。恢复时优先评估 libavformat，不以已有手写协议实现作为
-再写 muxer 的理由；需要验证 VPS / SPS / PPS、AU 转换、帧数和时间戳。
+下一步使用 libavformat。离线 HEVC + AAC-ELD 的 MP4 / MKV 封装实验已通过，
+MP4 使用 hvc1；仍需将 RTP 时间戳、完整 AU、会话 epoch 和音视频共同时间轴
+接入生产，再验证断流恢复、磁盘失败和退出收尾。
 
-音轨需另行确定：原样保存 AAC-ELD、解码为 PCM、转码，或先只录视频。
-已有 FFmpeg 后端测试只说明所测配置不兼容，不能推定所有非 Apple 播放器或库均不可用。
+AAC-ELD 原包可直存，离线 FFmpeg 解码及本机 AVFoundation MP4 解码通过；
+其他播放器兼容性不能由这组结果代替。录制方向与 --orientation 语义一起推进。
 
-### MaaFramework
+## 暂缓：MaaFramework
 
 后续倾向参考 scrctl 已验证的协议独立实现；scrctl 同时作为独立产品发展。
 当前按用户安排先完成 scrctl，不修改 MaaFramework。

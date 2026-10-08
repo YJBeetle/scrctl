@@ -25,7 +25,16 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.set_help_flag("-h,--help", SCRCTL_N_("Show help"));
     app.add_option("--play", o.path, SCRCTL_N_("Play an Annex-B HEVC file"));
     app.add_option("-s,--serial", o.serial, SCRCTL_N_("Device UDID"));
-    app.add_option("--wifi", o.wifi, SCRCTL_N_("LAN address (requires an existing pairing record)"));
+    app.add_option("--wifi", o.wifi, SCRCTL_N_("LAN address, or auto to discover a paired wireless device"));
+    app.add_option("--wifi-port", o.wifi_port,
+                   SCRCTL_N_("RemotePairing port for a manual LAN address; default: 49152"))
+        ->check(CLI::Range(1, 65535))->needs("--wifi");
+    auto *pair_command = app.add_flag("--pair", o.pair,
+                 SCRCTL_N_("Create or verify a remote pairing record over USB, then exit"))
+        ->excludes("--wifi")->excludes("--play");
+    app.add_flag("--repair-pairing", o.repair_pairing,
+                 SCRCTL_N_("Allow replacing an incomplete or rejected pairing record; requires --pair"))
+        ->needs("--pair");
     app.add_option("-r,--record", o.record, SCRCTL_N_("Record the live stream as Annex-B"));
     app.add_option("--start-app", o.start_app, SCRCTL_N_("Launch bundle ID; ? matches name prefix, + terminates the previous instance"));
     app.add_option("--window-title,--title", o.title, SCRCTL_N_("Window title"));
@@ -45,7 +54,11 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.add_option("--test-type", o.test_type, SCRCTL_N_("Inject ASCII text (device text field must have focus)"));
     app.add_option("--test-degrade", o.test_degrade, SCRCTL_N_("Force alternating video fallback and recovery at T1,T2,... seconds"));
     app.add_option("--copy", o.copy_text, SCRCTL_N_("Write device clipboard and exit (supports Unicode)"));
-    app.add_flag("--list-devices", o.list_devices, SCRCTL_N_("List connected devices"));
+    app.add_flag("--list-devices", o.list_devices,
+                 SCRCTL_N_("List USB and RemotePairing devices; wireless scan defaults to 3 seconds"));
+    app.add_option("--discovery-timeout", o.discovery_timeout_ms,
+                   SCRCTL_N_("Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"))
+        ->check(CLI::Range(0, 60000))->needs("--list-devices");
     app.add_flag("-n,--no-control", o.no_control, SCRCTL_N_("Disable input control"))
         ->excludes("--test-touch")->excludes("--test-button")->excludes("--test-type");
     app.add_flag("--list-apps", o.list_apps, SCRCTL_N_("List device apps"));
@@ -88,11 +101,17 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.add_option("--background-color", background,
                    SCRCTL_N_("Background color: RGB or RRGGBB, with optional #"));
     app.add_option("--verify", verify, SCRCTL_N_("Read window at frame N into BMP: N FILE (requires a window)"))->expected(2);
+    // excludes 需要目标选项已经注册，不能引用后面才创建的独立命令。
+    pair_command->excludes("--list-devices")->excludes("--list-apps")
+        ->excludes("--copy")->excludes("--paste")->excludes("--start-app");
     i18n::CliLanguage language(app);
     try {
         app.parse(argc, argv);
         if (!language.select()) return ParseResult::Error;
         if (o.video_source == "display") o.video_source = "stream";
+        if (o.wifi == "auto" && app.count("--wifi-port")) {
+            throw CLI::ValidationError("--wifi-port", SCRCTL_TR("Use a manual LAN address; auto uses discovered SRV ports"));
+        }
         auto position = [&](const char *name, const std::string &value, std::optional<int> &out) {
             if (!app.count(name)) return;
             if (value == "auto") {

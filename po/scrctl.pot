@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 16:44+0800\n"
+"POT-Creation-Date: 2026-10-08 17:02+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -177,300 +177,389 @@ msgid "Device UDID"
 msgstr ""
 
 #: src/app/Cli.cpp:28
-msgid "LAN address (requires an existing pairing record)"
-msgstr ""
-
-#: src/app/Cli.cpp:29
-msgid "Record the live stream as Annex-B"
+msgid "LAN address, or auto to discover a paired wireless device"
 msgstr ""
 
 #: src/app/Cli.cpp:30
+msgid "RemotePairing port for a manual LAN address; default: 49152"
+msgstr ""
+
+#: src/app/Cli.cpp:33
+msgid "Create or verify a remote pairing record over USB, then exit"
+msgstr ""
+
+#: src/app/Cli.cpp:36
+msgid ""
+"Allow replacing an incomplete or rejected pairing record; requires --pair"
+msgstr ""
+
+#: src/app/Cli.cpp:38
+msgid "Record the live stream as Annex-B"
+msgstr ""
+
+#: src/app/Cli.cpp:39
 msgid ""
 "Launch bundle ID; ? matches name prefix, + terminates the previous instance"
 msgstr ""
 
-#: src/app/Cli.cpp:31
+#: src/app/Cli.cpp:40
 msgid "Window title"
 msgstr ""
 
-#: src/app/Cli.cpp:32
+#: src/app/Cli.cpp:41
 msgid "SDL render driver, e.g. metal / software"
 msgstr ""
 
-#: src/app/Cli.cpp:34
+#: src/app/Cli.cpp:43
 msgid ""
 "display for live video (default), screenshot for polling; stream is an alias "
 "for display"
 msgstr ""
 
-#: src/app/Cli.cpp:36
+#: src/app/Cli.cpp:45
 msgid "Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"
 msgstr ""
 
-#: src/app/Cli.cpp:43
+#: src/app/Cli.cpp:52
 msgid "Inject home/lock/volup/voldn/mute"
 msgstr ""
 
-#: src/app/Cli.cpp:45
+#: src/app/Cli.cpp:54
 msgid "Inject ASCII text (device text field must have focus)"
 msgstr ""
 
-#: src/app/Cli.cpp:46
+#: src/app/Cli.cpp:55
 msgid "Force alternating video fallback and recovery at T1,T2,... seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:47
+#: src/app/Cli.cpp:56
 msgid "Write device clipboard and exit (supports Unicode)"
 msgstr ""
 
-#: src/app/Cli.cpp:48
-msgid "List connected devices"
-msgstr ""
-
-#: src/app/Cli.cpp:49
-msgid "Disable input control"
-msgstr ""
-
-#: src/app/Cli.cpp:51
-msgid "List device apps"
-msgstr ""
-
-#: src/app/Cli.cpp:52
-msgid "Show version"
-msgstr ""
-
-#: src/app/Cli.cpp:53
-msgid "Desktop fullscreen"
-msgstr ""
-
-#: src/app/Cli.cpp:54
-msgid "Keep window on top"
-msgstr ""
-
-#: src/app/Cli.cpp:55
-msgid "Borderless window"
-msgstr ""
-
-#: src/app/Cli.cpp:56
-msgid "Prevent local screen sleep while running"
-msgstr ""
-
-#: src/app/Cli.cpp:57
-msgid "Do not start audio stream"
-msgstr ""
-
 #: src/app/Cli.cpp:58
-msgid "Receive and decode audio without local playback"
-msgstr ""
-
-#: src/app/Cli.cpp:59
-msgid "Run without a window"
+msgid "List USB and RemotePairing devices; wireless scan defaults to 3 seconds"
 msgstr ""
 
 #: src/app/Cli.cpp:60
-msgid "Use platform hardware decoder; default: software"
-msgstr ""
-
-#: src/app/Cli.cpp:61
-msgid "Print input coordinates"
+msgid ""
+"Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"
 msgstr ""
 
 #: src/app/Cli.cpp:62
-msgid "Add tunnel diagnostics to --stats"
-msgstr ""
-
-#: src/app/Cli.cpp:63
-msgid "Print statistics every second"
+msgid "Disable input control"
 msgstr ""
 
 #: src/app/Cli.cpp:64
-msgid "Read device clipboard; with --copy, read back after writing"
+msgid "List device apps"
+msgstr ""
+
+#: src/app/Cli.cpp:65
+msgid "Show version"
+msgstr ""
+
+#: src/app/Cli.cpp:66
+msgid "Desktop fullscreen"
 msgstr ""
 
 #: src/app/Cli.cpp:67
-msgid "Window horizontal position; integer or auto (default)"
+msgid "Keep window on top"
+msgstr ""
+
+#: src/app/Cli.cpp:68
+msgid "Borderless window"
 msgstr ""
 
 #: src/app/Cli.cpp:69
-msgid "Window vertical position; integer or auto (default)"
+msgid "Prevent local screen sleep while running"
+msgstr ""
+
+#: src/app/Cli.cpp:70
+msgid "Do not start audio stream"
 msgstr ""
 
 #: src/app/Cli.cpp:71
+msgid "Receive and decode audio without local playback"
+msgstr ""
+
+#: src/app/Cli.cpp:72
+msgid "Run without a window"
+msgstr ""
+
+#: src/app/Cli.cpp:73
+msgid "Use platform hardware decoder; default: software"
+msgstr ""
+
+#: src/app/Cli.cpp:74
+msgid "Print input coordinates"
+msgstr ""
+
+#: src/app/Cli.cpp:75
+msgid "Add tunnel diagnostics to --stats"
+msgstr ""
+
+#: src/app/Cli.cpp:76
+msgid "Print statistics every second"
+msgstr ""
+
+#: src/app/Cli.cpp:77
+msgid "Read device clipboard; with --copy, read back after writing"
+msgstr ""
+
+#: src/app/Cli.cpp:80
+msgid "Window horizontal position; integer or auto (default)"
+msgstr ""
+
+#: src/app/Cli.cpp:82
+msgid "Window vertical position; integer or auto (default)"
+msgstr ""
+
+#: src/app/Cli.cpp:84
 msgid ""
 "Shortcut modifiers, separated by commas: lctrl, rctrl, lalt, ralt, lsuper, "
 "rsuper; default: lalt,lsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:72
+#: src/app/Cli.cpp:85
 msgid "Window width; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:73
+#: src/app/Cli.cpp:86
 msgid "Window height; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:74
+#: src/app/Cli.cpp:87
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:76
+#: src/app/Cli.cpp:89
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr ""
 
-#: src/app/Cli.cpp:78
+#: src/app/Cli.cpp:91
 msgid "Exit after N frames; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:80
+#: src/app/Cli.cpp:93
 msgid "Finite positive scale; default: fit screen"
 msgstr ""
 
-#: src/app/Cli.cpp:84
+#: src/app/Cli.cpp:97
 msgid ""
 "Clockwise display rotation; auto follows the device; recording is unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:87
+#: src/app/Cli.cpp:100
 msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:89
+#: src/app/Cli.cpp:102
 msgid "Background color: RGB or RRGGBB, with optional #"
 msgstr ""
 
-#: src/app/Cli.cpp:90
+#: src/app/Cli.cpp:103
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr ""
 
-#: src/app/Cli.cpp:105
+#: src/app/Cli.cpp:113
+msgid "Use a manual LAN address; auto uses discovered SRV ports"
+msgstr ""
+
+#: src/app/Cli.cpp:124
 msgid "Expected an integer or auto"
 msgstr ""
 
-#: src/app/Cli.cpp:125
+#: src/app/Cli.cpp:144
 msgid ""
 "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:136
+#: src/app/Cli.cpp:155
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr ""
 
-#: src/app/Cli.cpp:143
+#: src/app/Cli.cpp:162
 msgid "Requires a finite positive number"
 msgstr ""
 
-#: src/app/Cli.cpp:160
+#: src/app/Cli.cpp:179
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr ""
 
-#: src/app/Cli.cpp:169
+#: src/app/Cli.cpp:188
 msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
 msgstr ""
 
-#: src/app/Cli.cpp:183
+#: src/app/Cli.cpp:202
 msgid "Frame number must be a positive integer"
 msgstr ""
 
-#: src/app/Cli.cpp:188
+#: src/app/Cli.cpp:207
 msgid "Requires a window; incompatible with --no-window"
 msgstr ""
 
-#: src/app/Commands.cpp:40 src/app/Commands.cpp:63
+#: src/app/Commands.cpp:39
+msgid "pairing record available"
+msgstr ""
+
+#: src/app/Commands.cpp:41
+msgid "pair again over USB"
+msgstr ""
+
+#: src/app/Commands.cpp:43
+msgid "old record hint; pair again over USB"
+msgstr ""
+
+#: src/app/Commands.cpp:45
+msgid "multiple matching pairing records"
+msgstr ""
+
+#: src/app/Commands.cpp:47
+msgid "invalid discovery identity"
+msgstr ""
+
+#: src/app/Commands.cpp:49
+msgid "identity matching failed"
+msgstr ""
+
+#: src/app/Commands.cpp:51 src/app/Commands.cpp:53
+msgid "no matching pairing record"
+msgstr ""
+
+#: src/app/Commands.cpp:70
+#, c-format
+msgid "Discovery warning: %s\n"
+msgstr ""
+
+#: src/app/Commands.cpp:74
+msgid "Wireless device (UDID unknown)"
+msgstr ""
+
+#: src/app/Commands.cpp:86
+msgid "address unresolved"
+msgstr ""
+
+#: src/app/Commands.cpp:102
+#, c-format
+msgid "No devices found\n"
+msgstr ""
+
+#: src/app/Commands.cpp:116
+#, c-format
+msgid "Remote pairing failed: %s\n"
+msgstr ""
+
+#: src/app/Commands.cpp:120
+#, c-format
+msgid "Remote pairing verified for %s\n"
+msgstr ""
+
+#: src/app/Commands.cpp:121
+#, c-format
+msgid "Remote pairing saved for %s\n"
+msgstr ""
+
+#: src/app/Commands.cpp:130 src/app/Commands.cpp:153
 #, c-format
 msgid "Failed to establish session: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:45
+#: src/app/Commands.cpp:135
 #, c-format
 msgid "Failed to list apps: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:51
+#: src/app/Commands.cpp:141
 #, c-format
 msgid "Total: %zu\n"
 msgstr ""
 
-#: src/app/Commands.cpp:69
+#: src/app/Commands.cpp:159
 #, c-format
 msgid "Wrote %zu bytes to device clipboard\n"
 msgstr ""
 
-#: src/app/Commands.cpp:71
+#: src/app/Commands.cpp:161
 #, c-format
 msgid "--copy failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:78
+#: src/app/Commands.cpp:168
 #, c-format
 msgid "Device clipboard (%zu bytes): "
 msgstr ""
 
-#: src/app/Commands.cpp:82
+#: src/app/Commands.cpp:172
 #, c-format
 msgid "--paste failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:108
+#: src/app/Commands.cpp:198
 #, c-format
 msgid "--start-app requires a nonempty app name\n"
 msgstr ""
 
-#: src/app/Commands.cpp:118
+#: src/app/Commands.cpp:208
 #, c-format
 msgid "Failed to find app by name: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:136
+#: src/app/Commands.cpp:226
 #, c-format
 msgid "No app name starts with %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:144 tools/app_launch_probe.cpp:89
+#: src/app/Commands.cpp:234 tools/app_launch_probe.cpp:89
 #, c-format
 msgid "Failed to launch %s: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:147
+#: src/app/Commands.cpp:237
 msgid " (previous instance terminated)"
 msgstr ""
 
-#: src/app/Commands.cpp:147
+#: src/app/Commands.cpp:237
 #, c-format
 msgid "Launched %s%s\n"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:29
-#, c-format
-msgid "Using the only remote pairing record (device suffix %s)\n"
+#: src/app/DeviceConnection.cpp:81
+msgid ""
+"Multiple usable remote pairing records match; select a unique device with -s"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:31
-msgid " contains "
+#: src/app/DeviceConnection.cpp:87
+msgid "No usable remote pairing record matches; pair the device over USB first"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:31
-msgid "Directory "
+#: src/app/DeviceConnection.cpp:111
+msgid ""
+"No paired wireless device is available; check the network and pair over USB "
+"first"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:32
-msgid " pairing records; specify the device with -s. Candidate suffixes: "
+#: src/app/DeviceConnection.cpp:115
+msgid "Multiple paired wireless devices are available; select one with -s"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:43
-msgid " remote pairing record (directory "
+#: src/app/DeviceConnection.cpp:133
+msgid "Selected wireless device does not match a usable pairing record"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:43
-msgid "): "
+#: src/app/DeviceConnection.cpp:137
+msgid "No usable wireless connection candidate is available"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:43
-msgid "Cannot read "
+#: src/app/DeviceConnection.cpp:150
+msgid "Cannot connect to any discovered wireless address"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:44
-msgid ". Establish a remote pairing record over USB first."
+#: src/app/DeviceConnection.cpp:161
+msgid "Wi-Fi port must be between 1 and 65535"
+msgstr ""
+
+#: src/app/DeviceConnection.cpp:176
+msgid "USB device enumeration was unavailable: "
 msgstr ""
 
 #: src/app/FileSource.cpp:56
@@ -1607,164 +1696,228 @@ msgid ""
 "pending)\n"
 msgstr ""
 
-#: src/remote/Device.cpp:21
+#: src/remote/Device.cpp:23
 #, c-format
 msgid "  [stage] %s\n"
 msgstr ""
 
-#: src/remote/Device.cpp:31
+#: src/remote/Device.cpp:33
 msgid ""
 " (device is locked; unlock it and keep the screen awake before retrying)"
 msgstr ""
 
-#: src/remote/Device.cpp:34
+#: src/remote/Device.cpp:36
 msgid " (computer not trusted; unlock the device and confirm Trust)"
 msgstr ""
 
-#: src/remote/Device.cpp:37
+#: src/remote/Device.cpp:39
 msgid ""
 " (service unavailable; check Developer Mode and DDI mounting through Xcode)"
 msgstr ""
 
-#: src/remote/Device.cpp:39
+#: src/remote/Device.cpp:41
 msgid " (check DDI mounting and Developer Mode)"
 msgstr ""
 
-#: src/remote/Device.cpp:93
+#: src/remote/Device.cpp:64
+msgid "Connected usbmux entries have no usable device UDID"
+msgstr ""
+
+#: src/remote/Device.cpp:68
 msgid ""
 "No USB device found (usbmux list is empty). Check the data cable and USB "
 "connection, then reconnect the device. Untrusted devices normally appear in "
 "this list too."
 msgstr ""
 
-#: src/remote/Device.cpp:103
-msgid "; select one: "
-msgstr ""
-
-#: src/remote/Device.cpp:103
+#: src/remote/Device.cpp:82
 msgid "Connected devices: "
 msgstr ""
 
-#: src/remote/Device.cpp:119
-msgid "; connected devices: "
+#: src/remote/Device.cpp:83
+msgid "; select one: "
 msgstr ""
 
-#: src/remote/Device.cpp:119
+#: src/remote/Device.cpp:89
 msgid "No connected device matches "
 msgstr ""
 
-#: src/remote/Device.cpp:123
+#: src/remote/Device.cpp:90
+msgid "; connected devices: "
+msgstr ""
+
+#: src/remote/Device.cpp:91
 msgid " (total "
 msgstr ""
 
-#: src/remote/Device.cpp:123
+#: src/remote/Device.cpp:92
 msgid "). Check the selected UDID and USB connection."
 msgstr ""
 
-#: src/remote/Device.cpp:133
+#: src/remote/Device.cpp:104
+msgid "Cannot choose a unique usbmux connection for device "
+msgstr ""
+
+#: src/remote/Device.cpp:162
 msgid "lockdown pairing session"
 msgstr ""
 
-#: src/remote/Device.cpp:136 tools/wifi_probe.cpp:348
+#: src/remote/Device.cpp:165 tools/wifi_probe.cpp:348
 msgid "Failed to establish lockdown session: "
 msgstr ""
 
-#: src/remote/Device.cpp:139
+#: src/remote/Device.cpp:168
 msgid "Start CoreDeviceProxy"
 msgstr ""
 
-#: src/remote/Device.cpp:142 src/remote/Rsd.cpp:193 src/remote/Rsd.cpp:396
+#: src/remote/Device.cpp:171 src/remote/Rsd.cpp:193 src/remote/Rsd.cpp:396
 #: src/transport/Usbmux.cpp:92 src/wifi/PairRecord.cpp:344
 #: tools/wifi_probe.cpp:353
 msgid " failed: "
 msgstr ""
 
-#: src/remote/Device.cpp:142
+#: src/remote/Device.cpp:171
 msgid "Start "
 msgstr ""
 
-#: src/remote/Device.cpp:145
+#: src/remote/Device.cpp:174
 msgid "CDTunnel handshake"
 msgstr ""
 
-#: src/remote/Device.cpp:150 src/remote/Device.cpp:250
+#: src/remote/Device.cpp:179 src/remote/Device.cpp:279
 msgid "Failed to establish packet tunnel: "
 msgstr ""
 
-#: src/remote/Device.cpp:157
+#: src/remote/Device.cpp:186
 msgid "Cannot construct a stable peer identity from pairing HostID"
 msgstr ""
 
-#: src/remote/Device.cpp:163 src/remote/Device.cpp:173
+#: src/remote/Device.cpp:192 src/remote/Device.cpp:202
 msgid "Connect to RSD inside tunnel and read directory"
 msgstr ""
 
-#: src/remote/Device.cpp:179
+#: src/remote/Device.cpp:208
 msgid "Tunnel returned an invalid IPv6 address"
 msgstr ""
 
-#: src/remote/Device.cpp:190
+#: src/remote/Device.cpp:219
 msgid "Ready"
 msgstr ""
 
-#: src/remote/Device.cpp:199 src/wifi/PairVerify.cpp:13
+#: src/remote/Device.cpp:228 src/wifi/PairVerify.cpp:13
 msgid "Pairing record incomplete; cannot sign"
 msgstr ""
 
-#: src/remote/Device.cpp:203 src/wifi/PairVerify.cpp:19
+#: src/remote/Device.cpp:232 src/wifi/PairVerify.cpp:19
 #: tools/wifi_probe.cpp:801
 msgid "Pairing record has no device identity; pair again over USB"
 msgstr ""
 
-#: src/remote/Device.cpp:211
+#: src/remote/Device.cpp:240
 msgid "LAN pair-verify"
 msgstr ""
 
-#: src/remote/Device.cpp:214
+#: src/remote/Device.cpp:243
 msgid "Cannot connect to device RemotePairing port "
 msgstr ""
 
-#: src/remote/Device.cpp:215
+#: src/remote/Device.cpp:244
 msgid ""
 " (check that the device is reachable on this network and has been paired)"
 msgstr ""
 
-#: src/remote/Device.cpp:224
+#: src/remote/Device.cpp:253
 msgid "Device rejected pairing record: "
 msgstr ""
 
-#: src/remote/Device.cpp:225
+#: src/remote/Device.cpp:254
 msgid " is not paired with this device, or its pairing was removed"
 msgstr ""
 
-#: src/remote/Device.cpp:227
+#: src/remote/Device.cpp:256
 msgid "pair-verify failed: "
 msgstr ""
 
-#: src/remote/Device.cpp:232
+#: src/remote/Device.cpp:261
 msgid "Request device tunnel port"
 msgstr ""
 
-#: src/remote/Device.cpp:240
+#: src/remote/Device.cpp:269
 msgid "TLS-PSK and CDTunnel handshake"
 msgstr ""
 
-#: src/remote/Device.cpp:243
+#: src/remote/Device.cpp:272
 msgid "Cannot connect to tunnel port "
 msgstr ""
 
-#: src/remote/Device.cpp:257
+#: src/remote/Device.cpp:286
 msgid ""
 "Pairing host identifier is not a valid UUID; cannot construct a stable peer "
 "identity"
 msgstr ""
 
-#: src/remote/Device.cpp:277
+#: src/remote/Device.cpp:306
 msgid "Session not established"
 msgstr ""
 
-#: src/remote/Device.cpp:289
+#: src/remote/Device.cpp:318
 msgid " does not advertise feature "
+msgstr ""
+
+#: src/remote/Discovery.cpp:99
+msgid "Cannot match mDNS advertisements to pairing records"
+msgstr ""
+
+#: src/remote/Discovery.cpp:144
+msgid "Cannot access pairing record directory"
+msgstr ""
+
+#: src/remote/Discovery.cpp:148
+msgid "Pairing record path is not a directory"
+msgstr ""
+
+#: src/remote/Discovery.cpp:153
+msgid "Cannot read pairing record directory"
+msgstr ""
+
+#: src/remote/Discovery.cpp:163
+msgid "Pairing record directory entry limit reached"
+msgstr ""
+
+#: src/remote/Discovery.cpp:168
+msgid "Cannot inspect a pairing record directory entry"
+msgstr ""
+
+#: src/remote/Discovery.cpp:175
+msgid "Pairing record file limit reached"
+msgstr ""
+
+#: src/remote/Discovery.cpp:180
+msgid "Cannot read a pairing record file"
+msgstr ""
+
+#: src/remote/Discovery.cpp:183
+msgid "Skipped an oversized pairing record file"
+msgstr ""
+
+#: src/remote/Discovery.cpp:188
+msgid "Skipped an unreadable or invalid pairing record file"
+msgstr ""
+
+#: src/remote/Discovery.cpp:194
+msgid "Reading pairing record directory was interrupted"
+msgstr ""
+
+#: src/remote/Discovery.cpp:199
+msgid "Cannot read pairing records for device discovery"
+msgstr ""
+
+#: src/remote/Discovery.cpp:211
+msgid "Device discovery timeout must be between 0 and 60000 ms"
+msgstr ""
+
+#: src/remote/Discovery.cpp:226
+msgid "USB device enumeration is unavailable"
 msgstr ""
 
 #: src/remote/DisplayInfo.cpp:103
@@ -1777,6 +1930,120 @@ msgstr ""
 
 #: src/remote/DisplayInfo.cpp:165
 msgid " ended without an update"
+msgstr ""
+
+#: src/remote/Pairing.cpp:23
+msgid "USB pairing timeout must be between 1 and 300000 ms"
+msgstr ""
+
+#: src/remote/Pairing.cpp:48
+msgid "Pairing requires the selected device to remain connected over USB"
+msgstr ""
+
+#: src/remote/Pairing.cpp:53
+msgid "Device does not provide the USB RemotePairing service"
+msgstr ""
+
+#: src/remote/Pairing.cpp:57
+msgid "USB RemotePairing service does not support RemoteXPC"
+msgstr ""
+
+#: src/remote/Pairing.cpp:69
+msgid "Unexpected initial USB RemotePairing message"
+msgstr ""
+
+#: src/remote/Pairing.cpp:86
+msgid "Multiple USB devices match; select one by UDID"
+msgstr ""
+
+#: src/remote/Pairing.cpp:91
+msgid "No matching USB device is connected"
+msgstr ""
+
+#: src/remote/Pairing.cpp:93
+msgid "USB device has no UDID; cannot bind a pairing record"
+msgstr ""
+
+#: src/remote/Pairing.cpp:107
+msgid "USB pairing device selection is invalid"
+msgstr ""
+
+#: src/remote/Pairing.cpp:111
+msgid "USB pairing workflow operations are unavailable"
+msgstr ""
+
+#: src/remote/Pairing.cpp:123
+msgid "Cannot inspect existing USB pairing record"
+msgstr ""
+
+#: src/remote/Pairing.cpp:129
+msgid "Existing USB pairing record is not a regular file"
+msgstr ""
+
+#: src/remote/Pairing.cpp:136
+msgid ""
+"Existing pairing record belongs to a different device; choose another record "
+"directory"
+msgstr ""
+
+#: src/remote/Pairing.cpp:140
+msgid "Existing pairing record cannot be read; enable USB repair explicitly"
+msgstr ""
+
+#: src/remote/Pairing.cpp:144
+msgid "Verifying the existing USB pairing record"
+msgstr ""
+
+#: src/remote/Pairing.cpp:152
+msgid "Existing pairing record verification failed: "
+msgstr ""
+
+#: src/remote/Pairing.cpp:157
+msgid "Device rejected the pairing record; enable USB repair explicitly"
+msgstr ""
+
+#: src/remote/Pairing.cpp:161
+msgid "Existing pairing record is incomplete; enable USB repair explicitly"
+msgstr ""
+
+#: src/remote/Pairing.cpp:167
+msgid "Cannot obtain the local hostname for USB pairing"
+msgstr ""
+
+#: src/remote/Pairing.cpp:175
+msgid "Cannot generate a host identifier for USB pairing"
+msgstr ""
+
+#: src/remote/Pairing.cpp:178
+msgid "Starting USB pairing; confirm the request on the device"
+msgstr ""
+
+#: src/remote/Pairing.cpp:182
+msgid "USB pair setup failed: "
+msgstr ""
+
+#: src/remote/Pairing.cpp:187
+msgid "USB pair setup returned an incomplete or mismatched record"
+msgstr ""
+
+#: src/remote/Pairing.cpp:190
+msgid "Reconnecting to verify the new USB pairing record"
+msgstr ""
+
+#: src/remote/Pairing.cpp:193
+msgid "New USB pairing record verification failed: "
+msgstr ""
+
+#: src/remote/Pairing.cpp:198
+msgid "Cannot save the verified USB pairing record: "
+msgstr ""
+
+#: src/remote/Pairing.cpp:205
+msgid "USB pairing workflow failed before completion"
+msgstr ""
+
+#: src/remote/Pairing.cpp:216
+msgid "Cannot enumerate devices for USB pairing: "
 msgstr ""
 
 #: src/remote/PairingChannel.cpp:59
@@ -2557,6 +2824,86 @@ msgstr ""
 
 #: src/wifi/Crypto.cpp:307
 msgid "HKDF-SHA512 derivation failed"
+msgstr ""
+
+#: src/wifi/DiscoveryIdentity.cpp:24
+msgid "SipHash requires a 16-byte key"
+msgstr ""
+
+#: src/wifi/DiscoveryIdentity.cpp:69
+msgid "OpenSSL SipHash computation failed"
+msgstr ""
+
+#: src/wifi/DiscoveryIdentity.cpp:84
+msgid "Invalid mDNS identifier"
+msgstr ""
+
+#: src/wifi/DiscoveryIdentity.cpp:96
+msgid "Invalid mDNS authTag (expected 8 Base64 characters)"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:140
+msgid "mDNS service limit reached"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:160
+msgid "mDNS SRV candidate limit reached"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:165
+msgid "mDNS TXT record limit reached"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:202
+msgid "mDNS host limit reached"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:207
+msgid "mDNS address candidate limit reached"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:266 src/wifi/Mdns.cpp:377
+msgid "mDNS interface limit reached"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:317
+msgid "mDNS endpoint limit reached"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:459
+msgid "mDNS interface "
+msgstr ""
+
+#: src/wifi/Mdns.cpp:496
+msgid "mDNS query name is too long"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:515
+msgid "mDNS query on interface "
+msgstr ""
+
+#: src/wifi/Mdns.cpp:529
+msgid "mDNS timeout must be between 0 and 60000 ms"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:544
+msgid "No multicast interface is available for mDNS"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:568
+msgid "mDNS receive wait: "
+msgstr ""
+
+#: src/wifi/Mdns.cpp:582
+msgid "mDNS receive on interface "
+msgstr ""
+
+#: src/wifi/Mdns.cpp:596
+msgid "mDNS packet limit reached"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:613
+msgid "mDNS browse: "
 msgstr ""
 
 #: src/wifi/Opack.cpp:91

@@ -114,7 +114,8 @@ CMake 优先找系统包，缺失时下载固定版本并校验 SHA256；首次�
 `FETCHCONTENT_SOURCE_DIR_NLOHMANN_JSON` / `FETCHCONTENT_SOURCE_DIR_CLI11` /
 `FETCHCONTENT_SOURCE_DIR_PUGIXML` 指定已有源码目录。
 隧道内的 IPv6 / TCP / UDP 使用 lwIP 2.2.1（BSD-3-Clause），固定源码构建以保证配置一致。
-离线时还需用 `FETCHCONTENT_SOURCE_DIR_LWIP` 指定该版本源码；
+离线时还需用 `FETCHCONTENT_SOURCE_DIR_LWIP` 指定该版本源码。
+mDNS 使用 mjansson/mdns 1.4.3（Unlicense）；离线时设置 `FETCHCONTENT_SOURCE_DIR_MDNS`。
 `-DSCRCTL_FETCH_DEPENDENCIES=OFF` 禁止下载缺失依赖。
 该选项仍允许使用上面指定的本地源码目录；目录无效时配置失败，不回退下载。
 第三方许可证位于对应依赖源码中，分发时应保留其许可声明。
@@ -149,9 +150,10 @@ feature 可用：已有 iPadOS 18.7.8 记录中，设备拒绝实时媒体流并
 `--video-source screenshot` 强制选择；截图模式不录制 Annex-B，也不启动音频。
 该设备的验证过程见协议记录第 23、24 节。
 
-Wi-Fi 需要设备可达和已有 RemotePairing 记录。目前产品没有新建远程配对的命令，
-启用开发诊断后，`./build-tools/tools/wifi_probe --pair-setup-xpc` 可用于建立记录。
-构建方法见 [工具说明](docs/TOOLS.md)，配对的验证边界见
+Wi-Fi 需要设备可达和已有 RemotePairing 记录。使用 `scrctl --pair -s <UDID>`
+经 USB 建立或验证记录；手机可能要求确认。旧记录缺少设备身份或被拒绝时，
+使用 `scrctl --pair --repair-pairing -s <UDID>` 显式重配。
+新记录通过独立连接验证后才保存，已有有效记录直接复用。验证边界见
 [路线图](docs/ROADMAP.md)。
 记录现在需要包含 USB 配对时校验并保存的设备标识和长期公钥；旧记录缺少这些字段时，
 请重新通过 USB 配对。探针的 `--pmd3-record` 当前只导入主机密钥，因此也不能直接用于
@@ -159,11 +161,29 @@ Wi-Fi 需要设备可达和已有 RemotePairing 记录。目前产品没有新�
 
 ```bash
 scrctl --list-devices
+scrctl --list-devices --discovery-timeout=0  # 只列 usbmux 设备
 scrctl --stats
 scrctl --wifi 192.168.1.50 --stats
 scrctl --video-source screenshot
 scrctl --help
 ```
+
+`--list-devices` 合并 usbmux 与 RemotePairing 的发现结果，默认扫描无线服务约 3 秒；
+`--discovery-timeout` 可以设置 0..60000 毫秒。每台设备保留所有地址、实际服务端口和
+网络接口；IPv6 link-local 地址包含 `%接口索引`。USB 网络地址也可能出现在发现结果中，
+列出地址不代表已经验证其可达性。
+
+无线广播的标识与 UDID 不同。只有 `authTag` 与一份本地配对记录唯一匹配，才将无线
+候选归到该记录的 UDID；未知设备、旧记录线索和匹配冲突分别显示状态。
+“配对记录可用”表示本地材料完整，连接时仍需通过 PairVerify 验证设备身份。
+扫描不会配对或启动媒体会话；多播被网络阻止时可以继续使用手动 `--wifi` 地址。
+默认先选择 usbmux 中匹配的设备；没有候选时再发现已配对的无线设备。
+`--wifi auto -s <UDID>` 只走无线发现；`--wifi <地址> -s <UDID>` 跳过发现，
+可用 `--wifi-port` 指定端口。未指定 `-s` 时只接受唯一可用设备，不任取第一台。
+设备已出现在 usbmux 中但连接失败时，保留原错误，不悄悄改连无线会话。
+
+核心接口为 `remote::discover_devices()`（`remote/Discovery.h`），返回设备、连接候选、
+来源可用状态和诊断；调用方可用 `std::stop_token` 取消，保留已经发现的快照。
 
 ## 剪贴板
 

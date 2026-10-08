@@ -1,6 +1,7 @@
 #include "app/Commands.h"
 
 #include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -9,9 +10,50 @@
 #include "app/Options.h"
 #include "i18n/Translation.h"
 #include "remote/App.h"
+#include "remote/Discovery.h"
 #include "remote/Pasteboard.h"
+#include "remote/Pairing.h"
 
 namespace scrctl::app {
+namespace {
+
+// 设备名称和服务标识来自网络或设备。转义终端控制字符，保留 UTF-8 文本；
+// 这只改变显示，不影响标识匹配或后续连接使用的原始值。
+std::string terminal_text(const std::string &text) {
+    std::string out;
+    for (const unsigned char c : text) {
+        if (c < 0x20 || c == 0x7f) {
+            char escaped[5];
+            std::snprintf(escaped, sizeof(escaped), "\\x%02x", c);
+            out += escaped;
+        } else {
+            out += static_cast<char>(c);
+        }
+    }
+    return out;
+}
+
+const char *pairing_status(remote::DiscoveryPairing status) {
+    switch (status) {
+    case remote::DiscoveryPairing::ready:
+        return SCRCTL_TR("pairing record available");
+    case remote::DiscoveryPairing::needs_pairing:
+        return SCRCTL_TR("pair again over USB");
+    case remote::DiscoveryPairing::identifier_hint:
+        return SCRCTL_TR("old record hint; pair again over USB");
+    case remote::DiscoveryPairing::ambiguous:
+        return SCRCTL_TR("multiple matching pairing records");
+    case remote::DiscoveryPairing::invalid_advertisement:
+        return SCRCTL_TR("invalid discovery identity");
+    case remote::DiscoveryPairing::crypto_error:
+        return SCRCTL_TR("identity matching failed");
+    case remote::DiscoveryPairing::unmatched:
+        return SCRCTL_TR("no matching pairing record");
+    }
+    return SCRCTL_TR("no matching pairing record");
+}
+
+} // namespace
 
 std::optional<int> run_standalone_command(const Options &o) {
     if (o.show_version) {
@@ -21,21 +63,69 @@ std::optional<int> run_standalone_command(const Options &o) {
     }
 
     if (o.list_devices) {
-        std::string err;
-        auto devices = scrctl::remote::Device::list(err);
-        if (!err.empty()) {
-            std::fprintf(stderr, "%s\n", err.c_str());
+        remote::DiscoveryOptions options;
+        options.timeout = std::chrono::milliseconds(o.discovery_timeout_ms);
+        const auto result = remote::discover_devices(options);
+        for (const auto &warning : result.warnings) {
+            std::fprintf(stderr, SCRCTL_TR("Discovery warning: %s\n"),
+                         terminal_text(warning).c_str());
+        }
+        for (const auto &device : result.devices) {
+            std::printf("%s\n", device.udid.empty() ? SCRCTL_TR("Wireless device (UDID unknown)")
+                                                  : terminal_text(device.udid).c_str());
+            if (!device.name.empty()) {
+                std::printf("  %s\n", terminal_text(device.name).c_str());
+            }
+            for (const auto &candidate : device.candidates) {
+                if (candidate.transport == remote::DiscoveryTransport::usbmux) {
+                    std::printf("  %s\n", terminal_text(candidate.connection_type).c_str());
+                    continue;
+                }
+                std::string endpoint;
+                if (candidate.address.empty()) {
+                    endpoint = SCRCTL_TR("address unresolved");
+                } else {
+                    endpoint = candidate.address.find(':') == std::string::npos
+                                   ? candidate.address : "[" + candidate.address + "]";
+                    endpoint += ":" + std::to_string(candidate.port);
+                }
+                std::printf("  RemotePairing  %s  %s  %s\n",
+                            terminal_text(endpoint).c_str(),
+                            terminal_text(candidate.interface_name).c_str(),
+                            pairing_status(candidate.pairing));
+                if (device.udid.empty()) {
+                    std::printf("    %s\n", terminal_text(candidate.instance).c_str());
+                }
+            }
+        }
+        if (result.devices.empty()) {
+            std::printf(SCRCTL_TR("No devices found\n"));
+        }
+        return result.usb_available || result.wifi_available ? 0 : 1;
+    }
+
+    if (o.pair) {
+        remote::UsbPairingOptions options;
+        options.udid = o.serial;
+        options.allow_repair = o.repair_pairing;
+        options.progress = [](std::string_view message) {
+            std::fprintf(stderr, "%s\n", terminal_text(std::string(message)).c_str());
+        };
+        const auto result = remote::pair_usb_remote(options);
+        if (!result.ok) {
+            std::fprintf(stderr, SCRCTL_TR("Remote pairing failed: %s\n"),
+                         terminal_text(result.error).c_str());
             return 1;
         }
-        for (const auto &d : devices) {
-            std::printf("%s  %s\n", d.udid.c_str(), d.connection_type.c_str());
-        }
+        std::printf(result.reused ? SCRCTL_TR("Remote pairing verified for %s\n")
+                                  : SCRCTL_TR("Remote pairing saved for %s\n"),
+                    terminal_text(result.udid).c_str());
         return 0;
     }
 
     if (o.list_apps) {
         std::string err;
-        auto dev = open_device(o.serial, o.wifi, err);
+        auto dev = open_device(o.serial, o.wifi, err, o.wifi_port);
         if (!dev) {
             std::fprintf(stderr, SCRCTL_TR("Failed to establish session: %s\n"), err.c_str());
             return 1;
@@ -58,7 +148,7 @@ std::optional<int> run_standalone_command(const Options &o) {
     // SET_REPLY 后丢弃内容，例如 types 为空时，仅检查写入回复不能确认保存成功。
     if (o.copy_text || o.paste) {
         std::string err;
-        auto dev = open_device(o.serial, o.wifi, err);
+        auto dev = open_device(o.serial, o.wifi, err, o.wifi_port);
         if (!dev) {
             std::fprintf(stderr, SCRCTL_TR("Failed to establish session: %s\n"), err.c_str());
             return 1;

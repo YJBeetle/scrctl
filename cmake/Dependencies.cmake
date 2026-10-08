@@ -38,3 +38,22 @@ if(NOT TARGET pugixml::pugixml)
         URL_HASH SHA256=357bcab8877dc9943f355d3a72daba1b053238ba955f50fa81586afb65090219)
     FetchContent_MakeAvailable(pugixml)
 endif()
+
+# mdns 是单头文件库。这里只取源码，跳过上游 CMake 中的示例程序和安装规则。
+# 核心库私有使用该头文件，公共设备发现接口不暴露其类型。
+if(NOT SCRCTL_FETCH_DEPENDENCIES AND NOT FETCHCONTENT_SOURCE_DIR_MDNS)
+    message(FATAL_ERROR
+        "离线构建需要 FETCHCONTENT_SOURCE_DIR_MDNS 指向 mdns 1.4.3 源码，"
+        "或启用 SCRCTL_FETCH_DEPENDENCIES 下载固定版本")
+endif()
+FetchContent_Declare(mdns
+    URL https://codeload.github.com/mjansson/mdns/tar.gz/refs/tags/1.4.3
+    URL_HASH SHA256=be1fd8e35599cb7de179decbd0633c121d11a2dcb9cc193ff5c590bd0d480483
+    SOURCE_SUBDIR scrctl-header-only)
+FetchContent_MakeAvailable(mdns)
+if(NOT EXISTS "${mdns_SOURCE_DIR}/mdns.h")
+    message(FATAL_ERROR "mdns 源码中缺少 mdns.h：${mdns_SOURCE_DIR}")
+endif()
+add_library(ScrctlMdns INTERFACE)
+target_include_directories(ScrctlMdns SYSTEM INTERFACE "${mdns_SOURCE_DIR}")
+add_library(Scrctl::Mdns ALIAS ScrctlMdns)

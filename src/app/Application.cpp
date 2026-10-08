@@ -69,7 +69,7 @@ int run(int argc, char **argv) {
         auto made = std::make_unique<LiveSource>();
         std::string err;
         if (!made->start(o.serial, o.wifi, o.record, o.hw_decode, !o.no_window,
-                         !o.no_audio, o.audio_buffer_ms, o.video_source, o.test_degrade, err)) {
+                         !o.no_audio, o.audio_buffer_ms, o.video_source, o.test_degrade, err, o.wifi_port)) {
             std::fprintf(stderr, SCRCTL_TR("Failed to start video: %s\n"), err.c_str());
             // 设备通话期间可能拒绝媒体流，错误码为 9022。曾观察到此时会话列表为空，
             // 截图服务仍可用；提示用户结束通话后重试。

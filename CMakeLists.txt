@@ -140,6 +140,7 @@ add_library(scrctl_core STATIC
         src/remote/RemoteXpc.cpp
         src/remote/Rsd.cpp
         src/remote/Device.cpp
+        src/remote/Discovery.cpp
         src/remote/Pasteboard.cpp
         src/remote/DisplayInfo.cpp
         src/remote/App.cpp
@@ -152,17 +153,20 @@ add_library(scrctl_core STATIC
         src/wifi/Tlv.cpp
         src/wifi/Rppairing.cpp
         src/wifi/PairRecord.cpp
+        src/wifi/Mdns.cpp
+        src/wifi/DiscoveryIdentity.cpp
         src/wifi/PairingIdentity.cpp
         src/wifi/PairVerify.cpp
         src/wifi/PairSetup.cpp
+        src/remote/Pairing.cpp
         src/wifi/RemotePairing.cpp)
 target_include_directories(scrctl_core PUBLIC src)
 target_link_libraries(scrctl_core PUBLIC ScrctlAppleFrameworks OpenSSL::SSL OpenSSL::Crypto nlohmann_json::nlohmann_json)
-target_link_libraries(scrctl_core PRIVATE pugixml::pugixml scrctl_lwip)
+target_link_libraries(scrctl_core PRIVATE pugixml::pugixml scrctl_lwip Scrctl::Mdns)
 target_link_libraries(scrctl_core PRIVATE Intl::Intl)
 if(WIN32)
     target_sources(scrctl_core PRIVATE src/wifi/PairRecordWindows.cpp)
-    target_link_libraries(scrctl_core PUBLIC ws2_32 PRIVATE advapi32)
+    target_link_libraries(scrctl_core PUBLIC ws2_32 PRIVATE advapi32 iphlpapi)
 endif()
 target_compile_definitions(scrctl_core PRIVATE
         SCRCTL_BUILD_LOCALEDIR="${CMAKE_BINARY_DIR}/locale"
@@ -378,6 +382,29 @@ if(SCRCTL_BUILD_TESTS)
     scrctl_add_test_executable(pairing_identity_test tests/pairing_identity_test.cpp)
     target_link_libraries(pairing_identity_test PRIVATE scrctl_core)
     add_test(NAME pairing_identity COMMAND pairing_identity_test)
+
+    scrctl_add_test_executable(pairing_workflow_test tests/pairing_workflow_test.cpp)
+    target_link_libraries(pairing_workflow_test PRIVATE scrctl_core)
+    add_test(NAME pairing_workflow COMMAND pairing_workflow_test)
+
+    scrctl_add_test_executable(mdns_test tests/mdns_test.cpp)
+    target_link_libraries(mdns_test PRIVATE scrctl_core Scrctl::Mdns)
+    add_test(NAME mdns COMMAND mdns_test)
+    set_tests_properties(mdns PROPERTIES TIMEOUT 15)
+
+    scrctl_add_test_executable(discovery_identity_test tests/discovery_identity_test.cpp)
+    target_link_libraries(discovery_identity_test PRIVATE scrctl_core)
+    add_test(NAME discovery_identity COMMAND discovery_identity_test)
+    set_tests_properties(discovery_identity PROPERTIES TIMEOUT 15)
+
+    scrctl_add_test_executable(discovery_test tests/discovery_test.cpp)
+    target_link_libraries(discovery_test PRIVATE scrctl_core)
+    add_test(NAME discovery COMMAND discovery_test)
+    set_tests_properties(discovery PROPERTIES TIMEOUT 15)
+
+    scrctl_add_test_executable(device_selection_test tests/device_selection_test.cpp)
+    target_link_libraries(device_selection_test PRIVATE scrctl_app)
+    add_test(NAME device_selection COMMAND device_selection_test)
 
     scrctl_add_test_executable(xpc_test tests/xpc_test.cpp)
     target_link_libraries(xpc_test PRIVATE scrctl_core)

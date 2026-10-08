@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 16:44+0800\n"
+"POT-Creation-Date: 2026-10-08 17:02+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -182,126 +182,144 @@ msgid "Device UDID"
 msgstr "设备 UDID"
 
 #: src/app/Cli.cpp:28
-msgid "LAN address (requires an existing pairing record)"
-msgstr "局域网地址（需要已有配对记录）"
+msgid "LAN address, or auto to discover a paired wireless device"
+msgstr "局域网地址；设为 auto 可自动发现已配对的无线设备"
 
-#: src/app/Cli.cpp:29
+#: src/app/Cli.cpp:30
+msgid "RemotePairing port for a manual LAN address; default: 49152"
+msgstr "手动指定局域网地址时使用的 RemotePairing 端口，默认 49152"
+
+#: src/app/Cli.cpp:33
+msgid "Create or verify a remote pairing record over USB, then exit"
+msgstr "通过 USB 创建或验证远程配对记录，然后退出"
+
+#: src/app/Cli.cpp:36
+msgid ""
+"Allow replacing an incomplete or rejected pairing record; requires --pair"
+msgstr "允许替换不完整或被设备拒绝的配对记录；需要 --pair"
+
+#: src/app/Cli.cpp:38
 msgid "Record the live stream as Annex-B"
 msgstr "将实时流录为 Annex-B"
 
-#: src/app/Cli.cpp:30
+#: src/app/Cli.cpp:39
 msgid ""
 "Launch bundle ID; ? matches name prefix, + terminates the previous instance"
 msgstr "启动 bundle id；? 按名称前缀，+ 先终止实例"
 
-#: src/app/Cli.cpp:31
+#: src/app/Cli.cpp:40
 msgid "Window title"
 msgstr "窗口标题"
 
-#: src/app/Cli.cpp:32
+#: src/app/Cli.cpp:41
 msgid "SDL render driver, e.g. metal / software"
 msgstr "SDL 渲染驱动，如 metal / software"
 
-#: src/app/Cli.cpp:34
+#: src/app/Cli.cpp:43
 msgid ""
 "display for live video (default), screenshot for polling; stream is an alias "
 "for display"
 msgstr ""
 "display 为实时视频（默认），screenshot 为截图轮询；stream 是 display 的别名"
 
-#: src/app/Cli.cpp:36
+#: src/app/Cli.cpp:45
 msgid "Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"
 msgstr "注入直线 X0,Y0,X1,Y1 后退出（归一化坐标）"
 
-#: src/app/Cli.cpp:43
+#: src/app/Cli.cpp:52
 msgid "Inject home/lock/volup/voldn/mute"
 msgstr "注入 home/lock/volup/voldn/mute"
 
-#: src/app/Cli.cpp:45
+#: src/app/Cli.cpp:54
 msgid "Inject ASCII text (device text field must have focus)"
 msgstr "注入 ASCII 文本（设备需已聚焦文本框）"
 
-#: src/app/Cli.cpp:46
+#: src/app/Cli.cpp:55
 msgid "Force alternating video fallback and recovery at T1,T2,... seconds"
 msgstr "按 T1,T2,... 秒交替强制降级与恢复"
 
-#: src/app/Cli.cpp:47
+#: src/app/Cli.cpp:56
 msgid "Write device clipboard and exit (supports Unicode)"
 msgstr "写入设备剪贴板后退出（支持中文）"
 
-#: src/app/Cli.cpp:48
-msgid "List connected devices"
-msgstr "列出连接的设备"
+#: src/app/Cli.cpp:58
+msgid "List USB and RemotePairing devices; wireless scan defaults to 3 seconds"
+msgstr "列出 USB 与 RemotePairing 设备；默认扫描无线设备 3 秒"
 
-#: src/app/Cli.cpp:49
+#: src/app/Cli.cpp:60
+msgid ""
+"Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"
+msgstr "无线设备扫描时间，单位毫秒（0..60000）；0 表示只列出 usbmux 设备"
+
+#: src/app/Cli.cpp:62
 msgid "Disable input control"
 msgstr "关闭输入控制"
 
-#: src/app/Cli.cpp:51
+#: src/app/Cli.cpp:64
 msgid "List device apps"
 msgstr "列出设备 App"
 
-#: src/app/Cli.cpp:52
+#: src/app/Cli.cpp:65
 msgid "Show version"
 msgstr "显示版本"
 
-#: src/app/Cli.cpp:53
+#: src/app/Cli.cpp:66
 msgid "Desktop fullscreen"
 msgstr "桌面全屏"
 
-#: src/app/Cli.cpp:54
+#: src/app/Cli.cpp:67
 msgid "Keep window on top"
 msgstr "窗口置顶"
 
-#: src/app/Cli.cpp:55
+#: src/app/Cli.cpp:68
 msgid "Borderless window"
 msgstr "无边框窗口"
 
-#: src/app/Cli.cpp:56
+#: src/app/Cli.cpp:69
 msgid "Prevent local screen sleep while running"
 msgstr "运行期间禁止本机息屏"
 
-#: src/app/Cli.cpp:57
+#: src/app/Cli.cpp:70
 msgid "Do not start audio stream"
 msgstr "不启动音频流"
 
-#: src/app/Cli.cpp:58
+#: src/app/Cli.cpp:71
 msgid "Receive and decode audio without local playback"
 msgstr "接收和解码音频，但本机不播放"
 
-#: src/app/Cli.cpp:59
+#: src/app/Cli.cpp:72
 msgid "Run without a window"
 msgstr "无窗口运行"
 
-#: src/app/Cli.cpp:60
+#: src/app/Cli.cpp:73
 msgid "Use platform hardware decoder; default: software"
 msgstr "使用平台硬件解码，默认软件解码"
 
-#: src/app/Cli.cpp:61
+#: src/app/Cli.cpp:74
 msgid "Print input coordinates"
 msgstr "打印输入坐标"
 
-#: src/app/Cli.cpp:62
+#: src/app/Cli.cpp:75
 msgid "Add tunnel diagnostics to --stats"
 msgstr "在 --stats 中增加隧道网络诊断"
 
-#: src/app/Cli.cpp:63
+#: src/app/Cli.cpp:76
 msgid "Print statistics every second"
 msgstr "每秒打印统计"
 
-#: src/app/Cli.cpp:64
+#: src/app/Cli.cpp:77
 msgid "Read device clipboard; with --copy, read back after writing"
 msgstr "读取设备剪贴板；与 --copy 同用时写后读回"
 
-#: src/app/Cli.cpp:67
+#: src/app/Cli.cpp:80
 msgid "Window horizontal position; integer or auto (default)"
 msgstr "窗口横坐标：整数或 auto（默认）"
 
-#: src/app/Cli.cpp:69
+#: src/app/Cli.cpp:82
 msgid "Window vertical position; integer or auto (default)"
 msgstr "窗口纵坐标：整数或 auto（默认）"
 
-#: src/app/Cli.cpp:71
+#: src/app/Cli.cpp:84
 msgid ""
 "Shortcut modifiers, separated by commas: lctrl, rctrl, lalt, ralt, lsuper, "
 "rsuper; default: lalt,lsuper"
@@ -309,177 +327,248 @@ msgstr ""
 "快捷键修饰键，用逗号分隔：lctrl、rctrl、lalt、ralt、lsuper、rsuper；默认 "
 "lalt,lsuper"
 
-#: src/app/Cli.cpp:72
+#: src/app/Cli.cpp:85
 msgid "Window width; 0 for automatic"
 msgstr "窗口宽度，0 为自动"
 
-#: src/app/Cli.cpp:73
+#: src/app/Cli.cpp:86
 msgid "Window height; 0 for automatic"
 msgstr "窗口高度，0 为自动"
 
-#: src/app/Cli.cpp:74
+#: src/app/Cli.cpp:87
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr "运行秒数，0 为不限"
 
-#: src/app/Cli.cpp:76
+#: src/app/Cli.cpp:89
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr "音频缓冲毫秒数，默认 50，上限 1000"
 
-#: src/app/Cli.cpp:78
+#: src/app/Cli.cpp:91
 msgid "Exit after N frames; 0 for unlimited"
 msgstr "处理 N 帧后退出，0 为不限"
 
-#: src/app/Cli.cpp:80
+#: src/app/Cli.cpp:93
 msgid "Finite positive scale; default: fit screen"
 msgstr "有限正数缩放比例，默认自动适应屏幕"
 
-#: src/app/Cli.cpp:84
+#: src/app/Cli.cpp:97
 msgid ""
 "Clockwise display rotation; auto follows the device; recording is unchanged"
 msgstr "顺时针旋转显示；auto 跟随设备；不改变录制内容"
 
-#: src/app/Cli.cpp:87
+#: src/app/Cli.cpp:100
 msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
 msgstr "裁剪显示像素：WxH+X+Y 或 W:H:X:Y；不改变录制内容"
 
-#: src/app/Cli.cpp:89
+#: src/app/Cli.cpp:102
 msgid "Background color: RGB or RRGGBB, with optional #"
 msgstr "背景色：RGB 或 RRGGBB，可带 # 前缀"
 
-#: src/app/Cli.cpp:90
+#: src/app/Cli.cpp:103
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr "第 N 帧回读窗口为 BMP：N FILE（需要窗口）"
 
-#: src/app/Cli.cpp:105
+#: src/app/Cli.cpp:113
+msgid "Use a manual LAN address; auto uses discovered SRV ports"
+msgstr "用于手动指定的局域网地址；auto 使用广播的 SRV 端口"
+
+#: src/app/Cli.cpp:124
 msgid "Expected an integer or auto"
 msgstr "请使用整数或 auto"
 
-#: src/app/Cli.cpp:125
+#: src/app/Cli.cpp:144
 msgid ""
 "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
 msgstr "请使用 lctrl、rctrl、lalt、ralt、lsuper 或 rsuper，以逗号分隔"
 
-#: src/app/Cli.cpp:136
+#: src/app/Cli.cpp:155
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr "坐标必须是 [0, 1] 内的有限数"
 
-#: src/app/Cli.cpp:143
+#: src/app/Cli.cpp:162
 msgid "Requires a finite positive number"
 msgstr "需要有限正数"
 
-#: src/app/Cli.cpp:160
+#: src/app/Cli.cpp:179
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr "格式应为 WxH+X+Y 或 W:H:X:Y，尺寸为正、偏移非负"
 
-#: src/app/Cli.cpp:169
+#: src/app/Cli.cpp:188
 msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
 msgstr "请使用 3 位或 6 位十六进制颜色，可带 # 前缀"
 
-#: src/app/Cli.cpp:183
+#: src/app/Cli.cpp:202
 msgid "Frame number must be a positive integer"
 msgstr "帧号需要正整数"
 
-#: src/app/Cli.cpp:188
+#: src/app/Cli.cpp:207
 msgid "Requires a window; incompatible with --no-window"
 msgstr "需要窗口，不能与 --no-window 同用"
 
-#: src/app/Commands.cpp:40 src/app/Commands.cpp:63
+#: src/app/Commands.cpp:39
+msgid "pairing record available"
+msgstr "本机已有配对记录"
+
+#: src/app/Commands.cpp:41
+msgid "pair again over USB"
+msgstr "请通过 USB 重新配对"
+
+#: src/app/Commands.cpp:43
+msgid "old record hint; pair again over USB"
+msgstr "发现旧配对记录线索；请通过 USB 重新配对"
+
+#: src/app/Commands.cpp:45
+msgid "multiple matching pairing records"
+msgstr "有多份匹配的配对记录"
+
+#: src/app/Commands.cpp:47
+msgid "invalid discovery identity"
+msgstr "设备广播的身份信息无效"
+
+#: src/app/Commands.cpp:49
+msgid "identity matching failed"
+msgstr "匹配设备身份失败"
+
+#: src/app/Commands.cpp:51 src/app/Commands.cpp:53
+msgid "no matching pairing record"
+msgstr "没有匹配的配对记录"
+
+#: src/app/Commands.cpp:70
+#, c-format
+msgid "Discovery warning: %s\n"
+msgstr "设备发现提示：%s\n"
+
+#: src/app/Commands.cpp:74
+msgid "Wireless device (UDID unknown)"
+msgstr "无线设备（UDID 未知）"
+
+#: src/app/Commands.cpp:86
+msgid "address unresolved"
+msgstr "尚未取得地址"
+
+#: src/app/Commands.cpp:102
+#, c-format
+msgid "No devices found\n"
+msgstr "未发现设备\n"
+
+#: src/app/Commands.cpp:116
+#, c-format
+msgid "Remote pairing failed: %s\n"
+msgstr "远程配对失败：%s\n"
+
+#: src/app/Commands.cpp:120
+#, c-format
+msgid "Remote pairing verified for %s\n"
+msgstr "已验证 %s 的远程配对记录\n"
+
+#: src/app/Commands.cpp:121
+#, c-format
+msgid "Remote pairing saved for %s\n"
+msgstr "已保存 %s 的远程配对记录\n"
+
+#: src/app/Commands.cpp:130 src/app/Commands.cpp:153
 #, c-format
 msgid "Failed to establish session: %s\n"
 msgstr "建立会话失败: %s\n"
 
-#: src/app/Commands.cpp:45
+#: src/app/Commands.cpp:135
 #, c-format
 msgid "Failed to list apps: %s\n"
 msgstr "列 App 失败: %s\n"
 
-#: src/app/Commands.cpp:51
+#: src/app/Commands.cpp:141
 #, c-format
 msgid "Total: %zu\n"
 msgstr "共 %zu 个\n"
 
-#: src/app/Commands.cpp:69
+#: src/app/Commands.cpp:159
 #, c-format
 msgid "Wrote %zu bytes to device clipboard\n"
 msgstr "已写入设备剪贴板：%zu 字节\n"
 
-#: src/app/Commands.cpp:71
+#: src/app/Commands.cpp:161
 #, c-format
 msgid "--copy failed: %s\n"
 msgstr "--copy 写入失败: %s\n"
 
-#: src/app/Commands.cpp:78
+#: src/app/Commands.cpp:168
 #, c-format
 msgid "Device clipboard (%zu bytes): "
 msgstr "设备剪贴板（%zu 字节）： "
 
-#: src/app/Commands.cpp:82
+#: src/app/Commands.cpp:172
 #, c-format
 msgid "--paste failed: %s\n"
 msgstr "--paste 读取失败: %s\n"
 
-#: src/app/Commands.cpp:108
+#: src/app/Commands.cpp:198
 #, c-format
 msgid "--start-app requires a nonempty app name\n"
 msgstr "--start-app 的名字是空的\n"
 
-#: src/app/Commands.cpp:118
+#: src/app/Commands.cpp:208
 #, c-format
 msgid "Failed to find app by name: %s\n"
 msgstr "按名字找 App 失败: %s\n"
 
-#: src/app/Commands.cpp:136
+#: src/app/Commands.cpp:226
 #, c-format
 msgid "No app name starts with %s\n"
 msgstr "没有名字以 %s 开头的 App\n"
 
-#: src/app/Commands.cpp:144 tools/app_launch_probe.cpp:89
+#: src/app/Commands.cpp:234 tools/app_launch_probe.cpp:89
 #, c-format
 msgid "Failed to launch %s: %s\n"
 msgstr "启动 %s 失败: %s\n"
 
-#: src/app/Commands.cpp:147
+#: src/app/Commands.cpp:237
 msgid " (previous instance terminated)"
 msgstr "（已先终止原实例）"
 
-#: src/app/Commands.cpp:147
+#: src/app/Commands.cpp:237
 #, c-format
 msgid "Launched %s%s\n"
 msgstr "已启动 %s%s\n"
 
-#: src/app/DeviceConnection.cpp:29
-#, c-format
-msgid "Using the only remote pairing record (device suffix %s)\n"
-msgstr "使用唯一的远程配对记录（设备尾号 %s）\n"
+#: src/app/DeviceConnection.cpp:81
+msgid ""
+"Multiple usable remote pairing records match; select a unique device with -s"
+msgstr "有多份匹配的可用远程配对记录；请用 -s 指定设备"
 
-#: src/app/DeviceConnection.cpp:31
-msgid " contains "
-msgstr " 里有 "
+#: src/app/DeviceConnection.cpp:87
+msgid "No usable remote pairing record matches; pair the device over USB first"
+msgstr "未找到匹配的可用远程配对记录；请先通过 USB 配对设备"
 
-#: src/app/DeviceConnection.cpp:31
-msgid "Directory "
-msgstr "目录 "
+#: src/app/DeviceConnection.cpp:111
+msgid ""
+"No paired wireless device is available; check the network and pair over USB "
+"first"
+msgstr "未找到已配对的无线设备；请检查网络，并先通过 USB 配对"
 
-#: src/app/DeviceConnection.cpp:32
-msgid " pairing records; specify the device with -s. Candidate suffixes: "
-msgstr " 条配对记录，请用 -s 指定设备；候选尾号："
+#: src/app/DeviceConnection.cpp:115
+msgid "Multiple paired wireless devices are available; select one with -s"
+msgstr "发现多台已配对的无线设备；请用 -s 选择其中一台"
 
-#: src/app/DeviceConnection.cpp:43
-msgid " remote pairing record (directory "
-msgstr " 的远程配对记录（目录 "
+#: src/app/DeviceConnection.cpp:133
+msgid "Selected wireless device does not match a usable pairing record"
+msgstr "所选无线设备没有匹配的可用配对记录"
 
-#: src/app/DeviceConnection.cpp:43
-msgid "): "
-msgstr "）："
+#: src/app/DeviceConnection.cpp:137
+msgid "No usable wireless connection candidate is available"
+msgstr "没有可用的无线连接地址"
 
-#: src/app/DeviceConnection.cpp:43
-msgid "Cannot read "
-msgstr "无法读取 "
+#: src/app/DeviceConnection.cpp:150
+msgid "Cannot connect to any discovered wireless address"
+msgstr "发现的无线地址均无法连接"
 
-#: src/app/DeviceConnection.cpp:44
-msgid ". Establish a remote pairing record over USB first."
-msgstr "。请先通过 USB 建立该设备的远程配对记录。"
+#: src/app/DeviceConnection.cpp:161
+msgid "Wi-Fi port must be between 1 and 65535"
+msgstr "Wi-Fi 端口必须在 1 到 65535 之间"
+
+#: src/app/DeviceConnection.cpp:176
+msgid "USB device enumeration was unavailable: "
+msgstr "无法枚举 USB 设备："
 
 #: src/app/FileSource.cpp:56
 msgid "Cannot open file "
@@ -894,7 +983,7 @@ msgstr "时刻表至少需要一个时刻"
 msgid ""
 "AAC-ELD decoding is unavailable in this build. Video can continue without "
 "audio."
-msgstr "此构建没有 AAC-ELD 音频解码后端，视频可以继续播放。"
+msgstr "当前构建不支持 AAC-ELD 解码。视频可继续播放，但没有声音。"
 
 #: src/decode/AudioToolboxEldDecoder.cpp:86
 msgid "Failed to allocate AudioBufferList"
@@ -949,7 +1038,7 @@ msgstr "无法分配 FFmpeg AAC-ELD 数据包："
 
 #: src/decode/FFmpegEldDecoder.cpp:89
 msgid "FFmpeg AAC-ELD rejected the packet: "
-msgstr "FFmpeg AAC-ELD 拒绝了数据包："
+msgstr "FFmpeg 未接受 AAC-ELD 数据包："
 
 #: src/decode/FFmpegEldDecoder.cpp:101
 msgid "FFmpeg AAC-ELD decode failed: "
@@ -958,32 +1047,32 @@ msgstr "FFmpeg AAC-ELD 解码失败："
 #: src/decode/FFmpegEldDecoder.cpp:105 src/decode/FFmpegEldDecoder.cpp:138
 #: src/decode/FFmpegEldDecoder.cpp:144
 msgid "FFmpeg AAC-ELD returned an unexpected audio format"
-msgstr "FFmpeg AAC-ELD 返回的音频格式与协商结果不符"
+msgstr "FFmpeg 输出的 AAC-ELD 音频格式不符合要求"
 
 #: src/decode/FFmpegEldDecoder.cpp:113
 msgid "AAC-ELD PCM output exceeds the buffer size limit"
-msgstr "AAC-ELD 的 PCM 输出超过缓冲区大小限制"
+msgstr "AAC-ELD 解码后的 PCM 数据超过缓冲区大小限制"
 
 #: src/decode/FFmpegEldDecoder.cpp:161 src/decode/FFmpegEldDecoder.cpp:166
 msgid "Failed to configure AAC-ELD PCM conversion: "
-msgstr "无法配置 AAC-ELD 的 PCM 转换："
+msgstr "无法配置 AAC-ELD PCM 转换："
 
 #: src/decode/FFmpegEldDecoder.cpp:176 src/decode/FFmpegEldDecoder.cpp:194
 msgid "AAC-ELD PCM conversion returned an invalid sample count"
-msgstr "AAC-ELD 的 PCM 转换返回了无效的采样数量"
+msgstr "AAC-ELD PCM 转换返回的采样数无效"
 
 #: src/decode/FFmpegEldDecoder.cpp:190
 msgid "AAC-ELD PCM conversion failed: "
-msgstr "AAC-ELD 的 PCM 转换失败："
+msgstr "AAC-ELD PCM 转换失败："
 
 #: src/decode/FFmpegEldDecoder.cpp:215
 msgid ""
 "FFmpeg AAC-ELD requires 48000 Hz, stereo, and 480 or 512 samples per frame"
-msgstr "FFmpeg AAC-ELD 当前支持 48000 Hz、双声道，每帧每声道 480 或 512 个采样"
+msgstr "FFmpeg AAC-ELD 要求 48000 Hz、立体声，每帧 480 或 512 个采样"
 
 #: src/decode/FFmpegEldDecoder.cpp:220
 msgid "FFmpeg has no native AAC decoder"
-msgstr "FFmpeg 没有原生 AAC 解码器"
+msgstr "FFmpeg 没有内置的 AAC 解码器"
 
 #: src/decode/FFmpegEldDecoder.cpp:227 src/decode/FFmpegEldDecoder.cpp:238
 msgid "Failed to allocate FFmpeg AAC-ELD decoder"
@@ -1647,30 +1736,34 @@ msgid ""
 "pending)\n"
 msgstr "stop_app(%s)：已发送信号，但进程仍在列表中（可能仍在退出）\n"
 
-#: src/remote/Device.cpp:21
+#: src/remote/Device.cpp:23
 #, c-format
 msgid "  [stage] %s\n"
 msgstr "  [阶段] %s\n"
 
-#: src/remote/Device.cpp:31
+#: src/remote/Device.cpp:33
 msgid ""
 " (device is locked; unlock it and keep the screen awake before retrying)"
 msgstr "（设备已锁定；请解锁并保持屏幕唤醒后重试）"
 
-#: src/remote/Device.cpp:34
+#: src/remote/Device.cpp:36
 msgid " (computer not trusted; unlock the device and confirm Trust)"
 msgstr "（电脑尚未受信任；请解锁设备并确认信任）"
 
-#: src/remote/Device.cpp:37
+#: src/remote/Device.cpp:39
 msgid ""
 " (service unavailable; check Developer Mode and DDI mounting through Xcode)"
 msgstr "（服务不可用；请检查开发者模式及 Xcode 的 DDI 挂载）"
 
-#: src/remote/Device.cpp:39
+#: src/remote/Device.cpp:41
 msgid " (check DDI mounting and Developer Mode)"
 msgstr "（请检查 DDI 挂载及开发者模式）"
 
-#: src/remote/Device.cpp:93
+#: src/remote/Device.cpp:64
+msgid "Connected usbmux entries have no usable device UDID"
+msgstr "usbmux 列出的设备缺少可用的 UDID"
+
+#: src/remote/Device.cpp:68
 msgid ""
 "No USB device found (usbmux list is empty). Check the data cable and USB "
 "connection, then reconnect the device. Untrusted devices normally appear in "
@@ -1679,135 +1772,195 @@ msgstr ""
 "未发现 USB 设备（usbmux 列表为空）。请检查数据线与 USB 连接，再重新连接设备。"
 "未信任的设备通常也会出现在此列表中。"
 
-#: src/remote/Device.cpp:103
-msgid "; select one: "
-msgstr "；请选择设备："
-
-#: src/remote/Device.cpp:103
+#: src/remote/Device.cpp:82
 msgid "Connected devices: "
 msgstr "已连接设备数："
 
-#: src/remote/Device.cpp:119
-msgid "; connected devices: "
-msgstr "；当前连接设备："
+#: src/remote/Device.cpp:83
+msgid "; select one: "
+msgstr "；请选择设备："
 
-#: src/remote/Device.cpp:119
+#: src/remote/Device.cpp:89
 msgid "No connected device matches "
 msgstr "没有已连接设备匹配 "
 
-#: src/remote/Device.cpp:123
+#: src/remote/Device.cpp:90
+msgid "; connected devices: "
+msgstr "；当前连接设备："
+
+#: src/remote/Device.cpp:91
 msgid " (total "
 msgstr "（共 "
 
-#: src/remote/Device.cpp:123
+#: src/remote/Device.cpp:92
 msgid "). Check the selected UDID and USB connection."
 msgstr " 台）。请检查所选 UDID 与 USB 连接。"
 
-#: src/remote/Device.cpp:133
+#: src/remote/Device.cpp:104
+msgid "Cannot choose a unique usbmux connection for device "
+msgstr "无法为设备选择唯一的 usbmux 连接："
+
+#: src/remote/Device.cpp:162
 msgid "lockdown pairing session"
 msgstr "lockdown 配对 session"
 
-#: src/remote/Device.cpp:136 tools/wifi_probe.cpp:348
+#: src/remote/Device.cpp:165 tools/wifi_probe.cpp:348
 msgid "Failed to establish lockdown session: "
 msgstr "lockdown 会话建立失败: "
 
-#: src/remote/Device.cpp:139
+#: src/remote/Device.cpp:168
 msgid "Start CoreDeviceProxy"
 msgstr "启动 CoreDeviceProxy"
 
-#: src/remote/Device.cpp:142 src/remote/Rsd.cpp:193 src/remote/Rsd.cpp:396
+#: src/remote/Device.cpp:171 src/remote/Rsd.cpp:193 src/remote/Rsd.cpp:396
 #: src/transport/Usbmux.cpp:92 src/wifi/PairRecord.cpp:344
 #: tools/wifi_probe.cpp:353
 msgid " failed: "
 msgstr " 失败: "
 
-#: src/remote/Device.cpp:142
+#: src/remote/Device.cpp:171
 msgid "Start "
 msgstr "启动 "
 
-#: src/remote/Device.cpp:145
+#: src/remote/Device.cpp:174
 msgid "CDTunnel handshake"
 msgstr "CDTunnel 握手"
 
-#: src/remote/Device.cpp:150 src/remote/Device.cpp:250
+#: src/remote/Device.cpp:179 src/remote/Device.cpp:279
 msgid "Failed to establish packet tunnel: "
 msgstr "包隧道建立失败: "
 
-#: src/remote/Device.cpp:157
+#: src/remote/Device.cpp:186
 msgid "Cannot construct a stable peer identity from pairing HostID"
 msgstr "无法根据配对记录的 HostID 生成稳定的连接身份"
 
-#: src/remote/Device.cpp:163 src/remote/Device.cpp:173
+#: src/remote/Device.cpp:192 src/remote/Device.cpp:202
 msgid "Connect to RSD inside tunnel and read directory"
 msgstr "连接隧道内 RSD 并读取目录"
 
-#: src/remote/Device.cpp:179
+#: src/remote/Device.cpp:208
 msgid "Tunnel returned an invalid IPv6 address"
 msgstr "隧道返回了无效的 IPv6 地址"
 
-#: src/remote/Device.cpp:190
+#: src/remote/Device.cpp:219
 msgid "Ready"
 msgstr "就绪"
 
-#: src/remote/Device.cpp:199 src/wifi/PairVerify.cpp:13
+#: src/remote/Device.cpp:228 src/wifi/PairVerify.cpp:13
 msgid "Pairing record incomplete; cannot sign"
 msgstr "配对记录不完整，无法签名"
 
-#: src/remote/Device.cpp:203 src/wifi/PairVerify.cpp:19
+#: src/remote/Device.cpp:232 src/wifi/PairVerify.cpp:19
 #: tools/wifi_probe.cpp:801
 msgid "Pairing record has no device identity; pair again over USB"
 msgstr "配对记录缺少设备身份，请重新通过 USB 配对"
 
-#: src/remote/Device.cpp:211
+#: src/remote/Device.cpp:240
 msgid "LAN pair-verify"
 msgstr "局域网配对验证"
 
-#: src/remote/Device.cpp:214
+#: src/remote/Device.cpp:243
 msgid "Cannot connect to device RemotePairing port "
 msgstr "无法连接设备的 RemotePairing 端口 "
 
-#: src/remote/Device.cpp:215
+#: src/remote/Device.cpp:244
 msgid ""
 " (check that the device is reachable on this network and has been paired)"
 msgstr "（请检查设备在当前网络是否可达，以及是否已配对）"
 
-#: src/remote/Device.cpp:224
+#: src/remote/Device.cpp:253
 msgid "Device rejected pairing record: "
 msgstr "设备拒绝此配对记录："
 
-#: src/remote/Device.cpp:225
+#: src/remote/Device.cpp:254
 msgid " is not paired with this device, or its pairing was removed"
 msgstr " 尚未与此设备配对，或配对已被移除"
 
-#: src/remote/Device.cpp:227
+#: src/remote/Device.cpp:256
 msgid "pair-verify failed: "
 msgstr "配对验证失败："
 
-#: src/remote/Device.cpp:232
+#: src/remote/Device.cpp:261
 msgid "Request device tunnel port"
 msgstr "请求设备隧道端口"
 
-#: src/remote/Device.cpp:240
+#: src/remote/Device.cpp:269
 msgid "TLS-PSK and CDTunnel handshake"
 msgstr "TLS-PSK + CDTunnel 握手"
 
-#: src/remote/Device.cpp:243
+#: src/remote/Device.cpp:272
 msgid "Cannot connect to tunnel port "
 msgstr "无法连接隧道端口 "
 
-#: src/remote/Device.cpp:257
+#: src/remote/Device.cpp:286
 msgid ""
 "Pairing host identifier is not a valid UUID; cannot construct a stable peer "
 "identity"
 msgstr "配对记录的主机标识不是有效 UUID，无法构造稳定的对端身份"
 
-#: src/remote/Device.cpp:277
+#: src/remote/Device.cpp:306
 msgid "Session not established"
 msgstr "会话尚未建立"
 
-#: src/remote/Device.cpp:289
+#: src/remote/Device.cpp:318
 msgid " does not advertise feature "
 msgstr " 没有声明 feature "
+
+#: src/remote/Discovery.cpp:99
+msgid "Cannot match mDNS advertisements to pairing records"
+msgstr "无法将 mDNS 广播与配对记录匹配"
+
+#: src/remote/Discovery.cpp:144
+msgid "Cannot access pairing record directory"
+msgstr "无法访问配对记录目录"
+
+#: src/remote/Discovery.cpp:148
+msgid "Pairing record path is not a directory"
+msgstr "配对记录路径不是目录"
+
+#: src/remote/Discovery.cpp:153
+msgid "Cannot read pairing record directory"
+msgstr "无法读取配对记录目录"
+
+#: src/remote/Discovery.cpp:163
+msgid "Pairing record directory entry limit reached"
+msgstr "配对记录目录条目数量已达到上限"
+
+#: src/remote/Discovery.cpp:168
+msgid "Cannot inspect a pairing record directory entry"
+msgstr "无法检查配对记录目录中的条目"
+
+#: src/remote/Discovery.cpp:175
+msgid "Pairing record file limit reached"
+msgstr "配对记录文件数量已达到上限"
+
+#: src/remote/Discovery.cpp:180
+msgid "Cannot read a pairing record file"
+msgstr "无法读取配对记录文件"
+
+#: src/remote/Discovery.cpp:183
+msgid "Skipped an oversized pairing record file"
+msgstr "已跳过过大的配对记录文件"
+
+#: src/remote/Discovery.cpp:188
+msgid "Skipped an unreadable or invalid pairing record file"
+msgstr "已跳过无法读取或格式无效的配对记录文件"
+
+#: src/remote/Discovery.cpp:194
+msgid "Reading pairing record directory was interrupted"
+msgstr "配对记录目录读取中断"
+
+#: src/remote/Discovery.cpp:199
+msgid "Cannot read pairing records for device discovery"
+msgstr "设备发现时无法读取配对记录"
+
+#: src/remote/Discovery.cpp:211
+msgid "Device discovery timeout must be between 0 and 60000 ms"
+msgstr "设备扫描时间必须在 0 到 60000 毫秒之间"
+
+#: src/remote/Discovery.cpp:226
+msgid "USB device enumeration is unavailable"
+msgstr "无法枚举 USB 设备"
 
 #: src/remote/DisplayInfo.cpp:103
 msgid "Update missing displays array: "
@@ -1820,6 +1973,120 @@ msgstr "没有可识别的显示条目"
 #: src/remote/DisplayInfo.cpp:165
 msgid " ended without an update"
 msgstr " 未发送更新便已结束"
+
+#: src/remote/Pairing.cpp:23
+msgid "USB pairing timeout must be between 1 and 300000 ms"
+msgstr "USB 配对超时必须在 1 到 300000 毫秒之间"
+
+#: src/remote/Pairing.cpp:48
+msgid "Pairing requires the selected device to remain connected over USB"
+msgstr "配对期间，所选设备必须保持 USB 连接"
+
+#: src/remote/Pairing.cpp:53
+msgid "Device does not provide the USB RemotePairing service"
+msgstr "设备未提供 USB RemotePairing 服务"
+
+#: src/remote/Pairing.cpp:57
+msgid "USB RemotePairing service does not support RemoteXPC"
+msgstr "USB RemotePairing 服务不支持 RemoteXPC"
+
+#: src/remote/Pairing.cpp:69
+msgid "Unexpected initial USB RemotePairing message"
+msgstr "USB RemotePairing 的初始消息不符合预期"
+
+#: src/remote/Pairing.cpp:86
+msgid "Multiple USB devices match; select one by UDID"
+msgstr "有多台匹配的 USB 设备；请用 UDID 选择其中一台"
+
+#: src/remote/Pairing.cpp:91
+msgid "No matching USB device is connected"
+msgstr "没有连接匹配的 USB 设备"
+
+#: src/remote/Pairing.cpp:93
+msgid "USB device has no UDID; cannot bind a pairing record"
+msgstr "USB 设备未提供 UDID，无法关联配对记录"
+
+#: src/remote/Pairing.cpp:107
+msgid "USB pairing device selection is invalid"
+msgstr "USB 配对的设备选择无效"
+
+#: src/remote/Pairing.cpp:111
+msgid "USB pairing workflow operations are unavailable"
+msgstr "USB 配对所需功能不可用"
+
+#: src/remote/Pairing.cpp:123
+msgid "Cannot inspect existing USB pairing record"
+msgstr "无法检查现有的 USB 配对记录"
+
+#: src/remote/Pairing.cpp:129
+msgid "Existing USB pairing record is not a regular file"
+msgstr "现有 USB 配对记录不是普通文件"
+
+#: src/remote/Pairing.cpp:136
+msgid ""
+"Existing pairing record belongs to a different device; choose another record "
+"directory"
+msgstr "现有配对记录属于另一台设备；请选择其他记录目录"
+
+#: src/remote/Pairing.cpp:140
+msgid "Existing pairing record cannot be read; enable USB repair explicitly"
+msgstr "无法读取现有配对记录；请允许通过 USB 重新配对后重试"
+
+#: src/remote/Pairing.cpp:144
+msgid "Verifying the existing USB pairing record"
+msgstr "正在验证现有的 USB 配对记录"
+
+#: src/remote/Pairing.cpp:152
+msgid "Existing pairing record verification failed: "
+msgstr "现有配对记录验证失败："
+
+#: src/remote/Pairing.cpp:157
+msgid "Device rejected the pairing record; enable USB repair explicitly"
+msgstr "设备拒绝了配对记录；请允许通过 USB 重新配对后重试"
+
+#: src/remote/Pairing.cpp:161
+msgid "Existing pairing record is incomplete; enable USB repair explicitly"
+msgstr "现有配对记录不完整；请允许通过 USB 重新配对后重试"
+
+#: src/remote/Pairing.cpp:167
+msgid "Cannot obtain the local hostname for USB pairing"
+msgstr "无法获取 USB 配对所需的本机名称"
+
+#: src/remote/Pairing.cpp:175
+msgid "Cannot generate a host identifier for USB pairing"
+msgstr "无法生成 USB 配对所需的主机标识"
+
+#: src/remote/Pairing.cpp:178
+msgid "Starting USB pairing; confirm the request on the device"
+msgstr "正在通过 USB 配对，请在设备上确认请求"
+
+#: src/remote/Pairing.cpp:182
+msgid "USB pair setup failed: "
+msgstr "USB 配对失败："
+
+#: src/remote/Pairing.cpp:187
+msgid "USB pair setup returned an incomplete or mismatched record"
+msgstr "USB 配对返回的记录不完整或与设备不匹配"
+
+#: src/remote/Pairing.cpp:190
+msgid "Reconnecting to verify the new USB pairing record"
+msgstr "正在重新连接，以验证新的 USB 配对记录"
+
+#: src/remote/Pairing.cpp:193
+msgid "New USB pairing record verification failed: "
+msgstr "新的 USB 配对记录验证失败："
+
+#: src/remote/Pairing.cpp:198
+msgid "Cannot save the verified USB pairing record: "
+msgstr "无法保存已验证的 USB 配对记录："
+
+#: src/remote/Pairing.cpp:205
+msgid "USB pairing workflow failed before completion"
+msgstr "USB 配对未完成"
+
+#: src/remote/Pairing.cpp:216
+msgid "Cannot enumerate devices for USB pairing: "
+msgstr "USB 配对时无法枚举设备："
 
 #: src/remote/PairingChannel.cpp:59
 msgid "JSON integer exceeds XPC int64 range"
@@ -2610,6 +2877,86 @@ msgstr "HKDF-SHA512 初始化失败"
 msgid "HKDF-SHA512 derivation failed"
 msgstr "HKDF-SHA512 密钥派生失败"
 
+#: src/wifi/DiscoveryIdentity.cpp:24
+msgid "SipHash requires a 16-byte key"
+msgstr "SipHash 密钥必须为 16 字节"
+
+#: src/wifi/DiscoveryIdentity.cpp:69
+msgid "OpenSSL SipHash computation failed"
+msgstr "OpenSSL 计算 SipHash 失败"
+
+#: src/wifi/DiscoveryIdentity.cpp:84
+msgid "Invalid mDNS identifier"
+msgstr "mDNS identifier 无效"
+
+#: src/wifi/DiscoveryIdentity.cpp:96
+msgid "Invalid mDNS authTag (expected 8 Base64 characters)"
+msgstr "mDNS authTag 无效（应为 8 个 Base64 字符）"
+
+#: src/wifi/Mdns.cpp:140
+msgid "mDNS service limit reached"
+msgstr "mDNS 服务数量已达到上限"
+
+#: src/wifi/Mdns.cpp:160
+msgid "mDNS SRV candidate limit reached"
+msgstr "mDNS SRV 记录数量已达到上限"
+
+#: src/wifi/Mdns.cpp:165
+msgid "mDNS TXT record limit reached"
+msgstr "mDNS TXT 记录过大"
+
+#: src/wifi/Mdns.cpp:202
+msgid "mDNS host limit reached"
+msgstr "mDNS 主机数量已达到上限"
+
+#: src/wifi/Mdns.cpp:207
+msgid "mDNS address candidate limit reached"
+msgstr "mDNS 地址数量已达到上限"
+
+#: src/wifi/Mdns.cpp:266 src/wifi/Mdns.cpp:377
+msgid "mDNS interface limit reached"
+msgstr "mDNS 网卡数量已达到上限"
+
+#: src/wifi/Mdns.cpp:317
+msgid "mDNS endpoint limit reached"
+msgstr "mDNS 连接地址数量已达到上限"
+
+#: src/wifi/Mdns.cpp:459
+msgid "mDNS interface "
+msgstr "mDNS 网卡 "
+
+#: src/wifi/Mdns.cpp:496
+msgid "mDNS query name is too long"
+msgstr "mDNS 查询名称过长"
+
+#: src/wifi/Mdns.cpp:515
+msgid "mDNS query on interface "
+msgstr "mDNS 查询失败，网卡 "
+
+#: src/wifi/Mdns.cpp:529
+msgid "mDNS timeout must be between 0 and 60000 ms"
+msgstr "mDNS 扫描时间必须在 0 到 60000 毫秒之间"
+
+#: src/wifi/Mdns.cpp:544
+msgid "No multicast interface is available for mDNS"
+msgstr "没有可用于 mDNS 的组播网卡"
+
+#: src/wifi/Mdns.cpp:568
+msgid "mDNS receive wait: "
+msgstr "等待 mDNS 数据失败："
+
+#: src/wifi/Mdns.cpp:582
+msgid "mDNS receive on interface "
+msgstr "接收 mDNS 数据失败，网卡 "
+
+#: src/wifi/Mdns.cpp:596
+msgid "mDNS packet limit reached"
+msgstr "mDNS 数据包数量已达到上限"
+
+#: src/wifi/Mdns.cpp:613
+msgid "mDNS browse: "
+msgstr "mDNS 扫描失败："
+
 #: src/wifi/Opack.cpp:91
 msgid "OPACK encoder does not support negative integers"
 msgstr "OPACK 编码器不支持负整数"
@@ -3338,7 +3685,7 @@ msgstr "声道数（1–32767；默认：2）"
 
 #: tools/audio_decode_probe.cpp:201
 msgid "Audio decoder backend: auto or ffmpeg (default: auto)"
-msgstr "音频解码后端：auto 或 ffmpeg，默认 auto"
+msgstr "音频解码器：auto 或 ffmpeg（默认 auto）"
 
 #: tools/audio_decode_probe.cpp:209
 msgid ""
@@ -3363,7 +3710,7 @@ msgstr "已读入 %zu 条数据报；目标格式：%d Hz，%d 声道\n"
 #: tools/audio_decode_probe.cpp:228
 msgid ""
 "FFmpeg AAC-ELD decoding is unavailable in this build; enable libav support"
-msgstr "此构建没有 FFmpeg AAC-ELD 解码后端，请启用 libav 支持"
+msgstr "当前构建不支持 FFmpeg AAC-ELD 解码；请启用 libav 支持"
 
 #: tools/audio_decode_probe.cpp:234
 #, c-format
@@ -5544,6 +5891,21 @@ msgstr "不可用"
 #~ msgid "  Pair-verify completed; device accepted the host key\n"
 #~ msgstr "  pair-verify 已完成，设备已接受主机密钥\n"
 
+#~ msgid " contains "
+#~ msgstr " 里有 "
+
+#~ msgid " pairing records; specify the device with -s. Candidate suffixes: "
+#~ msgstr " 条配对记录，请用 -s 指定设备；候选尾号："
+
+#~ msgid " remote pairing record (directory "
+#~ msgstr " 的远程配对记录（目录 "
+
+#~ msgid "): "
+#~ msgstr "）："
+
+#~ msgid ". Establish a remote pairing record over USB first."
+#~ msgstr "。请先通过 USB 建立该设备的远程配对记录。"
+
 #~ msgid ""
 #~ "AAC-ELD decoding is unavailable on this platform. This build uses "
 #~ "AudioToolbox on macOS; the tested native FFmpeg AAC decoder does not "
@@ -5554,6 +5916,9 @@ msgstr "不可用"
 
 #~ msgid "Background color #RRGGBB"
 #~ msgstr "背景色 #RRGGBB"
+
+#~ msgid "Cannot read "
+#~ msgstr "无法读取 "
 
 #~ msgid ""
 #~ "Clockwise display orientation; auto follows device and does not affect "
@@ -5570,6 +5935,9 @@ msgstr "不可用"
 #~ msgid "Device clipboard (%zu bytes): %s\n"
 #~ msgstr "设备剪贴板（%zu 字节）：%s\n"
 
+#~ msgid "Directory "
+#~ msgstr "目录 "
+
 #, c-format
 #~ msgid ""
 #~ "Display orientation changed to %d degrees clockwise; window recreated\n"
@@ -5578,11 +5946,21 @@ msgstr "不可用"
 #~ msgid "Expected #RRGGBB"
 #~ msgstr "需要 #RRGGBB"
 
+#~ msgid "LAN address (requires an existing pairing record)"
+#~ msgstr "局域网地址（需要已有配对记录）"
+
+#~ msgid "List connected devices"
+#~ msgstr "列出连接的设备"
+
 #~ msgid "No device matches --udid"
 #~ msgstr "未找到与 --udid 匹配的设备"
 
 #~ msgid "Screenshot is the visible area"
 #~ msgstr "截图即可见区"
+
+#, c-format
+#~ msgid "Using the only remote pairing record (device suffix %s)\n"
+#~ msgstr "使用唯一的远程配对记录（设备尾号 %s）\n"
 
 #~ msgid "Window horizontal position; default: centered"
 #~ msgstr "窗口横坐标，默认居中"

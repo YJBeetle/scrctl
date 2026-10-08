@@ -42,6 +42,22 @@ int main() {
               defaults.audio_buffer_ms == 50 &&
               defaults.shortcut_mods == (KMOD_LALT | KMOD_LGUI),
           "default options");
+    Options pair;
+    check(parse({"scrctl", "--pair", "-s", "device"}, pair) == ParseResult::Run &&
+              pair.pair && !pair.repair_pairing && pair.serial == "device",
+          "USB remote pairing is an explicit standalone command");
+    Options repair;
+    check(parse({"scrctl", "--pair", "--repair-pairing"}, repair) == ParseResult::Run &&
+              repair.pair && repair.repair_pairing,
+          "repair requires explicit pairing mode");
+    Options wifi_port;
+    check(parse({"scrctl", "--wifi", "10.0.0.7", "--wifi-port", "55000"}, wifi_port) == ParseResult::Run &&
+              wifi_port.wifi_port == 55000,
+          "manual wireless address preserves a specified RemotePairing port");
+    Options wifi_auto;
+    check(parse({"scrctl", "--wifi", "auto"}, wifi_auto) == ParseResult::Run &&
+              wifi_auto.wifi == "auto",
+          "wireless discovery mode");
     Options display_source;
     check(parse({"scrctl", "--video-source=display"}, display_source) == ParseResult::Run &&
               display_source.video_source == "stream",
@@ -152,6 +168,16 @@ int main() {
               "no-control conflicts are independent of argument order and short alias");
     }
     Options input;
+    Options discovery;
+    check(parse({"scrctl", "--list-devices"}, discovery) == ParseResult::Run &&
+              discovery.list_devices && discovery.discovery_timeout_ms == 3000,
+          "device listing defaults to a bounded three-second wireless scan");
+    for (const char *timeout : {"0", "60000"}) {
+        Options bounded;
+        check(parse({"scrctl", "--list-devices", "--discovery-timeout", timeout}, bounded) ==
+                  ParseResult::Run && bounded.discovery_timeout_ms == std::stoi(timeout),
+              "wireless discovery accepts both timeout bounds");
+    }
     check(parse({"scrctl", "--test-touch", "0,.25,.75,1", "--test-button", "home"}, input) ==
               ParseResult::Run && input.test_touch == std::vector<double>({0, .25, .75, 1}) &&
               input.test_button_code != 0, "typed input coordinates and HID button");
@@ -214,6 +240,18 @@ int main() {
         {"--video-source", "unknown"},
         {"--video-source", "camera"},
         {"--orientation", "45"},
+        {"--discovery-timeout", "10"},
+        {"--pair", "--wifi", "10.0.0.1"},
+        {"--pair", "--list-devices"},
+        {"--pair", "--play", "video.hevc"},
+        {"--repair-pairing"},
+        {"--wifi-port", "49152"},
+        {"--wifi", "10.0.0.1", "--wifi-port", "0"},
+        {"--wifi", "10.0.0.1", "--wifi-port", "65536"},
+        {"--wifi", "auto", "--wifi-port", "49152"},
+        {"--list-devices", "--discovery-timeout", "-1"},
+        {"--list-devices", "--discovery-timeout", "60001"},
+        {"--list-devices", "--discovery-timeout", "invalid"},
         {"--unknown"},
     };
     for (auto args : invalid) {

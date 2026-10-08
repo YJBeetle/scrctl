@@ -172,7 +172,8 @@ jobs:
   sanitizer:
     name: ASan + UBSan
     runs-on: macos-latest
-    timeout-minutes: 20
+    # 最近一次完整作业耗时 19 分钟；为新增发现模块和依赖下载保留构建余量。
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
