@@ -32,6 +32,8 @@ public:
     struct Options {
         std::string path;
         Format format = Format::Mp4;
+        /// 相对编码像素的静态顺时针展示角度：0/90/180/270，不旋转或重编码图像。
+        int video_orientation = 0;
         /// 原始参数 NAL，不含起始码。open 重新检查，只接受已确认无重排的配置。
         Nal vps, sps, pps;
         std::optional<Audio> audio;
@@ -49,6 +51,10 @@ public:
 
     /// 只表示构建中有封装库；open 仍可能因格式、codec 或 I/O 不可用而失败。
     [[nodiscard]] static bool available() noexcept;
+    /// 纯预检，不创建文件；旧版封装库不支持的非零 MKV 方向会明确拒绝。
+    /// 0 不需要旋转元数据；本方法成功不代表 codec 或 I/O 可用。
+    [[nodiscard]] static bool validate_video_orientation(
+        Format format, int degrees, std::string& error);
     [[nodiscard]] static std::unique_ptr<RecordingMuxer> open(
         const Options& options, std::string& error);
 

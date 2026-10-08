@@ -3,7 +3,9 @@
 
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <string_view>
@@ -12,7 +14,9 @@
 
 #ifdef SCRCTL_HAVE_LIBAVFORMAT
 extern "C" {
+#include <libavcodec/version.h>
 #include <libavformat/avformat.h>
+#include <libavutil/display.h>
 #include <libavutil/mathematics.h>
 }
 #endif
@@ -89,7 +93,11 @@ bool wait_for_error(Recorder& recorder) {
 }
 
 struct Packet { int64_t pts, dts, duration; Nal bytes; };
-struct File { std::vector<Packet> video, audio; unsigned tracks = 0; };
+struct File {
+    std::vector<Packet> video, audio;
+    unsigned tracks = 0;
+    std::optional<int> clockwise_orientation;
+};
 File read(const std::filesystem::path& path) {
     File result;
     AVFormatContext* input = nullptr;
@@ -97,6 +105,27 @@ File read(const std::filesystem::path& path) {
     check(opened >= 0 && input != nullptr, "successful Recorder output is a readable container");
     if (!input) return result;
     result.tracks = input->nb_streams;
+    for (unsigned i = 0; i < input->nb_streams; ++i) {
+        const auto* stream = input->streams[i];
+        if (stream->codecpar->codec_type != AVMEDIA_TYPE_VIDEO) continue;
+        const uint8_t* data = nullptr;
+        std::size_t size = 0;
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(60, 30, 100)
+        const auto* side = av_packet_side_data_get(stream->codecpar->coded_side_data,
+            stream->codecpar->nb_coded_side_data, AV_PKT_DATA_DISPLAYMATRIX);
+        if (side != nullptr) { data = side->data; size = side->size; }
+#else
+        data = av_stream_get_side_data(stream, AV_PKT_DATA_DISPLAYMATRIX, &size);
+#endif
+        if (data != nullptr && size == 9 * sizeof(int32_t)) {
+            std::array<int32_t, 9> matrix;
+            std::memcpy(matrix.data(), data, size);
+            const double degrees = av_display_rotation_get(matrix.data());
+            check(std::isfinite(degrees), "Recorder display matrix has a finite rotation");
+            if (std::isfinite(degrees))
+                result.clockwise_orientation = (360 - static_cast<int>(std::lround(degrees))) % 360;
+        }
+    }
     AVPacket* packet = av_packet_alloc();
     check(packet != nullptr, "demux packet can be allocated");
     int ret = AVERROR_EOF;
@@ -137,6 +166,45 @@ void verify_audio(const File& file, std::span<const int64_t> pts) {
     for (std::size_t i = 0; i < file.audio.size() && i < pts.size(); ++i) {
         check(near(file.audio[i].pts, pts[i]), "audio preserves its shared-origin SR timing");
         check(file.audio[i].bytes == silence, "AAC-ELD is not resampled or reencoded");
+    }
+}
+
+void recorded_orientation(const Directory& directory) {
+    std::optional<File> baseline;
+    for (const int degrees : {0, 90}) {
+        const auto path = directory.path / ("recorder-oriented-" + std::to_string(degrees) + ".mp4");
+        auto config = options(path, true, scrctl::media::RecordingMuxer::Format::Mp4);
+        config.video_orientation = degrees;
+        std::string error;
+        auto recorder = Recorder::start(config, error);
+        check(recorder != nullptr && error.empty(), "Recorder accepts a supported container orientation");
+        if (!recorder) continue;
+        begin(*recorder, true);
+        video(*recorder, 0); video(*recorder, 1200); video(*recorder, 3000);
+        for (const uint32_t ticks : {1200u, 1680u, 2160u})
+            check(recorder->audio(audio_session, 9, ticks, silence), "oriented recording admits unchanged AAC");
+        report(*recorder, Track::Video, sr(0, 0, 1000));
+        report(*recorder, Track::Audio, sr(9, 0, 1000));
+        report(*recorder, Track::Video, sr(0, 24000, 1001));
+        report(*recorder, Track::Audio, sr(9, 48000, 1001));
+        check(recorder->finish(error) && error.empty(), "oriented Recorder finishes normally");
+        const auto file = read(path);
+        check(file.clockwise_orientation.value_or(0) == degrees,
+              "Recorder passes its clockwise orientation through to the muxer");
+        const std::array<int64_t, 3> video_pts{0, 50000, 125000};
+        const std::array<int64_t, 3> audio_pts{25000, 35000, 45000};
+        verify_video(file, video_pts); verify_audio(file, audio_pts);
+        if (!baseline) { baseline = file; continue; }
+        // 同一 SR 和 AU 输入，只有展示元数据不同；时钟量化和末帧规则不应变化。
+        for (const bool audio : {false, true}) {
+            const auto& actual = audio ? file.audio : file.video;
+            const auto& expected = audio ? baseline->audio : baseline->video;
+            check(actual.size() == expected.size(), "Recorder orientation retains every approved packet");
+            for (std::size_t i = 0; i < actual.size() && i < expected.size(); ++i)
+                check(actual[i].pts == expected[i].pts && actual[i].dts == expected[i].dts &&
+                      actual[i].duration == expected[i].duration && actual[i].bytes == expected[i].bytes,
+                      "Recorder rotation metadata leaves encoded bytes and all timing unchanged");
+        }
     }
 }
 
@@ -514,13 +582,27 @@ void failure_paths(const Directory& directory) {
 int main() {
     Directory directory;
     std::string error;
+    for (const int degrees : {-90, 45, 360}) {
+        auto config = options(directory.path / "invalid-orientation.mp4", false,
+                              scrctl::media::RecordingMuxer::Format::Mp4);
+        config.video_orientation = degrees;
+        check(!Recorder::start(config, error) && !error.empty(),
+              "invalid Recorder orientation is rejected before creating a worker");
+        check(!std::filesystem::exists(config.path), "invalid Recorder orientation creates no output");
+    }
     if (!scrctl::media::RecordingMuxer::available()) {
+        auto rotated = options(directory.path / "unavailable-rotation.mp4", false,
+                               scrctl::media::RecordingMuxer::Format::Mp4);
+        rotated.video_orientation = 90;
+        check(!Recorder::start(rotated, error) && !error.empty() && !std::filesystem::exists(rotated.path),
+              "without the muxing library Recorder refuses rotation without creating output");
         check(!Recorder::start(options(directory.path / "unavailable.mkv"),error),"missing libavformat rejects MKV explicitly");
         check(!error.empty(),"unavailable Recorder provides a reason");
         check(!std::filesystem::exists(directory.path / "unavailable.mkv"),"unavailable Recorder does not create an output file");
     } else {
 #ifdef SCRCTL_HAVE_LIBAVFORMAT
         common_origin(directory);
+        recorded_orientation(directory);
         wrapping_audio_and_first_idr(directory);
         still_video(directory);
         still_video(directory, scrctl::media::RecordingMuxer::Format::Mp4);

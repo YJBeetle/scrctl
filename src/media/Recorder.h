@@ -24,6 +24,8 @@ public:
     struct Options {
         std::string path;
         RecordingMuxer::Format format = RecordingMuxer::Format::Matroska;
+        /// 静态容器展示方向，顺时针 0/90/180/270；编码字节与采样时钟保持原样。
+        int video_orientation = 0;
         bool include_audio = false;
         /// ingress、待 SR 包及写入中的原编码共用的预算，保守预留编码复制
         /// 和参数检查的临时空间；不是进程 RSS 或库内部缓存的硬上限。

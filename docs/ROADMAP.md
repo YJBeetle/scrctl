@@ -104,7 +104,10 @@ MKV 仍保留未知视频时长，两轨采用非负共同原点。实验背景�
 AAC-ELD 原包可直存，离线 FFmpeg 解码及本机 AVFoundation MP4 解码通过；
 其他播放器兼容性不能由这组结果代替。仍需实际音视频同步、更多设备、长时间
 录制、Windows / Wi-Fi 录制回归；容器 PTS 保留不代替物理听画同步验收。
-录制方向随后与 --orientation 语义一起推进。
+录制方向使用静态容器元数据：--orientation 数字角度同时设置显示和录制，
+--display-orientation / --record-orientation 分别设置单侧，按参数顺序覆盖。
+显示保留 auto、录制默认 0；裸 HEVC 不支持非零录制方向，旧版 MKV 封装器明确拒绝。
+不修改编码、时钟或触摸映射；动态自动录制方向、显示 flip 和设备采集裁剪尚未实现。
 
 ## 暂缓：MaaFramework
 

@@ -17,7 +17,7 @@ scrctl 是独立产品，也是设备协议与恢复行为的验证项目。MaaF
 | 配对密码运算 | HKDF、SRP 摘要和 Ed25519 使用 OpenSSL；正式 M6/M2 已校验并保存设备原始标识和长期公钥 | USB 新建配对保存/重连、严格 Wi-Fi 身份校验及隧道/RSD 已通过；旧记录缺设备身份须 USB 重配，其他设备版本待验证 |
 | 恢复策略和旧 review 问题 | 可追溯旧项已逐项复查，线程信息和剪贴板边界本轮补修 | 长时间、物理断线和真实无线重连仍待验证，具体结论见下表 |
 | 注释与命令行文案 | 主要模块注释已整理；应用、核心输出及十个常用诊断工具支持 en / zh-CN / auto，默认跟随 locale | 归档实验、零散注释与历史文档继续整理 |
-| 容器录制 | MP4 / MKV 已接入公共时钟及解码前 HEVC / AAC 原包；Mac USB 短测和原生 MP4 解码通过 | 物理音画同步、Windows / Wi-Fi 录制、录制方向及长时间运行继续验证 |
+| 容器录制 | MP4 / MKV 已接入公共时钟、原编码包和静态方向；Mac USB 短测和原生 MP4 解码通过 | 物理音画同步、Windows / Wi-Fi 录制、动态方向及长时间运行继续验证 |
 | MaaFramework | 按用户安排暂缓 | 后续参考 scrctl 验证过的实现，当前未修改 MaaFramework |
 
 XPC、OPACK、Apple 配对和控制语义、SRP 的 Apple 适配、Deflate 小工具暂时保留。
@@ -1790,7 +1790,35 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   0.1 秒，总长约 15.21 秒；本机原生解码同样为 904 帧，末帧区间取图正常。
   此成功路径短测发生在上述窄收尾检查补充前；无录制/生产失败，异步错误路径
   单独由最终源码的离线复现覆盖，不将短测写成最终提交的完整故障验收。
-- 录制诊断提交 `1c04013` 的四个 CI 任务各 51/51，翻译生成、Mac / Windows
-  搬移启动及产物上传检查通过。MP4 新提交的 CI 另行核对；上述结果不代替它。
+- 录制诊断提交 `1c04013` 和 MP4 提交 `1a0eefd` 的四个 CI 任务均各 51/51。
+  MP4 的 Mac、Windows 和 sanitizer 完整日志确认 Recorder 965 项、Muxer 1195
+  项无失败；翻译生成、搬移启动及上传检查通过。Windows 安装仍为 98 个 DLL，
+  Mac 仍为 25 个 dylib 路径条目；此次只下载完整测试日志，不重复下载大安装包。
 - 仍需物理声画同步、Windows / Wi-Fi 录制、更多设备和长时运行。证据保存在
   仓库外夹具 `mp4-recorder/`；本轮没有恢复音乐、改变音频路由或注入手机输入。
+
+## 第一百零三轮：显示与录制方向参数
+
+- 数字 `--orientation` 按 scrcpy 同时设置显示和容器录制方向；
+  `--display-orientation` 与 `--record-orientation` 分别设置。按参数出现顺序更新，
+  重复参数同样以后一次为准。保留显示默认 `auto`、录制默认 0，以及旧
+  `--orientation=auto` 仅设置显示的扩展；录制不接受 `auto`，显示 flip 尚未实现。
+- 方向经过 Application、LiveSource、Recorder 传入 RecordingMuxer，只写 FFmpeg
+  公开 display-matrix 元数据，不旋转编码像素，不改变 AU、AAC、SR 时钟或 MP4
+  末帧规则。方向相对编码像素固定，窗口快捷键和设备方向订阅不会改写文件矩阵。
+- 裸 HEVC 无法保存该元数据，最终非零录制方向会在连接前报错；只转窗口可用
+  `--display-orientation`，或最后显式设置 `--record-orientation=0`。
+  MKV 非零旋转要求 FFmpeg 6.1 的已知支持下限，旧版明确拒绝而不静默忽略。
+  MP4 使用新旧公开 side-data 接口兼容既有 FFmpeg 5.0 最低版本。
+- 本机完整 CTest 51/51（18.09 秒），英中文帮助、错误及目录检查通过。独立
+  ASan/UBSan：Muxer 1524 项、Recorder 1062 项；无 libavformat 分支 28 / 10 项。
+  FFmpeg 5.0.3 / 5.1.7 公开头的八项语法检查通过，不宣称运行了旧库。
+- 生产 Muxer 的非正方形 320×180 AV 夹具，MP4 / MKV 四方向各保留 75 HEVC
+  和 290 AAC 包，逐包字节及 PTS/DTS/duration 与 0 度一致；FFmpeg 完整解码，
+  Y/U/V 像素与指定顺时针旋转逐一相同，音频每声道 139200 PCM 帧完全一致。
+  本机原生 MP4 的矩阵与取图 RGB 也逐像素匹配，90 / 270 度显示为 180×320。
+- Mac USB 实际 `--record-orientation=90 --no-audio --no-control --no-window`
+  录制 12 秒成功：664 帧完整解码，编码尺寸 1136×2464、展示尺寸 2464×1136，
+  本机原生压缩包与解码帧均为 664；DTS 严格递增且等于 PTS，末帧仍为 100 ms。
+  本轮没有操作音乐或路由；不代表物理音画同步、所有播放器或动态录制方向已验证。
+- 模块、独立核查和实际命令证据见仓库外夹具的 `record-orientation/`。

@@ -22,8 +22,9 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         "change it with --shortcut-mod.\n"
         "Audio is forwarded to the computer by default; --audio-dup keeps phone playback. "
         "Switching routes may pause the phone's player; resume it if needed.\n"
-        "The device chooses encoding dimensions, bitrate and frame rate. Display rotation and crop "
-        "leave recordings unchanged. Record to .mp4 or .mkv for HEVC with audio, or .hevc for raw video.\n"
+        "The device chooses encoding dimensions, bitrate and frame rate. Display crop and "
+        "--display-orientation leave recordings unchanged; --orientation rotates display and "
+        "container recordings together. Record to .mp4 or .mkv for HEVC with audio, or .hevc for raw video.\n"
         "Wireless use requires pairing. --help / --version do not connect to the device."));
     app.set_help_flag("-h,--help", SCRCTL_N_("Show help"));
     app.add_option("--play", o.path, SCRCTL_N_("Play an Annex-B HEVC file"));
@@ -99,11 +100,23 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.add_option("--exit-after", o.exit_after, SCRCTL_N_("Exit after N frames; 0 for unlimited"))
         ->check(CLI::NonNegativeNumber);
     auto *scale = app.add_option("--scale", o.scale, SCRCTL_N_("Finite positive scale; default: fit screen"));
-    std::string orientation, crop, background;
+    std::string crop, background;
     std::vector<std::string> verify;
-    app.add_option("--display-orientation,--orientation", orientation,
-                   SCRCTL_N_("Clockwise display rotation; auto follows the device; recording is unchanged"))
-        ->check(CLI::IsMember({"auto", "0", "90", "180", "270"}));
+    // 按解析顺序立即设置方向，组合参数和重复参数的后一次赋值生效。
+    // 数字 --orientation 同时设置两者；旧 auto 用法仅设置显示，不改变录制方向。
+    app.add_option_function<std::string>("--orientation", [&](const std::string& value) {
+        o.orientation = value == "auto" ? -1 : std::stoi(value);
+        if (o.orientation >= 0) o.record_orientation = o.orientation;
+    }, SCRCTL_N_("Clockwise display and recording rotation: 0/90/180/270; auto changes display only"))
+        ->check(CLI::IsMember({"auto", "0", "90", "180", "270"}))->trigger_on_parse();
+    app.add_option_function<std::string>("--display-orientation", [&](const std::string& value) {
+        o.orientation = value == "auto" ? -1 : std::stoi(value);
+    }, SCRCTL_N_("Clockwise display rotation: auto/0/90/180/270; recording is unchanged"))
+        ->check(CLI::IsMember({"auto", "0", "90", "180", "270"}))->trigger_on_parse();
+    app.add_option_function<std::string>("--record-orientation", [&](const std::string& value) {
+        o.record_orientation = std::stoi(value);
+    }, SCRCTL_N_("Clockwise MP4/MKV recording rotation: 0/90/180/270; default: 0; display is unchanged"))
+        ->check(CLI::IsMember({"0", "90", "180", "270"}))->trigger_on_parse();
     app.add_option("--crop", crop,
                    SCRCTL_N_("Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"));
     app.add_option("--background-color", background,
@@ -120,6 +133,10 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         if (record_container_format(o.record) && o.video_source == "screenshot") {
             throw CLI::ValidationError("--record", SCRCTL_TR(
                 "Container recording requires live video; screenshot polling cannot be recorded"));
+        }
+        if (!o.record.empty() && !record_container_format(o.record) && o.record_orientation != 0) {
+            throw CLI::ValidationError("--record", SCRCTL_TR(
+                "Recording rotation requires MP4 or MKV; use --display-orientation to rotate only the display"));
         }
         if (o.wifi == "auto" && app.count("--wifi-port")) {
             throw CLI::ValidationError("--wifi-port", SCRCTL_TR("Use a manual LAN address; auto uses discovered SRV ports"));
@@ -173,8 +190,6 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         if (!std::isfinite(o.scale) || o.scale <= 0) {
             throw CLI::ValidationError("--scale", SCRCTL_TR("Requires a finite positive number"));
         }
-        if (!orientation.empty())
-            o.orientation = orientation == "auto" ? -1 : std::stoi(orientation);
         if (app.count("--crop")) {
             int consumed = 0;
             const bool dimensions = std::sscanf(crop.c_str(), "%dx%d+%d+%d%n", &o.crop_w, &o.crop_h,

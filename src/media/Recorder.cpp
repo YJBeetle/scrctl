@@ -333,6 +333,7 @@ struct Recorder::Impl {
         RecordingMuxer::Options output;
         output.path = options.path;
         output.format = options.format;
+        output.video_orientation = options.video_orientation;
         output.vps = video_config->vps;
         output.sps = video_config->sps;
         output.pps = video_config->pps;
@@ -515,12 +516,8 @@ struct Recorder::Impl {
 Recorder::Recorder(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
 
 std::unique_ptr<Recorder> Recorder::start(const Options& options, std::string& error) {
-    error.clear();
-    if (options.format != RecordingMuxer::Format::Mp4 &&
-        options.format != RecordingMuxer::Format::Matroska) {
-        error = SCRCTL_TR("Unsupported recording container format");
+    if (!RecordingMuxer::validate_video_orientation(options.format, options.video_orientation, error))
         return nullptr;
-    }
     if (!RecordingMuxer::available()) {
         error = SCRCTL_TR("Container recording requires libavformat and libavcodec");
         return nullptr;

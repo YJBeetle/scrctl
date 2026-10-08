@@ -2,7 +2,9 @@
 
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -14,6 +16,7 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/channel_layout.h>
+#include <libavutil/display.h>
 #include <libavutil/mathematics.h>
 #include <libavutil/version.h>
 }
@@ -79,6 +82,32 @@ Muxer::Options options(const std::filesystem::path& file, Muxer::Format format,
     return result;
 }
 
+void orientation_precheck(const Directory& directory) {
+    std::string error = "old error";
+    for (const auto format : {Muxer::Format::Mp4, Muxer::Format::Matroska}) {
+        check(Muxer::validate_video_orientation(format, 0, error) && error.empty(),
+              "zero orientation needs no display metadata capability");
+    }
+    const auto path = directory.path / "orientation-must-not-truncate";
+    { std::ofstream file(path); file << "keep"; }
+    for (const int degrees : {-90, 1, 360, std::numeric_limits<int>::min(),
+                               std::numeric_limits<int>::max()}) {
+        check(!Muxer::validate_video_orientation(Muxer::Format::Mp4, degrees, error) && !error.empty(),
+              "pure orientation precheck rejects unsupported angles");
+        auto config = options(path, Muxer::Format::Mp4);
+        config.video_orientation = degrees;
+        check(!Muxer::open(config, error) && !error.empty(), "open defensively rejects unsupported orientation");
+        std::ifstream file(path); std::string text; file >> text;
+        check(text == "keep", "invalid orientation cannot truncate an existing file");
+    }
+    check(!Muxer::validate_video_orientation(static_cast<Muxer::Format>(99), 0, error) && !error.empty(),
+          "orientation precheck rejects an invalid container enum even at zero degrees");
+    auto invalid = options(directory.path / "orientation-not-created", Muxer::Format::Mp4);
+    invalid.video_orientation = 45;
+    check(!Muxer::open(invalid, error) && !std::filesystem::exists(invalid.path),
+          "invalid orientation is rejected before creating a file");
+}
+
 #ifdef SCRCTL_HAVE_LIBAVFORMAT
 struct Packet {
     int64_t pts = 0, dts = 0, duration = 0;
@@ -90,6 +119,7 @@ struct Track {
     unsigned tag = 0;
     int width = 0, height = 0, sample_rate = 0, channels = 0;
     Nal extradata;
+    std::optional<int> clockwise_orientation;
     std::vector<Packet> packets;
 };
 struct File {
@@ -121,6 +151,26 @@ File read(const std::filesystem::path& path) {
         track->width = parameters->width;
         track->height = parameters->height;
         track->sample_rate = parameters->sample_rate;
+        if (parameters->codec_type == AVMEDIA_TYPE_VIDEO) {
+            const uint8_t* data = nullptr;
+            std::size_t size = 0;
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(60, 30, 100)
+            const auto* side = av_packet_side_data_get(parameters->coded_side_data,
+                parameters->nb_coded_side_data, AV_PKT_DATA_DISPLAYMATRIX);
+            if (side != nullptr) { data = side->data; size = side->size; }
+#else
+            data = av_stream_get_side_data(input->streams[i], AV_PKT_DATA_DISPLAYMATRIX, &size);
+#endif
+            if (data != nullptr && size == 9 * sizeof(int32_t)) {
+                std::array<int32_t, 9> matrix;
+                std::memcpy(matrix.data(), data, size);
+                const double degrees = av_display_rotation_get(matrix.data());
+                check(std::isfinite(degrees), "stored display matrix has a finite rotation");
+                if (std::isfinite(degrees)) {
+                    track->clockwise_orientation = (360 - static_cast<int>(std::lround(degrees))) % 360;
+                }
+            }
+        }
 #if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 24, 100)
         track->channels = parameters->ch_layout.nb_channels;
 #else
@@ -188,6 +238,67 @@ void check_audio(const Track& audio, std::span<const int64_t> pts, int frame_sam
         check(near(packet.pts, pts[i]) && packet.dts == packet.pts,
               "AAC starts at the caller offset and follows mapped packet PTS");
         check(packet.bytes == silence, "AAC-ELD payload is neither dropped nor reencoded");
+    }
+}
+
+void container_orientations(const Directory& directory) {
+    for (const auto format : {Muxer::Format::Mp4, Muxer::Format::Matroska}) {
+        std::optional<File> baseline;
+        for (const int degrees : {0, 90, 180, 270}) {
+            const auto path = directory.path / ((format == Muxer::Format::Mp4 ? "oriented-mp4-" : "oriented-mkv-") +
+                                               std::to_string(degrees));
+            std::string error;
+            const bool supported = Muxer::validate_video_orientation(format, degrees, error);
+#if LIBAVFORMAT_VERSION_INT < AV_VERSION_INT(60, 16, 100) || \
+    LIBAVCODEC_VERSION_INT < AV_VERSION_INT(60, 30, 100)
+            const bool expected_support = format == Muxer::Format::Mp4 || degrees == 0;
+#else
+            const bool expected_support = true;
+#endif
+            check(supported == expected_support, "orientation capability follows the supported container version");
+            auto config = options(path, format, Muxer::Audio{});
+            config.video_orientation = degrees;
+            if (!supported) {
+                check(!Muxer::open(config, error) && !error.empty() && !std::filesystem::exists(path),
+                      "unsupported MKV rotation fails before creating a misleading file");
+                continue;
+            }
+            auto writer = Muxer::open(config, error);
+            check(writer != nullptr && error.empty(), "supported display orientation opens");
+            if (!writer) continue;
+            const std::array<int64_t, 3> video_pts{0, 50000, 125000};
+            const std::array<int64_t, 3> audio_pts{25000, 35000, 45000};
+            check(writer->write_video(idr, {0, 0, 50000}, true, error), "oriented first VFR AU writes");
+            check(writer->write_video(idr, {50000, 50000, 75000}, true, error), "oriented second VFR AU writes");
+            for (const auto pts : audio_pts) {
+                check(writer->write_audio(silence, {pts, pts, 10000}, error), "oriented file retains raw AAC");
+            }
+            const int64_t tail = format == Muxer::Format::Mp4 ? 100000 : 0;
+            check(writer->write_video(idr, {125000, 125000, tail}, true, error), "orientation preserves tail duration policy");
+            check(writer->finish(error) && error.empty(), "oriented file finishes");
+            const auto file = read(path);
+            check(file.video.clockwise_orientation.value_or(0) == degrees,
+                  "container display metadata round-trips the requested clockwise angle");
+            check_video(file.video, video_pts, format);
+            check_audio(file.audio, audio_pts, 480);
+            if (!baseline) { baseline = file; continue; }
+            for (const auto audio : {false, true}) {
+                const auto& actual = audio ? file.audio : file.video;
+                const auto& expected = audio ? baseline->audio : baseline->video;
+                check(actual.codec == expected.codec && actual.tag == expected.tag &&
+                      actual.width == expected.width && actual.height == expected.height &&
+                      actual.sample_rate == expected.sample_rate && actual.channels == expected.channels &&
+                      actual.extradata == expected.extradata,
+                      "orientation changes no codec configuration or encoded dimensions");
+                check(actual.packets.size() == expected.packets.size(), "orientation retains every packet");
+                for (std::size_t i = 0; i < actual.packets.size() && i < expected.packets.size(); ++i) {
+                    const auto& a = actual.packets[i]; const auto& b = expected.packets[i];
+                    check(a.bytes == b.bytes && a.key == b.key && a.pts == b.pts &&
+                          a.dts == b.dts && a.duration == b.duration,
+                          "rotation metadata changes neither packet bytes nor PTS/DTS/duration");
+                }
+            }
+        }
     }
 }
 
@@ -373,15 +484,21 @@ void invalid_packets(const Directory& directory) {
 
 int main() {
     Directory directory;
+    orientation_precheck(directory);
 #ifdef SCRCTL_HAVE_LIBAVFORMAT
     check(Muxer::available(), "libavformat build reports container recording support");
     containers(directory);
+    container_orientations(directory);
     still_video_and_negative_audio(directory);
     rejected_before_open(directory);
     invalid_packets(directory);
 #else
     check(!Muxer::available(), "without libavformat container recording is explicitly unavailable");
     std::string error;
+    for (const auto format : {Muxer::Format::Mp4, Muxer::Format::Matroska})
+        for (const int degrees : {90, 180, 270})
+            check(!Muxer::validate_video_orientation(format, degrees, error) && !error.empty(),
+                  "without a muxing library nonzero orientation is explicitly unavailable");
     const auto path = directory.path / "not-created";
     check(!Muxer::open(options(path, Muxer::Format::Mp4), error) && !error.empty(),
           "without libavformat open fails clearly");

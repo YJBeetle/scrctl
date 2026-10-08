@@ -29,13 +29,14 @@ class LiveSource final : public FrameSource {
     /// 及订阅线程。want_audio 决定是否建立独立音频会话；失败时视频继续。
     /// audio_buffer_ms 是音频预缓冲与目标水位对应的时长。audio_dup 保留手机
     /// 播放；默认请求转到电脑，不支持该路由时禁用音频，不自动切回双端播放。
+    /// record_orientation 写容器方向元数据，默认 0；不改变编码数据或触摸映射。
     /// should_cancel 在连接和启动步骤之间检查退出请求，阻止后续起流与路由切换；
     /// 已在进行的底层连接或 RPC 仍可能等待自身超时后才返回。
     bool start(const std::string &serial, const std::string &wifi, const std::string &record_path,
                bool hw_decode, bool watch_display, bool want_audio, int audio_buffer_ms,
                const std::string &video_source, const std::string &test_degrade, std::string &err,
                uint16_t wifi_port = 49152, bool audio_dup = false,
-               const std::function<bool()> &should_cancel = {});
+               const std::function<bool()> &should_cancel = {}, int record_orientation = 0);
 
     /// 打开音频输出。应用先准备 SDL 音频子系统，再调用 start() 建立媒体会话；
     /// 取得 AudioPump 后才可打开声卡。输出失败时，容器录制继续接收音频；

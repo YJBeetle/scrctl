@@ -42,7 +42,8 @@
 | 项目 | 当前行为及使用边界 |
 | --- | --- |
 | `--record / -r` | `.mp4` / `.mkv` 保存 HEVC 和 AAC-ELD，`--no-audio` 只录视频；其他扩展名兼容裸 HEVC，建议 `.hevc`。MP4 最后一帧显示 100 ms，参考 scrcpy 的收尾规则 |
-| `--display-orientation` | 只改变本机显示；现有 `--orientation` 是其兼容别名，也不改变录制 |
+| `--display-orientation` | 只改变本机显示，支持 auto 和四个旋转角度；尚不支持 scrcpy 的 flip 值 |
+| `--orientation` / `--record-orientation` | 数字 `--orientation` 同时设置显示与容器录制方向；`--record-orientation` 只设置录制。按参数顺序覆盖；旧 `--orientation=auto` 仅设置显示 |
 | `--crop` | 裁剪本机显示的源像素；视频和截图各使用自身的像素坐标，不改变设备采集或录制 |
 | `--video-source` | 支持 display 和扩展值 screenshot（截图轮询）；没有 camera 能力 |
 | `--no-window` | 不创建窗口，仍接收和解码视频；可继续播放音频 |
@@ -53,9 +54,9 @@
 | 视频解码 | 默认软件解码；VideoToolbox 适配存在 NAL 长度限制，见 README |
 | 音频路由 | 默认转到电脑，`--audio-dup` 保留手机播放，语义与 scrcpy 对齐；切路由可能暂时暂停手机播放器，需要手动继续。默认路由失败时音频禁用、视频继续，不自动改为双端播放 |
 
-scrcpy 的 `--orientation` 可以同时改变显示和录制；它的 crop 作用于采集，录制可以
-包含 MP4 / MKV 容器及音频。scrctl 的录制尚不实现旋转或采集裁剪，所以帮助中
-明确显示与录制的区别。参见
+scrctl 已按 scrcpy 对齐四个旋转角度的显示与录制参数，录制方向写入容器元数据。
+显示仍保留 `auto` 扩展；显示翻转尚未实现。scrcpy 的 crop 作用于采集，scrctl 的
+`--crop` 只裁剪电脑显示。参见
 [视频方向](https://github.com/Genymobile/scrcpy/blob/v5.0/doc/video.md#orientation)、
 [录制](https://github.com/Genymobile/scrcpy/blob/v5.0/doc/recording.md)。
 
@@ -88,9 +89,8 @@ scrctl 的默认路由已在 macOS、iPhone14,4 / iOS 27 的 USB 与 Wi-Fi 音�
 2. Windows 音频：FFmpeg AAC-ELD 后端已接入，真实音乐解码及短时 USB 发声通过；
    无线播放已正常运行 120 秒。Mac 的重采样时钟补偿改善了刺啦声，新调节层
    仍需 Windows 回归；继续验证持续连接和安装包。
-3. 容器录制：MP4 / MKV 已接入 libavformat，继续验收音视频同步、跨平台和长期运行。
-   随后让 `--orientation` 同时设置显示与录制，
-   并提供独立的 `--record-orientation`，录制旋转优先使用容器方向信息。
+3. 容器录制：MP4 / MKV 和静态录制方向已接入 libavformat，继续验收音视频同步、
+   跨平台和长期运行；录制旋转使用容器方向信息，显示 flip 和设备采集裁剪仍待后续处理。
 4. 日常键盘输入与粘贴：接入窗口键盘事件，维护按下 / 抬起状态，在焦点丢失、
    转屏或退出时释放；区分键盘报告和文字输入，验证中文等文本的粘贴。
 5. 窗口动作：MOD+G / W、双击留边调整大小、显示旋转快捷键，以及转屏后的窗口

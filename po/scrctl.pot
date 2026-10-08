@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-09 03:19+0800\n"
+"POT-Creation-Date: 2026-10-09 03:58+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -29,7 +29,7 @@ msgstr ""
 msgid "SDL initialization failed: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:81 src/app/Application.cpp:277
+#: src/app/Application.cpp:81 src/app/Application.cpp:278
 #, c-format
 msgid "Received exit signal; closing device session\n"
 msgstr ""
@@ -46,28 +46,28 @@ msgid ""
 "without a sound device, or --no-audio to record video only."
 msgstr ""
 
-#: src/app/Application.cpp:128
+#: src/app/Application.cpp:129
 #, c-format
 msgid "Failed to start video: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:134
+#: src/app/Application.cpp:135
 #, c-format
 msgid "Device is in a call. End the call and try again.\n"
 msgstr ""
 
-#: src/app/Application.cpp:152
+#: src/app/Application.cpp:153
 #, c-format
 msgid "File playback cannot launch a device app; ignoring --start-app\n"
 msgstr ""
 
-#: src/app/Application.cpp:171
+#: src/app/Application.cpp:172
 #, c-format
 msgid ""
 "Failed to open audio output: %s (recording and audio reception continue)\n"
 msgstr ""
 
-#: src/app/Application.cpp:175
+#: src/app/Application.cpp:176
 #, c-format
 msgid ""
 "Failed to open audio output: %s (audio disabled; video continues). The "
@@ -75,78 +75,78 @@ msgid ""
 "seconds); resume its player if needed.\n"
 msgstr ""
 
-#: src/app/Application.cpp:182
+#: src/app/Application.cpp:183
 #, c-format
 msgid "Local audio playback disabled; receiving and decoding continue\n"
 msgstr ""
 
-#: src/app/Application.cpp:206 tools/rr_keepalive_probe.cpp:770
+#: src/app/Application.cpp:207 tools/rr_keepalive_probe.cpp:770
 msgid "failed"
 msgstr ""
 
-#: src/app/Application.cpp:206
+#: src/app/Application.cpp:207
 msgid "injected"
 msgstr ""
 
-#: src/app/Application.cpp:218
+#: src/app/Application.cpp:219
 #, c-format
 msgid "--test-button %s: pressed\n"
 msgstr ""
 
-#: src/app/Application.cpp:220
+#: src/app/Application.cpp:221
 #, c-format
 msgid "--test-button %s failed: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:232
+#: src/app/Application.cpp:233
 #, c-format
 msgid "--test-type %s: injected\n"
 msgstr ""
 
-#: src/app/Application.cpp:234
+#: src/app/Application.cpp:235
 #, c-format
 msgid "--test-type failed: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:262
+#: src/app/Application.cpp:263
 #, c-format
 msgid "Input injection failed (further attempts disabled): %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:273
+#: src/app/Application.cpp:274
 #, c-format
 msgid "Reached --time-limit %d seconds\n"
 msgstr ""
 
-#: src/app/Application.cpp:287
+#: src/app/Application.cpp:288
 #, c-format
 msgid ""
 "  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
 msgstr ""
 
-#: src/app/Application.cpp:313 src/app/Application.cpp:381
+#: src/app/Application.cpp:314 src/app/Application.cpp:382
 #, c-format
 msgid "Reached --exit-after %d\n"
 msgstr ""
 
-#: src/app/Application.cpp:328
+#: src/app/Application.cpp:329
 #, c-format
 msgid ""
 "Mouse input is unavailable: screenshot orientation or display dimensions are "
 "unknown or inconsistent\n"
 msgstr ""
 
-#: src/app/Application.cpp:360
+#: src/app/Application.cpp:361
 #, c-format
 msgid "Render rotation changed to %d degrees clockwise; window recreated\n"
 msgstr ""
 
-#: src/app/Application.cpp:396
+#: src/app/Application.cpp:397
 #, c-format
 msgid "Window readback was not reached (requested frame %d, rendered %d)\n"
 msgstr ""
 
-#: src/app/Application.cpp:400
+#: src/app/Application.cpp:401
 #, c-format
 msgid "Finished: processed %d frames\n"
 msgstr ""
@@ -179,14 +179,15 @@ msgid ""
 "Audio is forwarded to the computer by default; --audio-dup keeps phone "
 "playback. Switching routes may pause the phone's player; resume it if "
 "needed.\n"
-"The device chooses encoding dimensions, bitrate and frame rate. Display "
-"rotation and crop leave recordings unchanged. Record to .mp4 or .mkv for "
-"HEVC with audio, or .hevc for raw video.\n"
+"The device chooses encoding dimensions, bitrate and frame rate. Display crop "
+"and --display-orientation leave recordings unchanged; --orientation rotates "
+"display and container recordings together. Record to .mp4 or .mkv for HEVC "
+"with audio, or .hevc for raw video.\n"
 "Wireless use requires pairing. --help / --version do not connect to the "
 "device."
 msgstr ""
 
-#: src/app/Cli.cpp:28 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
+#: src/app/Cli.cpp:29 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
 #: tools/audio_decode_probe.cpp:193 tools/audio_pump_probe.cpp:85
 #: tools/feature_probe.cpp:61 tools/hid_probe.cpp:184
 #: tools/screenshot_probe.cpp:52 tools/stall_probe.cpp:59
@@ -194,245 +195,262 @@ msgstr ""
 msgid "Show help"
 msgstr ""
 
-#: src/app/Cli.cpp:29
+#: src/app/Cli.cpp:30
 msgid "Play an Annex-B HEVC file"
 msgstr ""
 
-#: src/app/Cli.cpp:30 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
+#: src/app/Cli.cpp:31 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
 msgid "Device UDID"
 msgstr ""
 
-#: src/app/Cli.cpp:31
+#: src/app/Cli.cpp:32
 msgid "LAN address, or auto to discover a paired wireless device"
 msgstr ""
 
-#: src/app/Cli.cpp:33
+#: src/app/Cli.cpp:34
 msgid "RemotePairing port for a manual LAN address; default: 49152"
 msgstr ""
 
-#: src/app/Cli.cpp:36
+#: src/app/Cli.cpp:37
 msgid "Create or verify a remote pairing record over USB, then exit"
 msgstr ""
 
-#: src/app/Cli.cpp:39
+#: src/app/Cli.cpp:40
 msgid ""
 "Allow replacing an incomplete or rejected pairing record; requires --pair"
 msgstr ""
 
-#: src/app/Cli.cpp:42
+#: src/app/Cli.cpp:43
 msgid ""
 "Record to .mp4 or .mkv (HEVC and audio); other extensions save raw HEVC "
 "without audio"
 msgstr ""
 
-#: src/app/Cli.cpp:44
+#: src/app/Cli.cpp:45
 msgid ""
 "Launch bundle ID; ? matches name prefix, + terminates the previous instance"
 msgstr ""
 
-#: src/app/Cli.cpp:45
+#: src/app/Cli.cpp:46
 msgid "Window title"
 msgstr ""
 
-#: src/app/Cli.cpp:46
+#: src/app/Cli.cpp:47
 msgid "SDL render driver, e.g. metal / software"
 msgstr ""
 
-#: src/app/Cli.cpp:48
+#: src/app/Cli.cpp:49
 msgid ""
 "display for live video (default), screenshot for polling; stream is an alias "
 "for display"
 msgstr ""
 
-#: src/app/Cli.cpp:50
+#: src/app/Cli.cpp:51
 msgid "Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"
 msgstr ""
 
-#: src/app/Cli.cpp:57
+#: src/app/Cli.cpp:58
 msgid "Inject home/lock/volup/voldn/mute"
 msgstr ""
 
-#: src/app/Cli.cpp:59
+#: src/app/Cli.cpp:60
 msgid "Inject ASCII text (device text field must have focus)"
 msgstr ""
 
-#: src/app/Cli.cpp:60
+#: src/app/Cli.cpp:61
 msgid "Force alternating video fallback and recovery at T1,T2,... seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:61
+#: src/app/Cli.cpp:62
 msgid "Write device clipboard and exit (supports Unicode)"
 msgstr ""
 
-#: src/app/Cli.cpp:63
+#: src/app/Cli.cpp:64
 msgid "List USB and RemotePairing devices; wireless scan defaults to 3 seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:65
+#: src/app/Cli.cpp:66
 msgid ""
 "Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"
 msgstr ""
 
-#: src/app/Cli.cpp:67
+#: src/app/Cli.cpp:68
 msgid "Disable input control"
 msgstr ""
 
-#: src/app/Cli.cpp:69
+#: src/app/Cli.cpp:70
 msgid "List device apps"
 msgstr ""
 
-#: src/app/Cli.cpp:70
+#: src/app/Cli.cpp:71
 msgid "Show version"
 msgstr ""
 
-#: src/app/Cli.cpp:71
+#: src/app/Cli.cpp:72
 msgid "Desktop fullscreen"
 msgstr ""
 
-#: src/app/Cli.cpp:72
+#: src/app/Cli.cpp:73
 msgid "Keep window on top"
 msgstr ""
 
-#: src/app/Cli.cpp:73
+#: src/app/Cli.cpp:74
 msgid "Borderless window"
 msgstr ""
 
-#: src/app/Cli.cpp:74
+#: src/app/Cli.cpp:75
 msgid "Prevent local screen sleep while running"
 msgstr ""
 
-#: src/app/Cli.cpp:75
+#: src/app/Cli.cpp:76
 msgid "Do not start audio stream"
 msgstr ""
 
-#: src/app/Cli.cpp:77
+#: src/app/Cli.cpp:78
 msgid "Keep audio playing on the phone while forwarding it to the computer"
 msgstr ""
 
-#: src/app/Cli.cpp:79
+#: src/app/Cli.cpp:80
 msgid "Receive and decode audio without local playback"
 msgstr ""
 
-#: src/app/Cli.cpp:80
+#: src/app/Cli.cpp:81
 msgid "Run without a window"
 msgstr ""
 
-#: src/app/Cli.cpp:81
+#: src/app/Cli.cpp:82
 msgid "Use platform hardware decoder; default: software"
 msgstr ""
 
-#: src/app/Cli.cpp:82
+#: src/app/Cli.cpp:83
 msgid "Print input coordinates"
 msgstr ""
 
-#: src/app/Cli.cpp:83
+#: src/app/Cli.cpp:84
 msgid "Add tunnel diagnostics to --stats"
 msgstr ""
 
-#: src/app/Cli.cpp:84
+#: src/app/Cli.cpp:85
 msgid "Print statistics every second"
 msgstr ""
 
-#: src/app/Cli.cpp:85
+#: src/app/Cli.cpp:86
 msgid "Read device clipboard; with --copy, read back after writing"
 msgstr ""
 
-#: src/app/Cli.cpp:88
+#: src/app/Cli.cpp:89
 msgid "Window horizontal position; integer or auto (default)"
 msgstr ""
 
-#: src/app/Cli.cpp:90
+#: src/app/Cli.cpp:91
 msgid "Window vertical position; integer or auto (default)"
 msgstr ""
 
-#: src/app/Cli.cpp:92
+#: src/app/Cli.cpp:93
 msgid ""
 "Shortcut modifiers, separated by commas: lctrl, rctrl, lalt, ralt, lsuper, "
 "rsuper; default: lalt,lsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:93
+#: src/app/Cli.cpp:94
 msgid "Window width; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:94
+#: src/app/Cli.cpp:95
 msgid "Window height; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:95
+#: src/app/Cli.cpp:96
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:97
+#: src/app/Cli.cpp:98
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr ""
 
-#: src/app/Cli.cpp:99
+#: src/app/Cli.cpp:100
 msgid "Exit after N frames; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:101
+#: src/app/Cli.cpp:102
 msgid "Finite positive scale; default: fit screen"
 msgstr ""
 
-#: src/app/Cli.cpp:105
+#: src/app/Cli.cpp:110
 msgid ""
-"Clockwise display rotation; auto follows the device; recording is unchanged"
+"Clockwise display and recording rotation: 0/90/180/270; auto changes display "
+"only"
 msgstr ""
 
-#: src/app/Cli.cpp:108
+#: src/app/Cli.cpp:114
+msgid "Clockwise display rotation: auto/0/90/180/270; recording is unchanged"
+msgstr ""
+
+#: src/app/Cli.cpp:118
+msgid ""
+"Clockwise MP4/MKV recording rotation: 0/90/180/270; default: 0; display is "
+"unchanged"
+msgstr ""
+
+#: src/app/Cli.cpp:121
 msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:110
+#: src/app/Cli.cpp:123
 msgid "Background color: RGB or RRGGBB, with optional #"
 msgstr ""
 
-#: src/app/Cli.cpp:111
+#: src/app/Cli.cpp:124
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr ""
 
-#: src/app/Cli.cpp:122 src/app/LiveSource.cpp:57
+#: src/app/Cli.cpp:135 src/app/LiveSource.cpp:58
 msgid ""
 "Container recording requires live video; screenshot polling cannot be "
 "recorded"
 msgstr ""
 
-#: src/app/Cli.cpp:125
+#: src/app/Cli.cpp:139 src/app/LiveSource.cpp:68
+msgid ""
+"Recording rotation requires MP4 or MKV; use --display-orientation to rotate "
+"only the display"
+msgstr ""
+
+#: src/app/Cli.cpp:142
 msgid "Use a manual LAN address; auto uses discovered SRV ports"
 msgstr ""
 
-#: src/app/Cli.cpp:136
+#: src/app/Cli.cpp:153
 msgid "Expected an integer or auto"
 msgstr ""
 
-#: src/app/Cli.cpp:156
+#: src/app/Cli.cpp:173
 msgid ""
 "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:167
+#: src/app/Cli.cpp:184
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr ""
 
-#: src/app/Cli.cpp:174
+#: src/app/Cli.cpp:191
 msgid "Requires a finite positive number"
 msgstr ""
 
-#: src/app/Cli.cpp:191
+#: src/app/Cli.cpp:206
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr ""
 
-#: src/app/Cli.cpp:200
+#: src/app/Cli.cpp:215
 msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
 msgstr ""
 
-#: src/app/Cli.cpp:214
+#: src/app/Cli.cpp:229
 msgid "Frame number must be a positive integer"
 msgstr ""
 
-#: src/app/Cli.cpp:219
+#: src/app/Cli.cpp:234
 msgid "Requires a window; incompatible with --no-window"
 msgstr ""
 
@@ -623,183 +641,183 @@ msgstr ""
 msgid "Recording failed: %s. The file may be incomplete.\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:48
+#: src/app/LiveSource.cpp:49
 msgid "Device startup cancelled"
 msgstr ""
 
-#: src/app/LiveSource.cpp:61
+#: src/app/LiveSource.cpp:62
 msgid "Container recording is unavailable in this build (libavformat required)"
 msgstr ""
 
-#: src/app/LiveSource.cpp:67
+#: src/app/LiveSource.cpp:74
 msgid "Invalid --test-degrade: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:115
+#: src/app/LiveSource.cpp:122
 #, c-format
 msgid "Failed to query display dimensions: %s (using model crop table)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:116
+#: src/app/LiveSource.cpp:123
 msgid "Update contains no usable dimensions"
 msgstr ""
 
-#: src/app/LiveSource.cpp:129
+#: src/app/LiveSource.cpp:136
 #, c-format
 msgid ""
 "Failed to subscribe to display changes: %s (automatic rotation unavailable)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:162 src/app/LiveSource.cpp:388
+#: src/app/LiveSource.cpp:170 src/app/LiveSource.cpp:396
 msgid "Live video unavailable; recording stopped"
 msgstr ""
 
-#: src/app/LiveSource.cpp:167
+#: src/app/LiveSource.cpp:175
 #, c-format
 msgid "Media stream unavailable: %s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:170
+#: src/app/LiveSource.cpp:178
 #, c-format
 msgid ""
 "Using screenshot polling; refresh rate depends on capture time. Input "
 "control remains available\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:174
+#: src/app/LiveSource.cpp:182
 msgid "Failed to start screenshot polling: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:189
+#: src/app/LiveSource.cpp:197
 msgid "No first screenshot within 5 seconds"
 msgstr ""
 
-#: src/app/LiveSource.cpp:196
+#: src/app/LiveSource.cpp:204
 msgid "No first decoded frame within 5 seconds"
 msgstr ""
 
-#: src/app/LiveSource.cpp:203
+#: src/app/LiveSource.cpp:211
 #, c-format
 msgid "Screenshot mirroring started: %s / iOS %s, %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:207
+#: src/app/LiveSource.cpp:215
 #, c-format
 msgid ""
 "Video stream started: %s / iOS %s, receive port=%u PT=%u, first frame %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:216
+#: src/app/LiveSource.cpp:224
 #, c-format
 msgid ""
 "Display geometry: visible area %dx%d (displayId=%llu %s), UI rotation %d "
 "degrees clockwise, stream %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:223
+#: src/app/LiveSource.cpp:231
 #, c-format
 msgid "Screenshot mode cannot record Annex-B; ignoring --record\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:225
+#: src/app/LiveSource.cpp:233
 #, c-format
 msgid "Recording to %s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:232
+#: src/app/LiveSource.cpp:240
 #, c-format
 msgid "Screenshot mode does not start audio\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:245
+#: src/app/LiveSource.cpp:253
 #, c-format
 msgid ""
 "Forwarding audio to the computer. Switching routes may pause the phone's "
 "player; resume playback on the phone if needed.\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:255
+#: src/app/LiveSource.cpp:263
 #, c-format
 msgid "Failed to start audio: %s (video continues)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:260
+#: src/app/LiveSource.cpp:268
 #, c-format
 msgid "Audio stream started: receive port=%u PT=%u backend=%s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:263
+#: src/app/LiveSource.cpp:271
 msgid "Audio routing: phone and computer (--audio-dup)"
 msgstr ""
 
-#: src/app/LiveSource.cpp:264
+#: src/app/LiveSource.cpp:272
 msgid "Audio routing: computer; phone playback is suppressed"
 msgstr ""
 
-#: src/app/LiveSource.cpp:271
+#: src/app/LiveSource.cpp:279
 #, c-format
 msgid "--test-degrade: from now,"
 msgstr ""
 
-#: src/app/LiveSource.cpp:273
+#: src/app/LiveSource.cpp:281
 #, c-format
 msgid " at %.1f seconds: %s"
 msgstr ""
 
-#: src/app/LiveSource.cpp:274
+#: src/app/LiveSource.cpp:282
 msgid "force fallback"
 msgstr ""
 
-#: src/app/LiveSource.cpp:274
+#: src/app/LiveSource.cpp:282
 msgid "release override"
 msgstr ""
 
-#: src/app/LiveSource.cpp:276
+#: src/app/LiveSource.cpp:284
 #, c-format
 msgid " (test mode)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:283
+#: src/app/LiveSource.cpp:291
 msgid ""
 "No playable audio stream (disabled, failed to start, or unsupported build)"
 msgstr ""
 
-#: src/app/LiveSource.cpp:297
+#: src/app/LiveSource.cpp:305
 msgid "Audio capture stopped before recording finished"
 msgstr ""
 
-#: src/app/LiveSource.cpp:317
+#: src/app/LiveSource.cpp:325
 #, c-format
 msgid "Control connected (touch injection available)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:392
+#: src/app/LiveSource.cpp:400
 #, c-format
 msgid ""
 "Live video unavailable; using screenshot polling while retrying video in the "
 "background\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:395
+#: src/app/LiveSource.cpp:403
 #, c-format
 msgid "Failed to switch to screenshots: %s (retry in %llu seconds)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:401
+#: src/app/LiveSource.cpp:409
 #, c-format
 msgid "Live video recovered; switched back to video stream\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:416 src/media/FramePump.cpp:174
+#: src/app/LiveSource.cpp:424 src/media/FramePump.cpp:174
 #, c-format
 msgid "Recording failed: %s. Mirroring continues; the file is incomplete.\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:448
+#: src/app/LiveSource.cpp:456
 msgid "); closing session"
 msgstr ""
 
-#: src/app/LiveSource.cpp:448
+#: src/app/LiveSource.cpp:456
 msgid "Device connection lost ("
 msgstr ""
 
@@ -1690,83 +1708,79 @@ msgstr ""
 msgid "Cannot map the first recording packet from trusted sender reports"
 msgstr ""
 
-#: src/media/Recorder.cpp:349
+#: src/media/Recorder.cpp:350
 msgid "Recording time cannot be represented as nonnegative microseconds"
 msgstr ""
 
-#: src/media/Recorder.cpp:358
+#: src/media/Recorder.cpp:359
 msgid "MP4 recording video duration is not positive or overflows"
 msgstr ""
 
-#: src/media/Recorder.cpp:383
+#: src/media/Recorder.cpp:384
 msgid "Recording clock cannot map a packet within its SR/extrapolation budget"
 msgstr ""
 
-#: src/media/Recorder.cpp:389
+#: src/media/Recorder.cpp:390
 msgid "Recording audio duration is not positive after clock mapping"
 msgstr ""
 
-#: src/media/Recorder.cpp:394
+#: src/media/Recorder.cpp:395
 msgid "MP4 recording video timestamps do not advance after clock mapping"
 msgstr ""
 
-#: src/media/Recorder.cpp:499
+#: src/media/Recorder.cpp:500
 msgid "A selected recording track did not produce a completed packet"
 msgstr ""
 
-#: src/media/Recorder.cpp:504
+#: src/media/Recorder.cpp:505
 msgid "Recording waited too long for approved media or trusted sender reports"
 msgstr ""
 
-#: src/media/Recorder.cpp:508
+#: src/media/Recorder.cpp:509
 msgid "Recording worker could not process its input"
 msgstr ""
 
-#: src/media/Recorder.cpp:521 src/media/RecordingMuxer.cpp:282
-msgid "Unsupported recording container format"
-msgstr ""
-
-#: src/media/Recorder.cpp:525 src/media/RecordingMuxer.cpp:24
+#: src/media/Recorder.cpp:522 src/media/RecordingMuxer.cpp:27
 msgid "Container recording requires libavformat and libavcodec"
 msgstr ""
 
-#: src/media/Recorder.cpp:533
+#: src/media/Recorder.cpp:530
 msgid "Invalid Recorder path or bounded buffering/clock limits"
 msgstr ""
 
-#: src/media/Recorder.cpp:541
+#: src/media/Recorder.cpp:538
 msgid "Cannot create the recording worker"
 msgstr ""
 
-#: src/media/Recorder.cpp:555
+#: src/media/Recorder.cpp:552
 msgid "Recording track selection or session UUID is invalid"
 msgstr ""
 
-#: src/media/Recorder.cpp:567
+#: src/media/Recorder.cpp:564
 msgid "Recording session UUID is invalid"
 msgstr ""
 
-#: src/media/Recorder.cpp:572
+#: src/media/Recorder.cpp:569
 msgid "Recording HEVC AU is incomplete or exceeds the packet budget"
 msgstr ""
 
-#: src/media/Recorder.cpp:576
+#: src/media/Recorder.cpp:573
 msgid "Recording HEVC AU has an invalid or unsupported layer header"
 msgstr ""
 
-#: src/media/Recorder.cpp:580
+#: src/media/Recorder.cpp:577
 msgid "Recording HEVC AU is empty"
 msgstr ""
 
-#: src/media/Recorder.cpp:584
+#: src/media/Recorder.cpp:581
 msgid "Recording HEVC parameters exceed the configuration budget"
 msgstr ""
 
-#: src/media/Recorder.cpp:611
+#: src/media/Recorder.cpp:608
 msgid "Recording AAC-ELD track, session or payload is invalid"
 msgstr ""
 
-#: src/media/Recorder.cpp:627
+#: src/media/Recorder.cpp:624
 msgid "Recording sender-report track or session is invalid"
 msgstr ""
 
@@ -1798,150 +1812,166 @@ msgstr ""
 msgid "Recording clock anchor limit reached"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:42 src/media/RecordingVideoConfig.cpp:107
+#: src/media/RecordingMuxer.cpp:45 src/media/RecordingVideoConfig.cpp:107
 msgid "libavcodec has no software HEVC decoder"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:47
+#: src/media/RecordingMuxer.cpp:50
 msgid "Cannot allocate the HEVC recording context"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:57
+#: src/media/RecordingMuxer.cpp:60
 msgid "Cannot allocate HEVC recording extradata"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:71
+#: src/media/RecordingMuxer.cpp:74
 msgid "Cannot open the HEVC recording configuration: "
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:76
+#: src/media/RecordingMuxer.cpp:79
 msgid "Cannot export HEVC recording parameters: "
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:105
+#: src/media/RecordingMuxer.cpp:108
 msgid "Cannot allocate AAC-ELD recording extradata"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:150
+#: src/media/RecordingMuxer.cpp:153
 msgid "The recording file has already been closed"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:153
+#: src/media/RecordingMuxer.cpp:156
 msgid "This recording has no audio track"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:155
+#: src/media/RecordingMuxer.cpp:158
 msgid "Recording access unit is empty or exceeds the 16 MiB packet budget"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:160
+#: src/media/RecordingMuxer.cpp:163
 msgid "HEVC recording requires an Annex-B access unit"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:162
+#: src/media/RecordingMuxer.cpp:165
 msgid "This HEVC configuration requires equal recording PTS and DTS"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:165
+#: src/media/RecordingMuxer.cpp:168
 msgid "MP4 recording requires a known positive HEVC access unit duration"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:172
+#: src/media/RecordingMuxer.cpp:175
 msgid "Recording timestamps or duration are invalid or overflow"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:175
+#: src/media/RecordingMuxer.cpp:178
 msgid "Matroska recording requires a nonnegative common origin for both tracks"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:179
+#: src/media/RecordingMuxer.cpp:182
 msgid "Cannot allocate a recording packet: "
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:196
+#: src/media/RecordingMuxer.cpp:199
 msgid "Recording timestamps cannot be represented in the container time base"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:200
+#: src/media/RecordingMuxer.cpp:203
 msgid ""
 "Recording DTS must increase within each track and its container time base"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:210
+#: src/media/RecordingMuxer.cpp:213
 msgid "Recording sample duration or DTS interval exceeds the MP4 range"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:215
+#: src/media/RecordingMuxer.cpp:218
 msgid "Cannot write a recording packet: "
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:216
+#: src/media/RecordingMuxer.cpp:219
 msgid "Cannot write the recording file"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:228
+#: src/media/RecordingMuxer.cpp:231
 msgid "Cannot finish the recording container: "
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:229
+#: src/media/RecordingMuxer.cpp:232
 msgid "Cannot finish the recording file"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:233
+#: src/media/RecordingMuxer.cpp:236
 msgid "Cannot flush the recording file"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:235
+#: src/media/RecordingMuxer.cpp:238
 msgid "Cannot close the recording file: "
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:275
+#: src/media/RecordingMuxer.cpp:273 src/media/RecordingMuxer.cpp:313
+msgid "Unsupported recording container format"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:277
+msgid "Recording video orientation must be 0, 90, 180 or 270 degrees clockwise"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:290
+msgid "Matroska recording orientation requires FFmpeg 6.1 or newer"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:306
 msgid "Recording requires a nonempty local file path without NUL bytes"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:287
+#: src/media/RecordingMuxer.cpp:318
 msgid ""
 "AAC-ELD recording supports only 48 kHz stereo with 480 or 512 samples per "
 "packet"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:293
+#: src/media/RecordingMuxer.cpp:324
 msgid "Recording HEVC with frame reordering is not supported"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:294
+#: src/media/RecordingMuxer.cpp:325
 msgid "Cannot validate the HEVC recording configuration: "
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:302
+#: src/media/RecordingMuxer.cpp:333
 msgid "Cannot allocate the recording container: "
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:315
+#: src/media/RecordingMuxer.cpp:346
 msgid "Cannot allocate the HEVC recording track"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:328
+#: src/media/RecordingMuxer.cpp:369
+msgid "Cannot allocate recording video orientation metadata"
+msgstr ""
+
+#: src/media/RecordingMuxer.cpp:377
 msgid "Cannot allocate the AAC-ELD recording track"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:339
+#: src/media/RecordingMuxer.cpp:388
 msgid "Cannot allocate the recording packet"
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:346
+#: src/media/RecordingMuxer.cpp:395
 msgid "Cannot restrict recording output to local files: "
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:352
+#: src/media/RecordingMuxer.cpp:401
 msgid "Cannot open the recording file: "
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:358
+#: src/media/RecordingMuxer.cpp:407
 msgid "Cannot write the recording header: "
 msgstr ""
 
-#: src/media/RecordingMuxer.cpp:362
+#: src/media/RecordingMuxer.cpp:411
 msgid "Cannot write the recording header"
 msgstr ""
 

@@ -40,7 +40,8 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
                        const std::string &record_path, bool hw_decode, bool watch_display,
                        bool want_audio, int audio_buffer_ms, const std::string &video_source,
                        const std::string &test_degrade, std::string &err, uint16_t wifi_port,
-                       bool audio_dup, const std::function<bool()> &should_cancel) {
+                       bool audio_dup, const std::function<bool()> &should_cancel,
+                       int record_orientation) {
     const auto cancelled = [&] {
         if (!should_cancel || !should_cancel()) {
             return false;
@@ -59,6 +60,12 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     }
     if (container_recording && !scrctl::media::RecordingMuxer::available()) {
         err = SCRCTL_TR("Container recording is unavailable in this build (libavformat required)");
+        return false;
+    }
+    if (container_recording && !scrctl::media::RecordingMuxer::validate_video_orientation(
+            *container_format, record_orientation, err)) return false;
+    if (!container_recording && !record_path.empty() && record_orientation != 0) {
+        err = SCRCTL_TR("Recording rotation requires MP4 or MKV; use --display-orientation to rotate only the display");
         return false;
     }
     // 连接设备前校验降级时刻表。非法参数应明确失败，避免测试实际未启用。
@@ -140,6 +147,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             scrctl::media::Recorder::Options ro;
             ro.path = record_path;
             ro.format = *container_format;
+            ro.video_orientation = record_orientation;
             ro.include_audio = want_audio;
             recorder_ = scrctl::media::Recorder::start(ro, err);
             if (recorder_ == nullptr) return false;

@@ -32,7 +32,7 @@ int main() {
                 o) == ParseResult::Run,
           "aliases, equals syntax, negative position and two-value verify");
     check(o.serial == "device" && o.title == "a=b" && o.scale_given && o.scale == .5 &&
-              o.win_x == -30 && o.orientation == 270 && o.crop_set && o.crop_w == 100 &&
+              o.win_x == -30 && o.orientation == 270 && o.record_orientation == 270 && o.crop_set && o.crop_w == 100 &&
               o.crop_y == 4 && o.bg[0] == 171 && o.bg[2] == 255 && o.verify_at == 12 &&
               o.verify_path == "frame.png" && o.no_audio,
           "parsed values preserved");
@@ -40,8 +40,40 @@ int main() {
     check(parse({"scrctl"}, defaults) == ParseResult::Run && !defaults.win_x &&
               !defaults.win_y && defaults.scale == 1 && !defaults.scale_given &&
               defaults.audio_buffer_ms == 50 && !defaults.audio_dup &&
-              defaults.shortcut_mods == (KMOD_LALT | KMOD_LGUI),
+              defaults.shortcut_mods == (KMOD_LALT | KMOD_LGUI) &&
+              defaults.orientation == -1 && defaults.record_orientation == 0,
           "default options");
+    Options orientation_overrides;
+    check(parse({"scrctl", "--record-orientation=270", "--orientation=90",
+                 "--display-orientation=180"}, orientation_overrides) == ParseResult::Run &&
+              orientation_overrides.orientation == 180 && orientation_overrides.record_orientation == 90,
+          "later combined and display-only options overwrite only their selected fields");
+    Options reverse_orientation;
+    check(parse({"scrctl", "--display-orientation=180", "--orientation=90",
+                 "--record-orientation=270"}, reverse_orientation) == ParseResult::Run &&
+              reverse_orientation.orientation == 90 && reverse_orientation.record_orientation == 270,
+          "record-only override leaves the combined display orientation intact");
+    Options repeated_orientation;
+    check(parse({"scrctl", "--orientation=90", "--orientation=180", "--display-orientation=0"},
+                repeated_orientation) == ParseResult::Run && repeated_orientation.orientation == 0 &&
+              repeated_orientation.record_orientation == 180,
+          "repeated direction options follow command-line order");
+    Options legacy_auto;
+    check(parse({"scrctl", "--record-orientation=270", "--orientation=auto"}, legacy_auto) ==
+              ParseResult::Run && legacy_auto.orientation == -1 && legacy_auto.record_orientation == 270,
+          "legacy auto changes only display and preserves an explicit recording orientation");
+    Options raw_display;
+    check(parse({"scrctl", "-r", "capture.hevc", "--display-orientation=90"}, raw_display) ==
+              ParseResult::Run && raw_display.orientation == 90 && raw_display.record_orientation == 0,
+          "raw HEVC can still use display-only rotation");
+    Options invalid_raw_rotation;
+    check(parse({"scrctl", "-r", "capture.hevc", "--orientation=90"}, invalid_raw_rotation) ==
+              ParseResult::Error,
+          "raw recording cannot silently discard a requested rotation");
+    Options raw_reset;
+    check(parse({"scrctl", "-r", "capture.hevc", "--orientation=90", "--record-orientation=0"},
+                raw_reset) == ParseResult::Run && raw_reset.orientation == 90 && raw_reset.record_orientation == 0,
+          "a final explicit zero recording orientation permits raw HEVC with a rotated window");
     Options duplicate_audio;
     check(parse({"scrctl", "--audio-dup"}, duplicate_audio) == ParseResult::Run &&
               duplicate_audio.audio_dup && !duplicate_audio.no_audio,
@@ -270,6 +302,9 @@ int main() {
         {"--no-audio", "--audio-dup"},
         {"--audio-dup", "--no-audio"},
         {"--orientation", "45"},
+        {"--record-orientation", "auto"},
+        {"--record-orientation", "45"},
+        {"--display-orientation", "flip0"},
         {"--discovery-timeout", "10"},
         {"--pair", "--wifi", "10.0.0.1"},
         {"--pair", "--list-devices"},

@@ -11,8 +11,11 @@
 #ifdef SCRCTL_HAVE_LIBAVFORMAT
 extern "C" {
 #include <libavcodec/avcodec.h>
+#include <libavcodec/version.h>
 #include <libavformat/avformat.h>
+#include <libavformat/version.h>
 #include <libavutil/channel_layout.h>
+#include <libavutil/display.h>
 #include <libavutil/error.h>
 #include <libavutil/mem.h>
 #include <libavutil/version.h>
@@ -264,8 +267,36 @@ bool RecordingMuxer::available() noexcept {
 #endif
 }
 
-std::unique_ptr<RecordingMuxer> RecordingMuxer::open(const Options& options, std::string& error) {
+bool RecordingMuxer::validate_video_orientation(Format format, int degrees, std::string& error) {
     error.clear();
+    if (format != Format::Mp4 && format != Format::Matroska) {
+        error = SCRCTL_TR("Unsupported recording container format");
+        return false;
+    }
+    if (degrees != 0 && degrees != 90 && degrees != 180 && degrees != 270) {
+        error = SCRCTL_TR("Recording video orientation must be 0, 90, 180 or 270 degrees clockwise");
+        return false;
+    }
+    if (degrees == 0) return true;
+#ifndef SCRCTL_HAVE_LIBAVFORMAT
+    error = SCRCTL_TR(unavailable);
+    return false;
+#else
+    // FFmpeg 6.1 是已核对支持普通画面 ProjectionPoseRoll 的版本下限。
+    // 5.x/6.0 的 MKV muxer 会忽略 display matrix，不能让方向静默失效。
+#if LIBAVFORMAT_VERSION_INT < AV_VERSION_INT(60, 16, 100) || \
+    LIBAVCODEC_VERSION_INT < AV_VERSION_INT(60, 30, 100)
+    if (format == Format::Matroska) {
+        error = SCRCTL_TR("Matroska recording orientation requires FFmpeg 6.1 or newer");
+        return false;
+    }
+#endif
+    return true;
+#endif
+}
+
+std::unique_ptr<RecordingMuxer> RecordingMuxer::open(const Options& options, std::string& error) {
+    if (!validate_video_orientation(options.format, options.video_orientation, error)) return nullptr;
 #ifndef SCRCTL_HAVE_LIBAVFORMAT
     (void)options;
     error = SCRCTL_TR(unavailable);
@@ -322,6 +353,24 @@ std::unique_ptr<RecordingMuxer> RecordingMuxer::open(const Options& options, std
     impl.video->codecpar->codec_tag = options.format == Format::Mp4 ? MKTAG('h', 'v', 'c', '1') : 0;
     impl.video->time_base = AVRational{1, 1000000};
     impl.video->avg_frame_rate = impl.video->r_frame_rate = AVRational{0, 1};
+    if (options.video_orientation != 0) {
+        // codec 参数复制完成后、写 header 前设置，以免后续参数复制覆盖矩阵。
+        // set 接受顺时针角度；get/ffprobe 的角度按逆时针报告，符号相反。
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(60, 30, 100)
+        const auto* side_data = av_packet_side_data_new(&impl.video->codecpar->coded_side_data,
+            &impl.video->codecpar->nb_coded_side_data, AV_PKT_DATA_DISPLAYMATRIX,
+            9 * sizeof(int32_t), 0);
+        uint8_t* matrix = side_data == nullptr ? nullptr : side_data->data;
+#else
+        uint8_t* matrix = av_stream_new_side_data(impl.video, AV_PKT_DATA_DISPLAYMATRIX,
+                                                 9 * sizeof(int32_t));
+#endif
+        if (matrix == nullptr) {
+            impl.fail(SCRCTL_TR("Cannot allocate recording video orientation metadata"), error);
+            return nullptr;
+        }
+        av_display_rotation_set(reinterpret_cast<int32_t*>(matrix), options.video_orientation);
+    }
     if (options.audio.has_value()) {
         impl.audio = avformat_new_stream(impl.context, nullptr);
         if (impl.audio == nullptr) {

@@ -121,7 +121,8 @@ int run(int argc, char **argv) {
         std::string err;
         if (!made->start(o.serial, o.wifi, o.record, o.hw_decode, !o.no_window,
                          want_audio, o.audio_buffer_ms, o.video_source, o.test_degrade, err,
-                         o.wifi_port, o.audio_dup, [&runtime] { return runtime.stop_requested(); })) {
+                         o.wifi_port, o.audio_dup, [&runtime] { return runtime.stop_requested(); },
+                         o.record_orientation)) {
             if (exit_requested()) {
                 return finish_source(made.get(), 0);
             }

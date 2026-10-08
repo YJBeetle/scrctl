@@ -17,7 +17,7 @@ struct Options {
     uint16_t wifi_port = 49152; ///< 手动 --wifi 地址的 RemotePairing 端口；发现模式采用 SRV 端口。
     bool pair = false; ///< --pair：经 USB 建立或验证远程配对记录，随后退出。
     bool repair_pairing = false; ///< --repair-pairing：允许更新被拒绝或缺少设备身份的旧记录。
-    std::string record; ///< .mkv 为容器录制，其余路径兼容裸 HEVC；不改变显示裁剪和旋转
+    std::string record; ///< .mp4 / .mkv 为容器录制，其余路径兼容裸 HEVC
     bool list_devices = false;
     int discovery_timeout_ms = 3000; ///< --list-devices 的无线扫描时限；0 只列 usbmux
     bool no_control = false; ///< --no-control：关闭输入控制
@@ -60,6 +60,8 @@ struct Options {
     /// --display-orientation：画面顺时针转这么多度。-1 = auto，跟着设备报的
     /// `currentOrientation` 走。
     int orientation = -1;
+    /// 容器的视频方向元数据，顺时针 0/90/180/270；不改设备编码或本机显示。
+    int record_orientation = 0;
     int win_w = 0, win_h = 0; ///< --window-width/height：显式窗口尺寸，0=自动
     /// 使用平台硬件解码后端。当前 VideoToolbox 适配的 2 字节 NAL 长度
     /// 限制为 65535 字节，默认软件解码可处理更大的关键帧。
