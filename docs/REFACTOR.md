@@ -1256,3 +1256,16 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
   与 scrcpy 的剩余差异见 [用法对照](SCRCPY_USAGE.md)。
 
 本机窗口证据：`/private/tmp/scrctl-usage-20261008/native-proof.json`。
+
+## 第八十一轮：HID 参数回归的 sanitizer 时间预算
+
+- 第八十轮提交的 macOS、Ubuntu、Windows ARM64 各 38 项回归通过，Mac 和 Windows
+  安装包检查通过。ASan / UBSan 有 37 项通过，HID 参数回归超过整组 30 秒时限；
+  日志没有断言失败或 sanitizer 错误，不能将这趟 CI 记为全绿。
+- HID 脚本串行启动 141 次真实工具进程。同轮其他工具的启动耗时表明 30 秒预算
+  不足；将这一项的 CTest 总时限改为 90 秒，保留全部用例及单次调用的 3 秒限制。
+  不改程序参数校验或设备连接行为。
+- sanitizer 任务也在成功或失败后上传 CTest 日志，便于检查下一次失败位置。
+- 本机从当前源码重建 Debug + ASan / UBSan 的 HID 工具，141 项离线检查通过，
+  耗时 12.30 秒；实际 CTest 配置的总时限为 90 秒。该结果覆盖这一项，不代替
+  修订后完整 CI；证据保存在 `/private/tmp/scrctl-ci-debug-san/Testing/Temporary/`。

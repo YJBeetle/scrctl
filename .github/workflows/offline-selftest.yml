@@ -183,3 +183,11 @@ jobs:
         env:
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: ctest --test-dir build-san --output-on-failure
+
+      - name: 上传 sanitizer 测试日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanitizer-test-logs
+          path: build-san/Testing/Temporary/*.log
+          if-no-files-found: ignore

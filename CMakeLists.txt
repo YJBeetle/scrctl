@@ -250,7 +250,9 @@ if(SCRCTL_BUILD_TESTS)
     if(SCRCTL_BUILD_PROBES)
         add_test(NAME hid_probe_cli COMMAND "${Python3_EXECUTABLE}"
             "${PROJECT_SOURCE_DIR}/tests/hid_probe_cli_test.py" "$<TARGET_FILE:hid_probe>")
-        set_tests_properties(hid_probe_cli PROPERTIES TIMEOUT 30)
+        # 参数和语言回归会串行启动 141 个进程；sanitizer 下的启动开销可超过 30 秒。
+        # 单次调用仍由脚本的 3 秒超时保护，这里给整组检查保留有限的总预算。
+        set_tests_properties(hid_probe_cli PROPERTIES TIMEOUT 90)
         add_test(NAME rr_probe_cli COMMAND "${Python3_EXECUTABLE}"
             "${PROJECT_SOURCE_DIR}/tests/rr_probe_cli_test.py" "$<TARGET_FILE:rr_keepalive_probe>")
         set_tests_properties(rr_probe_cli PROPERTIES TIMEOUT 30)
