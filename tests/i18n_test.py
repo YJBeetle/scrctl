@@ -74,6 +74,11 @@ for language, expected in [('en', 'finite positive'), ('zh-CN', '有限正数')]
     # 语言选择不能把数字解析切成 locale 相关的小数逗号。
     result = run(['--lang', language, '--scale=0.5', '--version'], {'LC_ALL': 'fr_FR.UTF-8'})
     assert result.returncode == 0 and 'scrctl' in result.stdout, result.stderr
+for language, expected in [('en', 'Keep audio playing on the phone'),
+                           ('zh-CN', '转发音频到电脑，同时保留手机播放')]:
+    result = run(['--lang', language, '--help'])
+    assert result.returncode == 0 and '--audio-dup' in result.stdout, result.stderr
+    assert expected in result.stdout, result.stdout
 for args in [['--lang=invalid', '--help'], ['--lang', 'invalid'], ['--lang']]:
     assert run(args).returncode == 2
 # 用户字符串不会被用于选择语言或翻译。

@@ -23,13 +23,19 @@ struct Offer {
     /// avcMediaStreamOptionCallID，本次协商调用的文本追踪号，与 SSRC 和 ClientSessionID 分开。
     std::string call_id;
 
-    /// 选择音频或视频 offer。当前构造器中，音频使用 negotiator mode 6、设置消息 f3；
+    /// 选择音频或视频 offer。音频默认使用 negotiator mode 10、设置消息 f3；
     /// 视频使用 mode 5、设置消息 f5（VideoSettings）。音频设置包含 f1=SSRC、f4=24191，
     /// f4 的具体含义尚未确认。两种 offer 共享媒体参数容器中的默认字段和码率表，
     /// 编码器能力条目位于视频设置中。StreamSession::start() 为每次协商生成 CallID。
     /// 编码形状与音视频并行验证见 [CoreDevice §17、§17.2](../../docs/coredevice.md#17-音频腿的编码鉴定实测iphone144--ios-270--usb)。
     /// 共享 ClientSessionID 不是当前实现维持视频会话的前提；每条流仍需发送自己的 RTCP。
     bool is_audio = false;
+    /// 音频路由：false 使用 NearbySystemAudio（mode 10），将播放转到电脑；
+    /// true 使用旧 CoreDeviceSystemAudio（mode 6），保留手机播放。
+    /// 只改变音频 offer 的外层 mode，媒体参数、主机身份及视频 offer 均不受影响。
+    /// mode 10 已在 iPhone14,4 / iOS 27 验证；切路由会暂时暂停播放器，需手动继续。
+    /// 不据此假定旧系统或 Windows 已验证。raw_offer 重放不受该选项影响。
+    bool audio_dup = false;
 
     /// 申报的主机型号、系统版本和构建号。默认值来自已有成功会话使用的身份组合，
     /// 不表示当前进程会读取本机信息或确认这些值与实际主机一致。

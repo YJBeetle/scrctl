@@ -20,6 +20,9 @@ namespace scrctl::media {
 class AudioPump {
 public:
     struct Options {
+        /// false 将手机音频转到电脑（negotiator mode 10）；true 保留手机播放（mode 6）。
+        /// 起流和会话重建使用相同策略，不自动切换为双端播放。
+        bool audio_dup = false;
         /// 音频会话的 avcMediaStreamOptionClientSessionID（16 字节 XPC UUID）。
         /// 为空时由设备生成。
         ///
@@ -61,6 +64,12 @@ public:
 
     /// 根据选项计算水位及容量，不访问设备，可在 tests/media_test 离线验证。
     [[nodiscard]] static Waterline compute_waterline(const Options &options);
+
+    /// 检查设备确实接受了所请求的路由，拒绝缺失、类型非法或归一成另一模式的回复。
+    /// mode 10 的 AudioStreamMode 应为 10；旧 negotiator mode 6 的回复应为 8。
+    /// 不访问设备，供起流失败路径的离线验证使用。
+    [[nodiscard]] static bool validate_stream_mode(const StreamSession::Started &started,
+                                                   const Options &options, std::string &err);
 
     struct ReadTrim {
         std::size_t frames = 0;
@@ -162,6 +171,7 @@ private:
     };
 
     bool start_session(std::string &err);
+    void reject_negotiation(std::string &err);
     void publish_live();
     void clear_live();
     void loop();
@@ -171,6 +181,9 @@ private:
     remote::Device &device_;
     Options options_;
     bool verbose_ = false;
+    /// 设备已接受请求但答复无效（含路由不符）时终止音频；与传输失败分开，
+    /// 避免每秒重做会打断播放器的路由切换。只在启动线程或后续工作线程内访问。
+    bool negotiation_invalid_ = false;
     std::unique_ptr<AudioDecoder> decoder_;
     /// 仅工作线程访问库状态；消费线程不做重采样。指针在工作线程启动前
     /// 设置，之后保持不变，read() 仅用它判断是否采用软补偿的积压策略。

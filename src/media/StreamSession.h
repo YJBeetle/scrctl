@@ -47,7 +47,8 @@ public:
         /// 已测更改未获得稳定的编码提升；各位的含义尚未完整确认，见
         /// [CoreDevice §11](../../docs/coredevice.md#11-屏幕视频流的线上细节实测iphone-144--ios-270--usb)。
         uint64_t client_supported_features = 140;
-        /// 选择音频请求：type 为 audio，省略显示器选择 options，本地生成的 offer 使用 mode 6。
+        /// 选择音频请求：type 为 audio，省略显示器选择 options，本地 offer 默认 mode 10；
+        /// offer.audio_dup 使用旧 mode 6，保留手机播放。
         /// 视频请求的 type 为 video，本地生成的 offer 使用 mode 5；raw_offer 自身的 mode 不改写。
         bool audio = false;
         /// avcMediaStreamOptionClientSessionID 的 16 字节 XPC UUID 数据；为空时为本次请求生成。
@@ -90,11 +91,23 @@ public:
         std::vector<uint8_t> session_uuid;
     };
 
+    /// 区分请求失败与设备已接受请求但答复无法使用，供调用方决定是否重试。
+    enum class StartStatus {
+        /// 尚未得到 feature 成功确认。传输超时不能证明设备没有执行请求。
+        NotConfirmed,
+        /// feature 已成功，但答复解析失败；设备流可能已开始，需要停止续期并等租期释放。
+        AcceptedInvalidAnswer,
+        /// 请求成功，答复已解析为可用的 StreamSession 参数。
+        Started,
+    };
+
     /// 在已建立隧道并取得 RSD 目录的 Device 上起流，先绑定接收 UDP 端口。
     /// 失败时返回 nullptr，并通过 err 提供传输、CoreDevice 或回复解析错误。
     /// 设备已接受请求后若回复解析失败，只释放本地 UDP 套接字，不发送 stopAll，
     /// 避免停止并存的音视频会话。本次设备流可能已开始，依赖请求中的 RTCP 租期释放；
     /// 产品请求为 20 秒，低层 Request 默认 3600 秒，此处不更改租期。
+    /// start_status 非空时写入明确结果，答复解析失败为 AcceptedInvalidAnswer；
+    /// 调用方无需匹配 err 文本，也不应把这种结果当作普通连接失败反复重试。
     ///
     /// 默认通过 Device::feature 新建服务连接，调用结束后释放。on_conn 非空时借用
     /// 调用方持有的连接，不取得所有权，也不在调用结束后关闭它。
@@ -105,7 +118,8 @@ public:
                                                 const Request &request, std::string &err,
                                                 bool verbose = false,
                                                 scrctl::remote::ServiceConnection *on_conn =
-                                                    nullptr);
+                                                    nullptr,
+                                                StartStatus *start_status = nullptr);
 
     /// 析构释放本地套接字，不自动调用 stopAll；设备会话的停止或续期由上层负责。
     ~StreamSession();
@@ -167,8 +181,11 @@ private:
 /// 仅收紧显式 connection.sender.port：接受 1..65535 的 Int64、UInt64 或完整十进制
 /// 字符串，拒绝其它类型、符号、空白、尾随内容及溢出。字段缺失时仍保留 0。
 /// 失败返回 nullopt 并说明端口约束，成功清空 err。
+/// 本解析器处理 feature 成功后的答复，start_status 非空时失败写 AcceptedInvalidAnswer、
+/// 成功写 Started。它不判断或执行 feature RPC。
 [[nodiscard]] std::optional<StreamSession::Started> parse_start_answer(
-    scrctl::xpc::Value answer, std::vector<uint8_t> session_uuid, std::string &err);
+    scrctl::xpc::Value answer, std::vector<uint8_t> session_uuid, std::string &err,
+    StreamSession::StartStatus *start_status = nullptr);
 
 /// 组装 startmediastream 的 CoreDevice.input，不进行网络 I/O，供起流和离线协议校验使用。
 /// options 的参数按 int / string / uuid 标签包装；会话与事件通道 UUID 使用 16 字节

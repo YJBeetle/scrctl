@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 18:14+0800\n"
+"POT-Creation-Date: 2026-10-08 19:21+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -26,106 +26,115 @@ msgstr ""
 
 #: src/app/Application.cpp:73
 #, c-format
-msgid "Failed to start video: %s\n"
-msgstr ""
-
-#: src/app/Application.cpp:79
-#, c-format
-msgid "Device is in a call. End the call and try again.\n"
-msgstr ""
-
-#: src/app/Application.cpp:93
-#, c-format
-msgid "File playback cannot launch a device app; ignoring --start-app\n"
-msgstr ""
-
-#: src/app/Application.cpp:116
-#, c-format
 msgid "SDL initialization failed: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:125
-#, c-format
-msgid "Failed to open audio output: %s (receiving and decoding continue)\n"
-msgstr ""
-
-#: src/app/Application.cpp:128
-#, c-format
-msgid "Local audio playback disabled; receiving and decoding continue\n"
-msgstr ""
-
-#: src/app/Application.cpp:149 tools/rr_keepalive_probe.cpp:770
-msgid "failed"
-msgstr ""
-
-#: src/app/Application.cpp:149
-msgid "injected"
-msgstr ""
-
-#: src/app/Application.cpp:158
-#, c-format
-msgid "--test-button %s: pressed\n"
-msgstr ""
-
-#: src/app/Application.cpp:160
-#, c-format
-msgid "--test-button %s failed: %s\n"
-msgstr ""
-
-#: src/app/Application.cpp:169
-#, c-format
-msgid "--test-type %s: injected\n"
-msgstr ""
-
-#: src/app/Application.cpp:171
-#, c-format
-msgid "--test-type failed: %s\n"
-msgstr ""
-
-#: src/app/Application.cpp:199
-#, c-format
-msgid "Input injection failed (further attempts disabled): %s\n"
-msgstr ""
-
-#: src/app/Application.cpp:210
-#, c-format
-msgid "Reached --time-limit %d seconds\n"
-msgstr ""
-
-#: src/app/Application.cpp:214
+#: src/app/Application.cpp:80 src/app/Application.cpp:254
 #, c-format
 msgid "Received exit signal; closing device session\n"
 msgstr ""
 
-#: src/app/Application.cpp:224
+#: src/app/Application.cpp:93
+#, c-format
+msgid ""
+"Failed to initialize audio output: %s (audio disabled; video continues)\n"
+msgstr ""
+
+#: src/app/Application.cpp:112
+#, c-format
+msgid "Failed to start video: %s\n"
+msgstr ""
+
+#: src/app/Application.cpp:118
+#, c-format
+msgid "Device is in a call. End the call and try again.\n"
+msgstr ""
+
+#: src/app/Application.cpp:135
+#, c-format
+msgid "File playback cannot launch a device app; ignoring --start-app\n"
+msgstr ""
+
+#: src/app/Application.cpp:153
+#, c-format
+msgid ""
+"Failed to open audio output: %s (audio disabled; video continues). The "
+"phone's audio route may remain active until session expiry (about 20 "
+"seconds); resume its player if needed.\n"
+msgstr ""
+
+#: src/app/Application.cpp:159
+#, c-format
+msgid "Local audio playback disabled; receiving and decoding continue\n"
+msgstr ""
+
+#: src/app/Application.cpp:183 tools/rr_keepalive_probe.cpp:770
+msgid "failed"
+msgstr ""
+
+#: src/app/Application.cpp:183
+msgid "injected"
+msgstr ""
+
+#: src/app/Application.cpp:195
+#, c-format
+msgid "--test-button %s: pressed\n"
+msgstr ""
+
+#: src/app/Application.cpp:197
+#, c-format
+msgid "--test-button %s failed: %s\n"
+msgstr ""
+
+#: src/app/Application.cpp:209
+#, c-format
+msgid "--test-type %s: injected\n"
+msgstr ""
+
+#: src/app/Application.cpp:211
+#, c-format
+msgid "--test-type failed: %s\n"
+msgstr ""
+
+#: src/app/Application.cpp:239
+#, c-format
+msgid "Input injection failed (further attempts disabled): %s\n"
+msgstr ""
+
+#: src/app/Application.cpp:250
+#, c-format
+msgid "Reached --time-limit %d seconds\n"
+msgstr ""
+
+#: src/app/Application.cpp:264
 #, c-format
 msgid ""
 "  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
 msgstr ""
 
-#: src/app/Application.cpp:250 src/app/Application.cpp:318
+#: src/app/Application.cpp:290 src/app/Application.cpp:358
 #, c-format
 msgid "Reached --exit-after %d\n"
 msgstr ""
 
-#: src/app/Application.cpp:265
+#: src/app/Application.cpp:305
 #, c-format
 msgid ""
 "Mouse input is unavailable: screenshot orientation or display dimensions are "
 "unknown or inconsistent\n"
 msgstr ""
 
-#: src/app/Application.cpp:297
+#: src/app/Application.cpp:337
 #, c-format
 msgid "Render rotation changed to %d degrees clockwise; window recreated\n"
 msgstr ""
 
-#: src/app/Application.cpp:332
+#: src/app/Application.cpp:372
 #, c-format
 msgid "Window readback was not reached (requested frame %d, rendered %d)\n"
 msgstr ""
 
-#: src/app/Application.cpp:336
+#: src/app/Application.cpp:376
 #, c-format
 msgid "Finished: processed %d frames\n"
 msgstr ""
@@ -155,6 +164,9 @@ msgid ""
 "the device yet.\n"
 "Quit: MOD+Q. Fullscreen: MOD+F or F11. MOD defaults to left Alt or left "
 "Super; change it with --shortcut-mod.\n"
+"Audio is forwarded to the computer by default; --audio-dup keeps phone "
+"playback. Switching routes may pause the phone's player; resume it if "
+"needed.\n"
 "The device chooses encoding dimensions, bitrate and frame rate. Display "
 "rotation and crop leave recordings unchanged; recording writes raw HEVC "
 "Annex-B without a container or audio.\n"
@@ -162,7 +174,7 @@ msgid ""
 "device."
 msgstr ""
 
-#: src/app/Cli.cpp:25 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
+#: src/app/Cli.cpp:27 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
 #: tools/audio_decode_probe.cpp:193 tools/audio_pump_probe.cpp:85
 #: tools/feature_probe.cpp:61 tools/hid_probe.cpp:184
 #: tools/screenshot_probe.cpp:52 tools/stall_probe.cpp:59
@@ -170,233 +182,237 @@ msgstr ""
 msgid "Show help"
 msgstr ""
 
-#: src/app/Cli.cpp:26
+#: src/app/Cli.cpp:28
 msgid "Play an Annex-B HEVC file"
 msgstr ""
 
-#: src/app/Cli.cpp:27 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
+#: src/app/Cli.cpp:29 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
 msgid "Device UDID"
 msgstr ""
 
-#: src/app/Cli.cpp:28
+#: src/app/Cli.cpp:30
 msgid "LAN address, or auto to discover a paired wireless device"
 msgstr ""
 
-#: src/app/Cli.cpp:30
+#: src/app/Cli.cpp:32
 msgid "RemotePairing port for a manual LAN address; default: 49152"
 msgstr ""
 
-#: src/app/Cli.cpp:33
+#: src/app/Cli.cpp:35
 msgid "Create or verify a remote pairing record over USB, then exit"
 msgstr ""
 
-#: src/app/Cli.cpp:36
+#: src/app/Cli.cpp:38
 msgid ""
 "Allow replacing an incomplete or rejected pairing record; requires --pair"
 msgstr ""
 
-#: src/app/Cli.cpp:38
+#: src/app/Cli.cpp:40
 msgid "Record the live stream as Annex-B"
 msgstr ""
 
-#: src/app/Cli.cpp:39
+#: src/app/Cli.cpp:41
 msgid ""
 "Launch bundle ID; ? matches name prefix, + terminates the previous instance"
 msgstr ""
 
-#: src/app/Cli.cpp:40
+#: src/app/Cli.cpp:42
 msgid "Window title"
 msgstr ""
 
-#: src/app/Cli.cpp:41
+#: src/app/Cli.cpp:43
 msgid "SDL render driver, e.g. metal / software"
 msgstr ""
 
-#: src/app/Cli.cpp:43
+#: src/app/Cli.cpp:45
 msgid ""
 "display for live video (default), screenshot for polling; stream is an alias "
 "for display"
 msgstr ""
 
-#: src/app/Cli.cpp:45
+#: src/app/Cli.cpp:47
 msgid "Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"
 msgstr ""
 
-#: src/app/Cli.cpp:52
+#: src/app/Cli.cpp:54
 msgid "Inject home/lock/volup/voldn/mute"
 msgstr ""
 
-#: src/app/Cli.cpp:54
+#: src/app/Cli.cpp:56
 msgid "Inject ASCII text (device text field must have focus)"
 msgstr ""
 
-#: src/app/Cli.cpp:55
+#: src/app/Cli.cpp:57
 msgid "Force alternating video fallback and recovery at T1,T2,... seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:56
+#: src/app/Cli.cpp:58
 msgid "Write device clipboard and exit (supports Unicode)"
 msgstr ""
 
-#: src/app/Cli.cpp:58
+#: src/app/Cli.cpp:60
 msgid "List USB and RemotePairing devices; wireless scan defaults to 3 seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:60
+#: src/app/Cli.cpp:62
 msgid ""
 "Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"
 msgstr ""
 
-#: src/app/Cli.cpp:62
+#: src/app/Cli.cpp:64
 msgid "Disable input control"
 msgstr ""
 
-#: src/app/Cli.cpp:64
+#: src/app/Cli.cpp:66
 msgid "List device apps"
 msgstr ""
 
-#: src/app/Cli.cpp:65
+#: src/app/Cli.cpp:67
 msgid "Show version"
 msgstr ""
 
-#: src/app/Cli.cpp:66
+#: src/app/Cli.cpp:68
 msgid "Desktop fullscreen"
 msgstr ""
 
-#: src/app/Cli.cpp:67
+#: src/app/Cli.cpp:69
 msgid "Keep window on top"
 msgstr ""
 
-#: src/app/Cli.cpp:68
+#: src/app/Cli.cpp:70
 msgid "Borderless window"
 msgstr ""
 
-#: src/app/Cli.cpp:69
+#: src/app/Cli.cpp:71
 msgid "Prevent local screen sleep while running"
 msgstr ""
 
-#: src/app/Cli.cpp:70
+#: src/app/Cli.cpp:72
 msgid "Do not start audio stream"
 msgstr ""
 
-#: src/app/Cli.cpp:71
-msgid "Receive and decode audio without local playback"
-msgstr ""
-
-#: src/app/Cli.cpp:72
-msgid "Run without a window"
-msgstr ""
-
-#: src/app/Cli.cpp:73
-msgid "Use platform hardware decoder; default: software"
-msgstr ""
-
 #: src/app/Cli.cpp:74
-msgid "Print input coordinates"
-msgstr ""
-
-#: src/app/Cli.cpp:75
-msgid "Add tunnel diagnostics to --stats"
+msgid "Keep audio playing on the phone while forwarding it to the computer"
 msgstr ""
 
 #: src/app/Cli.cpp:76
-msgid "Print statistics every second"
+msgid "Receive and decode audio without local playback"
 msgstr ""
 
 #: src/app/Cli.cpp:77
-msgid "Read device clipboard; with --copy, read back after writing"
+msgid "Run without a window"
+msgstr ""
+
+#: src/app/Cli.cpp:78
+msgid "Use platform hardware decoder; default: software"
+msgstr ""
+
+#: src/app/Cli.cpp:79
+msgid "Print input coordinates"
 msgstr ""
 
 #: src/app/Cli.cpp:80
-msgid "Window horizontal position; integer or auto (default)"
+msgid "Add tunnel diagnostics to --stats"
+msgstr ""
+
+#: src/app/Cli.cpp:81
+msgid "Print statistics every second"
 msgstr ""
 
 #: src/app/Cli.cpp:82
+msgid "Read device clipboard; with --copy, read back after writing"
+msgstr ""
+
+#: src/app/Cli.cpp:85
+msgid "Window horizontal position; integer or auto (default)"
+msgstr ""
+
+#: src/app/Cli.cpp:87
 msgid "Window vertical position; integer or auto (default)"
 msgstr ""
 
-#: src/app/Cli.cpp:84
+#: src/app/Cli.cpp:89
 msgid ""
 "Shortcut modifiers, separated by commas: lctrl, rctrl, lalt, ralt, lsuper, "
 "rsuper; default: lalt,lsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:85
+#: src/app/Cli.cpp:90
 msgid "Window width; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:86
+#: src/app/Cli.cpp:91
 msgid "Window height; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:87
+#: src/app/Cli.cpp:92
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:89
+#: src/app/Cli.cpp:94
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr ""
 
-#: src/app/Cli.cpp:91
+#: src/app/Cli.cpp:96
 msgid "Exit after N frames; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:93
+#: src/app/Cli.cpp:98
 msgid "Finite positive scale; default: fit screen"
 msgstr ""
 
-#: src/app/Cli.cpp:97
+#: src/app/Cli.cpp:102
 msgid ""
 "Clockwise display rotation; auto follows the device; recording is unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:100
+#: src/app/Cli.cpp:105
 msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:102
+#: src/app/Cli.cpp:107
 msgid "Background color: RGB or RRGGBB, with optional #"
 msgstr ""
 
-#: src/app/Cli.cpp:103
+#: src/app/Cli.cpp:108
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr ""
 
-#: src/app/Cli.cpp:113
+#: src/app/Cli.cpp:118
 msgid "Use a manual LAN address; auto uses discovered SRV ports"
 msgstr ""
 
-#: src/app/Cli.cpp:124
+#: src/app/Cli.cpp:129
 msgid "Expected an integer or auto"
 msgstr ""
 
-#: src/app/Cli.cpp:144
+#: src/app/Cli.cpp:149
 msgid ""
 "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:155
+#: src/app/Cli.cpp:160
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr ""
 
-#: src/app/Cli.cpp:162
+#: src/app/Cli.cpp:167
 msgid "Requires a finite positive number"
 msgstr ""
 
-#: src/app/Cli.cpp:179
+#: src/app/Cli.cpp:184
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr ""
 
-#: src/app/Cli.cpp:188
+#: src/app/Cli.cpp:193
 msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
 msgstr ""
 
-#: src/app/Cli.cpp:202
+#: src/app/Cli.cpp:207
 msgid "Frame number must be a positive integer"
 msgstr ""
 
-#: src/app/Cli.cpp:207
+#: src/app/Cli.cpp:212
 msgid "Requires a window; incompatible with --no-window"
 msgstr ""
 
@@ -582,147 +598,166 @@ msgstr ""
 msgid "Source ended"
 msgstr ""
 
-#: src/app/LiveSource.cpp:21
+#: src/app/LiveSource.cpp:23
+msgid "Device startup cancelled"
+msgstr ""
+
+#: src/app/LiveSource.cpp:32
 msgid "Invalid --test-degrade: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:66
+#: src/app/LiveSource.cpp:80
 #, c-format
 msgid "Failed to query display dimensions: %s (using model crop table)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:67
+#: src/app/LiveSource.cpp:81
 msgid "Update contains no usable dimensions"
 msgstr ""
 
-#: src/app/LiveSource.cpp:77
+#: src/app/LiveSource.cpp:94
 #, c-format
 msgid ""
 "Failed to subscribe to display changes: %s (automatic rotation unavailable)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:99
+#: src/app/LiveSource.cpp:122
 #, c-format
 msgid "Media stream unavailable: %s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:102
+#: src/app/LiveSource.cpp:125
 #, c-format
 msgid ""
 "Using screenshot polling; refresh rate depends on capture time. Input "
 "control remains available\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:106
+#: src/app/LiveSource.cpp:129
 msgid "Failed to start screenshot polling: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:118
+#: src/app/LiveSource.cpp:144
 msgid "No first screenshot within 5 seconds"
 msgstr ""
 
-#: src/app/LiveSource.cpp:125
+#: src/app/LiveSource.cpp:151
 msgid "No first decoded frame within 5 seconds"
 msgstr ""
 
-#: src/app/LiveSource.cpp:129
+#: src/app/LiveSource.cpp:158
 #, c-format
 msgid "Screenshot mirroring started: %s / iOS %s, %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:133
+#: src/app/LiveSource.cpp:162
 #, c-format
 msgid ""
 "Video stream started: %s / iOS %s, receive port=%u PT=%u, first frame %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:142
+#: src/app/LiveSource.cpp:171
 #, c-format
 msgid ""
 "Display geometry: visible area %dx%d (displayId=%llu %s), UI rotation %d "
 "degrees clockwise, stream %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:149
+#: src/app/LiveSource.cpp:178
 #, c-format
 msgid "Screenshot mode cannot record Annex-B; ignoring --record\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:151
+#: src/app/LiveSource.cpp:180
 #, c-format
 msgid "Recording to %s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:158
+#: src/app/LiveSource.cpp:187
 #, c-format
 msgid "Screenshot mode does not start audio\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:169
+#: src/app/LiveSource.cpp:198
+#, c-format
+msgid ""
+"Forwarding audio to the computer. Switching routes may pause the phone's "
+"player; resume playback on the phone if needed.\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:207
 #, c-format
 msgid "Failed to start audio: %s (video continues)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:174
+#: src/app/LiveSource.cpp:212
 #, c-format
 msgid "Audio stream started: receive port=%u PT=%u backend=%s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:182
+#: src/app/LiveSource.cpp:215
+msgid "Audio routing: phone and computer (--audio-dup)"
+msgstr ""
+
+#: src/app/LiveSource.cpp:216
+msgid "Audio routing: computer; phone playback is suppressed"
+msgstr ""
+
+#: src/app/LiveSource.cpp:223
 #, c-format
 msgid "--test-degrade: from now,"
 msgstr ""
 
-#: src/app/LiveSource.cpp:184
+#: src/app/LiveSource.cpp:225
 #, c-format
 msgid " at %.1f seconds: %s"
 msgstr ""
 
-#: src/app/LiveSource.cpp:185
+#: src/app/LiveSource.cpp:226
 msgid "force fallback"
 msgstr ""
 
-#: src/app/LiveSource.cpp:185
+#: src/app/LiveSource.cpp:226
 msgid "release override"
 msgstr ""
 
-#: src/app/LiveSource.cpp:187
+#: src/app/LiveSource.cpp:228
 #, c-format
 msgid " (test mode)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:194
+#: src/app/LiveSource.cpp:235
 msgid ""
 "No playable audio stream (disabled, failed to start, or unsupported build)"
 msgstr ""
 
-#: src/app/LiveSource.cpp:215
+#: src/app/LiveSource.cpp:266
 #, c-format
 msgid "Control connected (touch injection available)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:289
+#: src/app/LiveSource.cpp:340
 #, c-format
 msgid ""
 "Live video unavailable; using screenshot polling while retrying video in the "
 "background\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:292
+#: src/app/LiveSource.cpp:343
 #, c-format
 msgid "Failed to switch to screenshots: %s (retry in %llu seconds)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:298
+#: src/app/LiveSource.cpp:349
 #, c-format
 msgid "Live video recovered; switched back to video stream\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:337
+#: src/app/LiveSource.cpp:388
 msgid "); closing session"
 msgstr ""
 
-#: src/app/LiveSource.cpp:337
+#: src/app/LiveSource.cpp:388
 msgid "Device connection lost ("
 msgstr ""
 
@@ -944,6 +979,10 @@ msgstr ""
 #: src/app/Presenter.cpp:339
 #, c-format
 msgid "Failed to change fullscreen mode: %s\n"
+msgstr ""
+
+#: src/app/SdlRuntime.cpp:47
+msgid "SDL runtime must be initialized before preparing audio output"
 msgstr ""
 
 #: src/app/SourcePick.h:68
@@ -1212,40 +1251,68 @@ msgstr ""
 msgid "Clamped --audio-buffer %d to %d ms and adjusted buffer capacity\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:144
+#: src/media/AudioPump.cpp:130
+msgid "Audio routing was not confirmed: answer has no valid AudioStreamMode"
+msgstr ""
+
+#: src/media/AudioPump.cpp:136
+msgid ""
+"Phone-and-computer audio routing was not accepted (--audio-dup requires "
+"AudioStreamMode 8)"
+msgstr ""
+
+#: src/media/AudioPump.cpp:137
+msgid ""
+"Computer-only audio routing was not accepted (requires AudioStreamMode 10); "
+"not falling back to --audio-dup"
+msgstr ""
+
+#: src/media/AudioPump.cpp:148
+#, c-format
+msgid ""
+". Audio keepalive has stopped; wait for session expiry (about %u seconds), "
+"then resume the phone's player if needed"
+msgstr ""
+
+#: src/media/AudioPump.cpp:188
 #, c-format
 msgid ""
 "Audio answer missing SSRC (RemoteSSRC=%u LocalSSRC=%u); session renewal may "
 "fail\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:260
+#: src/media/AudioPump.cpp:304
 #, c-format
 msgid "Audio clock compensation failed: %s; continuing playback\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:357
+#: src/media/AudioPump.cpp:401
 #, c-format
 msgid "Audio session recreated, receive port=%u\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:365
+#: src/media/AudioPump.cpp:410
+#, c-format
+msgid "Audio negotiation failed during recovery; disabling audio: %s\n"
+msgstr ""
+
+#: src/media/AudioPump.cpp:414
 #, c-format
 msgid "Failed to recreate audio session: %s (retry in 1 second)\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:392
+#: src/media/AudioPump.cpp:441
 #, c-format
 msgid "Failed to send audio RTCP keepalive: %s\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:405
+#: src/media/AudioPump.cpp:454
 #, c-format
 msgid ""
 "Audio: device session ended (%llu ms without audio); recreating session\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:452
+#: src/media/AudioPump.cpp:501
 #, c-format
 msgid "Audio decode failed (%zu-byte payload): %s\n"
 msgstr ""
@@ -1483,26 +1550,26 @@ msgstr ""
 msgid "Screenshot response missing image data"
 msgstr ""
 
-#: src/media/StreamSession.cpp:148
+#: src/media/StreamSession.cpp:152
 msgid ""
 "Invalid startmediastream answer: connection.sender.port must be an integer "
 "or decimal string in 1..65535"
 msgstr ""
 
-#: src/media/StreamSession.cpp:178 src/remote/App.cpp:218
+#: src/media/StreamSession.cpp:189 src/remote/App.cpp:218
 #: src/transport/TcpConnect.cpp:27
 msgid ": "
 msgstr ""
 
-#: src/media/StreamSession.cpp:178
+#: src/media/StreamSession.cpp:189
 msgid "Failed to bind UDP port "
 msgstr ""
 
-#: src/media/StreamSession.cpp:211
+#: src/media/StreamSession.cpp:222
 msgid "startmediastream failed on the retained connection (transport failed)"
 msgstr ""
 
-#: src/media/StreamSession.cpp:289
+#: src/media/StreamSession.cpp:301
 msgid "getmediastreamserverstatus response missing sessions array"
 msgstr ""
 

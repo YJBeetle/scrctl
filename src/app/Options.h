@@ -66,6 +66,8 @@ struct Options {
     bool hw_decode = false;
     /// --no-audio 禁止建立音频会话和解码音频。
     bool no_audio = false;
+    /// --audio-dup 保留手机播放。默认将音频转到电脑；切换路由可能暂停播放器。
+    bool audio_dup = false;
     /// 窗口与运行控制选项。
     bool always_on_top = false; ///< --always-on-top
     bool borderless = false;    ///< --window-borderless

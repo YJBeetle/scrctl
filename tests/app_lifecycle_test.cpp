@@ -1,4 +1,5 @@
 #include "app/Application.h"
+#include "app/LiveSource.h"
 #include "app/SdlRuntime.h"
 #include "decode/Decoder.h"
 
@@ -48,6 +49,13 @@ int main() {
         std::raise(SIGTERM);
         check(runtime.stop_requested() && caller_signal == 0,
               "signal requests orderly exit while runtime is active");
+        scrctl::app::LiveSource source;
+        std::string err;
+        check(!source.start("must-not-connect", "must-not-resolve", "", false, false,
+                            true, 200, "stream", "", err, 49152, false,
+                            [&runtime] { return runtime.stop_requested(); }) &&
+                  !err.empty() && !source.has_audio(),
+              "an exit signal cancels actual startup before device connection or audio routing");
     }
     check(SDL_WasInit(0) == 0, "SDL shuts down after signal");
     std::raise(SIGINT);
@@ -59,6 +67,28 @@ int main() {
         check(runtime.initialize(SDL_INIT_TIMER) && !runtime.stop_requested(),
               "next runtime does not inherit previous exit request");
     }
+    SDL_setenv("SDL_AUDIODRIVER", "scrctl-invalid-audio-driver", 1);
+    {
+        scrctl::app::SdlRuntime runtime;
+        std::string err;
+        check(!runtime.prepare_audio(true, true, err) && !err.empty(),
+              "audio preparation without the owning SDL runtime fails safely");
+        check(runtime.initialize(SDL_INIT_TIMER), "initialize runtime before audio gating");
+        check(!runtime.prepare_audio(false, true, err) && err.empty() &&
+                  SDL_WasInit(SDL_INIT_AUDIO) == 0,
+              "no-audio does not initialize the failing audio backend");
+        check(runtime.prepare_audio(true, false, err) && err.empty() &&
+                  SDL_WasInit(SDL_INIT_AUDIO) == 0,
+              "explicit no-audio-playback may capture without an audio output backend");
+        check(!runtime.prepare_audio(true, true, err) && !err.empty() &&
+                  SDL_WasInit(SDL_INIT_AUDIO) == 0 && SDL_WasInit(SDL_INIT_TIMER) != 0,
+              "audio backend failure disables the audio request while preserving other SDL subsystems");
+        SDL_setenv("SDL_AUDIODRIVER", "dummy", 1);
+        check(runtime.prepare_audio(true, true, err) && err.empty() &&
+                  SDL_WasInit(SDL_INIT_AUDIO) != 0,
+              "a usable backend allows audio streaming before the device route is changed");
+    }
+    check(SDL_WasInit(0) == 0, "audio preparation and failures are cleaned by the runtime");
 
     const auto path =
         std::filesystem::temp_directory_path() /

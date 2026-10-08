@@ -105,7 +105,11 @@ xpc::Value build_start_request(const std::string &receiver_ip, uint16_t receiver
 }
 
 std::optional<StreamSession::Started> parse_start_answer(
-    xpc::Value answer, std::vector<uint8_t> session_uuid, std::string &err) {
+    xpc::Value answer, std::vector<uint8_t> session_uuid, std::string &err,
+    StreamSession::StartStatus *start_status) {
+    if (start_status != nullptr) {
+        *start_status = StreamSession::StartStatus::AcceptedInvalidAnswer;
+    }
     StreamSession::Started started;
     started.answer = std::move(answer);
     started.session_uuid = std::move(session_uuid);
@@ -154,13 +158,20 @@ std::optional<StreamSession::Started> parse_start_answer(
         }
     }
     err.clear();
+    if (start_status != nullptr) {
+        *start_status = StreamSession::StartStatus::Started;
+    }
     return started;
 }
 
 std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
                                                    const Request &request, std::string &err,
                                                    bool verbose,
-                                                   remote::ServiceConnection *on_conn) {
+                                                   remote::ServiceConnection *on_conn,
+                                                   StartStatus *start_status) {
+    if (start_status != nullptr) {
+        *start_status = StartStatus::NotConfirmed;
+    }
     const auto info = device.rsd().service("com.apple.coredevice.displayservice");
     if (!info) {
         // 错误中同时列出实际 RSD 目录，便于区分 DDI 状态与设备/系统服务差异。
@@ -222,7 +233,8 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
     // 从实际请求的类型包装中读取 ClientSessionID，保证记录的是本次发送的 UUID，
     // 包括调用方提供共享标识与本地新生成标识两种情况。
     auto started = parse_start_answer(std::move(output),
-        input.at("options").at("avcMediaStreamOptionClientSessionID").at("uuid").data, err);
+        input.at("options").at("avcMediaStreamOptionClientSessionID").at("uuid").data, err,
+        start_status);
     if (!started) {
         // RPC 已成功，设备可能已起流。只释放本次局部 socket，不调用会停止其它
         // 会话的 stopAll，也不关闭借用的 on_conn；设备端仍按请求租期处理空闲流。

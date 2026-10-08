@@ -12,7 +12,10 @@
 | 选择设备 | `-s / --serial`，标识为 Apple 设备 UDID |
 | 列出设备 | `--list-devices` 合并 USB 与 mDNS 发现；无线默认扫描 3 秒 |
 | 禁止窗口控制 | `-n / --no-control` |
-| 关闭音频会话 | `--no-audio` |
+| 不采集音频，保持手机原有路由与播放状态 | `--no-audio` |
+| 音频转到电脑、手机停止发声 | 默认行为 |
+| 保留手机播放并转发音频到电脑 | `--audio-dup` |
+| 只关闭电脑音频播放 | `--no-audio-playback`，仍采集音频并使用所选路由 |
 | 启动时全屏 | `-f / --fullscreen` |
 | 运行中切换全屏 | `MOD+F` 或无修饰 `F11` |
 | 退出窗口 | `MOD+Q` 或关闭按钮；终端可以按 Ctrl+C |
@@ -48,7 +51,7 @@
 | Wi-Fi | `--list-devices` 用 mDNS 枚举；`--pair` 经 USB 创建/验证记录，`--wifi auto -s <UDID>` 自动选择无线候选；手动地址可用 `--wifi-port` 指定端口。scrctl 承担配对与连接，Android 的对应入口由 ADB 提供 |
 | 编码控制 | 当前 Apple 服务决定尺寸、码率、FPS 和编码器，未提供相应覆盖参数 |
 | 视频解码 | 默认软件解码；VideoToolbox 适配存在 NAL 长度限制，见 README |
-| 音频路由 | scrcpy 默认把设备输出送到电脑并停止设备播放，`--audio-dup` 可双端发声；scrctl 当前双端发声，尚未验证 CoreDevice 的独立扬声器控制，手机音量调零也可能同时消掉捕获声音 |
+| 音频路由 | 默认转到电脑，`--audio-dup` 保留手机播放，语义与 scrcpy 对齐；切路由可能暂时暂停手机播放器，需要手动继续。默认路由失败时音频禁用、视频继续，不自动改为双端播放 |
 
 scrcpy 的 `--orientation` 可以同时改变显示和录制；它的 crop 作用于采集，录制可以
 包含 MP4 / MKV 容器及音频。scrctl 的原始码流录制尚不能承担这些含义，所以帮助中
@@ -56,7 +59,24 @@ scrcpy 的 `--orientation` 可以同时改变显示和录制；它的 crop 作�
 [视频方向](https://github.com/Genymobile/scrcpy/blob/v5.0/doc/video.md#orientation)、
 [录制](https://github.com/Genymobile/scrcpy/blob/v5.0/doc/recording.md)。
 
-音频路由区别见 [scrcpy 音频说明](https://github.com/Genymobile/scrcpy/blob/master/doc/audio.md#source)。
+音频路由参照 [scrcpy 音频说明](https://github.com/Genymobile/scrcpy/blob/master/doc/audio.md#source)。
+scrctl 的默认路由已在 macOS、iPhone14,4 / iOS 27 的 USB 与 Wi-Fi 音乐播放中验证：
+电脑发声、手机无声，退出后手动继续可恢复手机播放。Windows、Linux 与旧系统
+的该路由尚未验收。程序不调整手机音量，也不自动按播放键。
+本轮 QQ 音乐测试观察到默认路由激活时暂停一次，需要在手机上手动继续。
+
+`--no-audio` 与 scrcpy 一致，跳过音频采集和路由请求，保持手机原有的播放与
+输出状态；它不会自动恢复已经暂停的播放器。`--no-audio-playback` 仅关闭电脑
+音频输出，仍采集并使用默认电脑路由（手机仍无声），或使用 `--audio-dup`
+保留手机播放。只需要手机发声时可组合 `--audio-dup --no-audio-playback`。
+`--audio-dup` 与 `--no-audio` 冲突，会在连接前报错。
+
+本机播放后端初始化失败时不请求手机音频；声卡打开失败或设备答复无效（含路由不符）时
+停止音频收包及续期，保留视频。已切换的设备路由可能需等待音频会话到期
+（当前租期 20 秒），播放器仍可能需手动继续；具体回收时刻未在所有设备上验证。
+恢复时的无效协商答复不会进入反复切换路由的重试。
+启动期间收到 Ctrl+C 时，程序在步骤之间检查退出请求，不再继续起流、切换
+音频路由或执行设备输入。已经开始的连接和 RPC 仍可能等待各自的协议超时。
 
 ## 后续对齐顺序
 

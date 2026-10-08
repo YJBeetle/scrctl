@@ -14,7 +14,18 @@ LiveSource::~LiveSource() = default;
 bool LiveSource::start(const std::string &serial, const std::string &wifi,
                        const std::string &record_path, bool hw_decode, bool watch_display,
                        bool want_audio, int audio_buffer_ms, const std::string &video_source,
-                       const std::string &test_degrade, std::string &err, uint16_t wifi_port) {
+                       const std::string &test_degrade, std::string &err, uint16_t wifi_port,
+                       bool audio_dup, const std::function<bool()> &should_cancel) {
+    const auto cancelled = [&] {
+        if (!should_cancel || !should_cancel()) {
+            return false;
+        }
+        err = SCRCTL_TR("Device startup cancelled");
+        return true;
+    };
+    if (cancelled()) {
+        return false;
+    }
     // 连接设备前校验降级时刻表。非法参数应明确失败，避免测试实际未启用。
     if (!test_degrade.empty() &&
         !scrctl::app::parse_degrade_marks(test_degrade, degrade_marks_, err)) {
@@ -23,6 +34,9 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     }
     auto dev = open_device(serial, wifi, err, wifi_port);
     if (!dev) {
+        return false;
+    }
+    if (cancelled()) {
         return false;
     }
     device_ = std::make_unique<scrctl::remote::Device>(std::move(*dev));
@@ -68,6 +82,9 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
         }
     }
 
+    if (cancelled()) {
+        return false;
+    }
     // 初次查询只确定启动时的朝向；后续变化由常驻显示订阅推送。
     // 订阅失败仍可镜像，视频保留初次查询结果；截图输入必须有持续的朝向来源。
     if (watch_display) {
@@ -78,6 +95,9 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
         }
     }
 
+    if (cancelled()) {
+        return false;
+    }
     // --video-source=screenshot 强制使用截图轮询，不尝试建立媒体流。
     const bool force_screenshot = video_source == "screenshot";
     if (!force_screenshot) {
@@ -86,6 +106,9 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             // 创建媒体泵时建立统计时间基线，首次速率使用真实经过的时间。
             stats_.video_started(SDL_GetTicks64());
         }
+    }
+    if (cancelled()) {
+        return false;
     }
     if (pump_ == nullptr) {
         // 设备因系统版本拒绝媒体流（9021 / requires iOS）时自动改用截图。
@@ -111,6 +134,9 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     if (pump_ == nullptr && screenshot_.source == nullptr) {
         return false;
     }
+    if (cancelled()) {
+        return false;
+    }
     scrctl::Frame first;
     if (screenshot_.source != nullptr) {
         uint64_t s = 0;
@@ -123,6 +149,9 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
         // 不能直接用它覆盖面板轴上的尺寸与原始方向；取帧时分别发布这两种几何。
     } else if (!pump_->latest(first, 5000)) {
         err = SCRCTL_TR("No first decoded frame within 5 seconds");
+        return false;
+    }
+    if (cancelled()) {
         return false;
     }
     if (screenshot_.source != nullptr) {
@@ -163,7 +192,16 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
         } else {
             scrctl::media::AudioPump::Options ao;
             ao.target_backlog_ms = audio_buffer_ms;
+            ao.audio_dup = audio_dup;
+            if (!audio_dup) {
+                std::printf(SCRCTL_TR(
+                    "Forwarding audio to the computer. Switching routes may pause the phone's "
+                    "player; resume playback on the phone if needed.\n"));
+            }
             std::string aerr;
+            if (cancelled()) {
+                return false;
+            }
             audio_ = scrctl::media::AudioPump::start(*device_, ao, aerr);
             if (audio_ == nullptr) {
                 std::fprintf(stderr, SCRCTL_TR("Failed to start audio: %s (video continues)\n"), aerr.c_str());
@@ -173,6 +211,9 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
                 stats_.audio_started(SDL_GetTicks64());
                 std::printf(SCRCTL_TR("Audio stream started: receive port=%u PT=%u backend=%s\n"), audio_->receiver_port(),
                             audio_->payload_type(), audio_->backend_name().c_str());
+                std::printf("%s\n", audio_dup
+                    ? SCRCTL_TR("Audio routing: phone and computer (--audio-dup)")
+                    : SCRCTL_TR("Audio routing: computer; phone playback is suppressed"));
             }
         }
     }
@@ -194,7 +235,17 @@ bool LiveSource::start_playback(std::string &err) {
         err = SCRCTL_TR("No playable audio stream (disabled, failed to start, or unsupported build)");
         return false;
     }
-    return audio_out_.open(*audio_, err);
+    if (!audio_out_.open(*audio_, err)) {
+        abandon_audio();
+        return false;
+    }
+    return true;
+}
+
+void LiveSource::abandon_audio() {
+    // 先关闭回调，确保它不再持有随后销毁的 AudioPump。
+    audio_out_.close();
+    audio_.reset();
 }
 
 bool LiveSource::control(double x, double y, bool down, std::string &err) {

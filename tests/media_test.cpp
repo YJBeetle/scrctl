@@ -163,6 +163,7 @@ std::string as_text(const std::vector<uint8_t> &b) {
 void check_start_answer() {
     using namespace scrctl::xpc;
     using scrctl::media::parse_start_answer;
+    using StartStatus = scrctl::media::StreamSession::StartStatus;
     const std::vector<uint8_t> uuid {
         0x00, 0xff, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc,
         0xde, 0xf0, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab};
@@ -205,8 +206,10 @@ void check_start_answer() {
         const auto answer = answer_with_port(port.value);
         const auto wire = encode(answer);
         std::string err = "previous error";
-        const auto parsed = parse_start_answer(answer, uuid, err);
-        check(parsed && parsed->sender_port == port.expected && err.empty(),
+        StartStatus status = StartStatus::AcceptedInvalidAnswer;
+        const auto parsed = parse_start_answer(answer, uuid, err, &status);
+        check(parsed && parsed->sender_port == port.expected && err.empty() &&
+                  status == StartStatus::Started,
               std::string("合法端口被接受并清空旧错误：") + port.description);
         check(parsed && parsed->payload_type == 101 && parsed->local_ssrc == 0xff112233 &&
                   parsed->remote_ssrc == 0x44556677,
@@ -218,11 +221,13 @@ void check_start_answer() {
 
     const auto reject = [&](Value port, const std::string &description) {
         std::string err = "previous error";
-        const auto parsed = parse_start_answer(answer_with_port(std::move(port)), uuid, err);
+        StartStatus status = StartStatus::Started;
+        const auto parsed = parse_start_answer(answer_with_port(std::move(port)), uuid, err, &status);
         check(!parsed && err != "previous error" &&
+                  status == StartStatus::AcceptedInvalidAnswer &&
                   err.find("connection.sender.port") != std::string::npos &&
                   err.find("1..65535") != std::string::npos,
-              "非法端口返回字段诊断：" + description);
+              "非法端口区分已接受但答复无效，并返回字段诊断：" + description);
     };
     for (const int64_t port : {std::numeric_limits<int64_t>::min(), int64_t(-1), int64_t(0),
                               int64_t(65536), std::numeric_limits<int64_t>::max()}) {
@@ -275,6 +280,68 @@ void check_start_answer() {
     }
 }
 
+void check_audio_routing() {
+    using namespace scrctl::xpc;
+    using scrctl::media::AudioPump;
+    using scrctl::media::StreamSession;
+    const auto answer_with_mode = [](Value mode) {
+        StreamSession::Started started;
+        auto config = make_dict();
+        dict_set(config, "AudioStreamMode", std::move(mode));
+        auto connection = make_dict();
+        dict_set(connection, "streamConfig", std::move(config));
+        started.answer = make_dict();
+        dict_set(started.answer, "connection", std::move(connection));
+        return started;
+    };
+    AudioPump::Options options;
+    check(!options.audio_dup, "音频默认请求只在电脑播放");
+    for (const auto &mode : {make_int64(10), make_uint64(10)}) {
+        const auto started = answer_with_mode(mode);
+        const auto before = encode(started.answer);
+        std::string err = "previous error";
+        check(AudioPump::validate_stream_mode(started, options, err) && err.empty() &&
+                  encode(started.answer) == before,
+              "接受 mode 10 的整数回复，清空旧错误并保留原始答复");
+    }
+    for (const auto &mode : {make_int64(8), make_uint64(8)}) {
+        std::string err;
+        check(!AudioPump::validate_stream_mode(answer_with_mode(mode), options, err) &&
+                  err.find("AudioStreamMode 10") != std::string::npos && !options.audio_dup,
+              "拒绝设备将默认路由归一成 mode 8，不静默切回双端播放");
+        options.audio_dup = true;
+        check(AudioPump::validate_stream_mode(answer_with_mode(mode), options, err) && err.empty(),
+              "显式双端播放接受旧 mode 6 对应的 AudioStreamMode 8");
+        check(!AudioPump::validate_stream_mode(answer_with_mode(make_int64(10)), options, err) &&
+                  err.find("--audio-dup") != std::string::npos && options.audio_dup,
+              "双端播放也必须获得所请求的路由，不静默压掉手机播放");
+        options.audio_dup = false;
+    }
+    const std::vector<Value> invalid_modes {
+        make_null(), make_bool(true), make_bool(false), make_string("10"), make_double(10),
+        make_int64(-10), make_uint64(std::numeric_limits<uint64_t>::max()),
+        make_int64(0), make_int64(6), make_array(), make_dict()};
+    for (const auto &mode : invalid_modes) {
+        std::string err = "previous error";
+        check(!AudioPump::validate_stream_mode(answer_with_mode(mode), options, err) &&
+                  !err.empty() && err != "previous error" && !options.audio_dup,
+              "非法或不匹配的路由回复必须失败并提供诊断");
+    }
+    for (int depth = 0; depth < 3; ++depth) {
+        StreamSession::Started started;
+        started.answer = make_dict();
+        if (depth > 0) {
+            auto connection = make_dict();
+            if (depth > 1) dict_set(connection, "streamConfig", make_dict());
+            dict_set(started.answer, "connection", std::move(connection));
+        }
+        std::string err;
+        check(!AudioPump::validate_stream_mode(started, options, err) &&
+                  err.find("AudioStreamMode") != std::string::npos,
+              "缺少路由答复不能被当作电脑静音手机的成功确认");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -283,6 +350,9 @@ int main() {
 
     std::printf("== 起流回复端口及会话参数 ==\n");
     check_start_answer();
+
+    std::printf("== 音频路由答复校验 ==\n");
+    check_audio_routing();
 
     std::printf("== AudioToolbox 状态诊断 ==\n");
     {
@@ -444,7 +514,7 @@ int main() {
     if (audio_plist) {
         const auto *mode = audio_plist->find("avcMediaStreamNegotiatorMode");
         const auto *media = audio_plist->find("avcMediaStreamNegotiatorMediaBlob");
-        check(mode && mode->as_int_or() == 6, "音频使用 mode 6");
+        check(mode && mode->as_int_or() == 10, "音频默认使用 mode 10，将播放转到电脑");
         std::vector<uint8_t> audio_payload;
         std::vector<Field> audio_top;
         std::string audio_err;
@@ -453,6 +523,22 @@ int main() {
         check(decoded, "XML data 保留可解压的音频参数");
         check(decoded && only(audio_top, 3) && !only(audio_top, 5),
               "音频参数使用 f3，不含视频 f5");
+        Offer duplicate = audio_offer;
+        duplicate.audio_dup = true;
+        const auto duplicate_blob = build_negotiator_offer(duplicate);
+        auto duplicate_plist = scrctl::plist::parse(as_text(duplicate_blob));
+        check(duplicate_plist &&
+                  duplicate_plist->find("avcMediaStreamNegotiatorMode")->as_int_or() == 6,
+              "显式双端播放使用旧 negotiator mode 6");
+        if (duplicate_plist) {
+            duplicate_plist->set("avcMediaStreamNegotiatorMode", scrctl::plist::Value::Int(10));
+            check(scrctl::plist::write(*duplicate_plist) == as_text(audio_blob),
+                  "路由选项只改变 mode，音频参数、CallID 与主机身份字节均不变");
+        }
+        Offer video_duplicate = offer;
+        video_duplicate.audio_dup = true;
+        check(build_negotiator_offer(video_duplicate) == blob,
+              "音频路由选项完全不影响视频 offer");
     }
 
     // 音频水位与环容量。这一段是纯算术，不需要设备——而它要防的正是"没设备就测不到"

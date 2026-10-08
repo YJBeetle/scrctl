@@ -9,6 +9,7 @@
 #include "media/StreamSession.h"
 #include "remote/Device.h"
 #include "remote/DisplayInfo.h"
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -25,15 +26,22 @@ class LiveSource final : public FrameSource {
     /// watch_display 订阅原始显示方向，用于自动旋转及已转正截图的触摸映射；
     /// 显式渲染角也需要这份原始方向。无窗口时可关闭，避免独占连接
     /// 及订阅线程。want_audio 决定是否建立独立音频会话；失败时视频继续。
-    /// audio_buffer_ms 是音频预缓冲与目标水位对应的时长。
+    /// audio_buffer_ms 是音频预缓冲与目标水位对应的时长。audio_dup 保留手机
+    /// 播放；默认请求转到电脑，不支持该路由时禁用音频，不自动切回双端播放。
+    /// should_cancel 在连接和启动步骤之间检查退出请求，阻止后续起流与路由切换；
+    /// 已在进行的底层连接或 RPC 仍可能等待自身超时后才返回。
     bool start(const std::string &serial, const std::string &wifi, const std::string &record_path,
                bool hw_decode, bool watch_display, bool want_audio, int audio_buffer_ms,
                const std::string &video_source, const std::string &test_degrade, std::string &err,
-               uint16_t wifi_port = 49152);
+               uint16_t wifi_port = 49152, bool audio_dup = false,
+               const std::function<bool()> &should_cancel = {});
 
-    /// 打开音频输出。start() 在 SDL 初始化前建立画面源；播放必须等 SDL 音频
-    /// 子系统初始化完成，因此单独提供该入口。
+    /// 打开音频输出。应用先准备 SDL 音频子系统，再调用 start() 建立媒体会话；
+    /// 取得 AudioPump 后才可打开声卡。输出失败会停止本地音频接收和续期。
     bool start_playback(std::string &err);
+    /// 停止声卡、音频收包和 RR 续期，不调用会中断视频的 stopAll。
+    /// 设备侧需等待音频会话到期（当前租期 20 秒）；播放器可能需要手动继续。
+    void abandon_audio();
 
     /// 返回最近一次交付帧的面板尺寸、原始方向及截图标志。
     FrameGeometry frame_geometry() const override { return delivered_geometry_; }

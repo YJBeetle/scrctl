@@ -39,9 +39,17 @@ int main() {
     Options defaults;
     check(parse({"scrctl"}, defaults) == ParseResult::Run && !defaults.win_x &&
               !defaults.win_y && defaults.scale == 1 && !defaults.scale_given &&
-              defaults.audio_buffer_ms == 50 &&
+              defaults.audio_buffer_ms == 50 && !defaults.audio_dup &&
               defaults.shortcut_mods == (KMOD_LALT | KMOD_LGUI),
           "default options");
+    Options duplicate_audio;
+    check(parse({"scrctl", "--audio-dup"}, duplicate_audio) == ParseResult::Run &&
+              duplicate_audio.audio_dup && !duplicate_audio.no_audio,
+          "audio duplication is an explicit option; default routing remains computer-only");
+    Options capture_audio;
+    check(parse({"scrctl", "--audio-dup", "--no-audio-playback"}, capture_audio) ==
+              ParseResult::Run && capture_audio.audio_dup && capture_audio.no_audio_playback,
+          "phone playback can be retained while disabling computer playback");
     Options pair;
     check(parse({"scrctl", "--pair", "-s", "device"}, pair) == ParseResult::Run &&
               pair.pair && !pair.repair_pairing && pair.serial == "device",
@@ -239,6 +247,8 @@ int main() {
         {"--shortcut-mod", "none"},
         {"--video-source", "unknown"},
         {"--video-source", "camera"},
+        {"--no-audio", "--audio-dup"},
+        {"--audio-dup", "--no-audio"},
         {"--orientation", "45"},
         {"--discovery-timeout", "10"},
         {"--pair", "--wifi", "10.0.0.1"},

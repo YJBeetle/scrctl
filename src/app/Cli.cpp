@@ -19,6 +19,8 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         "Left mouse button maps to touch. Window keyboard input is not forwarded to the device yet.\n"
         "Quit: MOD+Q. Fullscreen: MOD+F or F11. MOD defaults to left Alt or left Super; "
         "change it with --shortcut-mod.\n"
+        "Audio is forwarded to the computer by default; --audio-dup keeps phone playback. "
+        "Switching routes may pause the phone's player; resume it if needed.\n"
         "The device chooses encoding dimensions, bitrate and frame rate. Display rotation and crop "
         "leave recordings unchanged; recording writes raw HEVC Annex-B without a container or audio.\n"
         "Wireless use requires pairing. --help / --version do not connect to the device."));
@@ -68,6 +70,9 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.add_flag("--window-borderless", o.borderless, SCRCTL_N_("Borderless window"));
     app.add_flag("--disable-screensaver", o.disable_screensaver, SCRCTL_N_("Prevent local screen sleep while running"));
     app.add_flag("--no-audio", o.no_audio, SCRCTL_N_("Do not start audio stream"));
+    app.add_flag("--audio-dup", o.audio_dup,
+                 SCRCTL_N_("Keep audio playing on the phone while forwarding it to the computer"))
+        ->excludes("--no-audio");
     app.add_flag("--no-audio-playback", o.no_audio_playback, SCRCTL_N_("Receive and decode audio without local playback"));
     app.add_flag("--no-window", o.no_window, SCRCTL_N_("Run without a window"));
     app.add_flag("--hw-decode", o.hw_decode, SCRCTL_N_("Use platform hardware decoder; default: software"));

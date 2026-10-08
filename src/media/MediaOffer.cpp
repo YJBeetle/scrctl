@@ -210,7 +210,8 @@ std::vector<uint8_t> build_negotiator_offer(const Offer &offer) {
     auto d = plist::Value::Dict();
     d.set("avcMediaStreamNegotiatorMediaBlob",
           plist::Value::OfData(util::zlib_store(media_blob(offer))));
-    d.set("avcMediaStreamNegotiatorMode", plist::Value::Int(offer.is_audio ? 6 : 5));
+    d.set("avcMediaStreamNegotiatorMode",
+          plist::Value::Int(offer.is_audio ? (offer.audio_dup ? 6 : 10) : 5));
     d.set("avcMediaStreamOptionCallID", plist::Value::Str(offer.call_id));
     d.set("avcMediaStreamOptionRemoteEndpointInfo",
           plist::Value::OfData(remote_endpoint_info(offer)));

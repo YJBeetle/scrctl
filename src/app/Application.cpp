@@ -61,6 +61,41 @@ int run(int argc, char **argv) {
 
     // 逆序析构：窗口 -> 媒体源（包含声卡）-> SDL。所有提前返回也遵守此顺序。
     SdlRuntime runtime;
+    if (!o.render_driver.empty()) {
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, o.render_driver.c_str());
+    }
+    // 无窗口模式不要求显示设备；禁止屏保仍需要视频子系统。
+    Uint32 sdl_flags = SDL_INIT_TIMER;
+    if (!o.no_window || o.disable_screensaver) {
+        sdl_flags |= SDL_INIT_VIDEO;
+    }
+    if (!runtime.initialize(sdl_flags)) {
+        std::fprintf(stderr, SCRCTL_TR("SDL initialization failed: %s\n"), SDL_GetError());
+        return 1;
+    }
+    const auto exit_requested = [&] {
+        if (!runtime.stop_requested()) {
+            return false;
+        }
+        std::printf(SCRCTL_TR("Received exit signal; closing device session\n"));
+        return true;
+    };
+    if (exit_requested()) {
+        return 0;
+    }
+    // 本机播放后端已不可用时，在音频起流前停住，避免压制手机却没有电脑声音。
+    // --no-audio-playback 是显式采集请求，不需要本机音频后端，仍采用用户所选路由。
+    std::string audio_init_error;
+    const bool want_audio = runtime.prepare_audio(
+        o.path.empty() && !o.no_audio && o.video_source != "screenshot",
+        !o.no_audio_playback, audio_init_error);
+    if (!audio_init_error.empty()) {
+        std::fprintf(stderr, SCRCTL_TR("Failed to initialize audio output: %s (audio disabled; video continues)\n"),
+                     audio_init_error.c_str());
+    }
+    if (exit_requested()) {
+        return 0;
+    }
     std::unique_ptr<FrameSource> source;
     LiveSource *live = nullptr;
     if (!o.path.empty()) {
@@ -69,7 +104,11 @@ int run(int argc, char **argv) {
         auto made = std::make_unique<LiveSource>();
         std::string err;
         if (!made->start(o.serial, o.wifi, o.record, o.hw_decode, !o.no_window,
-                         !o.no_audio, o.audio_buffer_ms, o.video_source, o.test_degrade, err, o.wifi_port)) {
+                         want_audio, o.audio_buffer_ms, o.video_source, o.test_degrade, err,
+                         o.wifi_port, o.audio_dup, [&runtime] { return runtime.stop_requested(); })) {
+            if (exit_requested()) {
+                return 0;
+            }
             std::fprintf(stderr, SCRCTL_TR("Failed to start video: %s\n"), err.c_str());
             // 设备通话期间可能拒绝媒体流，错误码为 9022。曾观察到此时会话列表为空，
             // 截图服务仍可用；提示用户结束通话后重试。
@@ -88,6 +127,9 @@ int run(int argc, char **argv) {
         }
         source = std::move(made);
     }
+    if (exit_requested()) {
+        return 0;
+    }
     if (live == nullptr && !o.start_app.empty()) {
         std::fprintf(stderr,
                      SCRCTL_TR("File playback cannot launch a device app; ignoring --start-app\n"));
@@ -98,34 +140,26 @@ int run(int argc, char **argv) {
             return exit_code;
         }
     }
+    if (exit_requested()) {
+        return 0;
+    }
 
     const bool control_enabled = live != nullptr && !o.no_control;
 
-    if (!o.render_driver.empty()) {
-        // SDL 渲染驱动提示必须在 SDL_CreateRenderer 前设置，否则不生效。
-        SDL_SetHint(SDL_HINT_RENDER_DRIVER, o.render_driver.c_str());
-    }
-    // 仅在需要窗口或禁止屏保时初始化视频子系统。无窗口模式应能在没有显示
-    // 设备的环境下运行；若无条件初始化视频，SDL_Init 失败会阻止这条路径。
-    Uint32 sdl_flags = SDL_INIT_TIMER;
-    if (!o.no_window || o.disable_screensaver) {
-        // SDL_DisableScreenSaver 依赖视频子系统；未初始化时无法关闭屏保。
-        sdl_flags |= SDL_INIT_VIDEO;
-    }
-    if (!runtime.initialize(sdl_flags)) {
-        std::fprintf(stderr, SCRCTL_TR("SDL initialization failed: %s\n"), SDL_GetError());
-        return 1;
-    }
-    // 音频子系统单独初始化，失败后仍可继续镜像。无声卡或音频后端不可用时，
-    // 不应使视频初始化失败。
-    if (live != nullptr && !o.no_audio && !o.no_audio_playback &&
-        SDL_InitSubSystem(SDL_INIT_AUDIO) == 0) {
+    if (live != nullptr && live->has_audio() && !o.no_audio_playback) {
         std::string aerr;
         if (!live->start_playback(aerr)) {
-            std::fprintf(stderr, SCRCTL_TR("Failed to open audio output: %s (receiving and decoding continue)\n"), aerr.c_str());
+            std::fprintf(stderr, SCRCTL_TR(
+                "Failed to open audio output: %s (audio disabled; video continues). The phone's "
+                "audio route may remain active until session expiry (about 20 seconds); resume "
+                "its player if needed.\n"),
+                aerr.c_str());
         }
     } else if (live != nullptr && live->has_audio() && o.no_audio_playback) {
         std::printf(SCRCTL_TR("Local audio playback disabled; receiving and decoding continue\n"));
+    }
+    if (exit_requested()) {
+        return 0;
     }
     if (o.disable_screensaver) {
         SDL_DisableScreenSaver();
@@ -152,6 +186,9 @@ int run(int argc, char **argv) {
 
     // 音量 HUD 显示时间短，另开截图会话可能来不及。此处完成按键注入，
     // 通过当前镜像配合 --verify N 回读画面检查效果。
+    if (exit_requested()) {
+        return 0;
+    }
     if (live != nullptr && !o.test_button.empty()) {
         std::string berr;
         if (live->button(scrctl::hid::button::kUsagePageConsumer, o.test_button_code, berr)) {
@@ -163,6 +200,9 @@ int run(int argc, char **argv) {
         }
     }
 
+    if (exit_requested()) {
+        return 0;
+    }
     if (live != nullptr && !o.test_type.empty()) {
         std::string terr;
         if (live->type_text(o.test_type, 40, terr)) {

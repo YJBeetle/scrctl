@@ -1,4 +1,5 @@
 #include "app/SdlRuntime.h"
+#include "i18n/Translation.h"
 
 #include <atomic>
 
@@ -30,11 +31,27 @@ bool SdlRuntime::initialize(Uint32 flags) {
     attempted_ = true;
     // 使用普通 main，不依赖 SDL 的平台入口包装器。
     SDL_SetMainReady();
-    const bool initialized = SDL_Init(flags) == 0;
+    initialized_ = SDL_Init(flags) == 0;
     // 必须在 SDL 后重新安装，否则退出请求可能被 SDL 吞掉。
     std::signal(SIGINT, on_stop_signal);
     std::signal(SIGTERM, on_stop_signal);
-    return initialized;
+    return initialized_;
+}
+
+bool SdlRuntime::prepare_audio(bool requested, bool playback, std::string &err) {
+    err.clear();
+    if (!requested || !playback) {
+        return requested;
+    }
+    if (!initialized_) {
+        err = SCRCTL_TR("SDL runtime must be initialized before preparing audio output");
+        return false;
+    }
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
+        err = SDL_GetError();
+        return false;
+    }
+    return true;
 }
 
 SdlRuntime::~SdlRuntime() {

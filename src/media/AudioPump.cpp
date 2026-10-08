@@ -118,6 +118,39 @@ std::unique_ptr<AudioPump> AudioPump::start(remote::Device &device, const Option
 
 AudioPump::~AudioPump() { stop(); }
 
+bool AudioPump::validate_stream_mode(const StreamSession::Started &started,
+                                     const Options &options, std::string &err) {
+    const auto *mode = started.answer.at("connection").at("streamConfig").find("AudioStreamMode");
+    uint64_t value = 0;
+    if (mode != nullptr && mode->type == xpc::Type::UInt64) {
+        value = mode->uint64;
+    } else if (mode != nullptr && mode->type == xpc::Type::Int64 && mode->int64 >= 0) {
+        value = static_cast<uint64_t>(mode->int64);
+    } else {
+        err = SCRCTL_TR("Audio routing was not confirmed: answer has no valid AudioStreamMode");
+        return false;
+    }
+    const uint64_t expected = options.audio_dup ? 8 : 10;
+    if (value != expected) {
+        err = options.audio_dup
+            ? SCRCTL_TR("Phone-and-computer audio routing was not accepted (--audio-dup requires AudioStreamMode 8)")
+            : SCRCTL_TR("Computer-only audio routing was not accepted (requires AudioStreamMode 10); not falling back to --audio-dup");
+        return false;
+    }
+    err.clear();
+    return true;
+}
+
+void AudioPump::reject_negotiation(std::string &err) {
+    negotiation_invalid_ = true;
+    char lease_note[384];
+    std::snprintf(lease_note, sizeof(lease_note), SCRCTL_TR(
+        ". Audio keepalive has stopped; wait for session expiry (about %u seconds), "
+        "then resume the phone's player if needed"), options_.lease_seconds);
+    err += lease_note;
+    // 只停音频本地收包和续期，让已接受的设备音频会话到期；stopAll 会中断视频。
+}
+
 bool AudioPump::start_session(std::string &err) {
     // 先确认解码器可用再起流，避免构建缺少后端时占用设备媒体会话。
     if (decoder_ == nullptr) {
@@ -130,13 +163,24 @@ bool AudioPump::start_session(std::string &err) {
 
     StreamSession::Request request;
     request.audio = true;
+    request.offer.audio_dup = options_.audio_dup;
     request.timeout_seconds = options_.lease_seconds;
     request.client_session_uuid = options_.client_session_uuid;
-    auto session = StreamSession::start(device_, request, err, verbose_);
+    StreamSession::StartStatus start_status = StreamSession::StartStatus::NotConfirmed;
+    auto session = StreamSession::start(device_, request, err, verbose_, nullptr, &start_status);
     if (session == nullptr) {
+        if (start_status == StreamSession::StartStatus::AcceptedInvalidAnswer) {
+            reject_negotiation(err);
+        }
         return false;
     }
     const auto &started = session->started();
+    if (!validate_stream_mode(started, options_, err)) {
+        reject_negotiation(err);
+        // 会话已被设备接受，但路由不符。停止本地收包，不发 RR，让音频租期到期；
+        // 不能调用 stopAll，因为视频已在运行。也不能为获得声音而静默改成双端播放。
+        return false;
+    }
     if (started.remote_ssrc == 0 || started.local_ssrc == 0) {
         // 缺少 SSRC 不影响当前收包和解码，但 RR 无法正确指向设备媒体源，
         // 会话可能无法续期。输出协商值以便排查。
@@ -361,6 +405,11 @@ void AudioPump::loop() {
                 lost_carry += seq.lost();
                 seq.reset();
                 continue;
+            }
+            if (negotiation_invalid_) {
+                std::fprintf(stderr, SCRCTL_TR("Audio negotiation failed during recovery; disabling audio: %s\n"),
+                             rerr.c_str());
+                break;
             }
             std::fprintf(stderr, SCRCTL_TR("Failed to recreate audio session: %s (retry in 1 second)\n"), rerr.c_str());
             // 使用可取消的条件变量等待，停止请求无需等待退避期结束。
