@@ -86,10 +86,15 @@ scrctl 是独立产品，也是设备协议的验证项目。MaaFramework 后续
 | 退出 | MOD+Q，或关闭窗口 |
 | 切换全屏 | MOD+F，或不带修饰键的 F11 |
 | 设备触摸 | 鼠标左键点击、拖动 |
+| 设备键盘 | 普通按键按下 / 松开；字母、数字、标点及常用编辑键 |
 
 MOD 默认是左 Alt 或左 Super（Windows 键 / Mac Command），可以通过
-`--shortcut-mod=rctrl` 等配置。普通 Q 和 Esc 不退出；窗口目前尚不转发日常键盘
-输入，`--test-type` 是单独的诊断注入入口。与 scrcpy 的具体差异和后续对齐项见
+`--shortcut-mod=rctrl` 等配置。普通 Q 和 Esc 不退出。窗口转发物理按键，使用手机
+的键盘布局与输入法；不同时注入主机输入法的提交文字。窗口失焦、隐藏、最小化、
+转屏或退出时松开按键和触点。发送失败后停止新输入，并用已有连接尽力松开。
+默认左 Command 属于本地 MOD；需要设备 Command 组合时可用 `--shortcut-mod=lalt`。
+中文等文本的窗口粘贴仍待接入，`--test-type` 仅是 ASCII 诊断入口。
+与 scrcpy 的具体差异和后续对齐项见
 [用法对照](docs/SCRCPY_USAGE.md)。
 
 ## 录制

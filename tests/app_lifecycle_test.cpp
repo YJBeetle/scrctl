@@ -93,6 +93,25 @@ int main() {
     }
     check(SDL_WasInit(0) == 0, "audio preparation and failures are cleaned by the runtime");
 
+    {
+        scrctl::app::LiveSource source;
+        std::string err = "previous error";
+        check(source.keyboard_state({}, err) && err.empty(),
+              "empty keyboard cleanup needs no device session or HID connection");
+        err = "previous error";
+        check(source.type_text("", 0, err) && err.empty(),
+              "empty text needs no device session and leaves keyboard ownership unchanged");
+        check(!source.keyboard_state({scrctl::hid::key::kA}, err) && !err.empty(),
+              "keyboard input without a device session fails safely");
+        const auto first_error = err;
+        err.clear();
+        check(!source.control(0.5, 0.5, true, err) && err == first_error,
+              "touch shares keyboard failure state and preserves its first error");
+        err.clear();
+        check(!source.type_text("", 0, err) && err == first_error,
+              "empty text preserves a latched input failure");
+    }
+
     const auto path =
         std::filesystem::temp_directory_path() /
         ("scrctl-lifecycle-" +

@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-09 05:09+0800\n"
+"POT-Creation-Date: 2026-10-09 05:27+0800\n"
 "PO-Revision-Date: 2026-10-09 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -24,7 +24,7 @@ msgstr "可见区 %ux%u -> %dx%d（设备未报告尺寸，使用机型表）\n"
 msgid "SDL initialization failed: %s\n"
 msgstr "SDL 初始化失败: %s\n"
 
-#: src/app/Application.cpp:81 src/app/Application.cpp:278
+#: src/app/Application.cpp:81 src/app/Application.cpp:285
 #, c-format
 msgid "Received exit signal; closing device session\n"
 msgstr "收到退出信号，正在关闭设备会话\n"
@@ -107,45 +107,45 @@ msgstr "--test-type %s: 已注入\n"
 msgid "--test-type failed: %s\n"
 msgstr "--test-type 失败: %s\n"
 
-#: src/app/Application.cpp:263
+#: src/app/Application.cpp:258
 #, c-format
 msgid "Input injection failed (further attempts disabled): %s\n"
 msgstr "注入输入失败（已停止尝试）: %s\n"
 
-#: src/app/Application.cpp:274
+#: src/app/Application.cpp:281
 #, c-format
 msgid "Reached --time-limit %d seconds\n"
 msgstr "达到 --time-limit %d 秒\n"
 
-#: src/app/Application.cpp:288
+#: src/app/Application.cpp:295
 #, c-format
 msgid ""
 "  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
 msgstr "  渲染：累计 %d 帧，本次 %d 帧 / %.1f fps，全程平均 %.1f fps\n"
 
-#: src/app/Application.cpp:314 src/app/Application.cpp:383
+#: src/app/Application.cpp:321 src/app/Application.cpp:390
 #, c-format
 msgid "Reached --exit-after %d\n"
 msgstr "达到 --exit-after %d\n"
 
-#: src/app/Application.cpp:329
+#: src/app/Application.cpp:336
 #, c-format
 msgid ""
 "Mouse input is unavailable: screenshot orientation or display dimensions are "
 "unknown or inconsistent\n"
 msgstr "截图的朝向或显示尺寸尚未确认，已暂停鼠标输入\n"
 
-#: src/app/Application.cpp:362
+#: src/app/Application.cpp:369
 #, c-format
 msgid "Render rotation changed to %d degrees clockwise; window recreated\n"
 msgstr "图像旋转角改为顺时针 %d°，窗口已重建\n"
 
-#: src/app/Application.cpp:398
+#: src/app/Application.cpp:405
 #, c-format
 msgid "Window readback was not reached (requested frame %d, rendered %d)\n"
 msgstr "未执行窗口回读：要求第 %d 帧，实际显示了 %d 帧\n"
 
-#: src/app/Application.cpp:402
+#: src/app/Application.cpp:409
 #, c-format
 msgid "Finished: processed %d frames\n"
 msgstr "完成：处理 %d 帧\n"
@@ -173,8 +173,8 @@ msgstr "iOS 屏幕镜像与控制"
 #: src/app/Cli.cpp:19
 msgid ""
 "With no arguments, mirror the connected device.\n"
-"Left mouse button maps to touch. Window keyboard input is not forwarded to "
-"the device yet.\n"
+"Left mouse button maps to touch. Ordinary keys use the device's keyboard "
+"layout and input method.\n"
 "Quit: MOD+Q. Fullscreen: MOD+F or F11. MOD defaults to left Alt or left "
 "Super; change it with --shortcut-mod.\n"
 "Audio is forwarded to the computer by default; --audio-dup keeps phone "
@@ -187,16 +187,16 @@ msgid ""
 "Wireless use requires pairing. --help / --version do not connect to the "
 "device."
 msgstr ""
-"不带参数时镜像已连接的设备。\n"
-"鼠标左键对应触摸，窗口中的键盘输入暂不转发到设备。\n"
+"不带参数运行时，镜像已连接的设备。\n"
+"鼠标左键对应触摸；普通按键使用设备的键盘布局和输入法。\n"
 "退出：MOD+Q。全屏：MOD+F 或 F11。MOD 默认是左 Alt 或左 Super，可用 --"
 "shortcut-mod 修改。\n"
-"默认将音频转到电脑；--audio-dup 保留手机播放。切换路由可能暂停手机播放器，需"
-"要时请继续播放。\n"
+"音频默认转到电脑，--audio-dup 保留手机播放。切换路由可能暂停手机播放器，需要"
+"时请继续播放。\n"
 "编码尺寸、码率和帧率由设备决定。显示裁剪和 --display-orientation 不改变录"
 "制；--orientation 同时旋转显示和容器录制。使用 .mp4 或 .mkv 录制 HEVC 和音"
 "频，使用 .hevc 保存裸视频。\n"
-"无线连接需要先配对。--help / --version 不连接设备。"
+"无线连接需要配对。--help / --version 不连接设备。"
 
 #: src/app/Cli.cpp:29 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
 #: tools/audio_decode_probe.cpp:193 tools/audio_pump_probe.cpp:85
@@ -425,7 +425,7 @@ msgstr "背景色：RGB 或 RRGGBB，可带 # 前缀"
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr "第 N 帧回读窗口为 BMP：N FILE（需要窗口）"
 
-#: src/app/Cli.cpp:145 src/app/LiveSource.cpp:58
+#: src/app/Cli.cpp:145 src/app/LiveSource.cpp:60
 msgid ""
 "Container recording requires live video; screenshot polling cannot be "
 "recorded"
@@ -439,7 +439,7 @@ msgstr ""
 "录制不支持翻转；只翻转显示请使用 --display-orientation，或在后面用 --record-"
 "orientation 指定旋转角度"
 
-#: src/app/Cli.cpp:153 src/app/LiveSource.cpp:68
+#: src/app/Cli.cpp:153 src/app/LiveSource.cpp:70
 msgid ""
 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate "
 "only the display"
@@ -696,78 +696,78 @@ msgstr "回放文件未解码出任何视频帧"
 msgid "Source ended"
 msgstr "源已结束"
 
-#: src/app/LiveSource.cpp:28 src/media/FramePump.cpp:175
+#: src/app/LiveSource.cpp:30 src/media/FramePump.cpp:175
 #, c-format
 msgid "Recording failed: %s. The file may be incomplete.\n"
 msgstr "录制失败：%s。录制文件可能不完整。\n"
 
-#: src/app/LiveSource.cpp:49
+#: src/app/LiveSource.cpp:51
 msgid "Device startup cancelled"
 msgstr "已取消设备启动"
 
-#: src/app/LiveSource.cpp:62
+#: src/app/LiveSource.cpp:64
 msgid "Container recording is unavailable in this build (libavformat required)"
 msgstr "此构建不支持容器录制，需要 libavformat"
 
-#: src/app/LiveSource.cpp:74
+#: src/app/LiveSource.cpp:76
 msgid "Invalid --test-degrade: "
 msgstr "--test-degrade 参数无效："
 
-#: src/app/LiveSource.cpp:122
+#: src/app/LiveSource.cpp:124
 #, c-format
 msgid "Failed to query display dimensions: %s (using model crop table)\n"
 msgstr "查询显示尺寸失败: %s（使用机型裁剪表）\n"
 
-#: src/app/LiveSource.cpp:123
+#: src/app/LiveSource.cpp:125
 msgid "Update contains no usable dimensions"
 msgstr "推送里没有可用的尺寸"
 
-#: src/app/LiveSource.cpp:136
+#: src/app/LiveSource.cpp:138
 #, c-format
 msgid ""
 "Failed to subscribe to display changes: %s (automatic rotation unavailable)\n"
 msgstr "订阅显示变化失败: %s（无法自动跟随旋转）\n"
 
-#: src/app/LiveSource.cpp:170 src/app/LiveSource.cpp:396
+#: src/app/LiveSource.cpp:172 src/app/LiveSource.cpp:459
 msgid "Live video unavailable; recording stopped"
 msgstr "实时视频不可用，录制已停止"
 
-#: src/app/LiveSource.cpp:175
+#: src/app/LiveSource.cpp:177
 #, c-format
 msgid "Media stream unavailable: %s\n"
 msgstr "媒体流不可用：%s\n"
 
-#: src/app/LiveSource.cpp:178
+#: src/app/LiveSource.cpp:180
 #, c-format
 msgid ""
 "Using screenshot polling; refresh rate depends on capture time. Input "
 "control remains available\n"
 msgstr "已改用截图轮询，刷新率取决于截图耗时；输入控制仍可用\n"
 
-#: src/app/LiveSource.cpp:182
+#: src/app/LiveSource.cpp:184
 msgid "Failed to start screenshot polling: "
 msgstr "启动截图轮询失败: "
 
-#: src/app/LiveSource.cpp:197
+#: src/app/LiveSource.cpp:199
 msgid "No first screenshot within 5 seconds"
 msgstr "5 秒内未取得首张截图"
 
-#: src/app/LiveSource.cpp:204
+#: src/app/LiveSource.cpp:206
 msgid "No first decoded frame within 5 seconds"
 msgstr "5 秒内未解出首帧"
 
-#: src/app/LiveSource.cpp:211
+#: src/app/LiveSource.cpp:213
 #, c-format
 msgid "Screenshot mirroring started: %s / iOS %s, %ux%u\n"
 msgstr "截图镜像已建立：%s / iOS %s，尺寸 %ux%u\n"
 
-#: src/app/LiveSource.cpp:215
+#: src/app/LiveSource.cpp:217
 #, c-format
 msgid ""
 "Video stream started: %s / iOS %s, receive port=%u PT=%u, first frame %ux%u\n"
 msgstr "视频流已建立：%s / iOS %s，收流端口=%u PT=%u，首帧 %ux%u\n"
 
-#: src/app/LiveSource.cpp:224
+#: src/app/LiveSource.cpp:226
 #, c-format
 msgid ""
 "Display geometry: visible area %dx%d (displayId=%llu %s), UI rotation %d "
@@ -776,22 +776,22 @@ msgstr ""
 "显示几何：设备报可见区 %dx%d（displayId=%llu %s），界面旋转顺时针 %d°，码流 "
 "%ux%u\n"
 
-#: src/app/LiveSource.cpp:231
+#: src/app/LiveSource.cpp:233
 #, c-format
 msgid "Screenshot mode cannot record Annex-B; ignoring --record\n"
 msgstr "截图模式无法录制 Annex-B，已忽略 --record\n"
 
-#: src/app/LiveSource.cpp:233
+#: src/app/LiveSource.cpp:235
 #, c-format
 msgid "Recording to %s\n"
 msgstr "录制到 %s\n"
 
-#: src/app/LiveSource.cpp:240
+#: src/app/LiveSource.cpp:242
 #, c-format
 msgid "Screenshot mode does not start audio\n"
 msgstr "截图模式不启动音频流\n"
 
-#: src/app/LiveSource.cpp:253
+#: src/app/LiveSource.cpp:255
 #, c-format
 msgid ""
 "Forwarding audio to the computer. Switching routes may pause the phone's "
@@ -800,62 +800,76 @@ msgstr ""
 "正在将音频转到电脑。切换路由可能暂停手机播放器；如有需要，请在手机上继续播"
 "放。\n"
 
-#: src/app/LiveSource.cpp:263
+#: src/app/LiveSource.cpp:265
 #, c-format
 msgid "Failed to start audio: %s (video continues)\n"
 msgstr "启动音频流失败: %s（继续显示画面）\n"
 
-#: src/app/LiveSource.cpp:268
+#: src/app/LiveSource.cpp:270
 #, c-format
 msgid "Audio stream started: receive port=%u PT=%u backend=%s\n"
 msgstr "音频流已建立：收流端口=%u PT=%u 后端=%s\n"
 
-#: src/app/LiveSource.cpp:271
+#: src/app/LiveSource.cpp:273
 msgid "Audio routing: phone and computer (--audio-dup)"
 msgstr "音频路由：手机和电脑（--audio-dup）"
 
-#: src/app/LiveSource.cpp:272
+#: src/app/LiveSource.cpp:274
 msgid "Audio routing: computer; phone playback is suppressed"
 msgstr "音频路由：电脑；手机停止发声"
 
-#: src/app/LiveSource.cpp:279
+#: src/app/LiveSource.cpp:281
 #, c-format
 msgid "--test-degrade: from now,"
 msgstr "--test-degrade：从现在起"
 
-#: src/app/LiveSource.cpp:281
+#: src/app/LiveSource.cpp:283
 #, c-format
 msgid " at %.1f seconds: %s"
 msgstr " %.1f 秒%s"
 
-#: src/app/LiveSource.cpp:282
+#: src/app/LiveSource.cpp:284
 msgid "force fallback"
 msgstr "强制降级"
 
-#: src/app/LiveSource.cpp:282
+#: src/app/LiveSource.cpp:284
 msgid "release override"
 msgstr "放开"
 
-#: src/app/LiveSource.cpp:284
+#: src/app/LiveSource.cpp:286
 #, c-format
 msgid " (test mode)\n"
 msgstr "（测试模式）\n"
 
-#: src/app/LiveSource.cpp:291
+#: src/app/LiveSource.cpp:293
 msgid ""
 "No playable audio stream (disabled, failed to start, or unsupported build)"
 msgstr "没有可播放的音频流（已禁用、启动失败或构建不支持）"
 
-#: src/app/LiveSource.cpp:305
+#: src/app/LiveSource.cpp:307
 msgid "Audio capture stopped before recording finished"
 msgstr "录制尚未完成，音频采集已停止"
 
-#: src/app/LiveSource.cpp:325
-#, c-format
-msgid "Control connected (touch injection available)\n"
-msgstr "控制已接通（触摸注入可用）\n"
+#: src/app/LiveSource.cpp:318
+msgid "Device input is unavailable before a session is started"
+msgstr "尚未建立设备会话，无法发送输入"
 
-#: src/app/LiveSource.cpp:400
+#: src/app/LiveSource.cpp:328
+#, c-format
+msgid "Device input connection established\n"
+msgstr "设备输入连接已建立\n"
+
+#: src/app/LiveSource.cpp:340
+#, c-format
+msgid "Failed to release device touch: %s\n"
+msgstr "未能释放设备触点：%s\n"
+
+#: src/app/LiveSource.cpp:348
+#, c-format
+msgid "Failed to release device keys: %s\n"
+msgstr "未能松开设备按键：%s\n"
+
+#: src/app/LiveSource.cpp:463
 #, c-format
 msgid ""
 "Live video unavailable; using screenshot polling while retrying video in the "
@@ -863,26 +877,26 @@ msgid ""
 msgstr ""
 "实时视频暂不可用，已切换到截图轮询；后台继续尝试恢复视频，成功后自动切回\n"
 
-#: src/app/LiveSource.cpp:403
+#: src/app/LiveSource.cpp:466
 #, c-format
 msgid "Failed to switch to screenshots: %s (retry in %llu seconds)\n"
 msgstr "切换到截图失败: %s（%llu 秒后重试）\n"
 
-#: src/app/LiveSource.cpp:409
+#: src/app/LiveSource.cpp:472
 #, c-format
 msgid "Live video recovered; switched back to video stream\n"
 msgstr "实时视频已恢复，已切回视频流\n"
 
-#: src/app/LiveSource.cpp:424 src/media/FramePump.cpp:174
+#: src/app/LiveSource.cpp:487 src/media/FramePump.cpp:174
 #, c-format
 msgid "Recording failed: %s. Mirroring continues; the file is incomplete.\n"
 msgstr "录制失败：%s。镜像继续，录制文件不完整。\n"
 
-#: src/app/LiveSource.cpp:456
+#: src/app/LiveSource.cpp:519
 msgid "); closing session"
 msgstr "），正在关闭会话"
 
-#: src/app/LiveSource.cpp:456
+#: src/app/LiveSource.cpp:519
 msgid "Device connection lost ("
 msgstr "设备连接已断开（"
 
@@ -1010,40 +1024,40 @@ msgstr "已启用"
 msgid "inactive"
 msgstr "未启用"
 
-#: src/app/Presenter.cpp:39
+#: src/app/Presenter.cpp:40
 #, c-format
 msgid ""
 "Window dimensions are too large; reduce --scale or the requested window "
 "size\n"
 msgstr "窗口尺寸过大；请减小 --scale 或指定的窗口宽高\n"
 
-#: src/app/Presenter.cpp:43
+#: src/app/Presenter.cpp:44
 #, c-format
 msgid "Screen %dx%d points; window scaled to %dx%d (override with --scale)\n"
 msgstr "屏幕 %dx%d 点，窗口自动缩放到 %dx%d（可用 --scale 指定比例）\n"
 
-#: src/app/Presenter.cpp:58
+#: src/app/Presenter.cpp:59
 #, c-format
 msgid "Failed to create window: %s\n"
 msgstr "创建窗口失败: %s\n"
 
-#: src/app/Presenter.cpp:72
+#: src/app/Presenter.cpp:73
 #, c-format
 msgid "Failed to create renderer: %s\n"
 msgstr "创建渲染器失败: %s\n"
 
-#: src/app/Presenter.cpp:77
+#: src/app/Presenter.cpp:78
 #, c-format
 msgid "Render driver: %s\n"
 msgstr "渲染驱动: %s\n"
 
-#: src/app/Presenter.cpp:85 src/app/Presenter.cpp:159 src/app/Presenter.cpp:208
-#: src/app/Presenter.cpp:226
+#: src/app/Presenter.cpp:86 src/app/Presenter.cpp:161 src/app/Presenter.cpp:210
+#: src/app/Presenter.cpp:228
 #, c-format
 msgid "Failed to configure viewport: %s\n"
 msgstr "无法设置显示区域：%s\n"
 
-#: src/app/Presenter.cpp:96
+#: src/app/Presenter.cpp:97
 #, c-format
 msgid ""
 "Window %dx%d points / drawable %dx%d pixels / viewport %dx%d (source %dx%d, "
@@ -1052,62 +1066,62 @@ msgstr ""
 "窗口 %dx%d 点 / 绘制面 %dx%d 像素 / 视口 %dx%d（源帧 %dx%d，裁剪 %dx%d+%d+"
 "%d，转正顺时针 %d°）\n"
 
-#: src/app/Presenter.cpp:101
+#: src/app/Presenter.cpp:102
 #, c-format
 msgid "Display is horizontally flipped before rotation\n"
 msgstr "显示先水平翻转，再旋转\n"
 
-#: src/app/Presenter.cpp:117
+#: src/app/Presenter.cpp:118
 #, c-format
 msgid "Failed to create texture: %s\n"
 msgstr "创建纹理失败: %s\n"
 
-#: src/app/Presenter.cpp:135 src/app/Presenter.cpp:143
+#: src/app/Presenter.cpp:136 src/app/Presenter.cpp:144
 #, c-format
 msgid "Cannot render frame: invalid dimensions or pixel buffer\n"
 msgstr "无法显示这一帧：图像尺寸或像素缓冲无效\n"
 
-#: src/app/Presenter.cpp:168 src/app/Presenter.cpp:178
+#: src/app/Presenter.cpp:170 src/app/Presenter.cpp:180
 #, c-format
 msgid "Failed to render frame: %s\n"
 msgstr "无法绘制这一帧：%s\n"
 
-#: src/app/Presenter.cpp:172
+#: src/app/Presenter.cpp:174
 #, c-format
 msgid "Failed to upload texture: %s\n"
 msgstr "上传纹理失败: %s\n"
 
-#: src/app/Presenter.cpp:192
+#: src/app/Presenter.cpp:194
 #, c-format
 msgid "Failed to query drawable dimensions: %s\n"
 msgstr "查询绘制面尺寸失败: %s\n"
 
-#: src/app/Presenter.cpp:197
+#: src/app/Presenter.cpp:199
 #, c-format
 msgid "Failed to create readback buffer: %s\n"
 msgstr "创建回读缓冲失败: %s\n"
 
-#: src/app/Presenter.cpp:201
+#: src/app/Presenter.cpp:203
 #, c-format
 msgid "Failed to lock readback buffer: %s\n"
 msgstr "锁定回读缓冲失败: %s\n"
 
-#: src/app/Presenter.cpp:221
+#: src/app/Presenter.cpp:223
 #, c-format
 msgid "Readback failed: %s\n"
 msgstr "回读失败: %s\n"
 
-#: src/app/Presenter.cpp:233
+#: src/app/Presenter.cpp:235
 #, c-format
 msgid "Failed to save image: %s\n"
 msgstr "存图失败: %s\n"
 
-#: src/app/Presenter.cpp:236
+#: src/app/Presenter.cpp:238
 #, c-format
 msgid "Window readback saved to %s (%dx%d pixels)\n"
 msgstr "窗口回读已保存到 %s (%dx%d 像素)\n"
 
-#: src/app/Presenter.cpp:246
+#: src/app/Presenter.cpp:248
 #, c-format
 msgid ""
 "[input] %s raw(%d,%d) viewport %d x%d (rotation %d degrees, horizontal flip: "
@@ -1116,27 +1130,27 @@ msgstr ""
 "[输入] %s 原始坐标(%d,%d)，视口 %d x%d（旋转 %d 度，水平翻转：%s）/ 窗口 %d "
 "x%d / 绘制面 %d x%d -> (%.3f, %.3f)\n"
 
-#: src/app/Presenter.cpp:249 tools/feature_probe.cpp:26
+#: src/app/Presenter.cpp:251 tools/feature_probe.cpp:26
 #: tools/feature_probe.cpp:27 tools/rr_keepalive_probe.cpp:249
 #: tools/rr_keepalive_probe.cpp:307
 msgid "no"
 msgstr "无"
 
-#: src/app/Presenter.cpp:249 tools/feature_probe.cpp:26
+#: src/app/Presenter.cpp:251 tools/feature_probe.cpp:26
 #: tools/feature_probe.cpp:27 tools/rr_keepalive_probe.cpp:249
 #: tools/rr_keepalive_probe.cpp:307
 msgid "yes"
 msgstr "有"
 
-#: src/app/Presenter.cpp:313
+#: src/app/Presenter.cpp:342
 msgid "down"
 msgstr "按下"
 
-#: src/app/Presenter.cpp:327
+#: src/app/Presenter.cpp:356
 msgid "move"
 msgstr "移动"
 
-#: src/app/Presenter.cpp:372
+#: src/app/Presenter.cpp:401
 #, c-format
 msgid "Failed to change fullscreen mode: %s\n"
 msgstr "切换全屏失败：%s\n"
@@ -6671,6 +6685,10 @@ msgstr "不可用"
 #~ "unchanged"
 #~ msgstr "顺时针旋转显示；auto 跟随设备；不改变录制内容"
 
+#, c-format
+#~ msgid "Control connected (touch injection available)\n"
+#~ msgstr "控制已接通（触摸注入可用）\n"
+
 #~ msgid "Create a pairing record over USB or the given Wi-Fi address"
 #~ msgstr "通过 USB 或指定的 Wi-Fi 地址建立配对记录"
 
@@ -6772,6 +6790,33 @@ msgstr "不可用"
 
 #~ msgid "Window vertical position; default: centered"
 #~ msgstr "窗口纵坐标，默认居中"
+
+#~ msgid ""
+#~ "With no arguments, mirror the connected device.\n"
+#~ "Left mouse button maps to touch. Window keyboard input is not forwarded "
+#~ "to the device yet.\n"
+#~ "Quit: MOD+Q. Fullscreen: MOD+F or F11. MOD defaults to left Alt or left "
+#~ "Super; change it with --shortcut-mod.\n"
+#~ "Audio is forwarded to the computer by default; --audio-dup keeps phone "
+#~ "playback. Switching routes may pause the phone's player; resume it if "
+#~ "needed.\n"
+#~ "The device chooses encoding dimensions, bitrate and frame rate. Display "
+#~ "crop and --display-orientation leave recordings unchanged; --orientation "
+#~ "rotates display and container recordings together. Record to .mp4 or .mkv "
+#~ "for HEVC with audio, or .hevc for raw video.\n"
+#~ "Wireless use requires pairing. --help / --version do not connect to the "
+#~ "device."
+#~ msgstr ""
+#~ "不带参数时镜像已连接的设备。\n"
+#~ "鼠标左键对应触摸，窗口中的键盘输入暂不转发到设备。\n"
+#~ "退出：MOD+Q。全屏：MOD+F 或 F11。MOD 默认是左 Alt 或左 Super，可用 --"
+#~ "shortcut-mod 修改。\n"
+#~ "默认将音频转到电脑；--audio-dup 保留手机播放。切换路由可能暂停手机播放器，"
+#~ "需要时请继续播放。\n"
+#~ "编码尺寸、码率和帧率由设备决定。显示裁剪和 --display-orientation 不改变录"
+#~ "制；--orientation 同时旋转显示和容器录制。使用 .mp4 或 .mkv 录制 HEVC 和音"
+#~ "频，使用 .hevc 保存裸视频。\n"
+#~ "无线连接需要先配对。--help / --version 不连接设备。"
 
 #~ msgid ""
 #~ "With no arguments, mirror the connected device.\n"

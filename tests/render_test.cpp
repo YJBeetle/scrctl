@@ -792,6 +792,7 @@ void presenter_releases_touch_when_window_deactivates() {
         e.type = SDL_KEYDOWN;
         e.key.windowID = window_id;
         e.key.keysym.sym = symbol;
+        e.key.keysym.scancode = SDL_GetScancodeFromKey(symbol);
         e.key.keysym.mod = mods;
         check(SDL_PushEvent(&e) == 1, "将带窗口身份的快捷键事件送入实际 SDL 队列");
     };
@@ -918,9 +919,15 @@ void presenter_shortcuts_preserve_normal_input() {
         event.type = SDL_KEYDOWN;
         event.key.windowID = window_id;
         event.key.keysym.sym = symbol;
+        event.key.keysym.scancode = SDL_GetScancodeFromKey(symbol);
         event.key.keysym.mod = mods;
         event.key.repeat = repeat;
         check(SDL_PushEvent(&event) == 1, "将键盘事件送入实际 SDL 队列");
+        if (!repeat) {
+            event.type = SDL_KEYUP;
+            event.key.state = SDL_RELEASED;
+            check(SDL_PushEvent(&event) == 1, "同一次按键检查包含实际抬起事件");
+        }
         return presenter.pump(on_touch);
     };
     SDL_Event down{};
@@ -978,14 +985,323 @@ void presenter_shortcuts_preserve_normal_input() {
         event.type = SDL_KEYDOWN;
         event.key.windowID = configured_id;
         event.key.keysym.sym = symbol;
+        event.key.keysym.scancode = SDL_GetScancodeFromKey(symbol);
         event.key.keysym.mod = mods;
         check(SDL_PushEvent(&event) == 1, "送入自定义快捷键事件");
+        event.type = SDL_KEYUP;
+        event.key.state = SDL_RELEASED;
+        check(SDL_PushEvent(&event) == 1, "自定义快捷键检查包含按键抬起");
         return configured.pump({});
     };
     check(!configured_key(KMOD_LALT, SDLK_q), "自定义修饰键不再接受默认退出组合");
     configured_key(KMOD_RCTRL, SDLK_f);
     check(!configured.is_fullscreen(), "从启动全屏模式退出后仍可切换窗口模式");
     check(configured_key(KMOD_RCTRL, SDLK_q), "自定义修饰键替换默认退出组合");
+}
+
+struct KeyboardFixture {
+    using Report = scrctl::app::KeyboardState::Report;
+    using Reports = scrctl::app::KeyboardState::Reports;
+    struct Touch { double x, y; bool down; };
+
+    scrctl::app::Presenter presenter;
+    scrctl::app::Crop crop{0, 0, 64, 96, 64, 96};
+    scrctl::Frame frame;
+    Uint32 window_id = 0;
+    Reports reports;
+    std::vector<Touch> touches;
+
+    explicit KeyboardFixture(const char *title) {
+        const Palette colors{kTopLeft, kTopRight, kBottomRight, kBottomLeft};
+        frame = colored_frame(64, 96, crop, colors, 0);
+        scrctl::app::WindowSpec spec;
+        spec.title = title;
+        spec.want_w = crop.w;
+        spec.want_h = crop.h;
+        spec.want_readback = true;
+        const bool opened = presenter.open(64, 96, crop, 0, 1, false, spec);
+        check(opened, "为物理键盘回归创建实际 Presenter");
+        if (opened) window_id = window_id_from_events(title);
+    }
+
+    auto on_touch() {
+        return [this](double x, double y, bool down) { touches.push_back({x, y, down}); };
+    }
+    auto on_keyboard() {
+        return [this](const Report &report) { reports.push_back(report); };
+    }
+    bool pump() { return presenter.pump(on_touch(), on_keyboard()); }
+    void release() { presenter.release_input(on_touch(), on_keyboard()); }
+    void key_for(Uint32 type, SDL_Scancode scancode, Uint16 mods, Uint8 repeat, Uint32 id) {
+        SDL_Event event{};
+        event.type = type;
+        event.key.windowID = id;
+        event.key.state = type == SDL_KEYDOWN ? SDL_PRESSED : SDL_RELEASED;
+        event.key.keysym.scancode = scancode;
+        event.key.keysym.sym = SDL_GetKeyFromScancode(scancode);
+        event.key.keysym.mod = mods;
+        event.key.repeat = repeat;
+        check(SDL_PushEvent(&event) == 1, "将物理键盘事件送入实际 SDL 队列");
+    }
+    void key(Uint32 type, SDL_Scancode scancode, Uint16 mods = KMOD_NONE, Uint8 repeat = 0) {
+        key_for(type, scancode, mods, repeat, window_id);
+    }
+    void window(Uint8 state, Uint32 id) {
+        SDL_Event event{};
+        event.type = SDL_WINDOWEVENT;
+        event.window.windowID = id;
+        event.window.event = state;
+        check(SDL_PushEvent(&event) == 1, "将键盘生命周期窗口事件送入实际 SDL 队列");
+    }
+    void window(Uint8 state) { window(state, window_id); }
+    void mouse(Uint32 type, int x, int y) {
+        SDL_Event event{};
+        event.type = type;
+        if (type == SDL_MOUSEMOTION) {
+            event.motion.windowID = window_id;
+            event.motion.state = SDL_BUTTON_LMASK;
+            event.motion.x = x; event.motion.y = y;
+        } else {
+            event.button.windowID = window_id;
+            event.button.button = SDL_BUTTON_LEFT;
+            event.button.state = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
+            event.button.x = x; event.button.y = y;
+        }
+        check(SDL_PushEvent(&event) == 1, "向键盘生命周期窗口送入触摸事件");
+    }
+    void expect(const Reports &expected, const char *message) {
+        check(reports == expected, message);
+        if (reports != expected) {
+            for (const auto &report : reports) {
+                std::printf("     keyboard report:");
+                for (const auto usage : report) std::printf(" %u", usage);
+                std::printf("\n");
+            }
+        }
+        reports.clear();
+    }
+};
+
+void presenter_physical_keyboard_events() {
+    KeyboardFixture f("Presenter physical keyboard regression");
+    if (f.window_id == 0) return;
+    std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> foreign(
+        SDL_CreateWindow("Foreign keyboard event window", SDL_WINDOWPOS_UNDEFINED,
+                         SDL_WINDOWPOS_UNDEFINED, 64, 96, SDL_WINDOW_HIDDEN),
+        SDL_DestroyWindow);
+    check(foreign != nullptr, "创建另一真实窗口以检查 keyboard/window 身份过滤");
+    if (!foreign) return;
+    const Uint32 foreign_id = SDL_GetWindowID(foreign.get());
+    SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_B, KMOD_LSHIFT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_B, KMOD_LSHIFT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_LSHIFT, KMOD_LSHIFT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_A);
+    check(!f.pump(), "普通物理组合键不退出窗口");
+    f.expect({{4}, {4, 225}, {4, 5, 225}, {4, 225}, {4}, {}},
+             "实际回调先交付修饰键前缀并保留 A，每次抬起保留其它按住状态");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_Q);
+    f.key(SDL_KEYUP, SDL_SCANCODE_Q);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_ESCAPE);
+    f.key(SDL_KEYUP, SDL_SCANCODE_ESCAPE);
+    check(!f.pump(), "普通 Q 和 Esc 按物理键交付，不退出窗口");
+    f.expect({{20}, {}, {41}, {}}, "同轮快速普通 Q/Esc 的 DOWN 和 UP 均有序交付");
+
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_RALT, KMOD_LCTRL | KMOD_RALT);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_A, KMOD_LCTRL | KMOD_RALT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_A, KMOD_LCTRL | KMOD_RALT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_RALT, KMOD_LCTRL);
+    f.key(SDL_KEYUP, SDL_SCANCODE_LCTRL);
+    f.pump();
+    f.expect({{224, 230}, {4, 224, 230}, {224, 230}, {224}, {}},
+             "AltGr 的右 Alt 和 Control 按物理键状态交付，不误作本地 MOD");
+
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_LALT, KMOD_LALT);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_F, KMOD_LALT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_LALT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_F);
+    check(!f.pump() && f.presenter.is_fullscreen(), "首次 MOD+F 执行一次全屏动作");
+    f.expect({}, "先松 MOD 后松 F，本地所有权保持到 UP，不把 F 交付设备");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_F11);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_F11, KMOD_NONE, 1);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_F11);
+    f.key(SDL_KEYUP, SDL_SCANCODE_F11, KMOD_RSHIFT);
+    check(!f.pump() && !f.presenter.is_fullscreen(), "F11 的重复 DOWN 不再次切换全屏");
+    f.expect({}, "本地 F11 的 DOWN/UP 不交付设备，也不从陈旧 UP 快照引入 Shift");
+
+    // scrcpy 将所有 F11 组合留在本地；只有无修饰的新 DOWN 才切换全屏。
+    // 修饰键快照不能因为一个被消费的 F11 而进入设备状态，UP 也不能清掉 A。
+    for (const Uint16 mods : {Uint16{KMOD_LCTRL}, Uint16{KMOD_LSHIFT},
+                             Uint16{KMOD_LCTRL | KMOD_RALT}}) {
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+        f.pump();
+        f.expect({{4}}, "先交付普通 A，为带修饰 F11 检查保留已有设备键");
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_F11, mods);
+        check(!f.pump() && !f.presenter.is_fullscreen(),
+              "Ctrl、Shift 或 AltGr 加 F11 不切换全屏");
+        f.expect({}, "带非快捷键修饰的 F11 不交付 HID，也不引入修饰键快照");
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_F11, KMOD_NONE, 1);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_F11);
+        check(!f.pump() && !f.presenter.is_fullscreen(),
+              "本地 F11 保持所有权，重复或后来无修饰的 DOWN 不切换全屏");
+        f.expect({}, "本地 F11 重复 DOWN 不交付设备");
+        f.key(SDL_KEYUP, SDL_SCANCODE_F11, mods);
+        f.pump();
+        f.expect({}, "带修饰 F11 的 UP 不修改原有 A");
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_B);
+        f.key(SDL_KEYUP, SDL_SCANCODE_A);
+        f.key(SDL_KEYUP, SDL_SCANCODE_B);
+        f.pump();
+        f.expect({{4, 5}, {5}, {}}, "F11 UP 后 A 仍按住，普通 B 与后续抬起有序交付");
+    }
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_LCTRL, KMOD_LCTRL);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_A, KMOD_LCTRL);
+    f.pump();
+    f.expect({{224}, {4, 224}}, "先按实际 Control 与 A，以检查 F11 UP 不清其它设备键");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_F11, KMOD_LCTRL);
+    f.key(SDL_KEYUP, SDL_SCANCODE_F11);
+    check(!f.pump() && !f.presenter.is_fullscreen(), "带 Control 的本地 F11 不切换全屏");
+    f.expect({}, "本地 F11 的陈旧 UP 快照不能释放已交付的 Control 或 A");
+    f.key(SDL_KEYUP, SDL_SCANCODE_LCTRL);
+    f.key(SDL_KEYUP, SDL_SCANCODE_A);
+    f.pump();
+    f.expect({{4}, {}}, "实际 Control 和 A 的各自 UP 才释放设备状态");
+
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_F);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_LALT, KMOD_LALT);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_F, KMOD_LALT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_LALT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_F);
+    check(!f.pump() && !f.presenter.is_fullscreen(), "已归设备的 F 后收到 MOD 重复 DOWN 不切全屏");
+    f.expect({{9}, {}}, "旧 F 保持 Device 所有权直到 UP，不重复交付或转成本地键");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_A, KMOD_LALT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_A);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+    f.key(SDL_KEYUP, SDL_SCANCODE_A);
+    f.pump();
+    f.expect({{4}, {}}, "未分配动作的 MOD+A 仍归本地，下一次普通 A 可正常使用");
+
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+    for (const Uint32 id : {foreign_id, Uint32{0}}) {
+        f.key_for(SDL_KEYUP, SDL_SCANCODE_A, KMOD_NONE, 0, id);
+        f.key_for(SDL_KEYDOWN, SDL_SCANCODE_B, KMOD_RSHIFT, 0, id);
+        f.key_for(SDL_KEYDOWN, SDL_SCANCODE_Q, KMOD_LALT, 0, id);
+        f.key_for(SDL_KEYDOWN, SDL_SCANCODE_F11, KMOD_NONE, 0, id);
+        f.window(SDL_WINDOWEVENT_CLOSE, id);
+    }
+    check(!f.pump() && !f.presenter.is_fullscreen(), "外部和未知 ID 的键盘/关闭事件不改变本窗口");
+    f.expect({{4}}, "外部 UP 不释放 A，外部 DOWN 不引入 B/Shift");
+    f.key(SDL_KEYUP, SDL_SCANCODE_A);
+    f.pump();
+    f.expect({{}}, "只有本窗口 UP 释放原有 A");
+
+    for (const Uint8 state : {SDL_WINDOWEVENT_FOCUS_LOST, SDL_WINDOWEVENT_HIDDEN,
+                             SDL_WINDOWEVENT_MINIMIZED}) {
+        f.touches.clear();
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_X, KMOD_LALT);
+        f.mouse(SDL_MOUSEBUTTONDOWN, 16, 24);
+        f.pump();
+        f.expect({{4}}, "失活前同时保留设备 A、本地 X 与触摸状态");
+        f.mouse(SDL_MOUSEMOTION, 32, 48);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_B);
+        f.window(state);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_C);
+        f.mouse(SDL_MOUSEBUTTONDOWN, 48, 72);
+        f.pump();
+        f.expect({{4, 5}, {}}, "本窗口失活统一发送一次空键盘报告，丢弃尾部 C");
+        check(f.touches.size() == 2 && f.touches.front().down && !f.touches.back().down &&
+                  f.touches.back().x == 0.25 && f.touches.back().y == 0.25,
+              "统一清理仍按最后已交付触点释放，不发送待合并移动");
+        f.window(state);
+        f.window(SDL_WINDOWEVENT_FOCUS_GAINED, foreign_id);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_C);
+        f.pump();
+        f.release();
+        f.expect({}, "重复失活与显式释放幂等，外部 focus 不恢复输入");
+        f.window(SDL_WINDOWEVENT_FOCUS_GAINED);
+        f.key(SDL_KEYUP, SDL_SCANCODE_A, KMOD_RSHIFT);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_X);
+        f.key(SDL_KEYUP, SDL_SCANCODE_X);
+        f.pump();
+        f.expect({{27}, {}}, "恢复后旧 UP 不引入修饰键，本地 X 所有权已清理");
+    }
+
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+    f.pump(); f.expect({{4}}, "只按键盘、没有拖动时保存 A");
+    auto rotated = f.crop; rotated.pixel_degrees = 180;
+    check(f.presenter.draw(f.frame, rotated), "仅键盘按住时绘制源方向变化");
+    f.presenter.release_touch(f.on_touch());
+    f.pump(); f.expect({{}}, "legacy release_touch 不吃掉待发键盘释放，转向统一清理 A");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_B);
+    f.pump(); f.expect({{5}}, "方向变化后 B 可重新按下");
+    auto resized = rotated; resized.display_w = 128; resized.display_h = 192;
+    check(f.presenter.draw(f.frame, resized), "仅键盘按住时绘制面板尺寸变化");
+    f.pump(); f.expect({{}}, "没有触摸的面板尺寸变化也清除按住键");
+
+    const Palette colors{kTopLeft, kTopRight, kBottomRight, kBottomLeft};
+    const auto larger_frame = colored_frame(80, 112, resized, colors, 0);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+    f.pump(); f.expect({{4}}, "编码源尺寸改变前只按住键盘 A");
+    check(f.presenter.draw(larger_frame, resized), "源帧变大但面板尺寸和轴角保持不变");
+    f.pump(); f.expect({{}}, "独立于面板轴角的源编码尺寸变化也释放按住键");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_B);
+    f.pump(); f.expect({{5}}, "裁剪改变前只按住键盘 B");
+    auto recropped = resized; recropped.x = 4; recropped.y = 6;
+    recropped.w = 60; recropped.h = 90;
+    check(f.presenter.draw(larger_frame, recropped), "源尺寸和面板轴角不变，仅改变裁剪矩形");
+    f.pump(); f.expect({{}}, "裁剪矩形 transition 也统一释放键盘");
+
+    auto unknown = recropped; unknown.input_valid = false;
+    check(f.presenter.draw(larger_frame, unknown), "切换到触摸几何未知的画面");
+    f.pump(); f.expect({}, "一次性几何变化在空键盘状态下不补空报告");
+    f.touches.clear();
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+    f.mouse(SDL_MOUSEBUTTONDOWN, 16, 24);
+    f.pump(); f.expect({{4}}, "未知触摸坐标下普通物理 A 仍可按住");
+    check(f.touches.empty(), "未知几何仍不交付鼠标触摸");
+    check(f.presenter.draw(larger_frame, unknown), "继续显示同一未知几何画面");
+    f.pump(); f.expect({}, "持续未知几何不会每帧松开键盘");
+    f.key(SDL_KEYUP, SDL_SCANCODE_A);
+    f.pump(); f.expect({{}}, "未知几何下仍能正常交付物理 A 的 UP");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_B);
+    f.pump(); f.expect({{5}}, "几何恢复前按住普通 B");
+    check(f.presenter.draw(f.frame, f.crop), "恢复源方向和触摸坐标依据");
+    f.pump(); f.expect({{}}, "unknown 到 known 的一次性 transition 释放 B");
+    f.release(); f.release(); f.pump();
+    f.expect({}, "重复统一释放和 pump 不追加空键盘报告");
+}
+
+void presenter_keyboard_quit_and_close() {
+    for (const bool close : {false, true}) {
+        KeyboardFixture f(close ? "Presenter keyboard close regression" :
+                                  "Presenter keyboard quit regression");
+        if (f.window_id == 0) continue;
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+        f.mouse(SDL_MOUSEBUTTONDOWN, 16, 24);
+        f.pump(); f.expect({{4}}, "退出前键盘 A 与触摸都保持按下");
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_B);
+        f.mouse(SDL_MOUSEMOTION, 32, 48);
+        if (close) {
+            f.window(SDL_WINDOWEVENT_CLOSE);
+        } else {
+            SDL_Event quit{}; quit.type = SDL_QUIT;
+            check(SDL_PushEvent(&quit) == 1, "向实际 SDL 队列送入退出事件");
+        }
+        f.window(SDL_WINDOWEVENT_FOCUS_GAINED);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_C);
+        f.key(SDL_KEYUP, SDL_SCANCODE_A, KMOD_RSHIFT);
+        f.mouse(SDL_MOUSEBUTTONDOWN, 48, 72);
+        check(f.pump(), "QUIT 或本窗口 CLOSE 返回退出请求");
+        f.expect({{4, 5}, {}}, "退出前保留 A/B，退出后只发一次空报告、不派发尾部 C/Shift");
+        check(f.touches.size() == 2 && !f.touches.back().down &&
+                  f.touches.back().x == 0.25 && f.touches.back().y == 0.25,
+              "退出统一释放触摸，待合并移动与尾部按下均不再交付");
+        f.release(); f.release();
+        f.expect({}, "正式调用方退出收尾重复 release_input 不重复释放键盘");
+    }
 }
 
 }  // namespace
@@ -1039,6 +1355,8 @@ int main() {
     presenter_flip_mouse_events();
     presenter_releases_touch_when_window_deactivates();
     presenter_shortcuts_preserve_normal_input();
+    presenter_physical_keyboard_events();
+    presenter_keyboard_quit_and_close();
 
     SDL_Quit();
     if (failures != 0) {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "app/KeyboardState.h"
 #include "app/ViewGeom.h"
 #include "decode/Decoder.h"
 #include <SDL.h>
@@ -25,6 +26,8 @@ struct WindowSpec {
 
 class Presenter {
   public:
+    using KeyboardHandler = std::function<void(const KeyboardState::Report &)>;
+
     /// 等比缩放时留边区域的背景色，在 open() 前设置；首帧前的 clear 也使用它。
     void set_background(uint8_t r, uint8_t g, uint8_t b);
 
@@ -51,11 +54,16 @@ class Presenter {
     /// 用于核对 SDL 的坐标空间。
     void report_input(int raw_x, int raw_y, double fx, double fy, const char *tag) const;
 
-    bool pump(const std::function<void(double, double, bool)> &on_touch);
+    /// 物理键盘报告保留全部按住的 usages；不将 SDL_TEXTINPUT 重复注入成文字。
+    bool pump(const std::function<void(double, double, bool)> &on_touch,
+              const KeyboardHandler &on_keyboard = {});
     /// 查询 SDL 的实际状态，设备转屏重建窗口时保留用户选择的全屏模式。
     [[nodiscard]] bool is_fullscreen() const;
     /// 在重建窗口、退出或坐标依据失效时，释放最后一个有效的设备触摸点。
     void release_touch(const std::function<void(double, double, bool)> &on_touch);
+    /// 在窗口重建或退出前清理两种输入；键盘存在按住状态时发送一次空报告。
+    void release_input(const std::function<void(double, double, bool)> &on_touch,
+                       const KeyboardHandler &on_keyboard = {});
 
     ~Presenter();
 
@@ -87,10 +95,12 @@ class Presenter {
     /// 失焦、隐藏或最小化后暂停输入，直到本窗口重新获得焦点。
     bool input_active_ = true;
     bool dragging_ = false;
+    /// 源坐标依据改变时，下一轮 pump 统一释放触摸和键盘一次。
     bool release_pending_ = false;
     double last_touch_x_ = 0, last_touch_y_ = 0;
     bool debug_input_ = false;
     uint16_t shortcut_mods_ = KMOD_LALT | KMOD_LGUI;
+    KeyboardState keyboard_;
 };
 
 } // namespace scrctl::app

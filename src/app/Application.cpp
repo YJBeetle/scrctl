@@ -250,18 +250,25 @@ int run(int argc, char **argv) {
     bool quit = false;
     int exit_code = 0;
 
-    /// 将窗口的按下、移动和抬起事件转换为设备触摸。
-    /// 注入失败后停止重试，仅输出一次错误，避免每次鼠标移动重复报错。
+    /// 触摸和键盘共享控制门控及首次失败，停止发送后只输出一次错误。
     std::string control_err;
     bool control_warned = false;
+    const auto input_failed = [&] {
+        control_warned = true;
+        std::fprintf(stderr, SCRCTL_TR("Input injection failed (further attempts disabled): %s\n"),
+                     control_err.c_str());
+    };
     auto on_touch = [&](double x, double y, bool down) {
         if (!control_enabled || live == nullptr || control_warned) {
             return;
         }
         if (!live->control(x, y, down, control_err)) {
-            control_warned = true;
-            std::fprintf(stderr, SCRCTL_TR("Input injection failed (further attempts disabled): %s\n"), control_err.c_str());
+            input_failed();
         }
+    };
+    const auto on_keyboard = [&](const std::vector<uint16_t> &usages) {
+        if (!control_enabled || live == nullptr || control_warned) return;
+        if (!live->keyboard_state(usages, control_err)) input_failed();
     };
 
     // 复用 Frame 的像素缓冲，避免每帧重新分配并提交约 11 MiB 内存。
@@ -302,7 +309,7 @@ int run(int argc, char **argv) {
             }
             // 等待下一帧时也需要处理窗口事件，避免窗口失去响应。
             if (presenter != nullptr) {
-                quit = presenter->pump(on_touch);
+                quit = presenter->pump(on_touch, on_keyboard);
             }
             continue;
         }
@@ -333,7 +340,7 @@ int run(int argc, char **argv) {
             applied_degrees = degrees;
             if (presenter != nullptr) {
                 window_fullscreen = presenter->is_fullscreen();
-                presenter->release_touch(on_touch);
+                presenter->release_input(on_touch, on_keyboard);
             }
             presenter.reset();
             presenter = std::make_unique<Presenter>();
@@ -365,7 +372,7 @@ int run(int argc, char **argv) {
 
         const bool do_verify = o.verify_at > 0 && rendered + 1 == o.verify_at;
         if (!presenter->draw(f, crop, do_verify ? o.verify_path.c_str() : nullptr)) {
-            presenter->release_touch(on_touch);
+            presenter->release_input(on_touch, on_keyboard);
             return finish_exit(1);
         }
         ++rendered;
@@ -383,11 +390,11 @@ int run(int argc, char **argv) {
             std::printf(SCRCTL_TR("Reached --exit-after %d\n"), o.exit_after);
             break;
         }
-        quit = presenter->pump(on_touch);
+        quit = presenter->pump(on_touch, on_keyboard);
     }
 
     if (presenter != nullptr) {
-        presenter->release_touch(on_touch);
+        presenter->release_input(on_touch, on_keyboard);
     }
     exit_code = finish_exit(exit_code);
     if (exit_code != 0) {

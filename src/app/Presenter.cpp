@@ -24,6 +24,7 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
     degrees_ = degrees;
     horizontal_flip_ = spec.horizontal_flip;
     shortcut_mods_ = spec.shortcut_mods;
+    keyboard_ = KeyboardState(shortcut_mods_);
     scrctl::app::viewport_size(crop, degrees_, view_w_, view_h_);
     SDL_Rect desk{};
     if (want_w == 0 && want_h == 0) {
@@ -143,12 +144,17 @@ bool Presenter::draw(const scrctl::Frame &f, const Crop &crop, const char *readb
         std::fprintf(stderr, SCRCTL_TR("Cannot render frame: invalid dimensions or pixel buffer\n"));
         return false;
     }
+    const bool source_size_changed = texture_w_ != static_cast<int>(f.width) ||
+                                     texture_h_ != static_cast<int>(f.height);
     if (!ensure_texture(static_cast<int>(f.width), static_cast<int>(f.height))) {
         return false;
     }
-    // 坐标轴改变时先保留释放请求，待 pump 提供设备回调后发送原坐标的抬起。
-    if (dragging_ && (!crop.input_valid || crop.pixel_degrees != src_.pixel_degrees ||
-                     crop.display_w != src_.display_w || crop.display_h != src_.display_h)) {
+    // 源坐标依据改变时保留统一释放请求，不依赖是否正在拖动：只按着键盘时
+    // 转屏也需要清理。持续未知的同一几何不会每帧重复清除物理键盘状态。
+    if (source_size_changed || crop.x != src_.x || crop.y != src_.y ||
+        crop.w != src_.w || crop.h != src_.h ||
+        crop.input_valid != src_.input_valid || crop.pixel_degrees != src_.pixel_degrees ||
+        crop.display_w != src_.display_w || crop.display_h != src_.display_h) {
         release_pending_ = true;
     }
     src_ = crop;
@@ -249,8 +255,12 @@ void Presenter::report_input(int raw_x, int raw_y, double fx, double fy, const c
                  horizontal_flip_ ? SCRCTL_TR("yes") : SCRCTL_TR("no"), pw, ph, ow, oh, fx, fy);
 }
 
-bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) {
-    if (release_pending_ || !src_.input_valid) {
+bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
+                     const KeyboardHandler &on_keyboard) {
+    if (release_pending_) {
+        release_input(on_touch, on_keyboard);
+    } else if (!src_.input_valid) {
+        // 触摸坐标未知不影响物理按键。仅触摸依赖有效面板坐标，键盘可继续保持。
         release_touch(on_touch);
     }
     SDL_Event e;
@@ -274,6 +284,8 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) 
             if (window_id == 0 || e.window.windowID != window_id) break;
             if (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
                 input_active_ = true;
+            } else if (e.window.event == SDL_WINDOWEVENT_CLOSE) {
+                quit = true;
             } else if (e.window.event == SDL_WINDOWEVENT_FOCUS_LOST ||
                        e.window.event == SDL_WINDOWEVENT_HIDDEN ||
                        e.window.event == SDL_WINDOWEVENT_MINIMIZED) {
@@ -281,7 +293,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) 
                 // 可能在抬起之后再次发送 down，或让抬起跳到未发送的位置。
                 pending_move = false;
                 input_active_ = false;
-                release_touch(on_touch);
+                release_input(on_touch, on_keyboard);
             }
             break;
         case SDL_KEYDOWN: {
@@ -290,16 +302,40 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) 
             // 默认只选左 Alt / 左 Super，避免把 AltGr（右 Alt）误当作快捷键。
             const auto mods = e.key.keysym.mod;
             const bool shortcut = (mods & shortcut_mods_) != 0;
-            if (e.key.repeat) break;
+            // scrcpy 的 F11 在所有修饰组合下都归本地；只有无修饰的新 DOWN
+            // 切换全屏，其余组合和对应 UP 也不能进入设备键盘状态。
+            const bool local_f11 = e.key.keysym.sym == SDLK_F11;
+            const bool fullscreen_key = local_f11 &&
+                !(mods & (KMOD_CTRL | KMOD_ALT | KMOD_GUI | KMOD_SHIFT));
+            const SDL_Scancode scancode = e.key.keysym.scancode;
+            const bool fresh = !e.key.repeat && !keyboard_.is_pressed(scancode);
+            for (const auto &report : keyboard_.key_down(scancode, mods, e.key.repeat != 0,
+                                                        shortcut || local_f11)) {
+                if (on_keyboard) on_keyboard(report);
+            }
+            // 所有权在首次 DOWN 确定。已转给设备的 F 不能因后来按下 MOD、
+            // 或一个重复 DOWN 改成全屏动作；不支持的 scancode 也不触发本地动作。
+            if (!fresh || !keyboard_.is_pressed(scancode)) break;
             if (shortcut && e.key.keysym.sym == SDLK_q) {
                 quit = true;
             } else if ((shortcut && e.key.keysym.sym == SDLK_f && !(mods & KMOD_SHIFT)) ||
-                       (e.key.keysym.sym == SDLK_F11 &&
-                        !(mods & (KMOD_CTRL | KMOD_ALT | KMOD_GUI | KMOD_SHIFT)))) {
+                       fullscreen_key) {
                 toggle_fullscreen();
             }
             break;
         }
+        case SDL_KEYUP:
+            if (input_active_ && window_id != 0 && e.key.windowID == window_id) {
+                for (const auto &report : keyboard_.key_up(e.key.keysym.scancode,
+                                                          e.key.keysym.mod)) {
+                    if (on_keyboard) on_keyboard(report);
+                }
+            }
+            break;
+        case SDL_TEXTINPUT:
+            // 当前使用 physical 模式。文字输入和 IME 不与物理键报告混合注入，
+            // 也不改变宿主机的全局 text-input 开关。
+            break;
         case SDL_MOUSEBUTTONDOWN:
             if (input_active_ && window_id != 0 && e.button.windowID == window_id &&
                 e.button.button == SDL_BUTTON_LEFT && on_touch) {
@@ -352,7 +388,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) 
     if (quit) {
         input_active_ = false;
         pending_move = false;
-        release_touch(on_touch);
+        release_input(on_touch, on_keyboard);
     } else if (pending_move && on_touch) {
         pending_move = false;
         last_touch_x_ = px;
@@ -378,6 +414,14 @@ void Presenter::release_touch(const std::function<void(double, double, bool)> &o
         on_touch(last_touch_x_, last_touch_y_, false);
     }
     dragging_ = false;
+}
+
+void Presenter::release_input(const std::function<void(double, double, bool)> &on_touch,
+                              const KeyboardHandler &on_keyboard) {
+    release_touch(on_touch);
+    for (const auto &report : keyboard_.release_all()) {
+        if (on_keyboard) on_keyboard(report);
+    }
     release_pending_ = false;
 }
 

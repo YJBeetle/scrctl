@@ -17,7 +17,7 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     CLI::App app{SCRCTL_N_("iOS screen mirroring and control")};
     app.footer(SCRCTL_N_(
         "With no arguments, mirror the connected device.\n"
-        "Left mouse button maps to touch. Window keyboard input is not forwarded to the device yet.\n"
+        "Left mouse button maps to touch. Ordinary keys use the device's keyboard layout and input method.\n"
         "Quit: MOD+Q. Fullscreen: MOD+F or F11. MOD defaults to left Alt or left Super; "
         "change it with --shortcut-mod.\n"
         "Audio is forwarded to the computer by default; --audio-dup keeps phone playback. "

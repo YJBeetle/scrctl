@@ -69,8 +69,12 @@ class LiveSource final : public FrameSource {
     [[nodiscard]] scrctl::remote::Device &device() { return *device_; }
 
     /// 转发触摸。HID 在首次使用时连接，避免增加首帧延迟；服务不可用不影响
-    /// 镜像。连接失败后停止本次会话的输入重试，避免每帧重复建立连接。
+    /// 镜像。连接或发送失败后停止本次会话的输入重试，避免反复建立连接。
     bool control(double x, double y, bool down, std::string &err);
+
+    /// 发送当前仍按住的完整 keyboard usage 集合，空集合松开全部键。
+    /// 与触摸复用同一 HID 连接，调用者串行安排；成功只表示本地发送完成。
+    bool keyboard_state(const std::vector<uint16_t> &usages, std::string &err);
 
     /// 注入 ASCII 文本，复用触摸服务的 HID 连接。
     bool type_text(const std::string &text, int hold_ms, std::string &err);
@@ -86,6 +90,10 @@ class LiveSource final : public FrameSource {
     bool start_screenshot(bool capture_first, std::string &err);
     void update_picture_source();
     FrameGeometry sample_geometry(bool screenshot) const;
+    bool ensure_hid(std::string &err);
+    void fail_hid(const std::string &reason);
+    /// 只使用已经存在的连接尽力松开输入，不为清理建立新连接。
+    void release_hid();
 
     std::unique_ptr<scrctl::remote::Device> device_;
     /// 两个媒体泵借用此对象；逆序析构必须先停止媒体泵，再销毁录制器。
@@ -114,6 +122,10 @@ class LiveSource final : public FrameSource {
     std::unique_ptr<scrctl::hid::Service> hid_;
     std::unique_ptr<scrctl::hid::Buttons> buttons_;
     bool hid_unavailable_ = false;
+    std::string hid_error_;
+    bool touch_down_ = false;
+    bool keyboard_down_ = false;
+    double touch_x_ = 0, touch_y_ = 0;
     uint64_t serial_ = 0;
     bool recording_error_reported_ = false;
 

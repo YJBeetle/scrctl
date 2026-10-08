@@ -222,6 +222,7 @@ add_library(scrctl_app STATIC
     src/app/Commands.cpp
         src/app/SdlRuntime.cpp
         src/app/Presenter.cpp
+        src/app/KeyboardState.cpp
         src/app/AudioOut.cpp
         src/app/FileSource.cpp
         src/app/Cli.cpp
@@ -316,6 +317,12 @@ if(SCRCTL_BUILD_TESTS)
     scrctl_add_test_executable(cli_test tests/cli_test.cpp)
     target_link_libraries(cli_test PRIVATE scrctl_app)
     add_test(NAME cli COMMAND cli_test)
+
+    scrctl_add_test_executable(keyboard_state_test tests/keyboard_state_test.cpp
+        src/app/KeyboardState.cpp)
+    target_include_directories(keyboard_state_test PRIVATE src)
+    target_link_libraries(keyboard_state_test PRIVATE Scrctl::SDL2)
+    add_test(NAME keyboard_state COMMAND keyboard_state_test)
 
     scrctl_add_test_executable(app_lifecycle_test tests/app_lifecycle_test.cpp)
     target_link_libraries(app_lifecycle_test PRIVATE scrctl_app)

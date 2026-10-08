@@ -11,7 +11,9 @@
 
 namespace scrctl::app {
 
-LiveSource::~LiveSource() = default;
+LiveSource::~LiveSource() {
+    release_hid();
+}
 
 bool LiveSource::finish_recording(std::string &err) {
     audio_out_.close();
@@ -307,38 +309,116 @@ void LiveSource::abandon_audio() {
     audio_.reset();
 }
 
-bool LiveSource::control(double x, double y, bool down, std::string &err) {
-    // 输入操作通常会改变画面，因此主动唤醒视频恢复。否则设备已停止静止
-    // 画面的流时，需要等静默检测窗口结束才能恢复，增加输入后的显示延迟。
-    if (pump_ != nullptr) {
-        pump_->wake();
+bool LiveSource::ensure_hid(std::string &err) {
+    if (hid_unavailable_) {
+        err = hid_error_;
+        return false;
+    }
+    if (device_ == nullptr) {
+        err = SCRCTL_TR("Device input is unavailable before a session is started");
+        fail_hid(err);
+        return false;
     }
     if (hid_ == nullptr) {
-        if (hid_unavailable_) {
-            return false;
-        }
         hid_ = scrctl::hid::Service::open(*device_, err);
         if (hid_ == nullptr) {
-            hid_unavailable_ = true;
+            fail_hid(err);
             return false;
         }
-        std::printf(SCRCTL_TR("Control connected (touch injection available)\n"));
+        std::printf(SCRCTL_TR("Device input connection established\n"));
     }
-    return hid_->touch(scrctl::hid::kSurfaceMainTouchscreen, x, y, down, err);
+    return true;
+}
+
+void LiveSource::release_hid() {
+    if (hid_ == nullptr) return;
+    std::string cleanup_error;
+    if (touch_down_) {
+        touch_down_ = false;
+        if (!hid_->touch(scrctl::hid::kSurfaceMainTouchscreen, touch_x_, touch_y_, false,
+                         cleanup_error)) {
+            std::fprintf(stderr, SCRCTL_TR("Failed to release device touch: %s\n"),
+                         cleanup_error.c_str());
+        }
+    }
+    if (keyboard_down_) {
+        keyboard_down_ = false;
+        if (!hid_->send_report(scrctl::hid::kSurfaceKeyboard, scrctl::hid::keyboard_report({}),
+                               cleanup_error)) {
+            std::fprintf(stderr, SCRCTL_TR("Failed to release device keys: %s\n"),
+                         cleanup_error.c_str());
+        }
+    }
+}
+
+void LiveSource::fail_hid(const std::string &reason) {
+    // 前一报告可能已留下接触或修饰键。使用同一连接尽力松开一次，保留原错；
+    // 松开报告仍无法确认设备收到。之后所有输入共享失败状态，不自动重连。
+    hid_error_ = reason;
+    hid_unavailable_ = true;
+    release_hid();
+}
+
+bool LiveSource::control(double x, double y, bool down, std::string &err) {
+    // 输入通常改变画面，主动唤醒静止画面的恢复，不等静默检测窗口结束。
+    if (pump_ != nullptr) pump_->wake();
+    if (!ensure_hid(err)) return false;
+    if (!hid_->touch(scrctl::hid::kSurfaceMainTouchscreen, x, y, down, err)) {
+        // 首次按下失败时也可能已部分送达；已有触点则保留最后已发送的坐标。
+        if (down && !touch_down_) {
+            touch_down_ = true;
+            touch_x_ = x;
+            touch_y_ = y;
+        }
+        fail_hid(err);
+        return false;
+    }
+    touch_down_ = down;
+    touch_x_ = x;
+    touch_y_ = y;
+    return true;
+}
+
+bool LiveSource::keyboard_state(const std::vector<uint16_t> &usages, std::string &err) {
+    if (hid_unavailable_) {
+        err = hid_error_;
+        return false;
+    }
+    if (usages.empty() && !keyboard_down_) {
+        err.clear();
+        return true;
+    }
+    if (pump_ != nullptr) pump_->wake();
+    if (!ensure_hid(err)) return false;
+    // send_only 失败不证明报告完全没到达；保留一次尽力松键的机会。
+    keyboard_down_ = keyboard_down_ || !usages.empty();
+    if (!hid_->send_report(scrctl::hid::kSurfaceKeyboard, scrctl::hid::keyboard_report(usages),
+                           err)) {
+        fail_hid(err);
+        return false;
+    }
+    keyboard_down_ = !usages.empty();
+    return true;
 }
 
 bool LiveSource::type_text(const std::string &text, int hold_ms, std::string &err) {
-    if (hid_ == nullptr) {
-        if (hid_unavailable_) {
-            return false;
-        }
-        hid_ = scrctl::hid::Service::open(*device_, err);
-        if (hid_ == nullptr) {
-            hid_unavailable_ = true;
-            return false;
-        }
+    if (hid_unavailable_) {
+        err = hid_error_;
+        return false;
     }
-    return hid_->type_text(text, hold_ms, err);
+    // 空文本不发报告，也不能覆盖由物理键盘留下的按住状态。
+    if (text.empty()) {
+        err.clear();
+        return true;
+    }
+    if (!ensure_hid(err)) return false;
+    keyboard_down_ = true;
+    if (!hid_->type_text(text, hold_ms, err)) {
+        fail_hid(err);
+        return false;
+    }
+    keyboard_down_ = false;
+    return true;
 }
 
 bool LiveSource::button(uint16_t usage_page, uint16_t usage_code, std::string &err) {
