@@ -107,7 +107,8 @@ AAC-ELD 原包可直存，离线 FFmpeg 解码及本机 AVFoundation MP4 解码�
 录制方向使用静态容器元数据：--orientation 数字角度同时设置显示和录制，
 --display-orientation / --record-orientation 分别设置单侧，按参数顺序覆盖。
 显示保留 auto、录制默认 0；裸 HEVC 不支持非零录制方向，旧版 MKV 封装器明确拒绝。
-不修改编码、时钟或触摸映射；动态自动录制方向、显示 flip 和设备采集裁剪尚未实现。
+显示 flip 已使用 SDL 水平翻转与旋转，鼠标按相反顺序还原到源像素；不改变录制。
+动态自动录制方向与设备采集裁剪尚未实现。
 
 ## 暂缓：MaaFramework
 

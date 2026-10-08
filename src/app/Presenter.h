@@ -18,6 +18,8 @@ struct WindowSpec {
     bool borderless = false;
     bool fullscreen = false;
     bool want_readback = false;
+    /// 先在源像素裁剪区域内水平翻转，再施加窗口旋转；不改变设备或录制数据。
+    bool horizontal_flip = false;
     uint16_t shortcut_mods = KMOD_LALT | KMOD_LGUI;
 };
 
@@ -28,6 +30,7 @@ class Presenter {
 
     /// degrees 是窗口对源图像施加的顺时针旋转，用于视口和鼠标的首次逆变换。
     /// 截图已经应用的设备方向单独保留在 Crop.pixel_degrees 中，不能重复旋转。
+    /// spec.horizontal_flip 在窗口旋转前作用于裁剪区域，不改变裁剪的源像素位置。
     bool open(int frame_w, int frame_h, const Crop &crop, int degrees, double scale,
               bool scale_given, const WindowSpec &spec);
 
@@ -60,7 +63,8 @@ class Presenter {
     /// 将 SDL 鼠标逻辑坐标转换为设备整屏的 0..1 坐标。
     /// SDL_RenderSetLogicalSize 会把鼠标事件映射到逻辑空间。例如窗口为 457 点、
     /// 绘制面 914 像素时，事件右下角仍接近逻辑尺寸 1125x2436。
-    /// 先逆窗口旋转、加源像素裁剪偏移，再逆截图自身的旋转，得到设备面板坐标。
+    /// 先逆窗口旋转和裁剪区域的水平翻转，加源像素裁剪偏移，
+    /// 再逆截图自身的旋转，得到设备面板坐标。
     /// 不能再次换算点数与像素；截图的方向依据不完整时返回 false。
     bool to_display(int raw_x, int raw_y, double &fx, double &fy) const;
     bool ensure_texture(int width, int height);
@@ -74,6 +78,7 @@ class Presenter {
     Crop src_{};
     /// 窗口对源像素施加的顺时针角度，以及视口尺寸（90/270 时宽高对调）。
     int degrees_ = 0;
+    bool horizontal_flip_ = false;
     int view_w_ = 0, view_h_ = 0;
     int win_w_ = 0, win_h_ = 0;
     /// 无法获取显示器边界时保留原始窗口尺寸。

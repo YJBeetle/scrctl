@@ -41,7 +41,7 @@ int main() {
               !defaults.win_y && defaults.scale == 1 && !defaults.scale_given &&
               defaults.audio_buffer_ms == 50 && !defaults.audio_dup &&
               defaults.shortcut_mods == (KMOD_LALT | KMOD_LGUI) &&
-              defaults.orientation == -1 && defaults.record_orientation == 0,
+              defaults.orientation == -1 && !defaults.display_flip && defaults.record_orientation == 0,
           "default options");
     Options orientation_overrides;
     check(parse({"scrctl", "--record-orientation=270", "--orientation=90",
@@ -74,6 +74,50 @@ int main() {
     check(parse({"scrctl", "-r", "capture.hevc", "--orientation=90", "--record-orientation=0"},
                 raw_reset) == ParseResult::Run && raw_reset.orientation == 90 && raw_reset.record_orientation == 0,
           "a final explicit zero recording orientation permits raw HEVC with a rotated window");
+    for (int degrees : {0, 90, 180, 270}) {
+        Options flipped;
+        check(parse({"scrctl", "--display-orientation=flip" + std::to_string(degrees),
+                     "-r", "capture.mp4"}, flipped) == ParseResult::Run &&
+                  flipped.display_flip && flipped.orientation == degrees && flipped.record_orientation == 0,
+              "every display flip rotates the window without changing recording");
+        Options combined;
+        check(parse({"scrctl", "--orientation=flip" + std::to_string(degrees)}, combined) ==
+                  ParseResult::Run && combined.display_flip && combined.orientation == degrees,
+              "combined flip is usable when no recording is requested");
+    }
+    Options flip_record_override;
+    check(parse({"scrctl", "--orientation=flip90", "--record-orientation=0", "-r", "capture.mp4"},
+                flip_record_override) == ParseResult::Run && flip_record_override.display_flip &&
+              flip_record_override.orientation == 90 && flip_record_override.record_orientation == 0,
+          "a later recording rotation permits combined display flipping");
+    Options flip_record_last;
+    check(parse({"scrctl", "--record-orientation=0", "--orientation=flip90", "-r", "capture.mp4"},
+                flip_record_last) == ParseResult::Error,
+          "a final combined flip cannot silently become unflipped recording");
+    Options flip_record_only;
+    check(parse({"scrctl", "--record-orientation=flip180", "--record-orientation=270",
+                 "--display-orientation=flip90", "-r", "capture.mkv"}, flip_record_only) == ParseResult::Run &&
+              flip_record_only.display_flip && flip_record_only.orientation == 90 &&
+              flip_record_only.record_orientation == 270,
+          "record-only flip state can be replaced in argument order without changing display");
+    Options flip_record_rejected;
+    check(parse({"scrctl", "--record-orientation=flip0", "-r", "capture.mp4"}, flip_record_rejected) ==
+              ParseResult::Error,
+          "a final recording flip is rejected even at zero rotation");
+    Options reset_flip;
+    check(parse({"scrctl", "--display-orientation=flip270", "--orientation=90", "-r", "capture.mp4"},
+                reset_flip) == ParseResult::Run && !reset_flip.display_flip && reset_flip.orientation == 90 &&
+              reset_flip.record_orientation == 90,
+          "numeric combined orientation clears a prior display flip");
+    Options auto_flip;
+    check(parse({"scrctl", "--display-orientation=flip270", "--record-orientation=90",
+                 "--orientation=auto", "-r", "capture.mp4"}, auto_flip) == ParseResult::Run &&
+              !auto_flip.display_flip && auto_flip.orientation == -1 && auto_flip.record_orientation == 90,
+          "legacy auto clears display flip while retaining recording rotation");
+    Options raw_flip;
+    check(parse({"scrctl", "--display-orientation=flip180", "-r", "capture.hevc"}, raw_flip) ==
+              ParseResult::Run && raw_flip.display_flip && raw_flip.orientation == 180 && raw_flip.record_orientation == 0,
+          "display-only flip does not require a container");
     Options duplicate_audio;
     check(parse({"scrctl", "--audio-dup"}, duplicate_audio) == ParseResult::Run &&
               duplicate_audio.audio_dup && !duplicate_audio.no_audio,
@@ -304,7 +348,9 @@ int main() {
         {"--orientation", "45"},
         {"--record-orientation", "auto"},
         {"--record-orientation", "45"},
-        {"--display-orientation", "flip0"},
+        {"--display-orientation", "flip45"},
+        {"--orientation", "flipauto"},
+        {"--record-orientation", "flip360"},
         {"--discovery-timeout", "10"},
         {"--pair", "--wifi", "10.0.0.1"},
         {"--pair", "--list-devices"},

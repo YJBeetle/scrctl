@@ -107,10 +107,11 @@ inline Crop make_frame_crop(bool crop_given, int x, int y, int w, int h, int cod
 /// 将旋转后的视口逻辑像素转换为设备整屏归一化坐标：
 /// 1. lx/ly 是 SDL logical size 空间坐标，不重复换算窗口点数或输出像素。
 /// 2. 90/270 度时视口宽高交换，用 c.h/c.w 归一化。
-/// 3. 先逆窗口渲染的旋转，加源像素裁剪偏移，再逆截图已经应用的旋转。
+/// 3. 先逆窗口旋转，再逆裁剪区域内的水平翻转，加源像素裁剪偏移，
+///    最后逆截图已经应用的旋转；不能把翻转直接施加到设备整屏坐标上。
 /// 未知截图方向时返回 false，不发布部分坐标；调用方须释放已有触摸。
 inline bool viewport_fraction_to_panel(double lx, double ly, const Crop &c, int degrees,
-                                       double &fx, double &fy) {
+                                       double &fx, double &fy, bool horizontal_flip = false) {
     if (!c.input_valid) {
         return false;
     }
@@ -127,6 +128,7 @@ inline bool viewport_fraction_to_panel(double lx, double ly, const Crop &c, int 
         case 270: pu = 1.0 - v; pv = u; break;
         default: break;
     }
+    if (horizontal_flip) pu = 1.0 - pu;
     const bool pixel_swapped = c.pixel_degrees == 90 || c.pixel_degrees == 270;
     const int image_w = pixel_swapped ? c.display_h : c.display_w;
     const int image_h = pixel_swapped ? c.display_w : c.display_h;

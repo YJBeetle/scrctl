@@ -128,11 +128,18 @@ MP4 中，前一帧的显示时长取两个已确认视频时间点的间隔；�
 scrctl -r capture.mp4 --orientation=90        # 显示和录制都顺时针转 90°
 scrctl -r capture.mp4 --display-orientation=90 # 只转电脑画面
 scrctl -r capture.mp4 --record-orientation=90  # 只转录制文件的显示方向
+scrctl --display-orientation=flip90          # 水平翻转电脑画面，再顺时针转 90°
 ```
 
-方向支持 `0` / `90` / `180` / `270`，组合参数按出现顺序覆盖各自涉及的方向。
+旋转支持 `0` / `90` / `180` / `270`；显示还支持 `flip0` / `flip90` / `flip180` /
+`flip270`，先水平翻转裁剪后的源画面，再顺时针旋转。鼠标映射会撤销这两个变换，
+点击仍对应画面中的设备位置。组合参数按出现顺序覆盖各自涉及的方向。
 显示默认 `auto` 跟随设备；录制默认 `0`。兼容用法 `--orientation=auto` 只设置
-显示，不改变已设置的录制方向；`--record-orientation` 不支持 `auto`。
+显示并取消显示翻转，不改变已设置的录制方向；`--record-orientation` 不支持 `auto`。
+
+录制不支持翻转。可用 `--display-orientation=flip90` 单独翻转显示；若用
+`--orientation=flip90` 并录制，需在后面用 `--record-orientation=0` 等旋转值覆盖
+录制方向。最终录制方向仍为 flip 时会在连接设备前报错。
 
 录制旋转通过容器元数据实现，相对于设备编码像素固定，不重编码，也不改变音频、
 时间戳或触摸映射。播放器需要支持方向元数据；MKV 非零旋转需要 FFmpeg 6.1 或更新版本。

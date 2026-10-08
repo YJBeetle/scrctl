@@ -1,8 +1,7 @@
 // 窗口几何的离线自检。
 //
-// 这段几何是"点哪儿打哪儿"的唯一依据，而且它错起来毫无征兆（画面在动、触摸在动，
-// 只是整体偏一个倍数）。所以用例里的关键数字全部来自真机 --debug-input 实测，
-// 而不是编出来的理想值。
+// 显示坐标必须还原为设备面板坐标。回归既保留 --debug-input 的真机尺寸与落点，
+// 也用独立构造的源点验证全部旋转、局部翻转、裁剪与截图自身方向组合。
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -291,6 +290,50 @@ void test_viewport_rotation() {
     }
 }
 
+void test_flip_geometry() {
+    std::printf("\n== 局部水平翻转与截图像素方向 ==\n");
+    using scrctl::app::viewport_fraction_to_panel;
+    using scrctl::app::viewport_size;
+    for (const int pixel_degrees : {0, 90, 180, 270}) {
+        const bool pixel_swapped = pixel_degrees == 90 || pixel_degrees == 270;
+        const int image_w = pixel_swapped ? 12 : 16, image_h = pixel_swapped ? 16 : 12;
+        const Crop crop = scrctl::app::make_frame_crop(true, 2, 1, 8, 6, image_w, image_h,
+            scrctl::app::FrameGeometry{16, 12, pixel_degrees, true});
+        for (const int degrees : {0, 90, 180, 270}) for (const bool flip : {false, true}) {
+            int vw = 0, vh = 0; viewport_size(crop, degrees, vw, vh);
+            for (const auto point : {std::pair{0.0, 0.0}, std::pair{1.0, 1.0},
+                                    std::pair{0.5, 0.5}, std::pair{0.125, 0.25},
+                                    std::pair{0.75, 2.0 / 3}}) {
+                // 以裁剪内已知源点构造显示位置，避免直接复述被测逆变换。
+                const double x = point.first, y = point.second;
+                const double hx = flip ? 1 - x : x;
+                double u = hx, v = y;
+                switch (degrees) {
+                    case 90: u = 1 - y; v = hx; break;
+                    case 180: u = 1 - hx; v = 1 - y; break;
+                    case 270: u = y; v = 1 - hx; break;
+                }
+                const double ix = (crop.x + x * crop.w) / image_w;
+                const double iy = (crop.y + y * crop.h) / image_h;
+                double ex = ix, ey = iy;
+                switch (pixel_degrees) {
+                    case 90: ex = iy; ey = 1 - ix; break;
+                    case 180: ex = 1 - ix; ey = 1 - iy; break;
+                    case 270: ex = 1 - iy; ey = ix; break;
+                }
+                double fx = 7, fy = 8;
+                check(viewport_fraction_to_panel(u * vw, v * vh, crop, degrees, fx, fy, flip) &&
+                      near(fx, ex, 1e-12) && near(fy, ey, 1e-12),
+                      "局部翻转经窗口旋转和截图像素方向还原为原始面板点");
+            }
+        }
+    }
+    Crop unknown{2, 1, 8, 6, 16, 12}; unknown.input_valid = false;
+    double fx = 7, fy = 8;
+    check(!viewport_fraction_to_panel(3, 4, unknown, 90, fx, fy, true) && fx == 7 && fy == 8,
+          "未知截图几何在翻转时仍拒绝输入，不发布部分坐标");
+}
+
 /// 截图已经摆正，render=0 与像素方向不是同一件事。rot270 的尺寸与拖拽坐标
 /// 来自 docs §16.1；其他四分之一旋转用数学角点验证，不代表新增真机结论。
 void test_screenshot_geometry() {
@@ -383,6 +426,7 @@ int main() {
     test_cropped_viewport();
     test_manual_crop_keeps_the_display_denominator();
     test_viewport_rotation();
+    test_flip_geometry();
     test_screenshot_geometry();
     test_degenerate();
     test_fit_window();

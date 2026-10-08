@@ -22,6 +22,7 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
     const int want_h = spec.want_h;
     src_ = crop;
     degrees_ = degrees;
+    horizontal_flip_ = spec.horizontal_flip;
     shortcut_mods_ = spec.shortcut_mods;
     scrctl::app::viewport_size(crop, degrees_, view_w_, view_h_);
     SDL_Rect desk{};
@@ -95,6 +96,9 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
         "crop %dx%d+%d+%d, clockwise rotation %d degrees)\n"),
                 win_w_, win_h_, out_w, out_h, view_w_, view_h_, frame_w, frame_h, crop.w, crop.h,
                 crop.x, crop.y, degrees_);
+    if (horizontal_flip_) {
+        std::printf(SCRCTL_TR("Display is horizontally flipped before rotation\n"));
+    }
     return true;
 }
 
@@ -169,7 +173,7 @@ bool Presenter::draw(const scrctl::Frame &f, const Crop &crop, const char *readb
     }
     // 渲染使用逻辑坐标，由 SDL 处理 Retina 缩放和留边。旋转由 draw_rotated
     // 完成，该函数同时用于离线回读测试。
-    if (!scrctl::app::draw_rotated(renderer_, texture_, src_, degrees_)) {
+    if (!scrctl::app::draw_rotated(renderer_, texture_, src_, degrees_, horizontal_flip_)) {
         std::fprintf(stderr, SCRCTL_TR("Failed to render frame: %s\n"), SDL_GetError());
         return false;
     }
@@ -238,9 +242,10 @@ void Presenter::report_input(int raw_x, int raw_y, double fx, double fy, const c
     SDL_GetRendererOutputSize(renderer_, &ow, &oh);
     std::fprintf(stderr,
                  SCRCTL_TR(
-                     "[input] %s raw(%d,%d) viewport %d x%d (rotation %d degrees) / window %d x%d / "
+                     "[input] %s raw(%d,%d) viewport %d x%d (rotation %d degrees, horizontal flip: %s) / window %d x%d / "
                      "drawable %d x%d -> (%.3f, %.3f)\n"),
-                 tag, raw_x, raw_y, view_w_, view_h_, degrees_, pw, ph, ow, oh, fx, fy);
+                 tag, raw_x, raw_y, view_w_, view_h_, degrees_,
+                 horizontal_flip_ ? SCRCTL_TR("yes") : SCRCTL_TR("no"), pw, ph, ow, oh, fx, fy);
 }
 
 bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) {
@@ -361,7 +366,8 @@ Presenter::~Presenter() {
 }
 
 bool Presenter::to_display(int raw_x, int raw_y, double &fx, double &fy) const {
-    return scrctl::app::viewport_fraction_to_panel(raw_x, raw_y, src_, degrees_, fx, fy);
+    return scrctl::app::viewport_fraction_to_panel(raw_x, raw_y, src_, degrees_, fx, fy,
+                                                  horizontal_flip_);
 }
 
 } // namespace scrctl::app

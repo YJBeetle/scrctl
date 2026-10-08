@@ -349,6 +349,7 @@ int run(int argc, char **argv) {
             spec.fullscreen = window_fullscreen;
             spec.want_readback = o.verify_at > 0;
             spec.shortcut_mods = o.shortcut_mods;
+            spec.horizontal_flip = o.display_flip;
             presenter->set_background(o.bg[0], o.bg[1], o.bg[2]);
             if (!presenter->open(static_cast<int>(f.width), static_cast<int>(f.height),
                                  crop, degrees, o.scale, o.scale_given,

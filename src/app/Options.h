@@ -60,6 +60,8 @@ struct Options {
     /// --display-orientation：画面顺时针转这么多度。-1 = auto，跟着设备报的
     /// `currentOrientation` 走。
     int orientation = -1;
+    /// 在裁剪后的源图像上先水平翻转，再施加窗口旋转。
+    bool display_flip = false;
     /// 容器的视频方向元数据，顺时针 0/90/180/270；不改设备编码或本机显示。
     int record_orientation = 0;
     int win_w = 0, win_h = 0; ///< --window-width/height：显式窗口尺寸，0=自动

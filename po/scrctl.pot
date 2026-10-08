@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-09 03:58+0800\n"
+"POT-Creation-Date: 2026-10-09 04:16+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -124,7 +124,7 @@ msgid ""
 "  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
 msgstr ""
 
-#: src/app/Application.cpp:314 src/app/Application.cpp:382
+#: src/app/Application.cpp:314 src/app/Application.cpp:383
 #, c-format
 msgid "Reached --exit-after %d\n"
 msgstr ""
@@ -136,17 +136,17 @@ msgid ""
 "unknown or inconsistent\n"
 msgstr ""
 
-#: src/app/Application.cpp:361
+#: src/app/Application.cpp:362
 #, c-format
 msgid "Render rotation changed to %d degrees clockwise; window recreated\n"
 msgstr ""
 
-#: src/app/Application.cpp:397
+#: src/app/Application.cpp:398
 #, c-format
 msgid "Window readback was not reached (requested frame %d, rendered %d)\n"
 msgstr ""
 
-#: src/app/Application.cpp:401
+#: src/app/Application.cpp:402
 #, c-format
 msgid "Finished: processed %d frames\n"
 msgstr ""
@@ -376,81 +376,89 @@ msgstr ""
 msgid "Finite positive scale; default: fit screen"
 msgstr ""
 
-#: src/app/Cli.cpp:110
+#: src/app/Cli.cpp:120
 msgid ""
-"Clockwise display and recording rotation: 0/90/180/270; auto changes display "
-"only"
+"Display and recording orientation: 0/90/180/270 or flip0/flip90/flip180/"
+"flip270; recording cannot flip; auto changes display only"
 msgstr ""
 
-#: src/app/Cli.cpp:114
-msgid "Clockwise display rotation: auto/0/90/180/270; recording is unchanged"
+#: src/app/Cli.cpp:124
+msgid ""
+"Display orientation: auto, 0/90/180/270 or flip0/flip90/flip180/flip270; "
+"flip horizontally before clockwise rotation"
 msgstr ""
 
-#: src/app/Cli.cpp:118
+#: src/app/Cli.cpp:128
 msgid ""
 "Clockwise MP4/MKV recording rotation: 0/90/180/270; default: 0; display is "
 "unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:121
+#: src/app/Cli.cpp:131
 msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:123
+#: src/app/Cli.cpp:133
 msgid "Background color: RGB or RRGGBB, with optional #"
 msgstr ""
 
-#: src/app/Cli.cpp:124
+#: src/app/Cli.cpp:134
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr ""
 
-#: src/app/Cli.cpp:135 src/app/LiveSource.cpp:58
+#: src/app/Cli.cpp:145 src/app/LiveSource.cpp:58
 msgid ""
 "Container recording requires live video; screenshot polling cannot be "
 "recorded"
 msgstr ""
 
-#: src/app/Cli.cpp:139 src/app/LiveSource.cpp:68
+#: src/app/Cli.cpp:149
+msgid ""
+"Recording does not support flipping; use --display-orientation for display-"
+"only flipping or reset --record-orientation to a rotation"
+msgstr ""
+
+#: src/app/Cli.cpp:153 src/app/LiveSource.cpp:68
 msgid ""
 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate "
 "only the display"
 msgstr ""
 
-#: src/app/Cli.cpp:142
+#: src/app/Cli.cpp:156
 msgid "Use a manual LAN address; auto uses discovered SRV ports"
 msgstr ""
 
-#: src/app/Cli.cpp:153
+#: src/app/Cli.cpp:167
 msgid "Expected an integer or auto"
 msgstr ""
 
-#: src/app/Cli.cpp:173
+#: src/app/Cli.cpp:187
 msgid ""
 "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:184
+#: src/app/Cli.cpp:198
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr ""
 
-#: src/app/Cli.cpp:191
+#: src/app/Cli.cpp:205
 msgid "Requires a finite positive number"
 msgstr ""
 
-#: src/app/Cli.cpp:206
+#: src/app/Cli.cpp:220
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr ""
 
-#: src/app/Cli.cpp:215
+#: src/app/Cli.cpp:229
 msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
 msgstr ""
 
-#: src/app/Cli.cpp:229
+#: src/app/Cli.cpp:243
 msgid "Frame number must be a positive integer"
 msgstr ""
 
-#: src/app/Cli.cpp:234
+#: src/app/Cli.cpp:248
 msgid "Requires a window; incompatible with --no-window"
 msgstr ""
 
@@ -931,112 +939,129 @@ msgstr ""
 msgid "inactive"
 msgstr ""
 
-#: src/app/Presenter.cpp:38
+#: src/app/Presenter.cpp:39
 #, c-format
 msgid ""
 "Window dimensions are too large; reduce --scale or the requested window "
 "size\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:42
+#: src/app/Presenter.cpp:43
 #, c-format
 msgid "Screen %dx%d points; window scaled to %dx%d (override with --scale)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:57
+#: src/app/Presenter.cpp:58
 #, c-format
 msgid "Failed to create window: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:70
+#: src/app/Presenter.cpp:71
 #, c-format
 msgid "Failed to create renderer: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:75
+#: src/app/Presenter.cpp:76
 #, c-format
 msgid "Render driver: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:83 src/app/Presenter.cpp:154 src/app/Presenter.cpp:203
-#: src/app/Presenter.cpp:221
+#: src/app/Presenter.cpp:84 src/app/Presenter.cpp:158 src/app/Presenter.cpp:207
+#: src/app/Presenter.cpp:225
 #, c-format
 msgid "Failed to configure viewport: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:94
+#: src/app/Presenter.cpp:95
 #, c-format
 msgid ""
 "Window %dx%d points / drawable %dx%d pixels / viewport %dx%d (source %dx%d, "
 "crop %dx%d+%d+%d, clockwise rotation %d degrees)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:112
+#: src/app/Presenter.cpp:100
+#, c-format
+msgid "Display is horizontally flipped before rotation\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:116
 #, c-format
 msgid "Failed to create texture: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:130 src/app/Presenter.cpp:138
+#: src/app/Presenter.cpp:134 src/app/Presenter.cpp:142
 #, c-format
 msgid "Cannot render frame: invalid dimensions or pixel buffer\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:163 src/app/Presenter.cpp:173
+#: src/app/Presenter.cpp:167 src/app/Presenter.cpp:177
 #, c-format
 msgid "Failed to render frame: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:167
+#: src/app/Presenter.cpp:171
 #, c-format
 msgid "Failed to upload texture: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:187
+#: src/app/Presenter.cpp:191
 #, c-format
 msgid "Failed to query drawable dimensions: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:192
+#: src/app/Presenter.cpp:196
 #, c-format
 msgid "Failed to create readback buffer: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:196
+#: src/app/Presenter.cpp:200
 #, c-format
 msgid "Failed to lock readback buffer: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:216
+#: src/app/Presenter.cpp:220
 #, c-format
 msgid "Readback failed: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:228
+#: src/app/Presenter.cpp:232
 #, c-format
 msgid "Failed to save image: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:231
+#: src/app/Presenter.cpp:235
 #, c-format
 msgid "Window readback saved to %s (%dx%d pixels)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:241
+#: src/app/Presenter.cpp:245
 #, c-format
 msgid ""
-"[input] %s raw(%d,%d) viewport %d x%d (rotation %d degrees) / window %d "
-"x%d / drawable %d x%d -> (%.3f, %.3f)\n"
+"[input] %s raw(%d,%d) viewport %d x%d (rotation %d degrees, horizontal flip: "
+"%s) / window %d x%d / drawable %d x%d -> (%.3f, %.3f)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:285
+#: src/app/Presenter.cpp:248 tools/feature_probe.cpp:26
+#: tools/feature_probe.cpp:27 tools/rr_keepalive_probe.cpp:249
+#: tools/rr_keepalive_probe.cpp:307
+msgid "no"
+msgstr ""
+
+#: src/app/Presenter.cpp:248 tools/feature_probe.cpp:26
+#: tools/feature_probe.cpp:27 tools/rr_keepalive_probe.cpp:249
+#: tools/rr_keepalive_probe.cpp:307
+msgid "yes"
+msgstr ""
+
+#: src/app/Presenter.cpp:290
 msgid "down"
 msgstr ""
 
-#: src/app/Presenter.cpp:300
+#: src/app/Presenter.cpp:305
 msgid "move"
 msgstr ""
 
-#: src/app/Presenter.cpp:339
+#: src/app/Presenter.cpp:344
 #, c-format
 msgid "Failed to change fullscreen mode: %s\n"
 msgstr ""
@@ -4502,16 +4527,6 @@ msgstr ""
 #: tools/feature_probe.cpp:24
 #, c-format
 msgid "  %-46s port=%u RemoteXPC=%s encrypted=%s\n"
-msgstr ""
-
-#: tools/feature_probe.cpp:26 tools/feature_probe.cpp:27
-#: tools/rr_keepalive_probe.cpp:249 tools/rr_keepalive_probe.cpp:307
-msgid "no"
-msgstr ""
-
-#: tools/feature_probe.cpp:26 tools/feature_probe.cpp:27
-#: tools/rr_keepalive_probe.cpp:249 tools/rr_keepalive_probe.cpp:307
-msgid "yes"
 msgstr ""
 
 #: tools/feature_probe.cpp:39

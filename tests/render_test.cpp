@@ -1,16 +1,11 @@
-// 转屏渲染的离线自检：拿一张四角染色的假面板帧，在无头驱动下画一遍，读回来对角落。
-//
-// 为什么必须自己画一遍而不是只看数学：`SDL_RenderCopyEx` 的角度是顺时针还是逆时针，
-// 是这条路径唯一一个"错了就整幅歪 180°"的外部约定，而真机上验它要开窗口（用户在场
-// 时才合适），画面内容又一直在动、不好判定。dummy 驱动 + 软件渲染器 + 回读把这三件事
-// 都绕开了：不需要显示器，像素是我们自己填的，判据是四个角的颜色落点。
-//
-// 这个测试确实抓到了两条只有画一遍才看得见的错：一是 dst 给成视口尺寸时 90/270 会
-// 画成"中间一条、四角全黑"（SDL 是绕 dst 中心转、图像溢出 dst 的），二是 dummy 驱动下
-// `SDL_SetWindowSize` 不带动绘制面尺寸。两种症状在真机窗口里都只是"画面不对"，
-// 谁也推不回原因。
+// SDL 显示与输入的离线回归。dummy 驱动和软件渲染器不依赖显示器或设备，
+// 用固定源像素检查实际输出，而不只验证坐标公式。
+// 四角颜色验证旋转/翻转顺序，每像素不同的裁剪帧检测半像素中心产生的偏移；
+// Presenter 的 SDL 指针事件回调则检查实际显示方向与设备坐标是否一致。
+// 另保留留边、回读、来源尺寸切换和触点释放回归。
 #include <SDL.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -77,9 +72,10 @@ Point panel_corner(int which) {
 /// 这里独立地按定义算一遍（先归一化，再按顺时针旋转的坐标变换），为的是让判据
 /// 不是从被测代码里抄来的：被测的是 SDL 的角度方向与 dst 尺寸，判据必须来自
 /// 我们对"顺时针"的理解。
-Point viewport_corner(int which, int degrees) {
+Point viewport_corner(int which, int degrees, bool horizontal_flip = false) {
     const Point p = panel_corner(which);
-    const double u = static_cast<double>(p.x) / kPanelW;  // 面板横向 0..1
+    const double original_u = static_cast<double>(p.x) / kPanelW;
+    const double u = horizontal_flip ? 1.0 - original_u : original_u;
     const double v = static_cast<double>(p.y) / kPanelH;  // 面板纵向 0..1，向下
     double tu = u, tv = v;
     switch (degrees) {
@@ -156,7 +152,8 @@ struct Texture {
 };
 
 /// 画一次并回读。返回 false 表示这一档根本没画成（建纹理/回读失败）。
-bool render_once(int degrees, std::vector<Uint32> &out, int &ow, int &oh) {
+bool render_once(int degrees, std::vector<Uint32> &out, int &ow, int &oh,
+                 bool horizontal_flip = false) {
     scrctl::app::Crop crop {};
     crop.x = 0;
     crop.y = 0;
@@ -206,15 +203,15 @@ bool render_once(int degrees, std::vector<Uint32> &out, int &ow, int &oh) {
         auto *row = reinterpret_cast<Uint32 *>(
             static_cast<Uint8 *>(pixels) + static_cast<std::size_t>(y) * pitch);
         for (int x = 0; x < kPanelW; ++x) {
-            Rgb c = kBackground;
-            if (x < kBlock && y < kBlock) {
-                c = kTopLeft;
-            } else if (x >= kPanelW - kBlock && y < kBlock) {
-                c = kTopRight;
-            } else if (x >= kPanelW - kBlock && y >= kPanelH - kBlock) {
-                c = kBottomRight;
-            } else if (x < kBlock && y >= kPanelH - kBlock) {
-                c = kBottomLeft;
+            Rgb c{255, 0, 255}; // 裁剪区域外用不同颜色，检测误翻整张纹理或越界显示。
+            const int cx = x - crop.x, cy = y - crop.y;
+            if (cx >= 0 && cy >= 0 && cx < crop.w && cy < crop.h) {
+                c = kBackground;
+                const int block = std::min({kBlock, crop.w / 4, crop.h / 4});
+                if (cx < block && cy < block) c = kTopLeft;
+                else if (cx >= crop.w - block && cy < block) c = kTopRight;
+                else if (cx >= crop.w - block && cy >= crop.h - block) c = kBottomRight;
+                else if (cx < block && cy >= crop.h - block) c = kBottomLeft;
             }
             row[x] = pack(c);
         }
@@ -223,7 +220,8 @@ bool render_once(int degrees, std::vector<Uint32> &out, int &ow, int &oh) {
 
     SDL_SetRenderDrawColor(canvas.renderer, 0, 0, 0, 255);
     SDL_RenderClear(canvas.renderer);
-    scrctl::app::draw_rotated(canvas.renderer, holder.tex, crop, degrees);
+    if (!scrctl::app::draw_rotated(canvas.renderer, holder.tex, crop, degrees, horizontal_flip))
+        return false;
 
     SDL_Surface *s = SDL_CreateRGBSurfaceWithFormat(0, vw, vh, 32, SDL_PIXELFORMAT_ARGB8888);
     if (s == nullptr) {
@@ -249,6 +247,59 @@ bool render_once(int degrees, std::vector<Uint32> &out, int &ow, int &oh) {
     }
     SDL_FreeSurface(s);
     return true;
+}
+
+/// 每像素不同的非正方形裁剪验证中心精度，四角大色块无法发现一像素偏移。
+/// 同时覆盖宽高同奇偶和不同奇偶，判据直接来自离散像素的翻转与旋转定义。
+void cropped_flip_pixels() {
+    for (const auto size : {Point{24, 36}, Point{25, 36}, Point{24, 35}, Point{25, 35}}) {
+        const scrctl::app::Crop crop{6, 8, size.x, size.y, kPanelW, kPanelH};
+        std::vector<Uint32> source(kPanelW * kPanelH);
+        for (int y = 0; y < kPanelH; ++y)
+            for (int x = 0; x < kPanelW; ++x)
+                source[y * kPanelW + x] = pack(Rgb{static_cast<Uint8>(x * 5),
+                                                   static_cast<Uint8>(y * 3),
+                                                   static_cast<Uint8>(x + y)});
+        for (const int degrees : {0, 90, 180, 270}) for (const bool flip : {false, true}) {
+            int vw = 0, vh = 0;
+            scrctl::app::viewport_size(crop, degrees, vw, vh);
+            Canvas canvas;
+            check(canvas.open(vw, vh), "为奇偶裁剪像素回归创建软件渲染器");
+            if (!canvas.renderer) continue;
+            Texture texture;
+            texture.tex = SDL_CreateTexture(canvas.renderer, SDL_PIXELFORMAT_ARGB8888,
+                SDL_TEXTUREACCESS_STREAMING, kPanelW, kPanelH);
+            check(texture.tex != nullptr, "创建裁剪像素纹理");
+            if (!texture.tex) continue;
+            SDL_SetTextureScaleMode(texture.tex, SDL_ScaleModeNearest);
+            check(SDL_UpdateTexture(texture.tex, nullptr, source.data(), kPanelW * 4) == 0,
+                  "上传每像素不同的完整源帧");
+            SDL_SetRenderDrawColor(canvas.renderer, 0, 0, 0, 255);
+            SDL_RenderClear(canvas.renderer);
+            check(scrctl::app::draw_rotated(canvas.renderer, texture.tex, crop, degrees, flip),
+                  "用正式绘制入口渲染裁剪及翻转");
+            std::vector<Uint32> actual(static_cast<std::size_t>(vw) * vh);
+            const bool read = SDL_RenderReadPixels(canvas.renderer, nullptr, SDL_PIXELFORMAT_ARGB8888,
+                                                    actual.data(), vw * 4) == 0;
+            bool equal = read;
+            for (int y = 0; y < crop.h && equal; ++y) for (int x = 0; x < crop.w; ++x) {
+                const int hx = flip ? crop.w - 1 - x : x;
+                int dx = hx, dy = y;
+                switch (degrees) {
+                    case 90: dx = crop.h - 1 - y; dy = hx; break;
+                    case 180: dx = crop.w - 1 - hx; dy = crop.h - 1 - y; break;
+                    case 270: dx = y; dy = crop.w - 1 - hx; break;
+                }
+                if (actual[dy * vw + dx] != source[(crop.y + y) * kPanelW + crop.x + x]) {
+                    std::printf("     crop=%dx%d rotation=%d flip=%d mismatch=(%d,%d)\n",
+                                crop.w, crop.h, degrees, flip, dx, dy);
+                    equal = false;
+                    break;
+                }
+            }
+            check(equal, "奇偶尺寸裁剪的每个像素均先水平翻转再顺时针旋转，无偏移或黑边");
+        }
+    }
 }
 
 /// 等比留边那两条边的颜色，以及"回读到底覆盖了整块输出没有"。
@@ -352,12 +403,13 @@ scrctl::Frame colored_frame(int width, int height, const scrctl::app::Crop &crop
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             Rgb color{255, 0, 255};  // 编码填充区，不能出现在裁剪后的画面内。
-            if (x < crop.w && y < crop.h) {
+            const int cx = x - crop.x, cy = y - crop.y;
+            if (cx >= 0 && cy >= 0 && cx < crop.w && cy < crop.h) {
                 color = kBackground;
-                const bool left = x < crop.w / 4;
-                const bool right = x >= crop.w - crop.w / 4;
-                const bool top = y < crop.h / 4;
-                const bool bottom = y >= crop.h - crop.h / 4;
+                const bool left = cx < crop.w / 4;
+                const bool right = cx >= crop.w - crop.w / 4;
+                const bool top = cy < crop.h / 4;
+                const bool bottom = cy >= crop.h - crop.h / 4;
                 if (left && top) color = colors[0];
                 else if (right && top) color = colors[1];
                 else if (right && bottom) color = colors[2];
@@ -580,6 +632,86 @@ void presenter_releases_touch_when_geometry_changes() {
     check(callbacks.size() == 9, "退出后的重复释放不新增回调");
 }
 
+void presenter_flip_mouse_events() {
+    const Palette colors{kTopLeft, kTopRight, kBottomRight, kBottomLeft};
+    for (const int pixel_degrees : {0, 90, 180, 270}) for (const int degrees : {0, 90, 180, 270}) {
+        const bool swapped = pixel_degrees == 90 || pixel_degrees == 270;
+        const int source_w = swapped ? 120 : 80, source_h = swapped ? 80 : 120;
+        const auto crop = scrctl::app::make_frame_crop(true, 10, 12, 40, 60, source_w, source_h,
+            scrctl::app::FrameGeometry{80, 120, pixel_degrees, true});
+        const auto frame = colored_frame(source_w, source_h, crop, colors, 0);
+        scrctl::app::WindowSpec spec;
+        spec.horizontal_flip = true;
+        spec.want_readback = true;
+        scrctl::app::viewport_size(crop, degrees, spec.want_w, spec.want_h);
+        scrctl::app::Presenter presenter;
+        const bool opened = presenter.open(frame.width, frame.height, crop, degrees, 1, false, spec);
+        check(opened, "为翻转鼠标回归创建实际 Presenter");
+        if (!opened) continue;
+        check(presenter.draw(frame, crop), "绘制带裁剪和截图像素方向的翻转帧");
+        SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+        struct Touch { double x, y; bool down; };
+        std::vector<Touch> callbacks;
+        const auto on_touch = [&](double x, double y, bool down) { callbacks.push_back({x, y, down}); };
+        const auto push = [&](Uint32 type, Point source_point) {
+            // 独立前向构造事件位置：裁剪内先水平翻转，再顺时针旋转。
+            const int hx = crop.w - source_point.x;
+            Point viewport{hx, source_point.y};
+            switch (degrees) {
+                case 90: viewport = {crop.h - source_point.y, hx}; break;
+                case 180: viewport = {crop.w - hx, crop.h - source_point.y}; break;
+                case 270: viewport = {source_point.y, crop.w - hx}; break;
+            }
+            SDL_Event event{};
+            event.type = type;
+            // 注入 logical size 坐标；windowID=0 避免 SDL 再次按窗口点数缩放。
+            if (type == SDL_MOUSEMOTION) {
+                event.motion.state = SDL_BUTTON_LMASK;
+                event.motion.x = viewport.x; event.motion.y = viewport.y;
+            } else {
+                event.button.button = SDL_BUTTON_LEFT;
+                event.button.state = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
+                event.button.x = viewport.x; event.button.y = viewport.y;
+            }
+            check(SDL_PushEvent(&event) == 1, "向实际 SDL 队列发送翻转后的指针位置");
+        };
+        const auto expected = [&](Point source_point) {
+            const double x = double(crop.x + source_point.x) / source_w;
+            const double y = double(crop.y + source_point.y) / source_h;
+            switch (pixel_degrees) {
+                case 90: return Touch{y, 1 - x, true};
+                case 180: return Touch{1 - x, 1 - y, true};
+                case 270: return Touch{1 - y, x, true};
+                default: return Touch{x, y, true};
+            }
+        };
+        const Point first{8, 18}, last{28, 42};
+        push(SDL_MOUSEBUTTONDOWN, first);
+        push(SDL_MOUSEMOTION, last);
+        push(SDL_MOUSEBUTTONUP, last);
+        check(!presenter.pump(on_touch), "实际 Presenter 处理翻转指针事件");
+        check(callbacks.size() == 3, "翻转拖拽依次交付按下、合并移动和抬起");
+        for (std::size_t i = 0; i < callbacks.size() && i < 3; ++i) {
+            const auto want = expected(i == 0 ? first : last);
+            check(callbacks[i].down == (i < 2) && std::fabs(callbacks[i].x - want.x) < 1e-9 &&
+                  std::fabs(callbacks[i].y - want.y) < 1e-9,
+                  "翻转窗口的设备回调还原裁剪偏移和截图自身方向");
+        }
+        if (pixel_degrees == 90 && degrees == 270) {
+            callbacks.clear();
+            push(SDL_MOUSEBUTTONDOWN, first); presenter.pump(on_touch);
+            auto unknown = crop; unknown.input_valid = false;
+            check(presenter.draw(frame, unknown), "未知截图几何仍显示翻转画面");
+            push(SDL_MOUSEBUTTONDOWN, last); presenter.pump(on_touch);
+            const auto want = expected(first);
+            check(callbacks.size() == 2 && !callbacks.back().down &&
+                  std::fabs(callbacks.back().x - want.x) < 1e-9 &&
+                  std::fabs(callbacks.back().y - want.y) < 1e-9,
+                  "翻转截图失去几何依据时按旧有效点释放，拒绝新按下");
+        }
+    }
+}
+
 void presenter_shortcuts_preserve_normal_input() {
     const scrctl::app::Crop crop{0, 0, 64, 96, 64, 96};
     scrctl::app::WindowSpec spec;
@@ -668,12 +800,12 @@ int main() {
                                               "面板左下(白)"};
     static constexpr Rgb kColors[4] = {kTopLeft, kTopRight, kBottomRight, kBottomLeft};
 
-    for (const int degrees : {0, 90, 180, 270}) {
-        std::printf("== 顺时针转正 %d° ==\n", degrees);
+    for (const int degrees : {0, 90, 180, 270}) for (const bool flip : {false, true}) {
+        std::printf("== 顺时针旋转 %d°，水平翻转 %s ==\n", degrees, flip ? "是" : "否");
         std::vector<Uint32> px;
         int ow = 0, oh = 0;
         const int before = failures;
-        if (!render_once(degrees, px, ow, oh)) {
+        if (!render_once(degrees, px, ow, oh, flip)) {
             ++failures;
             continue;
         }
@@ -682,7 +814,7 @@ int main() {
         const int want_h = (degrees == 90 || degrees == 270) ? kPanelW : kPanelH;
         check(ow == want_w && oh == want_h, "视口尺寸按旋转对调");
         for (int i = 0; i < 4; ++i) {
-            const Point want = viewport_corner(i, degrees);
+            const Point want = viewport_corner(i, degrees, flip);
             const Rgb got = at(px.data(), ow, want.x, want.y);
             char note[128];
             std::snprintf(note, sizeof note, "%s 落在视口 (%d,%d) 且颜色对得上", kNames[i], want.x,
@@ -699,8 +831,10 @@ int main() {
     }
 
     check(letterbox_and_readback(), "等比留边的边上涂的是 --background-color，且回读覆盖整块输出");
+    cropped_flip_pixels();
     presenter_source_size_changes();
     presenter_releases_touch_when_geometry_changes();
+    presenter_flip_mouse_events();
     presenter_shortcuts_preserve_normal_input();
 
     SDL_Quit();
