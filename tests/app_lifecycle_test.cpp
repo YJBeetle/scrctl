@@ -1,7 +1,6 @@
 #include "app/Application.h"
 #include "app/LiveSource.h"
 #include "app/SdlRuntime.h"
-#include "decode/Decoder.h"
 
 #include <SDL.h>
 #include <chrono>
@@ -106,15 +105,14 @@ int main() {
     check(run({"scrctl", "--play", path.string(), "--no-audio"}) == 1,
           "application reports SDL initialization failure");
     check(SDL_WasInit(0) == 0, "failed initialization cleans partially started SDL subsystems");
-    check(run({"scrctl", "--play", path.string(), "--no-window", "--no-audio"}) ==
-              (scrctl::kHaveDecoder ? 0 : 1),
-          "headless EOF succeeds with a decoder; missing decoder reports failure");
+    check(run({"scrctl", "--play", path.string(), "--no-window", "--no-audio"}) == 1,
+          "empty playback fails even without a window or verify request");
     check(SDL_WasInit(0) == 0, "normal application return cleans SDL");
     SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);
     const auto readback_path = path.parent_path() / (path.stem().string() + ".bmp");
     check(run({"scrctl", "--play", path.string(), "--no-audio", "--verify", "1",
                readback_path.string()}) == 1,
-          "empty playback reports that requested readback frame was not reached");
+          "empty playback fails before requested readback can be reached");
     check(!std::filesystem::exists(readback_path), "unreached readback does not create an image");
     check(SDL_WasInit(0) == 0, "unreached readback cleans SDL");
     caller_signal = 0;

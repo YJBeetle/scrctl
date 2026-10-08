@@ -321,6 +321,12 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(app_lifecycle_test PRIVATE scrctl_app)
     add_test(NAME app_lifecycle COMMAND app_lifecycle_test)
 
+    # 直接编译真实文件源，测试只在两种解码器工厂边界提供受控后端。
+    scrctl_add_test_executable(filesource_test tests/filesource_test.cpp src/app/FileSource.cpp)
+    target_link_libraries(filesource_test PRIVATE scrctl_core)
+    add_test(NAME filesource COMMAND filesource_test)
+    set_tests_properties(filesource PROPERTIES TIMEOUT 30)
+
     scrctl_add_test_executable(annexb_test tests/annexb_test.cpp)
     target_link_libraries(annexb_test PRIVATE scrctl_core)
 

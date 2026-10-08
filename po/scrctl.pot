@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-09 04:16+0800\n"
+"POT-Creation-Date: 2026-10-09 05:09+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -626,18 +626,49 @@ msgstr ""
 msgid "USB device enumeration was unavailable: "
 msgstr ""
 
-#: src/app/FileSource.cpp:56
+#: src/app/FileSource.cpp:37
+msgid "Cannot read playback file: "
+msgstr ""
+
+#: src/app/FileSource.cpp:41
+msgid "Cannot parse playback file: "
+msgstr ""
+
+#: src/app/FileSource.cpp:58 src/app/FileSource.cpp:64
 msgid "Cannot open file "
 msgstr ""
 
-#: src/app/FileSource.cpp:61
-#, c-format
-msgid "Read %s (%zu bytes)\n"
+#: src/app/FileSource.cpp:59
+msgid "Playback requires a regular file: "
 msgstr ""
 
-#: src/app/FileSource.cpp:69
+#: src/app/FileSource.cpp:81
+#, c-format
+msgid ""
+"Software decoder (libavcodec) is not included; using the platform decoder "
+"for file playback.\n"
+msgstr ""
+
+#: src/app/FileSource.cpp:85
+#, c-format
+msgid "Playing file: %s\n"
+msgstr ""
+
+#: src/app/FileSource.cpp:86
 #, c-format
 msgid "Decoder backend: %s\n"
+msgstr ""
+
+#: src/app/FileSource.cpp:116
+msgid "Cannot configure the HEVC decoder for playback"
+msgstr ""
+
+#: src/app/FileSource.cpp:132
+msgid "Playback file has no complete HEVC parameter sets"
+msgstr ""
+
+#: src/app/FileSource.cpp:134
+msgid "Playback file produced no video frames"
 msgstr ""
 
 #: src/app/FrameSource.h:23
@@ -956,112 +987,112 @@ msgstr ""
 msgid "Failed to create window: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:71
+#: src/app/Presenter.cpp:72
 #, c-format
 msgid "Failed to create renderer: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:76
+#: src/app/Presenter.cpp:77
 #, c-format
 msgid "Render driver: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:84 src/app/Presenter.cpp:158 src/app/Presenter.cpp:207
-#: src/app/Presenter.cpp:225
+#: src/app/Presenter.cpp:85 src/app/Presenter.cpp:159 src/app/Presenter.cpp:208
+#: src/app/Presenter.cpp:226
 #, c-format
 msgid "Failed to configure viewport: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:95
+#: src/app/Presenter.cpp:96
 #, c-format
 msgid ""
 "Window %dx%d points / drawable %dx%d pixels / viewport %dx%d (source %dx%d, "
 "crop %dx%d+%d+%d, clockwise rotation %d degrees)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:100
+#: src/app/Presenter.cpp:101
 #, c-format
 msgid "Display is horizontally flipped before rotation\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:116
+#: src/app/Presenter.cpp:117
 #, c-format
 msgid "Failed to create texture: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:134 src/app/Presenter.cpp:142
+#: src/app/Presenter.cpp:135 src/app/Presenter.cpp:143
 #, c-format
 msgid "Cannot render frame: invalid dimensions or pixel buffer\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:167 src/app/Presenter.cpp:177
+#: src/app/Presenter.cpp:168 src/app/Presenter.cpp:178
 #, c-format
 msgid "Failed to render frame: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:171
+#: src/app/Presenter.cpp:172
 #, c-format
 msgid "Failed to upload texture: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:191
+#: src/app/Presenter.cpp:192
 #, c-format
 msgid "Failed to query drawable dimensions: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:196
+#: src/app/Presenter.cpp:197
 #, c-format
 msgid "Failed to create readback buffer: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:200
+#: src/app/Presenter.cpp:201
 #, c-format
 msgid "Failed to lock readback buffer: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:220
+#: src/app/Presenter.cpp:221
 #, c-format
 msgid "Readback failed: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:232
+#: src/app/Presenter.cpp:233
 #, c-format
 msgid "Failed to save image: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:235
+#: src/app/Presenter.cpp:236
 #, c-format
 msgid "Window readback saved to %s (%dx%d pixels)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:245
+#: src/app/Presenter.cpp:246
 #, c-format
 msgid ""
 "[input] %s raw(%d,%d) viewport %d x%d (rotation %d degrees, horizontal flip: "
 "%s) / window %d x%d / drawable %d x%d -> (%.3f, %.3f)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:248 tools/feature_probe.cpp:26
+#: src/app/Presenter.cpp:249 tools/feature_probe.cpp:26
 #: tools/feature_probe.cpp:27 tools/rr_keepalive_probe.cpp:249
 #: tools/rr_keepalive_probe.cpp:307
 msgid "no"
 msgstr ""
 
-#: src/app/Presenter.cpp:248 tools/feature_probe.cpp:26
+#: src/app/Presenter.cpp:249 tools/feature_probe.cpp:26
 #: tools/feature_probe.cpp:27 tools/rr_keepalive_probe.cpp:249
 #: tools/rr_keepalive_probe.cpp:307
 msgid "yes"
 msgstr ""
 
-#: src/app/Presenter.cpp:290
+#: src/app/Presenter.cpp:313
 msgid "down"
 msgstr ""
 
-#: src/app/Presenter.cpp:305
+#: src/app/Presenter.cpp:327
 msgid "move"
 msgstr ""
 
-#: src/app/Presenter.cpp:344
+#: src/app/Presenter.cpp:372
 #, c-format
 msgid "Failed to change fullscreen mode: %s\n"
 msgstr ""

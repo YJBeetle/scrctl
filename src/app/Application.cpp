@@ -115,7 +115,7 @@ int run(int argc, char **argv) {
         return code;
     };
     if (!o.path.empty()) {
-        source = std::make_unique<FileSource>(o.path);
+        source = std::make_unique<FileSource>(o.path, o.hw_decode);
     } else {
         auto made = std::make_unique<LiveSource>();
         std::string err;
