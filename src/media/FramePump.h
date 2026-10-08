@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <string>
 #include <thread>
 #include <vector>
@@ -139,6 +140,11 @@ public:
 
     ~FramePump();
 
+    /// 仅供退出收尾：停止并等待视频 worker，再检查录制文件的刷新与关闭结果。
+    /// 写入失败不会中断镜像；此处返回本次录制的最早错误。重复调用结果相同，
+    /// 无录制时返回 true。须由拥有者顺序调用，调用后不能继续取新视频帧。
+    bool finish_recording(std::string &err);
+
     FramePump(const FramePump &) = delete;
     FramePump &operator=(const FramePump &) = delete;
 
@@ -180,6 +186,10 @@ private:
     /// 停止旧会话并创建新会话。首次启动也使用此入口，但不创建线程；
     /// start() 完成录制文件、时钟等初始化后再启动 worker，避免无锁字段竞争。
     bool restart(std::string &err);
+    /// 录制保留原始 NAL。文件失败只禁用录制，后续拆包和解码仍继续。
+    void write_recording_nal(std::span<const uint8_t> bytes);
+    void close_recording(bool mirroring_continues);
+    void note_recording_error(std::string reason, bool mirroring_continues);
 
     scrctl::remote::Device &device_;
     Options options_;
@@ -190,7 +200,10 @@ private:
     bool worker_running_ = false;
     /// 仅由启动线程/worker 访问；已接受但不可用的答复使本泵停止重试及续期。
     bool negotiation_invalid_ = false;
+    /// 活跃期间由 worker 独占；退出线程 join 后才能刷新、关闭或读取。
     FILE *record_ = nullptr;
+    /// mutex_ 保护，只记录最早错误；清理失败不能覆盖原始写入原因。
+    std::string recording_error_;
 
     /// 解析器仅由后台线程访问，每次重建会话时替换。
     std::unique_ptr<AnnexBParser> parser_;

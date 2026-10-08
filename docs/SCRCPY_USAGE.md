@@ -59,6 +59,9 @@ scrcpy 的 `--orientation` 可以同时改变显示和录制；它的 crop 作�
 [视频方向](https://github.com/Genymobile/scrcpy/blob/v5.0/doc/video.md#orientation)、
 [录制](https://github.com/Genymobile/scrcpy/blob/v5.0/doc/recording.md)。
 
+录制写入失败时停止写文件，视频接收和镜像继续。退出时检查文件刷新与关闭结果；
+本次录制只要发生过文件错误，最终退出码就非零，文件可能不完整。
+
 音频路由参照 [scrcpy 音频说明](https://github.com/Genymobile/scrcpy/blob/master/doc/audio.md#source)。
 scrctl 的默认路由已在 macOS、iPhone14,4 / iOS 27 的 USB 与 Wi-Fi 音乐播放中验证：
 电脑发声、手机无声，退出后手动继续可恢复手机播放。Windows、Linux 与旧系统

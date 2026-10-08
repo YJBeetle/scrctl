@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 20:42+0800\n"
+"POT-Creation-Date: 2026-10-08 21:59+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -29,7 +29,7 @@ msgstr ""
 msgid "SDL initialization failed: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:80 src/app/Application.cpp:254
+#: src/app/Application.cpp:80 src/app/Application.cpp:264
 #, c-format
 msgid "Received exit signal; closing device session\n"
 msgstr ""
@@ -40,22 +40,22 @@ msgid ""
 "Failed to initialize audio output: %s (audio disabled; video continues)\n"
 msgstr ""
 
-#: src/app/Application.cpp:112
+#: src/app/Application.cpp:121
 #, c-format
 msgid "Failed to start video: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:118
+#: src/app/Application.cpp:127
 #, c-format
 msgid "Device is in a call. End the call and try again.\n"
 msgstr ""
 
-#: src/app/Application.cpp:135
+#: src/app/Application.cpp:145
 #, c-format
 msgid "File playback cannot launch a device app; ignoring --start-app\n"
 msgstr ""
 
-#: src/app/Application.cpp:153
+#: src/app/Application.cpp:163
 #, c-format
 msgid ""
 "Failed to open audio output: %s (audio disabled; video continues). The "
@@ -63,78 +63,78 @@ msgid ""
 "seconds); resume its player if needed.\n"
 msgstr ""
 
-#: src/app/Application.cpp:159
+#: src/app/Application.cpp:169
 #, c-format
 msgid "Local audio playback disabled; receiving and decoding continue\n"
 msgstr ""
 
-#: src/app/Application.cpp:183 tools/rr_keepalive_probe.cpp:770
+#: src/app/Application.cpp:193 tools/rr_keepalive_probe.cpp:770
 msgid "failed"
 msgstr ""
 
-#: src/app/Application.cpp:183
+#: src/app/Application.cpp:193
 msgid "injected"
 msgstr ""
 
-#: src/app/Application.cpp:195
+#: src/app/Application.cpp:205
 #, c-format
 msgid "--test-button %s: pressed\n"
 msgstr ""
 
-#: src/app/Application.cpp:197
+#: src/app/Application.cpp:207
 #, c-format
 msgid "--test-button %s failed: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:209
+#: src/app/Application.cpp:219
 #, c-format
 msgid "--test-type %s: injected\n"
 msgstr ""
 
-#: src/app/Application.cpp:211
+#: src/app/Application.cpp:221
 #, c-format
 msgid "--test-type failed: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:239
+#: src/app/Application.cpp:249
 #, c-format
 msgid "Input injection failed (further attempts disabled): %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:250
+#: src/app/Application.cpp:260
 #, c-format
 msgid "Reached --time-limit %d seconds\n"
 msgstr ""
 
-#: src/app/Application.cpp:264
+#: src/app/Application.cpp:274
 #, c-format
 msgid ""
 "  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
 msgstr ""
 
-#: src/app/Application.cpp:290 src/app/Application.cpp:358
+#: src/app/Application.cpp:300 src/app/Application.cpp:368
 #, c-format
 msgid "Reached --exit-after %d\n"
 msgstr ""
 
-#: src/app/Application.cpp:305
+#: src/app/Application.cpp:315
 #, c-format
 msgid ""
 "Mouse input is unavailable: screenshot orientation or display dimensions are "
 "unknown or inconsistent\n"
 msgstr ""
 
-#: src/app/Application.cpp:337
+#: src/app/Application.cpp:347
 #, c-format
 msgid "Render rotation changed to %d degrees clockwise; window recreated\n"
 msgstr ""
 
-#: src/app/Application.cpp:372
+#: src/app/Application.cpp:383
 #, c-format
 msgid "Window readback was not reached (requested frame %d, rendered %d)\n"
 msgstr ""
 
-#: src/app/Application.cpp:376
+#: src/app/Application.cpp:387
 #, c-format
 msgid "Finished: processed %d frames\n"
 msgstr ""
@@ -598,166 +598,166 @@ msgstr ""
 msgid "Source ended"
 msgstr ""
 
-#: src/app/LiveSource.cpp:23
+#: src/app/LiveSource.cpp:31
 msgid "Device startup cancelled"
 msgstr ""
 
-#: src/app/LiveSource.cpp:32
+#: src/app/LiveSource.cpp:40
 msgid "Invalid --test-degrade: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:80
+#: src/app/LiveSource.cpp:88
 #, c-format
 msgid "Failed to query display dimensions: %s (using model crop table)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:81
+#: src/app/LiveSource.cpp:89
 msgid "Update contains no usable dimensions"
 msgstr ""
 
-#: src/app/LiveSource.cpp:94
+#: src/app/LiveSource.cpp:102
 #, c-format
 msgid ""
 "Failed to subscribe to display changes: %s (automatic rotation unavailable)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:122
+#: src/app/LiveSource.cpp:130
 #, c-format
 msgid "Media stream unavailable: %s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:125
+#: src/app/LiveSource.cpp:133
 #, c-format
 msgid ""
 "Using screenshot polling; refresh rate depends on capture time. Input "
 "control remains available\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:129
+#: src/app/LiveSource.cpp:137
 msgid "Failed to start screenshot polling: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:144
+#: src/app/LiveSource.cpp:152
 msgid "No first screenshot within 5 seconds"
 msgstr ""
 
-#: src/app/LiveSource.cpp:151
+#: src/app/LiveSource.cpp:159
 msgid "No first decoded frame within 5 seconds"
 msgstr ""
 
-#: src/app/LiveSource.cpp:158
+#: src/app/LiveSource.cpp:166
 #, c-format
 msgid "Screenshot mirroring started: %s / iOS %s, %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:162
+#: src/app/LiveSource.cpp:170
 #, c-format
 msgid ""
 "Video stream started: %s / iOS %s, receive port=%u PT=%u, first frame %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:171
+#: src/app/LiveSource.cpp:179
 #, c-format
 msgid ""
 "Display geometry: visible area %dx%d (displayId=%llu %s), UI rotation %d "
 "degrees clockwise, stream %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:178
+#: src/app/LiveSource.cpp:186
 #, c-format
 msgid "Screenshot mode cannot record Annex-B; ignoring --record\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:180
+#: src/app/LiveSource.cpp:188
 #, c-format
 msgid "Recording to %s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:187
+#: src/app/LiveSource.cpp:195
 #, c-format
 msgid "Screenshot mode does not start audio\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:198
+#: src/app/LiveSource.cpp:206
 #, c-format
 msgid ""
 "Forwarding audio to the computer. Switching routes may pause the phone's "
 "player; resume playback on the phone if needed.\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:207
+#: src/app/LiveSource.cpp:215
 #, c-format
 msgid "Failed to start audio: %s (video continues)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:212
+#: src/app/LiveSource.cpp:220
 #, c-format
 msgid "Audio stream started: receive port=%u PT=%u backend=%s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:215
+#: src/app/LiveSource.cpp:223
 msgid "Audio routing: phone and computer (--audio-dup)"
 msgstr ""
 
-#: src/app/LiveSource.cpp:216
+#: src/app/LiveSource.cpp:224
 msgid "Audio routing: computer; phone playback is suppressed"
 msgstr ""
 
-#: src/app/LiveSource.cpp:223
+#: src/app/LiveSource.cpp:231
 #, c-format
 msgid "--test-degrade: from now,"
 msgstr ""
 
-#: src/app/LiveSource.cpp:225
+#: src/app/LiveSource.cpp:233
 #, c-format
 msgid " at %.1f seconds: %s"
 msgstr ""
 
-#: src/app/LiveSource.cpp:226
+#: src/app/LiveSource.cpp:234
 msgid "force fallback"
 msgstr ""
 
-#: src/app/LiveSource.cpp:226
+#: src/app/LiveSource.cpp:234
 msgid "release override"
 msgstr ""
 
-#: src/app/LiveSource.cpp:228
+#: src/app/LiveSource.cpp:236
 #, c-format
 msgid " (test mode)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:235
+#: src/app/LiveSource.cpp:243
 msgid ""
 "No playable audio stream (disabled, failed to start, or unsupported build)"
 msgstr ""
 
-#: src/app/LiveSource.cpp:266
+#: src/app/LiveSource.cpp:274
 #, c-format
 msgid "Control connected (touch injection available)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:340
+#: src/app/LiveSource.cpp:348
 #, c-format
 msgid ""
 "Live video unavailable; using screenshot polling while retrying video in the "
 "background\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:343
+#: src/app/LiveSource.cpp:351
 #, c-format
 msgid "Failed to switch to screenshots: %s (retry in %llu seconds)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:349
+#: src/app/LiveSource.cpp:357
 #, c-format
 msgid "Live video recovered; switched back to video stream\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:388
+#: src/app/LiveSource.cpp:396
 msgid "); closing session"
 msgstr ""
 
-#: src/app/LiveSource.cpp:388
+#: src/app/LiveSource.cpp:396
 msgid "Device connection lost ("
 msgstr ""
 
@@ -1246,73 +1246,73 @@ msgstr ""
 msgid "Nesting too deep"
 msgstr ""
 
-#: src/media/AudioPump.cpp:99
+#: src/media/AudioPump.cpp:100
 #, c-format
 msgid "Clamped --audio-buffer %d to %d ms and adjusted buffer capacity\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:130
+#: src/media/AudioPump.cpp:131
 msgid "Audio routing was not confirmed: answer has no valid AudioStreamMode"
 msgstr ""
 
-#: src/media/AudioPump.cpp:136
+#: src/media/AudioPump.cpp:137
 msgid ""
 "Phone-and-computer audio routing was not accepted (--audio-dup requires "
 "AudioStreamMode 8)"
 msgstr ""
 
-#: src/media/AudioPump.cpp:137
+#: src/media/AudioPump.cpp:138
 msgid ""
 "Computer-only audio routing was not accepted (requires AudioStreamMode 10); "
 "not falling back to --audio-dup"
 msgstr ""
 
-#: src/media/AudioPump.cpp:148
+#: src/media/AudioPump.cpp:149
 #, c-format
 msgid ""
 ". Audio keepalive has stopped; wait for session expiry (about %u seconds), "
 "then resume the phone's player if needed"
 msgstr ""
 
-#: src/media/AudioPump.cpp:188
+#: src/media/AudioPump.cpp:189
 #, c-format
 msgid ""
 "Audio answer missing SSRC (RemoteSSRC=%u LocalSSRC=%u); session renewal may "
 "fail\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:304
+#: src/media/AudioPump.cpp:305
 #, c-format
 msgid "Audio clock compensation failed: %s; continuing playback\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:401
+#: src/media/AudioPump.cpp:407
 #, c-format
 msgid "Audio session recreated, receive port=%u\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:410
+#: src/media/AudioPump.cpp:420
 #, c-format
 msgid "Audio negotiation failed during recovery; disabling audio: %s\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:414
+#: src/media/AudioPump.cpp:424
 #, c-format
 msgid "Failed to recreate audio session: %s (retry in 1 second)\n"
 msgstr ""
 
 #: src/media/AudioPump.cpp:441
 #, c-format
-msgid "Failed to send audio RTCP keepalive: %s\n"
-msgstr ""
-
-#: src/media/AudioPump.cpp:454
-#, c-format
 msgid ""
 "Audio: device session ended (%llu ms without audio); recreating session\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:502
+#: src/media/AudioPump.cpp:469
+#, c-format
+msgid "Failed to send audio RTCP keepalive: %s\n"
+msgstr ""
+
+#: src/media/AudioPump.cpp:545
 #, c-format
 msgid "Audio decode failed (%zu-byte payload): %s\n"
 msgstr ""
@@ -1351,7 +1351,7 @@ msgstr ""
 msgid "Failed to adjust the audio clock: "
 msgstr ""
 
-#: src/media/FramePump.cpp:70
+#: src/media/FramePump.cpp:73
 #, c-format
 msgid ""
 "Software decoder (libavcodec) is not included; continuing with the platform "
@@ -1361,86 +1361,108 @@ msgid ""
 "Install FFmpeg development packages and reconfigure the build.\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:108
+#: src/media/FramePump.cpp:112
 msgid "Cannot open recording file "
 msgstr ""
 
-#: src/media/FramePump.cpp:134
+#: src/media/FramePump.cpp:133
 #, c-format
 msgid ""
 "Failed to stop device video session (device will release it when the lease "
 "expires): %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:158
+#: src/media/FramePump.cpp:164
+#, c-format
+msgid "Recording failed: %s. Mirroring continues; the file is incomplete.\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:165
+#, c-format
+msgid "Recording failed: %s. The file may be incomplete.\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:177
+msgid "Cannot flush recording file "
+msgstr ""
+
+#: src/media/FramePump.cpp:184
+msgid "Cannot close recording file "
+msgstr ""
+
+#: src/media/FramePump.cpp:207
+msgid "Cannot write recording file "
+msgstr ""
+
+#: src/media/FramePump.cpp:226
 #, c-format
 msgid "Failed to stop previous video session (still attempting restart): %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:177
+#: src/media/FramePump.cpp:245
 #, c-format
 msgid ""
 "Video negotiation failed during recovery; stopping video reception: %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:202
+#: src/media/FramePump.cpp:270
 #, c-format
 msgid "Video session recreated, receive port=%u\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:269
+#: src/media/FramePump.cpp:337
 #, c-format
 msgid "Failed to send PLI: %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:295
+#: src/media/FramePump.cpp:363
 #, c-format
 msgid ""
 "Video packet loss or payload damage detected: requesting keyframe, wait "
 "limit %d ms\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:326
+#: src/media/FramePump.cpp:394
 #, c-format
 msgid "Decoder switched to %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:366
+#: src/media/FramePump.cpp:434
 #, c-format
 msgid ""
 "After %d restarts, NALs still exceed the decoder limit. Video is "
 "unavailable; retrying every %llu seconds. Callers can use screenshots.\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:417
+#: src/media/FramePump.cpp:485
 #, c-format
 msgid "Test: injected keyframe decode failure (%s)\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:418
+#: src/media/FramePump.cpp:486
 msgid "further PLI disabled"
 msgstr ""
 
-#: src/media/FramePump.cpp:419
+#: src/media/FramePump.cpp:487
 msgid "PLI continues"
 msgstr ""
 
-#: src/media/FramePump.cpp:515
+#: src/media/FramePump.cpp:583
 #, c-format
 msgid ""
 "%s: no data for %llu ms; device reports session alive, continuing to wait\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:520
+#: src/media/FramePump.cpp:588
 #, c-format
 msgid "%s: no data for %llu ms, %s; recreating video session\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:523
+#: src/media/FramePump.cpp:591
 msgid "device session ended"
 msgstr ""
 
-#: src/media/FramePump.cpp:524 src/media/ScreenshotSource.cpp:72
+#: src/media/FramePump.cpp:592 src/media/ScreenshotSource.cpp:72
 #: src/net/Stack.cpp:359 src/net/TcpStream.cpp:44 src/net/TcpStream.cpp:122
 #: src/net/TcpStream.cpp:126 src/net/UdpSocket.cpp:109
 #: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:255
@@ -1449,88 +1471,88 @@ msgstr ""
 msgid ")"
 msgstr ""
 
-#: src/media/FramePump.cpp:524
+#: src/media/FramePump.cpp:592
 msgid "session status query failed ("
 msgstr ""
 
-#: src/media/FramePump.cpp:528 src/media/FramePump.cpp:543
+#: src/media/FramePump.cpp:596 src/media/FramePump.cpp:611
 #, c-format
 msgid "Failed to recreate video session: %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:559
+#: src/media/FramePump.cpp:627
 #, c-format
 msgid ""
 "%s: no data for %llu ms; recovery threshold exceeded, recreating video "
 "session\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:587
+#: src/media/FramePump.cpp:655
 #, c-format
 msgid "Failed to recreate video session: %s (retry in 1 second)\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:617
+#: src/media/FramePump.cpp:685
 #, c-format
 msgid "Failed to send RTCP keepalive: %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:622
+#: src/media/FramePump.cpp:690
 msgid "Input or frame request"
 msgstr ""
 
-#: src/media/FramePump.cpp:630
+#: src/media/FramePump.cpp:698
 #, c-format
 msgid "Video fallback active for %llu seconds; retrying video session\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:637
+#: src/media/FramePump.cpp:705
 #, c-format
 msgid "%s; recreating video session to obtain a keyframe\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:638
+#: src/media/FramePump.cpp:706
 msgid "Scheduled video retry after fallback"
 msgstr ""
 
-#: src/media/FramePump.cpp:639
+#: src/media/FramePump.cpp:707
 msgid "NAL exceeds platform decoder length limit"
 msgstr ""
 
-#: src/media/FramePump.cpp:675
+#: src/media/FramePump.cpp:743
 #, c-format
 msgid "Keyframe wait reached %d ms; recreating video session\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:690
+#: src/media/FramePump.cpp:758
 #, c-format
 msgid ""
 "No keyframe output after %llu seconds; recreating video session (%d/%d)\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:698
+#: src/media/FramePump.cpp:766
 #, c-format
 msgid ""
 "No keyframe output after %d restarts. Video is unavailable; callers can use "
 "screenshots. Retrying every %llu seconds.\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:721
+#: src/media/FramePump.cpp:789
 msgid "Receive silence timeout"
 msgstr ""
 
-#: src/media/FramePump.cpp:786
+#: src/media/FramePump.cpp:854
 #, c-format
 msgid "Test: dropped video packet %d to inject a sequence gap\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:822
+#: src/media/FramePump.cpp:885
 msgid ""
 "Video sampling timestamp is ambiguous; discarding the access unit and "
 "requesting a keyframe.\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:829
+#: src/media/FramePump.cpp:892
 msgid ""
 "Video access-unit input is inconsistent; discarding the access unit and "
 "requesting a keyframe.\n"

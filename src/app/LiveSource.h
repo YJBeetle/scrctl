@@ -43,6 +43,10 @@ class LiveSource final : public FrameSource {
     /// 设备侧需等待音频会话到期（当前租期 20 秒）；播放器可能需要手动继续。
     void abandon_audio();
 
+    /// 退出专用：停止视频 worker 并检查录制文件收尾，重复调用保留同一错误。
+    /// 录制写入失败期间镜像仍继续，退出状态由调用者根据此结果决定。
+    bool finish_recording(std::string &err);
+
     /// 返回最近一次交付帧的面板尺寸、原始方向及截图标志。
     FrameGeometry frame_geometry() const override { return delivered_geometry_; }
 

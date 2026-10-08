@@ -11,6 +11,14 @@ namespace scrctl::app {
 
 LiveSource::~LiveSource() = default;
 
+bool LiveSource::finish_recording(std::string &err) {
+    if (pump_ != nullptr) {
+        return pump_->finish_recording(err);
+    }
+    err.clear();
+    return true;
+}
+
 bool LiveSource::start(const std::string &serial, const std::string &wifi,
                        const std::string &record_path, bool hw_decode, bool watch_display,
                        bool want_audio, int audio_buffer_ms, const std::string &video_source,

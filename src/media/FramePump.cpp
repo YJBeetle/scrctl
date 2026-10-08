@@ -2,9 +2,12 @@
 #include "media/FramePump.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <optional>
+#include <utility>
 
 #include "bitstream/AnnexB.h"
 #include "media/StreamSession.h"
@@ -105,7 +108,9 @@ std::unique_ptr<FramePump> FramePump::start(remote::Device &device, const Option
     if (!options.record_path.empty()) {
         pump->record_ = std::fopen(options.record_path.c_str(), "wb");
         if (pump->record_ == nullptr) {
-            err = SCRCTL_TR("Cannot open recording file ") + options.record_path;
+            const int error = errno;
+            err = SCRCTL_TR("Cannot open recording file ") + options.record_path + ": " +
+                  std::strerror(error != 0 ? error : EIO);
             return nullptr;
         }
     }
@@ -117,14 +122,8 @@ std::unique_ptr<FramePump> FramePump::start(remote::Device &device, const Option
 }
 
 FramePump::~FramePump() {
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        stopping_ = true;
-    }
-    cv_.notify_all();
-    if (worker_.joinable()) {
-        worker_.join();
-    }
+    std::string recording_err;
+    finish_recording(recording_err);
     // 先 join worker，再停止设备媒体会话；worker 可能调用 restart() 并修改
     // session_。正常退出显式停流，避免设备继续向无人接收的端口编码，
     // 也避免会话占用影响下一次启动。异常退出仍依赖租期释放。
@@ -136,9 +135,78 @@ FramePump::~FramePump() {
         }
         session_.reset();
     }
-    if (record_ != nullptr) {
-        std::fclose(record_);
+}
+
+bool FramePump::finish_recording(std::string &err) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        stopping_ = true;
     }
+    cv_.notify_all();
+    if (worker_.joinable()) {
+        worker_.join();
+    }
+    close_recording(false);
+    std::lock_guard<std::mutex> lock(mutex_);
+    err = recording_error_;
+    return err.empty();
+}
+
+void FramePump::note_recording_error(std::string reason, bool mirroring_continues) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!recording_error_.empty()) {
+            return;
+        }
+        recording_error_ = reason;
+    }
+    std::fprintf(stderr, mirroring_continues
+        ? SCRCTL_TR("Recording failed: %s. Mirroring continues; the file is incomplete.\n")
+        : SCRCTL_TR("Recording failed: %s. The file may be incomplete.\n"), reason.c_str());
+}
+
+void FramePump::close_recording(bool mirroring_continues) {
+    if (record_ == nullptr) {
+        return;
+    }
+    // 即使刷新失败也必须关闭 FILE；fclose 失败后同样不能再次访问它。
+    FILE *file = std::exchange(record_, nullptr);
+    errno = 0;
+    if (std::fflush(file) != 0) {
+        const int error = errno;
+        note_recording_error(SCRCTL_TR("Cannot flush recording file ") +
+            options_.record_path + ": " + std::strerror(error != 0 ? error : EIO),
+            mirroring_continues);
+    }
+    errno = 0;
+    if (std::fclose(file) != 0) {
+        const int error = errno;
+        note_recording_error(SCRCTL_TR("Cannot close recording file ") +
+            options_.record_path + ": " + std::strerror(error != 0 ? error : EIO),
+            mirroring_continues);
+    }
+}
+
+void FramePump::write_recording_nal(std::span<const uint8_t> bytes) {
+    if (record_ == nullptr) {
+        return;
+    }
+    // 裸 HEVC 仍写原始完整 NAL 与四字节 Annex-B 起始码，不因 ticks 改变格式。
+    static constexpr uint8_t start_code[] = {0, 0, 0, 1};
+    errno = 0;
+    const bool prefix_ok = std::fwrite(start_code, 1, sizeof(start_code), record_) ==
+                           sizeof(start_code) && !std::ferror(record_);
+    if (prefix_ok) {
+        errno = 0;
+        if (std::fwrite(bytes.data(), 1, bytes.size(), record_) == bytes.size() &&
+            !std::ferror(record_)) {
+            return;
+        }
+    }
+    const int error = errno;
+    note_recording_error(SCRCTL_TR("Cannot write recording file ") + options_.record_path +
+        ": " + std::strerror(error != 0 ? error : EIO), true);
+    close_recording(true);
 }
 
 bool FramePump::restart(std::string &err) {
@@ -810,12 +878,7 @@ void FramePump::loop() {
             continue;
         }
         for (auto &nal : nals) {
-            if (record_ != nullptr) {
-                // 裸 HEVC 仍写原始完整 NAL 与四字节 Annex-B 起始码，不因 ticks 改变格式。
-                static constexpr uint8_t start_code[] = {0, 0, 0, 1};
-                std::fwrite(start_code, 1, sizeof(start_code), record_);
-                std::fwrite(nal.bytes.data(), 1, nal.bytes.size(), record_);
-            }
+            write_recording_nal(nal.bytes);
             const auto timestamp = sampling_clock.observe(nal.timestamp);
             if (!timestamp) {
                 if (!need_keyframe_) {

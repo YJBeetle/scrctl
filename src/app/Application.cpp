@@ -98,6 +98,15 @@ int run(int argc, char **argv) {
     }
     std::unique_ptr<FrameSource> source;
     LiveSource *live = nullptr;
+    // 返回值必须在 FILE 刷新、关闭之后确定。析构仍负责兜底，但无法修改已经
+    // 求值的 return 0；取消启动时 made 也可能已经拥有视频 worker 和录制文件。
+    const auto finish_source = [](LiveSource *active, int code) {
+        std::string err;
+        if (active != nullptr && !active->finish_recording(err) && code == 0) {
+            return 1;
+        }
+        return code;
+    };
     if (!o.path.empty()) {
         source = std::make_unique<FileSource>(o.path);
     } else {
@@ -107,7 +116,7 @@ int run(int argc, char **argv) {
                          want_audio, o.audio_buffer_ms, o.video_source, o.test_degrade, err,
                          o.wifi_port, o.audio_dup, [&runtime] { return runtime.stop_requested(); })) {
             if (exit_requested()) {
-                return 0;
+                return finish_source(made.get(), 0);
             }
             std::fprintf(stderr, SCRCTL_TR("Failed to start video: %s\n"), err.c_str());
             // 设备通话期间可能拒绝媒体流，错误码为 9022。曾观察到此时会话列表为空，
@@ -117,7 +126,7 @@ int run(int argc, char **argv) {
                     stderr,
                     SCRCTL_TR("Device is in a call. End the call and try again.\n"));
             }
-            return 1;
+            return finish_source(made.get(), 1);
         }
         live = made.get();
         if (o.debug_net) {
@@ -127,8 +136,9 @@ int run(int argc, char **argv) {
         }
         source = std::move(made);
     }
+    const auto finish_exit = [&](int code) { return finish_source(live, code); };
     if (exit_requested()) {
-        return 0;
+        return finish_exit(0);
     }
     if (live == nullptr && !o.start_app.empty()) {
         std::fprintf(stderr,
@@ -137,11 +147,11 @@ int run(int argc, char **argv) {
     if (live != nullptr && !o.start_app.empty()) {
         const int exit_code = launch_app(live->device(), o.start_app);
         if (exit_code != 0) {
-            return exit_code;
+            return finish_exit(exit_code);
         }
     }
     if (exit_requested()) {
-        return 0;
+        return finish_exit(0);
     }
 
     const bool control_enabled = live != nullptr && !o.no_control;
@@ -159,7 +169,7 @@ int run(int argc, char **argv) {
         std::printf(SCRCTL_TR("Local audio playback disabled; receiving and decoding continue\n"));
     }
     if (exit_requested()) {
-        return 0;
+        return finish_exit(0);
     }
     if (o.disable_screensaver) {
         SDL_DisableScreenSaver();
@@ -181,13 +191,13 @@ int run(int argc, char **argv) {
         }
         std::printf("--test-touch (%.3f,%.3f)->(%.3f,%.3f): %s%s\n", x0, y0, x1, y1,
                     ok ? SCRCTL_TR("injected") : SCRCTL_TR("failed"), ok ? "" : cerr.c_str());
-        return ok ? 0 : 1;
+        return finish_exit(ok ? 0 : 1);
     }
 
     // 音量 HUD 显示时间短，另开截图会话可能来不及。此处完成按键注入，
     // 通过当前镜像配合 --verify N 回读画面检查效果。
     if (exit_requested()) {
-        return 0;
+        return finish_exit(0);
     }
     if (live != nullptr && !o.test_button.empty()) {
         std::string berr;
@@ -196,12 +206,12 @@ int run(int argc, char **argv) {
         } else {
             std::fprintf(stderr, SCRCTL_TR("--test-button %s failed: %s\n"), o.test_button.c_str(),
                          berr.c_str());
-            return 1;
+            return finish_exit(1);
         }
     }
 
     if (exit_requested()) {
-        return 0;
+        return finish_exit(0);
     }
     if (live != nullptr && !o.test_type.empty()) {
         std::string terr;
@@ -209,7 +219,7 @@ int run(int argc, char **argv) {
             std::printf(SCRCTL_TR("--test-type %s: injected\n"), o.test_type.c_str());
         } else {
             std::fprintf(stderr, SCRCTL_TR("--test-type failed: %s\n"), terr.c_str());
-            return 1;
+            return finish_exit(1);
         }
     }
 
@@ -329,7 +339,7 @@ int run(int argc, char **argv) {
             if (!presenter->open(static_cast<int>(f.width), static_cast<int>(f.height),
                                  crop, degrees, o.scale, o.scale_given,
                                  spec)) {
-                return 1;
+                return finish_exit(1);
             }
             if (first_window) {
                 first_window = false;
@@ -341,7 +351,7 @@ int run(int argc, char **argv) {
         const bool do_verify = o.verify_at > 0 && rendered + 1 == o.verify_at;
         if (!presenter->draw(f, crop, do_verify ? o.verify_path.c_str() : nullptr)) {
             presenter->release_touch(on_touch);
-            return 1;
+            return finish_exit(1);
         }
         ++rendered;
 
@@ -364,6 +374,7 @@ int run(int argc, char **argv) {
     if (presenter != nullptr) {
         presenter->release_touch(on_touch);
     }
+    exit_code = finish_exit(exit_code);
     if (exit_code != 0) {
         return exit_code;
     }

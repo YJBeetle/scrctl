@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 20:42+0800\n"
+"POT-Creation-Date: 2026-10-08 21:59+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -25,7 +25,7 @@ msgstr "可见区 %ux%u -> %dx%d（设备未报告尺寸，使用机型表）\n"
 msgid "SDL initialization failed: %s\n"
 msgstr "SDL 初始化失败: %s\n"
 
-#: src/app/Application.cpp:80 src/app/Application.cpp:254
+#: src/app/Application.cpp:80 src/app/Application.cpp:264
 #, c-format
 msgid "Received exit signal; closing device session\n"
 msgstr "收到退出信号，正在关闭设备会话\n"
@@ -36,22 +36,22 @@ msgid ""
 "Failed to initialize audio output: %s (audio disabled; video continues)\n"
 msgstr "初始化音频输出失败：%s（已禁用音频，视频继续）\n"
 
-#: src/app/Application.cpp:112
+#: src/app/Application.cpp:121
 #, c-format
 msgid "Failed to start video: %s\n"
 msgstr "启动视频失败: %s\n"
 
-#: src/app/Application.cpp:118
+#: src/app/Application.cpp:127
 #, c-format
 msgid "Device is in a call. End the call and try again.\n"
 msgstr "设备正在通话，请结束通话后重试。\n"
 
-#: src/app/Application.cpp:135
+#: src/app/Application.cpp:145
 #, c-format
 msgid "File playback cannot launch a device app; ignoring --start-app\n"
 msgstr "文件回放模式无法启动设备应用，已忽略 --start-app\n"
 
-#: src/app/Application.cpp:153
+#: src/app/Application.cpp:163
 #, c-format
 msgid ""
 "Failed to open audio output: %s (audio disabled; video continues). The "
@@ -61,78 +61,78 @@ msgstr ""
 "打开音频输出失败：%s（已禁用音频，视频继续）。手机音频路由可能保持到会话到期"
 "（约 20 秒）；如有需要，请在手机上继续播放。\n"
 
-#: src/app/Application.cpp:159
+#: src/app/Application.cpp:169
 #, c-format
 msgid "Local audio playback disabled; receiving and decoding continue\n"
 msgstr "已禁用本机音频播放，继续接收和解码音频\n"
 
-#: src/app/Application.cpp:183 tools/rr_keepalive_probe.cpp:770
+#: src/app/Application.cpp:193 tools/rr_keepalive_probe.cpp:770
 msgid "failed"
 msgstr "失败"
 
-#: src/app/Application.cpp:183
+#: src/app/Application.cpp:193
 msgid "injected"
 msgstr "已注入"
 
-#: src/app/Application.cpp:195
+#: src/app/Application.cpp:205
 #, c-format
 msgid "--test-button %s: pressed\n"
 msgstr "--test-button %s: 已按下\n"
 
-#: src/app/Application.cpp:197
+#: src/app/Application.cpp:207
 #, c-format
 msgid "--test-button %s failed: %s\n"
 msgstr "--test-button %s 失败: %s\n"
 
-#: src/app/Application.cpp:209
+#: src/app/Application.cpp:219
 #, c-format
 msgid "--test-type %s: injected\n"
 msgstr "--test-type %s: 已注入\n"
 
-#: src/app/Application.cpp:211
+#: src/app/Application.cpp:221
 #, c-format
 msgid "--test-type failed: %s\n"
 msgstr "--test-type 失败: %s\n"
 
-#: src/app/Application.cpp:239
+#: src/app/Application.cpp:249
 #, c-format
 msgid "Input injection failed (further attempts disabled): %s\n"
 msgstr "注入输入失败（已停止尝试）: %s\n"
 
-#: src/app/Application.cpp:250
+#: src/app/Application.cpp:260
 #, c-format
 msgid "Reached --time-limit %d seconds\n"
 msgstr "达到 --time-limit %d 秒\n"
 
-#: src/app/Application.cpp:264
+#: src/app/Application.cpp:274
 #, c-format
 msgid ""
 "  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
 msgstr "  渲染：累计 %d 帧，本次 %d 帧 / %.1f fps，全程平均 %.1f fps\n"
 
-#: src/app/Application.cpp:290 src/app/Application.cpp:358
+#: src/app/Application.cpp:300 src/app/Application.cpp:368
 #, c-format
 msgid "Reached --exit-after %d\n"
 msgstr "达到 --exit-after %d\n"
 
-#: src/app/Application.cpp:305
+#: src/app/Application.cpp:315
 #, c-format
 msgid ""
 "Mouse input is unavailable: screenshot orientation or display dimensions are "
 "unknown or inconsistent\n"
 msgstr "截图的朝向或显示尺寸尚未确认，已暂停鼠标输入\n"
 
-#: src/app/Application.cpp:337
+#: src/app/Application.cpp:347
 #, c-format
 msgid "Render rotation changed to %d degrees clockwise; window recreated\n"
 msgstr "图像旋转角改为顺时针 %d°，窗口已重建\n"
 
-#: src/app/Application.cpp:372
+#: src/app/Application.cpp:383
 #, c-format
 msgid "Window readback was not reached (requested frame %d, rendered %d)\n"
 msgstr "未执行窗口回读：要求第 %d 帧，实际显示了 %d 帧\n"
 
-#: src/app/Application.cpp:376
+#: src/app/Application.cpp:387
 #, c-format
 msgid "Finished: processed %d frames\n"
 msgstr "完成：处理 %d 帧\n"
@@ -610,65 +610,65 @@ msgstr "解码后端: %s\n"
 msgid "Source ended"
 msgstr "源已结束"
 
-#: src/app/LiveSource.cpp:23
+#: src/app/LiveSource.cpp:31
 msgid "Device startup cancelled"
 msgstr "已取消设备启动"
 
-#: src/app/LiveSource.cpp:32
+#: src/app/LiveSource.cpp:40
 msgid "Invalid --test-degrade: "
 msgstr "--test-degrade 参数无效："
 
-#: src/app/LiveSource.cpp:80
+#: src/app/LiveSource.cpp:88
 #, c-format
 msgid "Failed to query display dimensions: %s (using model crop table)\n"
 msgstr "查询显示尺寸失败: %s（使用机型裁剪表）\n"
 
-#: src/app/LiveSource.cpp:81
+#: src/app/LiveSource.cpp:89
 msgid "Update contains no usable dimensions"
 msgstr "推送里没有可用的尺寸"
 
-#: src/app/LiveSource.cpp:94
+#: src/app/LiveSource.cpp:102
 #, c-format
 msgid ""
 "Failed to subscribe to display changes: %s (automatic rotation unavailable)\n"
 msgstr "订阅显示变化失败: %s（无法自动跟随旋转）\n"
 
-#: src/app/LiveSource.cpp:122
+#: src/app/LiveSource.cpp:130
 #, c-format
 msgid "Media stream unavailable: %s\n"
 msgstr "媒体流不可用：%s\n"
 
-#: src/app/LiveSource.cpp:125
+#: src/app/LiveSource.cpp:133
 #, c-format
 msgid ""
 "Using screenshot polling; refresh rate depends on capture time. Input "
 "control remains available\n"
 msgstr "已改用截图轮询，刷新率取决于截图耗时；输入控制仍可用\n"
 
-#: src/app/LiveSource.cpp:129
+#: src/app/LiveSource.cpp:137
 msgid "Failed to start screenshot polling: "
 msgstr "启动截图轮询失败: "
 
-#: src/app/LiveSource.cpp:144
+#: src/app/LiveSource.cpp:152
 msgid "No first screenshot within 5 seconds"
 msgstr "5 秒内未取得首张截图"
 
-#: src/app/LiveSource.cpp:151
+#: src/app/LiveSource.cpp:159
 msgid "No first decoded frame within 5 seconds"
 msgstr "5 秒内未解出首帧"
 
-#: src/app/LiveSource.cpp:158
+#: src/app/LiveSource.cpp:166
 #, c-format
 msgid "Screenshot mirroring started: %s / iOS %s, %ux%u\n"
 msgstr "截图镜像已建立：%s / iOS %s，尺寸 %ux%u\n"
 
-#: src/app/LiveSource.cpp:162
+#: src/app/LiveSource.cpp:170
 #, c-format
 msgid ""
 "Video stream started: %s / iOS %s, receive port=%u PT=%u, first frame %ux%u\n"
 msgstr "视频流已建立：%s / iOS %s，收流端口=%u PT=%u，首帧 %ux%u\n"
 
-#: src/app/LiveSource.cpp:171
+#: src/app/LiveSource.cpp:179
 #, c-format
 msgid ""
 "Display geometry: visible area %dx%d (displayId=%llu %s), UI rotation %d "
@@ -677,22 +677,22 @@ msgstr ""
 "显示几何：设备报可见区 %dx%d（displayId=%llu %s），界面旋转顺时针 %d°，码流 "
 "%ux%u\n"
 
-#: src/app/LiveSource.cpp:178
+#: src/app/LiveSource.cpp:186
 #, c-format
 msgid "Screenshot mode cannot record Annex-B; ignoring --record\n"
 msgstr "截图模式无法录制 Annex-B，已忽略 --record\n"
 
-#: src/app/LiveSource.cpp:180
+#: src/app/LiveSource.cpp:188
 #, c-format
 msgid "Recording to %s\n"
 msgstr "录制到 %s\n"
 
-#: src/app/LiveSource.cpp:187
+#: src/app/LiveSource.cpp:195
 #, c-format
 msgid "Screenshot mode does not start audio\n"
 msgstr "截图模式不启动音频流\n"
 
-#: src/app/LiveSource.cpp:198
+#: src/app/LiveSource.cpp:206
 #, c-format
 msgid ""
 "Forwarding audio to the computer. Switching routes may pause the phone's "
@@ -701,58 +701,58 @@ msgstr ""
 "正在将音频转到电脑。切换路由可能暂停手机播放器；如有需要，请在手机上继续播"
 "放。\n"
 
-#: src/app/LiveSource.cpp:207
+#: src/app/LiveSource.cpp:215
 #, c-format
 msgid "Failed to start audio: %s (video continues)\n"
 msgstr "启动音频流失败: %s（继续显示画面）\n"
 
-#: src/app/LiveSource.cpp:212
+#: src/app/LiveSource.cpp:220
 #, c-format
 msgid "Audio stream started: receive port=%u PT=%u backend=%s\n"
 msgstr "音频流已建立：收流端口=%u PT=%u 后端=%s\n"
 
-#: src/app/LiveSource.cpp:215
+#: src/app/LiveSource.cpp:223
 msgid "Audio routing: phone and computer (--audio-dup)"
 msgstr "音频路由：手机和电脑（--audio-dup）"
 
-#: src/app/LiveSource.cpp:216
+#: src/app/LiveSource.cpp:224
 msgid "Audio routing: computer; phone playback is suppressed"
 msgstr "音频路由：电脑；手机停止发声"
 
-#: src/app/LiveSource.cpp:223
+#: src/app/LiveSource.cpp:231
 #, c-format
 msgid "--test-degrade: from now,"
 msgstr "--test-degrade：从现在起"
 
-#: src/app/LiveSource.cpp:225
+#: src/app/LiveSource.cpp:233
 #, c-format
 msgid " at %.1f seconds: %s"
 msgstr " %.1f 秒%s"
 
-#: src/app/LiveSource.cpp:226
+#: src/app/LiveSource.cpp:234
 msgid "force fallback"
 msgstr "强制降级"
 
-#: src/app/LiveSource.cpp:226
+#: src/app/LiveSource.cpp:234
 msgid "release override"
 msgstr "放开"
 
-#: src/app/LiveSource.cpp:228
+#: src/app/LiveSource.cpp:236
 #, c-format
 msgid " (test mode)\n"
 msgstr "（测试模式）\n"
 
-#: src/app/LiveSource.cpp:235
+#: src/app/LiveSource.cpp:243
 msgid ""
 "No playable audio stream (disabled, failed to start, or unsupported build)"
 msgstr "没有可播放的音频流（已禁用、启动失败或构建不支持）"
 
-#: src/app/LiveSource.cpp:266
+#: src/app/LiveSource.cpp:274
 #, c-format
 msgid "Control connected (touch injection available)\n"
 msgstr "控制已接通（触摸注入可用）\n"
 
-#: src/app/LiveSource.cpp:340
+#: src/app/LiveSource.cpp:348
 #, c-format
 msgid ""
 "Live video unavailable; using screenshot polling while retrying video in the "
@@ -760,21 +760,21 @@ msgid ""
 msgstr ""
 "实时视频暂不可用，已切换到截图轮询；后台继续尝试恢复视频，成功后自动切回\n"
 
-#: src/app/LiveSource.cpp:343
+#: src/app/LiveSource.cpp:351
 #, c-format
 msgid "Failed to switch to screenshots: %s (retry in %llu seconds)\n"
 msgstr "切换到截图失败: %s（%llu 秒后重试）\n"
 
-#: src/app/LiveSource.cpp:349
+#: src/app/LiveSource.cpp:357
 #, c-format
 msgid "Live video recovered; switched back to video stream\n"
 msgstr "实时视频已恢复，已切回视频流\n"
 
-#: src/app/LiveSource.cpp:388
+#: src/app/LiveSource.cpp:396
 msgid "); closing session"
 msgstr "），正在关闭会话"
 
-#: src/app/LiveSource.cpp:388
+#: src/app/LiveSource.cpp:396
 msgid "Device connection lost ("
 msgstr "设备连接已断开（"
 
@@ -1285,22 +1285,22 @@ msgstr "输入过大"
 msgid "Nesting too deep"
 msgstr "嵌套过深"
 
-#: src/media/AudioPump.cpp:99
+#: src/media/AudioPump.cpp:100
 #, c-format
 msgid "Clamped --audio-buffer %d to %d ms and adjusted buffer capacity\n"
 msgstr "已将 --audio-buffer %d 限制为 %d ms，并按此配置缓冲容量\n"
 
-#: src/media/AudioPump.cpp:130
+#: src/media/AudioPump.cpp:131
 msgid "Audio routing was not confirmed: answer has no valid AudioStreamMode"
 msgstr "无法确认音频路由：设备答复缺少有效的 AudioStreamMode"
 
-#: src/media/AudioPump.cpp:136
+#: src/media/AudioPump.cpp:137
 msgid ""
 "Phone-and-computer audio routing was not accepted (--audio-dup requires "
 "AudioStreamMode 8)"
 msgstr "设备未接受双端播放路由（--audio-dup 要求 AudioStreamMode 8）"
 
-#: src/media/AudioPump.cpp:137
+#: src/media/AudioPump.cpp:138
 msgid ""
 "Computer-only audio routing was not accepted (requires AudioStreamMode 10); "
 "not falling back to --audio-dup"
@@ -1308,7 +1308,7 @@ msgstr ""
 "设备未接受仅在电脑播放的路由（要求 AudioStreamMode 10）；不会自动改为 --"
 "audio-dup"
 
-#: src/media/AudioPump.cpp:148
+#: src/media/AudioPump.cpp:149
 #, c-format
 msgid ""
 ". Audio keepalive has stopped; wait for session expiry (about %u seconds), "
@@ -1316,7 +1316,7 @@ msgid ""
 msgstr ""
 "。音频已停止续期，请等待会话到期（约 %u 秒）；如有需要，再在手机上继续播放"
 
-#: src/media/AudioPump.cpp:188
+#: src/media/AudioPump.cpp:189
 #, c-format
 msgid ""
 "Audio answer missing SSRC (RemoteSSRC=%u LocalSSRC=%u); session renewal may "
@@ -1324,38 +1324,38 @@ msgid ""
 msgstr ""
 "音频协商响应缺少 SSRC（RemoteSSRC=%u LocalSSRC=%u），音频会话可能无法续期\n"
 
-#: src/media/AudioPump.cpp:304
+#: src/media/AudioPump.cpp:305
 #, c-format
 msgid "Audio clock compensation failed: %s; continuing playback\n"
 msgstr "音频时钟补偿失败：%s；继续播放\n"
 
-#: src/media/AudioPump.cpp:401
+#: src/media/AudioPump.cpp:407
 #, c-format
 msgid "Audio session recreated, receive port=%u\n"
 msgstr "音频会话已重建，收流端口=%u\n"
 
-#: src/media/AudioPump.cpp:410
+#: src/media/AudioPump.cpp:420
 #, c-format
 msgid "Audio negotiation failed during recovery; disabling audio: %s\n"
 msgstr "恢复时音频协商失败，已禁用音频：%s\n"
 
-#: src/media/AudioPump.cpp:414
+#: src/media/AudioPump.cpp:424
 #, c-format
 msgid "Failed to recreate audio session: %s (retry in 1 second)\n"
 msgstr "重建音频会话失败: %s（1 秒后再试）\n"
 
 #: src/media/AudioPump.cpp:441
 #, c-format
-msgid "Failed to send audio RTCP keepalive: %s\n"
-msgstr "音频 RTCP 保活包发送失败: %s\n"
-
-#: src/media/AudioPump.cpp:454
-#, c-format
 msgid ""
 "Audio: device session ended (%llu ms without audio); recreating session\n"
 msgstr "音频：设备会话已结束（%llu ms 未收到音频），重建会话\n"
 
-#: src/media/AudioPump.cpp:502
+#: src/media/AudioPump.cpp:469
+#, c-format
+msgid "Failed to send audio RTCP keepalive: %s\n"
+msgstr "音频 RTCP 保活包发送失败: %s\n"
+
+#: src/media/AudioPump.cpp:545
 #, c-format
 msgid "Audio decode failed (%zu-byte payload): %s\n"
 msgstr "音频解码失败（载荷 %zu 字节）: %s\n"
@@ -1394,7 +1394,7 @@ msgstr "无效的采样数量"
 msgid "Failed to adjust the audio clock: "
 msgstr "调整音频时钟失败："
 
-#: src/media/FramePump.cpp:70
+#: src/media/FramePump.cpp:73
 #, c-format
 msgid ""
 "Software decoder (libavcodec) is not included; continuing with the platform "
@@ -1408,51 +1408,73 @@ msgstr ""
 "会话，可能暂时无新画面。\n"
 "请安装 FFmpeg 开发包并重新配置、构建项目。\n"
 
-#: src/media/FramePump.cpp:108
+#: src/media/FramePump.cpp:112
 msgid "Cannot open recording file "
 msgstr "打不开录制文件 "
 
-#: src/media/FramePump.cpp:134
+#: src/media/FramePump.cpp:133
 #, c-format
 msgid ""
 "Failed to stop device video session (device will release it when the lease "
 "expires): %s\n"
 msgstr "停止设备视频会话失败（设备端将在租期到期后释放）: %s\n"
 
-#: src/media/FramePump.cpp:158
+#: src/media/FramePump.cpp:164
+#, c-format
+msgid "Recording failed: %s. Mirroring continues; the file is incomplete.\n"
+msgstr "录制失败：%s。镜像继续，录制文件不完整。\n"
+
+#: src/media/FramePump.cpp:165
+#, c-format
+msgid "Recording failed: %s. The file may be incomplete.\n"
+msgstr "录制失败：%s。录制文件可能不完整。\n"
+
+#: src/media/FramePump.cpp:177
+msgid "Cannot flush recording file "
+msgstr "无法刷新录制文件 "
+
+#: src/media/FramePump.cpp:184
+msgid "Cannot close recording file "
+msgstr "无法关闭录制文件 "
+
+#: src/media/FramePump.cpp:207
+msgid "Cannot write recording file "
+msgstr "无法写入录制文件 "
+
+#: src/media/FramePump.cpp:226
 #, c-format
 msgid "Failed to stop previous video session (still attempting restart): %s\n"
 msgstr "停止旧视频会话失败（仍尝试重建）: %s\n"
 
-#: src/media/FramePump.cpp:177
+#: src/media/FramePump.cpp:245
 #, c-format
 msgid ""
 "Video negotiation failed during recovery; stopping video reception: %s\n"
 msgstr "视频恢复起流的协商答复无效，停止接收视频：%s\n"
 
-#: src/media/FramePump.cpp:202
+#: src/media/FramePump.cpp:270
 #, c-format
 msgid "Video session recreated, receive port=%u\n"
 msgstr "视频会话已重建，收流端口=%u\n"
 
-#: src/media/FramePump.cpp:269
+#: src/media/FramePump.cpp:337
 #, c-format
 msgid "Failed to send PLI: %s\n"
 msgstr "PLI 发送失败: %s\n"
 
-#: src/media/FramePump.cpp:295
+#: src/media/FramePump.cpp:363
 #, c-format
 msgid ""
 "Video packet loss or payload damage detected: requesting keyframe, wait "
 "limit %d ms\n"
 msgstr "检测到视频丢包或载荷损坏，请求关键帧；最多等待 %d ms\n"
 
-#: src/media/FramePump.cpp:326
+#: src/media/FramePump.cpp:394
 #, c-format
 msgid "Decoder switched to %s\n"
 msgstr "解码后端已切换为 %s\n"
 
-#: src/media/FramePump.cpp:366
+#: src/media/FramePump.cpp:434
 #, c-format
 msgid ""
 "After %d restarts, NALs still exceed the decoder limit. Video is "
@@ -1461,35 +1483,35 @@ msgstr ""
 "连续 %d 次重建仍因 NAL 超过后端长度上限而无画面输出。视频暂不可用，将每 %llu "
 "秒重试；调用方可切换至截图服务。\n"
 
-#: src/media/FramePump.cpp:417
+#: src/media/FramePump.cpp:485
 #, c-format
 msgid "Test: injected keyframe decode failure (%s)\n"
 msgstr "测试：注入关键帧解码失败（%s）\n"
 
-#: src/media/FramePump.cpp:418
+#: src/media/FramePump.cpp:486
 msgid "further PLI disabled"
 msgstr "后续禁止 PLI"
 
-#: src/media/FramePump.cpp:419
+#: src/media/FramePump.cpp:487
 msgid "PLI continues"
 msgstr "继续发送 PLI"
 
-#: src/media/FramePump.cpp:515
+#: src/media/FramePump.cpp:583
 #, c-format
 msgid ""
 "%s: no data for %llu ms; device reports session alive, continuing to wait\n"
 msgstr "%s：%llu ms 未收到数据，设备报告会话仍运行，继续等待\n"
 
-#: src/media/FramePump.cpp:520
+#: src/media/FramePump.cpp:588
 #, c-format
 msgid "%s: no data for %llu ms, %s; recreating video session\n"
 msgstr "%s：%llu ms 未收到数据，%s，重建视频会话\n"
 
-#: src/media/FramePump.cpp:523
+#: src/media/FramePump.cpp:591
 msgid "device session ended"
 msgstr "设备会话已结束"
 
-#: src/media/FramePump.cpp:524 src/media/ScreenshotSource.cpp:72
+#: src/media/FramePump.cpp:592 src/media/ScreenshotSource.cpp:72
 #: src/net/Stack.cpp:359 src/net/TcpStream.cpp:44 src/net/TcpStream.cpp:122
 #: src/net/TcpStream.cpp:126 src/net/UdpSocket.cpp:109
 #: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:255
@@ -1498,66 +1520,66 @@ msgstr "设备会话已结束"
 msgid ")"
 msgstr "）"
 
-#: src/media/FramePump.cpp:524
+#: src/media/FramePump.cpp:592
 msgid "session status query failed ("
 msgstr "查询会话状态失败（"
 
-#: src/media/FramePump.cpp:528 src/media/FramePump.cpp:543
+#: src/media/FramePump.cpp:596 src/media/FramePump.cpp:611
 #, c-format
 msgid "Failed to recreate video session: %s\n"
 msgstr "重建视频会话失败: %s\n"
 
-#: src/media/FramePump.cpp:559
+#: src/media/FramePump.cpp:627
 #, c-format
 msgid ""
 "%s: no data for %llu ms; recovery threshold exceeded, recreating video "
 "session\n"
 msgstr "%s：%llu ms 未收到数据，超过恢复阈值，重建视频会话\n"
 
-#: src/media/FramePump.cpp:587
+#: src/media/FramePump.cpp:655
 #, c-format
 msgid "Failed to recreate video session: %s (retry in 1 second)\n"
 msgstr "重建视频会话失败: %s（1 秒后再试）\n"
 
-#: src/media/FramePump.cpp:617
+#: src/media/FramePump.cpp:685
 #, c-format
 msgid "Failed to send RTCP keepalive: %s\n"
 msgstr "RTCP 保活包发送失败: %s\n"
 
-#: src/media/FramePump.cpp:622
+#: src/media/FramePump.cpp:690
 msgid "Input or frame request"
 msgstr "收到操作"
 
-#: src/media/FramePump.cpp:630
+#: src/media/FramePump.cpp:698
 #, c-format
 msgid "Video fallback active for %llu seconds; retrying video session\n"
 msgstr "视频降级已满 %llu 秒，重试视频会话\n"
 
-#: src/media/FramePump.cpp:637
+#: src/media/FramePump.cpp:705
 #, c-format
 msgid "%s; recreating video session to obtain a keyframe\n"
 msgstr "%s，重建视频会话以取得关键帧\n"
 
-#: src/media/FramePump.cpp:638
+#: src/media/FramePump.cpp:706
 msgid "Scheduled video retry after fallback"
 msgstr "视频降级后的定时重试"
 
-#: src/media/FramePump.cpp:639
+#: src/media/FramePump.cpp:707
 msgid "NAL exceeds platform decoder length limit"
 msgstr "NAL 超过平台后端长度上限"
 
-#: src/media/FramePump.cpp:675
+#: src/media/FramePump.cpp:743
 #, c-format
 msgid "Keyframe wait reached %d ms; recreating video session\n"
 msgstr "等待关键帧达到 %d ms，重建视频会话\n"
 
-#: src/media/FramePump.cpp:690
+#: src/media/FramePump.cpp:758
 #, c-format
 msgid ""
 "No keyframe output after %llu seconds; recreating video session (%d/%d)\n"
 msgstr "启动 %llu 秒仍无关键帧输出，重建视频会话 (%d/%d)\n"
 
-#: src/media/FramePump.cpp:698
+#: src/media/FramePump.cpp:766
 #, c-format
 msgid ""
 "No keyframe output after %d restarts. Video is unavailable; callers can use "
@@ -1566,22 +1588,22 @@ msgstr ""
 "连续 %d 次重建仍未输出关键帧，视频暂不可用。调用方可切换至截图服务；将每 "
 "%llu 秒重试视频会话。\n"
 
-#: src/media/FramePump.cpp:721
+#: src/media/FramePump.cpp:789
 msgid "Receive silence timeout"
 msgstr "静默超时"
 
-#: src/media/FramePump.cpp:786
+#: src/media/FramePump.cpp:854
 #, c-format
 msgid "Test: dropped video packet %d to inject a sequence gap\n"
 msgstr "测试：丢弃第 %d 个视频包以注入序号缺口\n"
 
-#: src/media/FramePump.cpp:822
+#: src/media/FramePump.cpp:885
 msgid ""
 "Video sampling timestamp is ambiguous; discarding the access unit and "
 "requesting a keyframe.\n"
 msgstr "无法确定视频采样时间，丢弃当前帧并请求关键帧。\n"
 
-#: src/media/FramePump.cpp:829
+#: src/media/FramePump.cpp:892
 msgid ""
 "Video access-unit input is inconsistent; discarding the access unit and "
 "requesting a keyframe.\n"
