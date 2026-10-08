@@ -57,9 +57,11 @@ struct Directory {
     }
     ~Directory() { std::error_code ignored; std::filesystem::remove_all(path, ignored); }
 };
-Recorder::Options options(const std::filesystem::path& path, bool audio = false) {
+Recorder::Options options(const std::filesystem::path& path, bool audio = false,
+                          scrctl::media::RecordingMuxer::Format format =
+                              scrctl::media::RecordingMuxer::Format::Matroska) {
     Recorder::Options result;
-    result.path = path.string(); result.include_audio = audio;
+    result.path = path.string(); result.include_audio = audio; result.format = format;
     return result;
 }
 #ifdef SCRCTL_HAVE_LIBAVFORMAT
@@ -86,13 +88,13 @@ bool wait_for_error(Recorder& recorder) {
     return !recorder.error().empty();
 }
 
-struct Packet { int64_t pts; Nal bytes; };
+struct Packet { int64_t pts, dts, duration; Nal bytes; };
 struct File { std::vector<Packet> video, audio; unsigned tracks = 0; };
 File read(const std::filesystem::path& path) {
     File result;
     AVFormatContext* input = nullptr;
     const int opened = avformat_open_input(&input, path.string().c_str(), nullptr, nullptr);
-    check(opened >= 0 && input != nullptr, "successful Recorder output is a readable MKV");
+    check(opened >= 0 && input != nullptr, "successful Recorder output is a readable container");
     if (!input) return result;
     result.tracks = input->nb_streams;
     AVPacket* packet = av_packet_alloc();
@@ -102,6 +104,8 @@ File read(const std::filesystem::path& path) {
         while ((ret = av_read_frame(input, packet)) >= 0) {
             auto* stream = input->streams[packet->stream_index];
             Packet sample{av_rescale_q(packet->pts, stream->time_base, AVRational{1, 1000000}),
+                          av_rescale_q(packet->dts, stream->time_base, AVRational{1, 1000000}),
+                          av_rescale_q(packet->duration, stream->time_base, AVRational{1, 1000000}),
                           Nal(packet->data, packet->data + packet->size)};
             if (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
                 check(stream->codecpar->codec_id == AV_CODEC_ID_HEVC, "Recorder writes a HEVC track");
@@ -112,7 +116,7 @@ File read(const std::filesystem::path& path) {
             }
             av_packet_unref(packet);
         }
-        check(ret == AVERROR_EOF, "all MKV packets demux before normal EOF");
+        check(ret == AVERROR_EOF, "all container packets demux before normal EOF");
     }
     av_packet_free(&packet); avformat_close_input(&input);
     return result;
@@ -124,6 +128,7 @@ void verify_video(const File& file, std::span<const int64_t> pts) {
     expected.insert(expected.end(), idr.begin(), idr.end());
     for (std::size_t i = 0; i < file.video.size() && i < pts.size(); ++i) {
         check(near(file.video[i].pts, pts[i]), "video PTS follows the measured SR interval");
+        check(file.video[i].dts == file.video[i].pts, "no-reorder video preserves equal PTS and DTS");
         check(file.video[i].bytes == expected, "HEVC encoded bytes are unchanged");
     }
 }
@@ -192,9 +197,11 @@ void wrapping_audio_and_first_idr(const Directory& directory) {
     verify_video(file, video_pts); verify_audio(file, audio_pts);
 }
 
-void still_video(const Directory& directory) {
-    const auto path = directory.path / "still.mkv";
-    auto config = options(path, true); config.clock_wait = 100ms;
+void still_video(const Directory& directory, scrctl::media::RecordingMuxer::Format format =
+                     scrctl::media::RecordingMuxer::Format::Matroska) {
+    const bool mp4 = format == scrctl::media::RecordingMuxer::Format::Mp4;
+    const auto path = directory.path / (mp4 ? "still.mp4" : "still.mkv");
+    auto config = options(path, true, format); config.clock_wait = 100ms;
     std::string error;
     auto recorder = Recorder::start(config, error);
     check(recorder != nullptr, "still-video fixture starts"); if (!recorder) return;
@@ -206,19 +213,137 @@ void still_video(const Directory& directory) {
     report(*recorder, Track::Video, sr(0, 24000, 1001));
     report(*recorder, Track::Audio, sr(9, 48000, 1001));
     std::this_thread::sleep_for(150ms);
-    check(recorder->error().empty(), "a healthy still video with no pending AU does not hit the media wait timeout");
+    check(recorder->error().empty(), "a mapped still video does not wait for SR or the next picture on a clock deadline");
     // 超过八个 SR 仍应及时淘汰已用锚点，音频不等下一视频 AU。
     for (uint32_t second = 1; second <= 12; ++second) {
         check(recorder->audio(audio_session, 9, second * 48000, silence), "audio continues independently of video");
         report(*recorder, Track::Video, sr(0, (second + 1) * 24000, 1001 + second));
         report(*recorder, Track::Audio, sr(9, (second + 1) * 48000, 1001 + second));
     }
+    std::this_thread::sleep_for(150ms);
+    check(recorder->error().empty(), "continued audio drains before finish while the mapped video tail remains still");
     check(recorder->finish(error), "still video and continued audio finish after many SR intervals");
     const auto file = read(path);
     const std::array<int64_t,1> video_pts{0}; verify_video(file, video_pts);
+    if (mp4 && file.video.size() == 1)
+        check(file.video[0].duration == 100000, "a static MP4 tail uses its explicit 100 ms display policy");
     std::array<int64_t,13> audio_pts{};
     for (std::size_t i = 0; i < audio_pts.size(); ++i) audio_pts[i] = static_cast<int64_t>(i) * 1000000;
     verify_audio(file, audio_pts);
+}
+
+bool wait_for_file(const std::filesystem::path& path, Recorder& recorder) {
+    for (int i = 0; i < 200 && recorder.error().empty(); ++i) {
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(path, ec)) return true;
+        std::this_thread::sleep_for(5ms);
+    }
+    return false;
+}
+
+void mp4_video_timing(const Directory& directory) {
+    using Format = scrctl::media::RecordingMuxer::Format;
+    for (bool single : {true, false}) {
+        const auto path = directory.path / (single ? "single.mp4" : "vfr.mp4");
+        std::string error;
+        auto recorder = Recorder::start(options(path, false, Format::Mp4), error);
+        check(recorder != nullptr, "MP4 starts before any source clock is approved");
+        if (!recorder) continue;
+        begin(*recorder, false); video(*recorder, 0);
+        // 两条 SR 确定 24 kHz 视频时钟。下面故意采用不同采样间隔，
+        // 验证录制时长来自这些时间点，而不是配置中声明的帧率。
+        report(*recorder, Track::Video, sr(0, 0, 1000));
+        report(*recorder, Track::Video, sr(0, 24000, 1001));
+        if (!single) {
+            video(*recorder, 500); video(*recorder, 2900); video(*recorder, 9400);
+        }
+        check(recorder->finish(error) && error.empty(), "normal MP4 finish writes the final tail before media validation");
+        check(recorder->finish(error) && error.empty(), "MP4 success remains stable on repeated finish");
+        const auto file = read(path);
+        const std::vector<int64_t> pts = single ? std::vector<int64_t>{0}
+            : std::vector<int64_t>{0, 20833, 120833, 391667};
+        verify_video(file, pts);
+        if (file.video.size() == pts.size()) {
+            for (std::size_t i = 0; i < pts.size(); ++i) {
+                check(file.video[i].pts == pts[i], "MP4 retains each approved sampling point after one final quantization");
+                const auto expected = i + 1 < pts.size() ? pts[i + 1] - pts[i] : 100000;
+                check(file.video[i].duration == expected, "MP4 keeps actual VFR gaps and gives only its final AU 100 ms");
+            }
+        }
+    }
+}
+
+void mp4_failure_paths(const Directory& directory) {
+    using Format = scrctl::media::RecordingMuxer::Format;
+    std::string error;
+    {
+        const auto path = directory.path / "mapped-tail-budget.mp4";
+        auto config = options(path, false, Format::Mp4);
+        const auto parameters = (vps.size() + sps.size() + pps.size()) * 3;
+        const auto packet = (idr.size() + 4) * 2;
+        // 若已映射的旧尾包被误计为释放，这个预算足够再接收一个 AU；
+        // 正确保留旧包时，两份编码同时占用预算，必须拒绝新输入。
+        config.encoded_budget = parameters * 2 + packet + 1;
+        auto recorder = Recorder::start(config, error);
+        check(recorder != nullptr, "mapped-tail shared-budget fixture starts");
+        if (recorder) {
+            begin(*recorder, false); video(*recorder, 0);
+            report(*recorder, Track::Video, sr(0, 0, 1000));
+            report(*recorder, Track::Video, sr(0, 24000, 1001));
+            check(wait_for_file(path, *recorder), "approved MP4 clocks open the file while retaining its first tail");
+            check(!recorder->video(video_session, 0, 240, {idr}, vps, sps, pps),
+                  "a mapped MP4 tail remains in the shared encoded-byte budget");
+            const auto first = recorder->error();
+            recorder->fail("later error");
+            check(!recorder->finish(error) && error == first && error.find("budget") != std::string::npos,
+                  "tail-budget failure survives cleanup without being replaced by missing video or trailer errors");
+            check(!recorder->finish(error) && error == first, "failed MP4 tail cleanup is idempotent");
+        }
+    }
+    {
+        auto config = options(directory.path / "unmapped-next.mp4", false, Format::Mp4);
+        config.clock_wait = 40ms;
+        auto recorder = Recorder::start(config, error);
+        check(recorder != nullptr, "unmapped MP4 successor fixture starts");
+        if (recorder) {
+            begin(*recorder, false); video(*recorder, 0);
+            report(*recorder, Track::Video, sr(0, 0, 1000));
+            report(*recorder, Track::Video, sr(0, 24000, 1001));
+            video(*recorder, 30000);
+            check(wait_for_error(*recorder), "an unapproved successor still has the bounded SR wait deadline");
+            const auto first = recorder->error();
+            check(!recorder->finish(error) && error == first,
+                  "the 100 ms display rule does not authorize a video point without a trusted clock");
+        }
+    }
+    {
+        auto recorder = Recorder::start(options(directory.path / "quantized-same.mp4", false, Format::Mp4), error);
+        check(recorder != nullptr, "quantized interval fixture starts");
+        if (recorder) {
+            begin(*recorder, false); video(*recorder, 0);
+            report(*recorder, Track::Video, sr(0, 0, 1000));
+            report(*recorder, Track::Video, sr(0, 24000000, 1001));
+            video(*recorder, 1); // 不同 ticks 在微秒量化后重合，不能写成零时长。
+            check(!recorder->finish(error) && error.find("advance") != std::string::npos,
+                  "distinct RTP points cannot create a zero MP4 duration after quantization");
+        }
+    }
+    {
+        auto recorder = Recorder::start(options(directory.path / "mux-range.mp4", false, Format::Mp4), error);
+        check(recorder != nullptr, "actual MP4 mux rejection fixture starts");
+        if (recorder) {
+            begin(*recorder, false); video(*recorder, 0);
+            report(*recorder, Track::Video, sr(0, 0, 1000));
+            for (uint32_t second = 5; second <= 2150; second += 5)
+                report(*recorder, Track::Video, sr(0, second * 24000, 1000 + second));
+            video(*recorder, 2150 * 24000);
+            check(!recorder->finish(error) && error.find("MP4 range") != std::string::npos,
+                  "an actual muxer duration-range failure seals recording instead of changing the measured VFR interval");
+            const auto first = error;
+            recorder->fail("late");
+            check(!recorder->finish(error) && error == first, "MP4 write failure is preserved through repeat finish");
+        }
+    }
 }
 
 void final_mapping(const Directory& directory) {
@@ -398,6 +523,9 @@ int main() {
         common_origin(directory);
         wrapping_audio_and_first_idr(directory);
         still_video(directory);
+        still_video(directory, scrctl::media::RecordingMuxer::Format::Mp4);
+        mp4_video_timing(directory);
+        mp4_failure_paths(directory);
         final_mapping(directory);
         early_reports_and_parameter_epoch(directory);
         delayed_au_history(directory);
@@ -406,6 +534,9 @@ int main() {
         check(!Recorder::start(invalid,error),"clock budget cannot exceed the first-version bound");
         invalid = options(directory.path / "invalid.mkv"); invalid.encoded_budget = 16u*1024u*1024u+1;
         check(!Recorder::start(invalid,error),"encoded budget cannot exceed 16 MiB");
+        invalid = options(directory.path / "invalid.mp4");
+        invalid.format = static_cast<scrctl::media::RecordingMuxer::Format>(99);
+        check(!Recorder::start(invalid,error) && !error.empty(), "an invalid Recorder container enum is rejected before a worker starts");
 #endif
     }
     std::printf("recorder: %d checks, %d failures\n",checks,failures);

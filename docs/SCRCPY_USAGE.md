@@ -41,7 +41,7 @@
 
 | 项目 | 当前行为及使用边界 |
 | --- | --- |
-| `--record / -r` | `.mkv` 保存 HEVC 和 AAC-ELD，`--no-audio` 只录视频；其他扩展名兼容裸 HEVC，建议 `.hevc`。正式 MP4 尚未接入，指定 `.mp4` 不会生成 MP4 容器 |
+| `--record / -r` | `.mp4` / `.mkv` 保存 HEVC 和 AAC-ELD，`--no-audio` 只录视频；其他扩展名兼容裸 HEVC，建议 `.hevc`。MP4 最后一帧显示 100 ms，参考 scrcpy 的收尾规则 |
 | `--display-orientation` | 只改变本机显示；现有 `--orientation` 是其兼容别名，也不改变录制 |
 | `--crop` | 裁剪本机显示的源像素；视频和截图各使用自身的像素坐标，不改变设备采集或录制 |
 | `--video-source` | 支持 display 和扩展值 screenshot（截图轮询）；没有 camera 能力 |
@@ -88,8 +88,8 @@ scrctl 的默认路由已在 macOS、iPhone14,4 / iOS 27 的 USB 与 Wi-Fi 音�
 2. Windows 音频：FFmpeg AAC-ELD 后端已接入，真实音乐解码及短时 USB 发声通过；
    无线播放已正常运行 120 秒。Mac 的重采样时钟补偿改善了刺啦声，新调节层
    仍需 Windows 回归；继续验证持续连接和安装包。
-3. 容器录制：MKV 已接入 libavformat，继续验收音视频同步、跨平台和长期运行；
-   MP4 需确定未知末帧的结束边界。随后让 `--orientation` 同时设置显示与录制，
+3. 容器录制：MP4 / MKV 已接入 libavformat，继续验收音视频同步、跨平台和长期运行。
+   随后让 `--orientation` 同时设置显示与录制，
    并提供独立的 `--record-orientation`，录制旋转优先使用容器方向信息。
 4. 日常键盘输入与粘贴：接入窗口键盘事件，维护按下 / 抬起状态，在焦点丢失、
    转屏或退出时释放；区分键盘报告和文字输入，验证中文等文本的粘贴。

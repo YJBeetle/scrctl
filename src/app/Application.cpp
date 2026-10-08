@@ -93,9 +93,9 @@ int run(int argc, char **argv) {
     if (!audio_init_error.empty()) {
         std::fprintf(stderr, SCRCTL_TR("Failed to initialize audio output: %s (audio disabled; video continues)\n"),
                      audio_init_error.c_str());
-        if (is_matroska_path(o.record) && !o.no_audio) {
+        if (record_container_format(o.record) && !o.no_audio) {
             std::fprintf(stderr, "%s\n", SCRCTL_TR(
-                "MKV audio recording requires an audio stream. Use --no-audio-playback to record "
+                "Audio recording requires an audio stream. Use --no-audio-playback to record "
                 "without a sound device, or --no-audio to record video only."));
             return 1;
         }
@@ -166,7 +166,7 @@ int run(int argc, char **argv) {
     if (live != nullptr && live->has_audio() && !o.no_audio_playback) {
         std::string aerr;
         if (!live->start_playback(aerr)) {
-            if (is_matroska_path(o.record)) {
+            if (record_container_format(o.record)) {
                 std::fprintf(stderr, SCRCTL_TR(
                     "Failed to open audio output: %s (recording and audio reception continue)\n"),
                     aerr.c_str());

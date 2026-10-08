@@ -86,6 +86,14 @@ int main() {
     check(parse({"scrctl", "-r", "capture.MKV", "--video-source=screenshot"}, invalid_mkv) ==
               ParseResult::Error,
           "screenshot container recording is rejected before connecting to a device");
+    Options mp4;
+    check(parse({"scrctl", "-r", "capture.Mp4", "--audio-dup", "--no-audio-playback"}, mp4) ==
+              ParseResult::Run && mp4.record == "capture.Mp4" && mp4.audio_dup && mp4.no_audio_playback,
+          "MP4 recording preserves the selected audio route and capture-only request");
+    Options invalid_mp4;
+    check(parse({"scrctl", "-r", "capture.mp4", "--video-source=screenshot"}, invalid_mp4) ==
+              ParseResult::Error,
+          "screenshot MP4 recording is rejected before connecting to a device");
     Options playback_recording;
     check(parse({"scrctl", "--play", "input.hevc", "--record", "output.mkv"},
                 playback_recording) == ParseResult::Error,

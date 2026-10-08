@@ -1,6 +1,7 @@
 #pragma once
 
 #include "bitstream/AnnexB.h"
+#include "media/RecordingMuxer.h"
 #include "rt/Rtcp.h"
 
 #include <chrono>
@@ -15,13 +16,14 @@
 
 namespace scrctl::media {
 
-/// 单一会话的 MKV 录制消费者；拥有一个 worker，串行使用时钟、参数检查和封装。
+/// 单一会话的 MP4/MKV 录制消费者；拥有一个 worker，串行使用时钟、参数检查和封装。
 /// 泵只转交已经组好且完成来源/传输完整性检查的编码包，不等待磁盘或队列空间。
 class Recorder {
 public:
     enum class Track { Video, Audio };
     struct Options {
         std::string path;
+        RecordingMuxer::Format format = RecordingMuxer::Format::Matroska;
         bool include_audio = false;
         /// ingress、待 SR 包及写入中的原编码共用的预算，保守预留编码复制
         /// 和参数检查的临时空间；不是进程 RSS 或库内部缓存的硬上限。
@@ -32,7 +34,9 @@ public:
     };
 
     /// 创建 worker；文件在首 IDR 配置和所选轨道的首包时钟批准后才打开。
-    /// 首版固定 MKV、无重排 HEVC；音频仅 48 kHz/双声道/480-sample AAC-ELD。
+    /// 首版支持无重排 HEVC；音频仅 48 kHz/双声道/480-sample AAC-ELD。
+    /// MP4 用下一批准视频点的 PTS 差作为前包时长，最后包显示 100 ms。
+    /// 这个末帧时长是展示规则，不是源端结束时间；MKV 保留未知时长 0。
     [[nodiscard]] static std::unique_ptr<Recorder> start(const Options&, std::string& error);
     ~Recorder();
     Recorder(const Recorder&) = delete;

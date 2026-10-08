@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-09 02:44+0800\n"
+"POT-Creation-Date: 2026-10-09 03:19+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -42,8 +42,8 @@ msgstr ""
 
 #: src/app/Application.cpp:98
 msgid ""
-"MKV audio recording requires an audio stream. Use --no-audio-playback to "
-"record without a sound device, or --no-audio to record video only."
+"Audio recording requires an audio stream. Use --no-audio-playback to record "
+"without a sound device, or --no-audio to record video only."
 msgstr ""
 
 #: src/app/Application.cpp:128
@@ -180,8 +180,8 @@ msgid ""
 "playback. Switching routes may pause the phone's player; resume it if "
 "needed.\n"
 "The device chooses encoding dimensions, bitrate and frame rate. Display "
-"rotation and crop leave recordings unchanged. Record to .mkv for HEVC with "
-"audio, or .hevc for raw video.\n"
+"rotation and crop leave recordings unchanged. Record to .mp4 or .mkv for "
+"HEVC with audio, or .hevc for raw video.\n"
 "Wireless use requires pairing. --help / --version do not connect to the "
 "device."
 msgstr ""
@@ -221,7 +221,8 @@ msgstr ""
 
 #: src/app/Cli.cpp:42
 msgid ""
-"Record to .mkv (HEVC and audio); other extensions save raw HEVC without audio"
+"Record to .mp4 or .mkv (HEVC and audio); other extensions save raw HEVC "
+"without audio"
 msgstr ""
 
 #: src/app/Cli.cpp:44
@@ -391,9 +392,10 @@ msgstr ""
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr ""
 
-#: src/app/Cli.cpp:122 src/app/LiveSource.cpp:56
+#: src/app/Cli.cpp:122 src/app/LiveSource.cpp:57
 msgid ""
-"MKV recording requires live video; screenshot polling cannot be recorded"
+"Container recording requires live video; screenshot polling cannot be "
+"recorded"
 msgstr ""
 
 #: src/app/Cli.cpp:125
@@ -625,179 +627,179 @@ msgstr ""
 msgid "Device startup cancelled"
 msgstr ""
 
-#: src/app/LiveSource.cpp:60
-msgid "MKV recording is unavailable in this build (libavformat required)"
+#: src/app/LiveSource.cpp:61
+msgid "Container recording is unavailable in this build (libavformat required)"
 msgstr ""
 
-#: src/app/LiveSource.cpp:66
+#: src/app/LiveSource.cpp:67
 msgid "Invalid --test-degrade: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:114
+#: src/app/LiveSource.cpp:115
 #, c-format
 msgid "Failed to query display dimensions: %s (using model crop table)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:115
+#: src/app/LiveSource.cpp:116
 msgid "Update contains no usable dimensions"
 msgstr ""
 
-#: src/app/LiveSource.cpp:128
+#: src/app/LiveSource.cpp:129
 #, c-format
 msgid ""
 "Failed to subscribe to display changes: %s (automatic rotation unavailable)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:160 src/app/LiveSource.cpp:386
+#: src/app/LiveSource.cpp:162 src/app/LiveSource.cpp:388
 msgid "Live video unavailable; recording stopped"
 msgstr ""
 
-#: src/app/LiveSource.cpp:165
+#: src/app/LiveSource.cpp:167
 #, c-format
 msgid "Media stream unavailable: %s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:168
+#: src/app/LiveSource.cpp:170
 #, c-format
 msgid ""
 "Using screenshot polling; refresh rate depends on capture time. Input "
 "control remains available\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:172
+#: src/app/LiveSource.cpp:174
 msgid "Failed to start screenshot polling: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:187
+#: src/app/LiveSource.cpp:189
 msgid "No first screenshot within 5 seconds"
 msgstr ""
 
-#: src/app/LiveSource.cpp:194
+#: src/app/LiveSource.cpp:196
 msgid "No first decoded frame within 5 seconds"
 msgstr ""
 
-#: src/app/LiveSource.cpp:201
+#: src/app/LiveSource.cpp:203
 #, c-format
 msgid "Screenshot mirroring started: %s / iOS %s, %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:205
+#: src/app/LiveSource.cpp:207
 #, c-format
 msgid ""
 "Video stream started: %s / iOS %s, receive port=%u PT=%u, first frame %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:214
+#: src/app/LiveSource.cpp:216
 #, c-format
 msgid ""
 "Display geometry: visible area %dx%d (displayId=%llu %s), UI rotation %d "
 "degrees clockwise, stream %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:221
+#: src/app/LiveSource.cpp:223
 #, c-format
 msgid "Screenshot mode cannot record Annex-B; ignoring --record\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:223
+#: src/app/LiveSource.cpp:225
 #, c-format
 msgid "Recording to %s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:230
+#: src/app/LiveSource.cpp:232
 #, c-format
 msgid "Screenshot mode does not start audio\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:243
+#: src/app/LiveSource.cpp:245
 #, c-format
 msgid ""
 "Forwarding audio to the computer. Switching routes may pause the phone's "
 "player; resume playback on the phone if needed.\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:253
+#: src/app/LiveSource.cpp:255
 #, c-format
 msgid "Failed to start audio: %s (video continues)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:258
+#: src/app/LiveSource.cpp:260
 #, c-format
 msgid "Audio stream started: receive port=%u PT=%u backend=%s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:261
+#: src/app/LiveSource.cpp:263
 msgid "Audio routing: phone and computer (--audio-dup)"
 msgstr ""
 
-#: src/app/LiveSource.cpp:262
+#: src/app/LiveSource.cpp:264
 msgid "Audio routing: computer; phone playback is suppressed"
-msgstr ""
-
-#: src/app/LiveSource.cpp:269
-#, c-format
-msgid "--test-degrade: from now,"
 msgstr ""
 
 #: src/app/LiveSource.cpp:271
 #, c-format
+msgid "--test-degrade: from now,"
+msgstr ""
+
+#: src/app/LiveSource.cpp:273
+#, c-format
 msgid " at %.1f seconds: %s"
 msgstr ""
 
-#: src/app/LiveSource.cpp:272
+#: src/app/LiveSource.cpp:274
 msgid "force fallback"
 msgstr ""
 
-#: src/app/LiveSource.cpp:272
+#: src/app/LiveSource.cpp:274
 msgid "release override"
 msgstr ""
 
-#: src/app/LiveSource.cpp:274
+#: src/app/LiveSource.cpp:276
 #, c-format
 msgid " (test mode)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:281
+#: src/app/LiveSource.cpp:283
 msgid ""
 "No playable audio stream (disabled, failed to start, or unsupported build)"
 msgstr ""
 
-#: src/app/LiveSource.cpp:295
+#: src/app/LiveSource.cpp:297
 msgid "Audio capture stopped before recording finished"
 msgstr ""
 
-#: src/app/LiveSource.cpp:315
+#: src/app/LiveSource.cpp:317
 #, c-format
 msgid "Control connected (touch injection available)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:390
+#: src/app/LiveSource.cpp:392
 #, c-format
 msgid ""
 "Live video unavailable; using screenshot polling while retrying video in the "
 "background\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:393
+#: src/app/LiveSource.cpp:395
 #, c-format
 msgid "Failed to switch to screenshots: %s (retry in %llu seconds)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:399
+#: src/app/LiveSource.cpp:401
 #, c-format
 msgid "Live video recovered; switched back to video stream\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:414 src/media/FramePump.cpp:174
+#: src/app/LiveSource.cpp:416 src/media/FramePump.cpp:174
 #, c-format
 msgid "Recording failed: %s. Mirroring continues; the file is incomplete.\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:446
+#: src/app/LiveSource.cpp:448
 msgid "); closing session"
 msgstr ""
 
-#: src/app/LiveSource.cpp:446
+#: src/app/LiveSource.cpp:448
 msgid "Device connection lost ("
 msgstr ""
 
@@ -1632,127 +1634,139 @@ msgid ""
 "requesting a keyframe.\n"
 msgstr ""
 
-#: src/media/Recorder.cpp:106
+#: src/media/Recorder.cpp:114
 msgid "Recording failed"
 msgstr ""
 
-#: src/media/Recorder.cpp:128
+#: src/media/Recorder.cpp:136
 msgid "Recorder input exceeds its encoded-byte or event budget"
 msgstr ""
 
-#: src/media/Recorder.cpp:144
+#: src/media/Recorder.cpp:152
 msgid "Cannot allocate the Recorder input buffer"
 msgstr ""
 
-#: src/media/Recorder.cpp:153
+#: src/media/Recorder.cpp:161
 msgid "Recording media belongs to a missing or changed session"
 msgstr ""
 
-#: src/media/Recorder.cpp:177 src/media/Recorder.cpp:293
+#: src/media/Recorder.cpp:185 src/media/Recorder.cpp:301
 msgid "Recording early sender-report budget exceeded"
 msgstr ""
 
-#: src/media/Recorder.cpp:187
+#: src/media/Recorder.cpp:195
 msgid "Recording sender report has no usable NTP/RTP clock"
 msgstr ""
 
-#: src/media/Recorder.cpp:209 src/media/Recorder.cpp:232
+#: src/media/Recorder.cpp:217 src/media/Recorder.cpp:240
 msgid "Recording media source changed within the session"
 msgstr ""
 
-#: src/media/Recorder.cpp:213
+#: src/media/Recorder.cpp:221
 msgid "Recording media timestamps do not advance within the track"
 msgstr ""
 
-#: src/media/Recorder.cpp:236
+#: src/media/Recorder.cpp:244
 msgid "Recording HEVC parameter sets changed"
 msgstr ""
 
-#: src/media/Recorder.cpp:246
+#: src/media/Recorder.cpp:254
 msgid "Recording HEVC requires a no-reorder configuration"
 msgstr ""
 
-#: src/media/Recorder.cpp:266
+#: src/media/Recorder.cpp:274
 msgid "Recording track session was started again"
 msgstr ""
 
-#: src/media/Recorder.cpp:276
+#: src/media/Recorder.cpp:284
 msgid "Recording audio RTP timestamp has an ambiguous wrap or overflows"
 msgstr ""
 
-#: src/media/Recorder.cpp:314
+#: src/media/Recorder.cpp:322
 msgid "A selected recording track has no approved media"
 msgstr ""
 
-#: src/media/Recorder.cpp:319
+#: src/media/Recorder.cpp:327
 msgid "Cannot map the first recording packet from trusted sender reports"
 msgstr ""
 
-#: src/media/Recorder.cpp:341
+#: src/media/Recorder.cpp:349
 msgid "Recording time cannot be represented as nonnegative microseconds"
 msgstr ""
 
-#: src/media/Recorder.cpp:356
+#: src/media/Recorder.cpp:358
+msgid "MP4 recording video duration is not positive or overflows"
+msgstr ""
+
+#: src/media/Recorder.cpp:383
 msgid "Recording clock cannot map a packet within its SR/extrapolation budget"
 msgstr ""
 
-#: src/media/Recorder.cpp:362
+#: src/media/Recorder.cpp:389
 msgid "Recording audio duration is not positive after clock mapping"
 msgstr ""
 
-#: src/media/Recorder.cpp:449
+#: src/media/Recorder.cpp:394
+msgid "MP4 recording video timestamps do not advance after clock mapping"
+msgstr ""
+
+#: src/media/Recorder.cpp:499
 msgid "A selected recording track did not produce a completed packet"
 msgstr ""
 
-#: src/media/Recorder.cpp:454
+#: src/media/Recorder.cpp:504
 msgid "Recording waited too long for approved media or trusted sender reports"
 msgstr ""
 
-#: src/media/Recorder.cpp:458
+#: src/media/Recorder.cpp:508
 msgid "Recording worker could not process its input"
 msgstr ""
 
-#: src/media/Recorder.cpp:470
-msgid "MKV recording requires libavformat and libavcodec"
+#: src/media/Recorder.cpp:521 src/media/RecordingMuxer.cpp:282
+msgid "Unsupported recording container format"
 msgstr ""
 
-#: src/media/Recorder.cpp:478
+#: src/media/Recorder.cpp:525 src/media/RecordingMuxer.cpp:24
+msgid "Container recording requires libavformat and libavcodec"
+msgstr ""
+
+#: src/media/Recorder.cpp:533
 msgid "Invalid Recorder path or bounded buffering/clock limits"
 msgstr ""
 
-#: src/media/Recorder.cpp:486
+#: src/media/Recorder.cpp:541
 msgid "Cannot create the recording worker"
 msgstr ""
 
-#: src/media/Recorder.cpp:500
+#: src/media/Recorder.cpp:555
 msgid "Recording track selection or session UUID is invalid"
 msgstr ""
 
-#: src/media/Recorder.cpp:512
+#: src/media/Recorder.cpp:567
 msgid "Recording session UUID is invalid"
 msgstr ""
 
-#: src/media/Recorder.cpp:517
+#: src/media/Recorder.cpp:572
 msgid "Recording HEVC AU is incomplete or exceeds the packet budget"
 msgstr ""
 
-#: src/media/Recorder.cpp:521
+#: src/media/Recorder.cpp:576
 msgid "Recording HEVC AU has an invalid or unsupported layer header"
 msgstr ""
 
-#: src/media/Recorder.cpp:525
+#: src/media/Recorder.cpp:580
 msgid "Recording HEVC AU is empty"
 msgstr ""
 
-#: src/media/Recorder.cpp:529
+#: src/media/Recorder.cpp:584
 msgid "Recording HEVC parameters exceed the configuration budget"
 msgstr ""
 
-#: src/media/Recorder.cpp:556
+#: src/media/Recorder.cpp:611
 msgid "Recording AAC-ELD track, session or payload is invalid"
 msgstr ""
 
-#: src/media/Recorder.cpp:572
+#: src/media/Recorder.cpp:627
 msgid "Recording sender-report track or session is invalid"
 msgstr ""
 
@@ -1782,10 +1796,6 @@ msgstr ""
 
 #: src/media/RecordingClock.cpp:77
 msgid "Recording clock anchor limit reached"
-msgstr ""
-
-#: src/media/RecordingMuxer.cpp:24
-msgid "Container recording requires libavformat and libavcodec"
 msgstr ""
 
 #: src/media/RecordingMuxer.cpp:42 src/media/RecordingVideoConfig.cpp:107
@@ -1887,10 +1897,6 @@ msgstr ""
 
 #: src/media/RecordingMuxer.cpp:275
 msgid "Recording requires a nonempty local file path without NUL bytes"
-msgstr ""
-
-#: src/media/RecordingMuxer.cpp:282
-msgid "Unsupported recording container format"
 msgstr ""
 
 #: src/media/RecordingMuxer.cpp:287

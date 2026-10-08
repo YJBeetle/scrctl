@@ -25,6 +25,7 @@ constexpr std::size_t max_media_events = 8192;
 constexpr std::size_t max_early_reports = 8;
 constexpr std::size_t recent_clock_anchors = 7;
 constexpr std::size_t max_encoded_budget = 16u * 1024u * 1024u;
+constexpr int64_t mp4_tail_duration_us = 100000;
 
 std::size_t index(Recorder::Track track) { return track == Recorder::Track::Video ? 0 : 1; }
 bool valid_track(Recorder::Track track) {
@@ -73,6 +74,10 @@ struct Recorder::Impl {
         std::deque<Packet> pending;
         bool wrote_media = false;
     };
+    struct MappedVideo {
+        Packet packet;
+        int64_t pts = 0;
+    };
 
     Options options;
     mutable std::mutex mutex;
@@ -90,6 +95,9 @@ struct Recorder::Impl {
     std::optional<RecordingVideoConfig> video_config;
     std::size_t configuration_cost = 0;
     std::unique_ptr<RecordingMuxer> muxer;
+    // 只保留一个完成 SR 映射的 MP4 尾包，原编码和事件仍占用 admission 预算。
+    // 它等待下一视频点来决定展示间隔，既不等待 SR，也不需要保留旧时钟锚点。
+    std::optional<MappedVideo> video_tail;
     Time::time_point startup_deadline;
 
     explicit Impl(Options value)
@@ -324,7 +332,7 @@ struct Recorder::Impl {
         origin = *earliest;
         RecordingMuxer::Options output;
         output.path = options.path;
-        output.format = RecordingMuxer::Format::Matroska;
+        output.format = options.format;
         output.vps = video_config->vps;
         output.sps = video_config->sps;
         output.pps = video_config->pps;
@@ -344,6 +352,25 @@ struct Recorder::Impl {
         return static_cast<int64_t>(rounded);
     }
 
+    bool write_mp4_tail(int64_t duration) {
+        const auto& tail = *video_tail;
+        if (duration <= 0 || tail.pts > std::numeric_limits<int64_t>::max() - duration) {
+            fail(SCRCTL_TR("MP4 recording video duration is not positive or overflows"));
+            return false;
+        }
+        std::string error;
+        if (!muxer->write_video(tail.packet.bytes, {tail.pts, tail.pts, duration},
+                                tail.packet.keyframe, error)) {
+            fail(error);
+            return false;
+        }
+        streams[0].wrote_media = true;
+        const auto cost = tail.packet.cost;
+        video_tail.reset();
+        release(cost, true);
+        return true;
+    }
+
     void drive(RecordingClock::Mode mode) {
         if (failed() || !establish_origin(mode)) return;
         for (std::size_t i = 0; i < (options.include_audio ? 2u : 1u); ++i) {
@@ -361,6 +388,20 @@ struct Recorder::Impl {
                 if (i == 1 && *end <= *pts) {
                     fail(SCRCTL_TR("Recording audio duration is not positive after clock mapping")); return;
                 }
+                if (i == 0 && options.format == RecordingMuxer::Format::Mp4) {
+                    if (video_tail) {
+                        if (*pts <= video_tail->pts) {
+                            fail(SCRCTL_TR("MP4 recording video timestamps do not advance after clock mapping"));
+                            return;
+                        }
+                        if (!write_mp4_tail(*pts - video_tail->pts)) return;
+                    }
+                    video_tail.emplace(MappedVideo{std::move(packet), *pts});
+                    stream.pending.pop_front();
+                    // 只转移所有权，不释放尾包的原编码或媒体事件预算。
+                    prune(stream);
+                    continue;
+                }
                 const RecordingMuxer::Timing timing{*pts, *pts, *end - *pts};
                 std::string error;
                 const bool written = i == 0
@@ -374,6 +415,10 @@ struct Recorder::Impl {
                 prune(stream);
             }
         }
+        // 音频可以在静止画面期间独立写入。只有正常 Final 才确定末帧展示规则；
+        // 失败时仍由 cleanup 收回尾包预算，不把未完成录制伪装成成功。
+        if (mode == RecordingClock::Mode::Final && video_tail && !failed())
+            (void)write_mp4_tail(mp4_tail_duration_us);
     }
 
     Time::time_point next_deadline() const {
@@ -394,6 +439,11 @@ struct Recorder::Impl {
         for (auto& stream : streams) {
             for (const auto& packet : stream.pending) release(packet.cost, true);
             stream.pending.clear();
+        }
+        if (video_tail) {
+            const auto cost = video_tail->packet.cost;
+            video_tail.reset();
+            release(cost, true);
         }
         video_config.reset();
         release(configuration_cost, false);
@@ -466,8 +516,13 @@ Recorder::Recorder(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
 
 std::unique_ptr<Recorder> Recorder::start(const Options& options, std::string& error) {
     error.clear();
+    if (options.format != RecordingMuxer::Format::Mp4 &&
+        options.format != RecordingMuxer::Format::Matroska) {
+        error = SCRCTL_TR("Unsupported recording container format");
+        return nullptr;
+    }
     if (!RecordingMuxer::available()) {
-        error = SCRCTL_TR("MKV recording requires libavformat and libavcodec");
+        error = SCRCTL_TR("Container recording requires libavformat and libavcodec");
         return nullptr;
     }
     if (options.path.empty() || options.path.find('\0') != std::string::npos ||

@@ -51,13 +51,14 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     if (cancelled()) {
         return false;
     }
-    const bool container_recording = is_matroska_path(record_path);
+    const auto container_format = record_container_format(record_path);
+    const bool container_recording = container_format.has_value();
     if (container_recording && video_source == "screenshot") {
-        err = SCRCTL_TR("MKV recording requires live video; screenshot polling cannot be recorded");
+        err = SCRCTL_TR("Container recording requires live video; screenshot polling cannot be recorded");
         return false;
     }
     if (container_recording && !scrctl::media::RecordingMuxer::available()) {
-        err = SCRCTL_TR("MKV recording is unavailable in this build (libavformat required)");
+        err = SCRCTL_TR("Container recording is unavailable in this build (libavformat required)");
         return false;
     }
     // 连接设备前校验降级时刻表。非法参数应明确失败，避免测试实际未启用。
@@ -138,6 +139,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
         if (container_recording) {
             scrctl::media::Recorder::Options ro;
             ro.path = record_path;
+            ro.format = *container_format;
             ro.include_audio = want_audio;
             recorder_ = scrctl::media::Recorder::start(ro, err);
             if (recorder_ == nullptr) return false;
