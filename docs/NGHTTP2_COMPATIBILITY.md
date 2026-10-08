@@ -38,10 +38,10 @@ nghttp2 能处理 RemoteXPC 的空 HEADERS、奇数号双向控制流和大型�
 cmake -S . -B /tmp/scrctl-nghttp2-build -DSCRCTL_NGHTTP2_PROBE=ON
 cmake --build /tmp/scrctl-nghttp2-build -j
 ctest --test-dir /tmp/scrctl-nghttp2-build --output-on-failure
-/tmp/scrctl-nghttp2-build/nghttp2_probe
-/tmp/scrctl-nghttp2-build/nghttp2_probe --wifi <device-ip>
-/tmp/scrctl-nghttp2-build/nghttp2_probe --wifi <device-ip> --screenshot
-/tmp/scrctl-nghttp2-build/nghttp2_probe --replay <channel-input.bin>
+/tmp/scrctl-nghttp2-build/experiments/nghttp2_probe
+/tmp/scrctl-nghttp2-build/experiments/nghttp2_probe --wifi <device-ip>
+/tmp/scrctl-nghttp2-build/experiments/nghttp2_probe --wifi <device-ip> --screenshot
+/tmp/scrctl-nghttp2-build/experiments/nghttp2_probe --replay <channel-input.bin>
 ```
 
 无参数探针和重放返回 0 表示预期观察与断言通过，不表示完整兼容。

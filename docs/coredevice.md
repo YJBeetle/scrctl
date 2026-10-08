@@ -107,12 +107,15 @@ scrctl 的存在理由是它的**形态**而非能力：原生窗口 + scrcpy �
 
 ## 9. 探针工具
 
-见 `tools/probe/`。需要自行 `pip install pymobiledevice3 pillow`（探针为研究用途，非 scrctl 运行时依赖）。
+原生 C++ 诊断与归档实验的当前构建方式、可执行文件路径见 [工具说明](TOOLS.md)。
+
+见 `tools/probe/`。需要自行 `pip install pymobiledevice3 pillow numpy av`（探针为研究用途，非 scrctl 运行时依赖）。
 
 ```bash
+cd tools/probe
 ./probe.sh                    # 交互 REPL：截图 / 点击 / 拖动 / 按键
-../../../.probe-venv/bin/python latency.py   # 帧率与输入->画面延迟
-../../../.probe-venv/bin/python stream.py | ffplay -f hevc -framerate 60 \
+../../.probe-venv/bin/python latency.py   # 帧率与输入->画面延迟
+../../.probe-venv/bin/python stream.py | ffplay -f hevc -framerate 60 \
     -probesize 32 -analyzeduration 0 pipe:0
 ```
 
@@ -394,7 +397,7 @@ digitizer event for display <main> from unsupported service"，而 `startmediast
 起来之后报告就一路走到 UIKit 变成真的 `UIEventTypeTouches`。于是写下了"流是输入的
 硬前提"，并让每个注入探针都顺手起一条流。
 
-复测用 `tools/hid_gate_probe`：同一次运行里按四种状态各画一条线，线落在互不重叠的
+复测用 `tools/experiments/hid_gate_probe`：同一次运行里按四种状态各画一条线，线落在互不重叠的
 纵向带上，前后各用 `screencaptureservice` 抓一张图（这条通道与媒体会话无关，所以
 会话死着也能读屏），再由 `tools/gate_diff.py` 按带数亮像素增量：
 
@@ -463,7 +466,7 @@ Codable，类型必须严格）；`stopAll=false` 配 ClientSessionID 回
 
 **RTCP PLI 设备不理。**（**已作废，正确结论在本节末尾的"修好之后第一次真测"**：PLI
 有效。留着这一段是因为它记录了两个各自独立就能造出假负结果的坑——发的是坏包、以及
-在静止画面上测。）这是 `tools/pli_probe` 专门测出来的负结果：起流后发一个
+在静止画面上测。）这是 `tools/experiments/pli_probe` 专门测出来的负结果：起流后发一个
 RFC 4585 的 PLI（sender SSRC + media SSRC），目的端口取 RTCP 实测的源端口（观测到
 RTCP 与 RTP 同端口，不是 RFC 3550 的"奇数端口"惯例），两种 sender SSRC 取值（等于
 媒体 SSRC / 另给一个）各测一遍：
@@ -511,7 +514,7 @@ UUID 一比就知道这条还在不在。实测静止主屏上它会从"在"变�
 给出的是 12.9 秒——两个"间隔"都对不上，但**两个"死亡时刻"都是 20.0 秒整**，锚点是起流
 时刻而不是最后一个视频包。
 
-把这件事钉死的是这组对照（`tools/rr_keepalive_probe`、`tools/lifetime_probe`）：
+把这件事钉死的是这组对照（`tools/rr_keepalive_probe`、`tools/experiments/lifetime_probe`）：
 
 | 这一条会话 | 画面 | 我们回的 RTCP | 死亡时刻 |
 | --- | --- | --- | --- |
@@ -1274,7 +1277,7 @@ stream:didReceiveRTCPPackets:  streamDidRTCPTimeOut  streamDidRecoverFromRTCPTim
 > **两会话实验的范围**：下面是两条视频流的替换对照，不能推广为设备只允许一条任意媒体流。
 > 视频与音频可共存；视频重起对在场音频的影响另有独立验证，见 [音视频并行与独立续期验证](#172-音频腿接进产品四个问题的真机读数toolsaudio_pump_probeasan-下跑)。
 
-**为什么必须付、而且没法靠"先起新的再切"躲掉**：`tools/two_session_probe` 量了设备上能
+**为什么必须付、而且没法靠"先起新的再切"躲掉**：`tools/experiments/two_session_probe` 量了设备上能
 不能同时跑两条会话。答案是不能，而且第二次的 `startmediastream` 会**把第一条从会话表里
 顶掉**：
 
@@ -1290,13 +1293,13 @@ stream:didReceiveRTCPPackets:  streamDidRTCPTimeOut  streamDidRecoverFromRTCPTim
 SSRC 那条尤其要看：它排除了"第二条只是把同一条流镜像了一份到另一个端口"这种可能，所以
 "只有一条活着"是设备侧的独占，不是我们的收包顺序问题。A 那 6 个包则是这条探针差点读错的
 地方——只看窗口内计数会得出"两条都在发"，而 A 的最后一个包在 +84ms。**判活要按时刻判，
-不能按计数判**（`tools/two_session_probe` 的第一版就交回过这个假结论）。
+不能按计数判**（`tools/experiments/two_session_probe` 的第一版就交回过这个假结论）。
 
 于是换一次会话的代价被钉死在约 300ms（RPC 84 + 首帧 100 + IDR 306），`--feed` 全程喂画面
 变化实测一次硬接续吃掉 **270 ms**（其间按过 1 次音量键，所以确实吃掉了内容），占 45 秒的
 0.6%；而两次挑到静止间隙的接续（`画面已静止 1782ms（数据报静默 51ms）`、`6619ms（0ms）`）
 没有产生任何可见损失——接续之前早就没新帧了。这条判据本身由
-`tools/lease_renew_probe` 看着泵自己的对外读数打（serial 间隔 + `stats().restarts` 增量，
+`tools/experiments/lease_renew_probe` 看着泵自己的对外读数打（serial 间隔 + `stats().restarts` 增量，
 后者用来把一条顿挫归到"换会话"头上而不是"画面本来就静止"）。
 
 **这条重起是承重的，别当成浪费去优化掉**：设备结束流之后，画面再变也不会自己恢复，
@@ -1344,7 +1347,7 @@ PT 用的是 206，而标准里 FIR 是 RTPFB=205 FMT=4；③ **offer 里 `allow
 `allowRTCPFB`)"），闸关着时测出来的"不理"是必然的。
 
 **这三个变量后来各自控住重测了一遍，答案是负面的：设备仍然不给 IDR。** 租期改大之后
-（观察窗不再被 20 秒截断），`tools/fir_probe` 按 `{PT=205, PT=206} × {发送者填设备的流号,
+（观察窗不再被 20 秒截断），`tools/experiments/fir_probe` 按 `{PT=205, PT=206} × {发送者填设备的流号,
 发送者填 answer 分配的 `RemoteSSRC`} × {allowRTCPFB=0, 1}` 组合跑，每臂"前摇 3 秒什么都不
 发，之后每 2 秒发一次请求、共 12 秒"：
 
@@ -1376,7 +1379,7 @@ PT 用的是 206，而标准里 FIR 是 RTPFB=205 FMT=4；③ **offer 里 `allow
 （注意"请设备给一帧"和"我们发出去的 RTCP 能不能给自己续命"是两件事：后者已经定案，答案是
 **都不影响**，因为那个时刻就是我们自己报的 `timeout`。）
 
-**重起本身很便宜，贵的是"发现"。** `tools/restart_gap_probe` 量了三种情形各 3 次：
+**重起本身很便宜，贵的是"发现"。** `tools/experiments/restart_gap_probe` 量了三种情形各 3 次：
 会话还活着就停、等它自己结束后再 `stop`、等它结束后不 `stop` 直接起——**九次全部
 成功，间隔 0ms 也没问题，停+起一共 37–90ms**。对着一条已被设备结束的会话调
 `stopmediastream` 不报错，也不需要额外等待。所以"点下去愣一下"几乎全在发现延迟上，
@@ -1408,7 +1411,7 @@ PT 用的是 206，而标准里 FIR 是 RTPFB=205 FMT=4；③ **offer 里 `allow
 落在窗口里。把阈值调大不会消灭它，只会把它推到别处（第二版就是这么把 150ms 的误伤
 换成了 5.5 秒的漏判）。要么问设备，要么等——问设备实测几乎不要钱，见下表。
 
-**wake() 到第一帧的实测预算：两档都是 191–272ms。** `tools/wake_latency_probe`
+**wake() 到第一帧的实测预算：两档都是 191–272ms。** `tools/experiments/wake_latency_probe`
 把 silence/stall 自动重起都关掉，等包计数静默到指定值再催一次，扫了两档各 2-3 次：
 
 | 催的时机 | 走哪条路 | wake() 到第一帧 |
@@ -1494,7 +1497,7 @@ progress on the device."。这不是我们这边的问题，也不是会话表�
 起不来——正是控制单元那条兜底路径，所以碰到它不要绕、不要重试，让调用方按它自己的
 "还没有第一帧"处理（scrctl 命令行则是提示去挂断，见 `src/app/main.cpp` 起流失败处）。
 
-## 14. 让设备自己交代入参形状（`tools/feature_schema_probe`）
+## 14. 让设备自己交代入参形状（`tools/experiments/feature_schema_probe`）
 
 CoreDevice 的 feature 入参在设备侧是 Swift Codable，而它对**每个必填键都点名**：
 

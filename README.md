@@ -111,6 +111,11 @@ FFmpeg 软件解码是默认的视频后端，`--hw-decode` 选择平台硬件�
 前缀，不能处理超过 65535 字节的 NAL；已有真机记录包含超过这一上限的帧，因此
 通常应保留软件后端。非 Apple 平台目前只有软件视频后端。
 
+默认不构建开发探针。离线测试可执行文件位于 `build-cmake/tests/`，主程序仍位于
+构建目录根部。只需要主程序时加 `-DSCRCTL_BUILD_TESTS=OFF`；开发诊断用
+`-DSCRCTL_BUILD_PROBES=ON`，历史协议实验用 `-DSCRCTL_BUILD_EXPERIMENTS=ON`。
+分组、输出目录及运行方法见 [工具说明](docs/TOOLS.md)。
+
 Windows ARM64 的构建、DLL 安装、AMDS 要求与验证范围见 [Windows 说明](docs/WINDOWS.md)。
 
 ## 首次连接设备
@@ -129,7 +134,8 @@ feature 可用：已有 iPadOS 18.7.8 记录中，设备拒绝实时媒体流并
 该设备的验证过程见协议记录第 23、24 节。
 
 Wi-Fi 需要设备可达和已有 RemotePairing 记录。目前产品没有新建远程配对的命令，
-研究探针 `wifi_probe --pair-setup-xpc` 可用于建立记录。使用方法与验证边界见
+启用开发诊断后，`./build-tools/tools/wifi_probe --pair-setup-xpc` 可用于建立记录。
+构建方法见 [工具说明](docs/TOOLS.md)，配对的验证边界见
 [路线图](docs/ROADMAP.md)。
 记录现在需要包含 USB 配对时校验并保存的设备标识和长期公钥；旧记录缺少这些字段时，
 请重新通过 USB 配对。探针的 `--pmd3-record` 当前只导入主机密钥，因此也不能直接用于
@@ -161,8 +167,10 @@ scrctl --copy "" --paste
 
 ## 研究工具
 
-`tools/*.cpp` 多数是需要真机的服务或媒体探针。lwIP / nghttp2 探针还包含离线
-适配判据，通过独立 CMake 开关构建；它们不是应用命令。
+10 个常用诊断工具保留在 `tools/`，19 个协议实验归档到 `tools/experiments/`。
+它们默认不构建，不随产品安装；常用工具输出到构建目录的 `tools/`，归档实验输出到
+`experiments/`。其中 lwIP / nghttp2 的库适配实验通过各自独立开关启用。
+具体用途和使用边界见 [工具说明](docs/TOOLS.md)。
 `tools/nalsizes.py` 离线分析录制文件的 NAL 尺寸，`tools/probe/` 保留早期 Python 验证工具。
 
 Python 探针使用第三方 pymobiledevice3，仅用于研究，不随 scrctl 分发或作为运行依赖。
@@ -170,7 +178,7 @@ Python 探针使用第三方 pymobiledevice3，仅用于研究，不随 scrctl �
 
 ```bash
 python3 -m venv .probe-venv
-.probe-venv/bin/pip install pymobiledevice3 pillow numpy
+.probe-venv/bin/pip install pymobiledevice3 pillow numpy av
 tools/probe/probe.sh
 ```
 

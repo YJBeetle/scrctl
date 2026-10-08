@@ -1,5 +1,6 @@
 # 构建并运行不需要设备的回归测试：协议编解码、lwIP 传输、媒体状态和命令行。
 # 真机测试另外运行，避免 CI 依赖设备在线或占用同一设备的媒体会话。
+# CI 显式启用诊断和归档实验，继续检查它们的编译与离线参数行为。
 # 测试项以 ctest -N 为准；未配置录制码流时，不注册需要该输入的测试。
 name: offline-selftest
 
@@ -48,7 +49,8 @@ jobs:
           if [ "$(uname)" = "Darwin" ]; then
             EXTRA="-DOPENSSL_ROOT_DIR=$(brew --prefix openssl)"
           fi
-          cmake -B build -DCMAKE_BUILD_TYPE=Release $EXTRA
+          cmake -B build -DCMAKE_BUILD_TYPE=Release \
+            -DSCRCTL_BUILD_PROBES=ON -DSCRCTL_BUILD_EXPERIMENTS=ON $EXTRA
 
       - name: 构建
         run: cmake --build build --parallel
@@ -124,6 +126,7 @@ jobs:
         run: >-
           cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+          -DSCRCTL_BUILD_PROBES=ON -DSCRCTL_BUILD_EXPERIMENTS=ON
       - name: 构建
         run: cmake --build build-win --parallel 4
       - name: 可执行文件启动
@@ -169,6 +172,7 @@ jobs:
       - name: 配置（Debug + 两个 sanitizer）
         run: >
           cmake -B build-san -DCMAKE_BUILD_TYPE=Debug
+          -DSCRCTL_BUILD_PROBES=ON -DSCRCTL_BUILD_EXPERIMENTS=ON
           -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g"
           -DOPENSSL_ROOT_DIR="$(brew --prefix openssl)"
 

@@ -210,84 +210,8 @@ add_executable(scrctl src/app/main.cpp)
 target_link_libraries(scrctl PRIVATE scrctl_app)
 target_compile_options(scrctl PRIVATE -Wall -Wextra)
 
-# 设备服务和媒体探针的业务路径需要真机；部分工具另有离线 CLI 的 CTest 用例。
-add_executable(usbmux_probe tools/usbmux_probe.cpp)
-target_link_libraries(usbmux_probe PRIVATE scrctl_core)
-
-add_executable(lockdown_probe tools/lockdown_probe.cpp)
-target_link_libraries(lockdown_probe PRIVATE scrctl_core)
-
-add_executable(feature_probe tools/feature_probe.cpp)
-target_link_libraries(feature_probe PRIVATE scrctl_core CLI11::CLI11)
-
-add_executable(screenshot_probe tools/screenshot_probe.cpp)
-target_link_libraries(screenshot_probe PRIVATE scrctl_core CLI11::CLI11)
-
-add_executable(rr_keepalive_probe tools/rr_keepalive_probe.cpp)
-target_link_libraries(rr_keepalive_probe PRIVATE scrctl_core CLI11::CLI11)
-
-add_executable(two_session_probe tools/two_session_probe.cpp)
-target_link_libraries(two_session_probe PRIVATE scrctl_core CLI11::CLI11)
-
-add_executable(lease_renew_probe tools/lease_renew_probe.cpp)
-target_link_libraries(lease_renew_probe PRIVATE scrctl_core CLI11::CLI11)
-
-add_executable(stream_probe tools/stream_probe.cpp)
-target_link_libraries(stream_probe PRIVATE scrctl_core)
-
-add_executable(applist_probe tools/applist_probe.cpp)
-target_link_libraries(applist_probe PRIVATE scrctl_core CLI11::CLI11)
-
-add_executable(app_launch_probe tools/app_launch_probe.cpp)
-target_link_libraries(app_launch_probe PRIVATE scrctl_core CLI11::CLI11)
-
-add_executable(hid_probe tools/hid_probe.cpp)
-target_link_libraries(hid_probe PRIVATE scrctl_core CLI11::CLI11)
-target_include_directories(hid_probe PRIVATE tools)
-
-add_executable(hid_gate_probe tools/hid_gate_probe.cpp)
-target_link_libraries(hid_gate_probe PRIVATE scrctl_core CLI11::CLI11)
-target_include_directories(hid_gate_probe PRIVATE tools)
-
-add_executable(wake_latency_probe tools/wake_latency_probe.cpp)
-target_link_libraries(wake_latency_probe PRIVATE scrctl_core CLI11::CLI11)
-target_include_directories(wake_latency_probe PRIVATE tools)
-
-add_executable(pli_probe tools/pli_probe.cpp)
-target_link_libraries(pli_probe PRIVATE scrctl_core CLI11::CLI11)
-target_include_directories(pli_probe PRIVATE tools)
-
-add_executable(rtcp_probe tools/rtcp_probe.cpp)
-target_link_libraries(rtcp_probe PRIVATE scrctl_core)
-
-add_executable(lifetime_probe tools/lifetime_probe.cpp)
-target_link_libraries(lifetime_probe PRIVATE scrctl_core CLI11::CLI11)
-target_include_directories(lifetime_probe PRIVATE tools)
-
-add_executable(fir_probe tools/fir_probe.cpp)
-target_link_libraries(fir_probe PRIVATE scrctl_core)
-
-add_executable(restart_gap_probe tools/restart_gap_probe.cpp)
-target_link_libraries(restart_gap_probe PRIVATE scrctl_core CLI11::CLI11)
-target_include_directories(restart_gap_probe PRIVATE tools)
-
-add_executable(bitrate_probe tools/bitrate_probe.cpp)
-target_link_libraries(bitrate_probe PRIVATE scrctl_core)
-
-# 独立的 nghttp2 兼容性验证，不给 scrctl_core / scrctl_app 引入依赖。
-option(SCRCTL_NGHTTP2_PROBE "构建 nghttp2 适配验证探针（需要系统 libnghttp2）" OFF)
-if(SCRCTL_NGHTTP2_PROBE)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(NGHTTP2 REQUIRED IMPORTED_TARGET libnghttp2>=1.50)
-    add_executable(nghttp2_probe tools/nghttp2_probe.cpp)
-    target_link_libraries(nghttp2_probe PRIVATE scrctl_app PkgConfig::NGHTTP2)
-    target_compile_options(nghttp2_probe PRIVATE -Wall -Wextra)
-endif()
-
-option(SCRCTL_LWIP_PROBE "构建 lwIP 隧道适配验证探针" OFF)
-if(SCRCTL_LWIP_PROBE)
-    include(cmake/LwipProbe.cmake)
-endif()
+# 开发诊断和历史实验默认关闭；目标、依赖和输出目录集中在此维护。
+include(cmake/Tools.cmake)
 
 # ---------------------------------------------------------------- tests -----
 if(SCRCTL_BUILD_TESTS)
@@ -302,50 +226,59 @@ if(SCRCTL_BUILD_TESTS)
     endif()
 
     find_package(Python3 3.7 REQUIRED COMPONENTS Interpreter)
-    add_executable(probe_wait_test tests/probe_wait_test.cpp)
+    function(scrctl_add_test_executable target)
+        add_executable(${target} ${ARGN})
+        set_target_properties(${target} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests")
+    endfunction()
+    scrctl_add_test_executable(probe_wait_test tests/probe_wait_test.cpp)
     target_include_directories(probe_wait_test PRIVATE tools)
     target_link_libraries(probe_wait_test PRIVATE CLI11::CLI11)
     add_test(NAME probe_wait COMMAND probe_wait_test)
-    add_test(NAME pli_probe_cli COMMAND "${Python3_EXECUTABLE}"
-        "${PROJECT_SOURCE_DIR}/tests/pli_probe_cli_test.py" "$<TARGET_FILE:pli_probe>")
-    set_tests_properties(pli_probe_cli PROPERTIES TIMEOUT 30)
-    add_test(NAME lifecycle_probe_cli COMMAND "${Python3_EXECUTABLE}"
-        "${PROJECT_SOURCE_DIR}/tests/lifecycle_probe_cli_test.py"
-        "$<TARGET_FILE:wake_latency_probe>" "$<TARGET_FILE:hid_gate_probe>"
-        "$<TARGET_FILE:restart_gap_probe>" "$<TARGET_FILE:lease_renew_probe>"
-        "$<TARGET_FILE:lifetime_probe>" "$<TARGET_FILE:two_session_probe>")
-    # 六个真实可执行文件的参数边界共用一组回归；sanitizer 启动每个进程较慢。
-    set_tests_properties(lifecycle_probe_cli PROPERTIES TIMEOUT 90)
-    add_test(NAME hid_probe_cli COMMAND "${Python3_EXECUTABLE}"
-        "${PROJECT_SOURCE_DIR}/tests/hid_probe_cli_test.py" "$<TARGET_FILE:hid_probe>")
-    set_tests_properties(hid_probe_cli PROPERTIES TIMEOUT 30)
-    add_test(NAME rr_probe_cli COMMAND "${Python3_EXECUTABLE}"
-        "${PROJECT_SOURCE_DIR}/tests/rr_probe_cli_test.py" "$<TARGET_FILE:rr_keepalive_probe>")
-    set_tests_properties(rr_probe_cli PROPERTIES TIMEOUT 30)
-    add_test(NAME screenshot_probe_cli COMMAND "${Python3_EXECUTABLE}"
-        "${PROJECT_SOURCE_DIR}/tests/screenshot_probe_cli_test.py" "$<TARGET_FILE:screenshot_probe>")
-    set_tests_properties(screenshot_probe_cli PROPERTIES TIMEOUT 30)
-    add_test(NAME wifi_probe_cli COMMAND "${Python3_EXECUTABLE}"
-        "${PROJECT_SOURCE_DIR}/tests/wifi_probe_cli_test.py" "$<TARGET_FILE:wifi_probe>")
-    set_tests_properties(wifi_probe_cli PROPERTIES TIMEOUT 30)
-    add_test(NAME stall_probe_cli COMMAND "${Python3_EXECUTABLE}"
-        "${PROJECT_SOURCE_DIR}/tests/stall_probe_cli_test.py" "$<TARGET_FILE:stall_probe>")
-    set_tests_properties(stall_probe_cli PROPERTIES TIMEOUT 30)
-    add_test(NAME audio_pump_probe_cli COMMAND "${Python3_EXECUTABLE}"
-        "${PROJECT_SOURCE_DIR}/tests/audio_pump_probe_cli_test.py" "$<TARGET_FILE:audio_pump_probe>")
-    set_tests_properties(audio_pump_probe_cli PROPERTIES TIMEOUT 30)
-    add_test(NAME audio_decode_probe_cli COMMAND "${Python3_EXECUTABLE}"
-        "${PROJECT_SOURCE_DIR}/tests/audio_decode_probe_cli_test.py" "$<TARGET_FILE:audio_decode_probe>")
-    set_tests_properties(audio_decode_probe_cli PROPERTIES TIMEOUT 30)
-    add_test(NAME feature_probe_cli COMMAND "${Python3_EXECUTABLE}"
-        "${PROJECT_SOURCE_DIR}/tests/feature_probe_cli_test.py" "$<TARGET_FILE:feature_probe>")
-    set_tests_properties(feature_probe_cli PROPERTIES TIMEOUT 30)
-    add_test(NAME applist_probe_cli COMMAND "${Python3_EXECUTABLE}"
-        "${PROJECT_SOURCE_DIR}/tests/applist_probe_cli_test.py" "$<TARGET_FILE:applist_probe>")
-    set_tests_properties(applist_probe_cli PROPERTIES TIMEOUT 30)
-    add_test(NAME app_launch_probe_cli COMMAND "${Python3_EXECUTABLE}"
-        "${PROJECT_SOURCE_DIR}/tests/app_launch_probe_cli_test.py" "$<TARGET_FILE:app_launch_probe>")
-    set_tests_properties(app_launch_probe_cli PROPERTIES TIMEOUT 30)
+    if(SCRCTL_BUILD_EXPERIMENTS)
+        add_test(NAME pli_probe_cli COMMAND "${Python3_EXECUTABLE}"
+            "${PROJECT_SOURCE_DIR}/tests/pli_probe_cli_test.py" "$<TARGET_FILE:pli_probe>")
+        set_tests_properties(pli_probe_cli PROPERTIES TIMEOUT 30)
+        add_test(NAME lifecycle_probe_cli COMMAND "${Python3_EXECUTABLE}"
+            "${PROJECT_SOURCE_DIR}/tests/lifecycle_probe_cli_test.py"
+            "$<TARGET_FILE:wake_latency_probe>" "$<TARGET_FILE:hid_gate_probe>"
+            "$<TARGET_FILE:restart_gap_probe>" "$<TARGET_FILE:lease_renew_probe>"
+            "$<TARGET_FILE:lifetime_probe>" "$<TARGET_FILE:two_session_probe>")
+        # 六个真实可执行文件的参数边界共用一组回归；sanitizer 启动每个进程较慢。
+        set_tests_properties(lifecycle_probe_cli PROPERTIES TIMEOUT 90)
+    endif()
+    if(SCRCTL_BUILD_PROBES)
+        add_test(NAME hid_probe_cli COMMAND "${Python3_EXECUTABLE}"
+            "${PROJECT_SOURCE_DIR}/tests/hid_probe_cli_test.py" "$<TARGET_FILE:hid_probe>")
+        set_tests_properties(hid_probe_cli PROPERTIES TIMEOUT 30)
+        add_test(NAME rr_probe_cli COMMAND "${Python3_EXECUTABLE}"
+            "${PROJECT_SOURCE_DIR}/tests/rr_probe_cli_test.py" "$<TARGET_FILE:rr_keepalive_probe>")
+        set_tests_properties(rr_probe_cli PROPERTIES TIMEOUT 30)
+        add_test(NAME screenshot_probe_cli COMMAND "${Python3_EXECUTABLE}"
+            "${PROJECT_SOURCE_DIR}/tests/screenshot_probe_cli_test.py" "$<TARGET_FILE:screenshot_probe>")
+        set_tests_properties(screenshot_probe_cli PROPERTIES TIMEOUT 30)
+        add_test(NAME wifi_probe_cli COMMAND "${Python3_EXECUTABLE}"
+            "${PROJECT_SOURCE_DIR}/tests/wifi_probe_cli_test.py" "$<TARGET_FILE:wifi_probe>")
+        set_tests_properties(wifi_probe_cli PROPERTIES TIMEOUT 30)
+        add_test(NAME stall_probe_cli COMMAND "${Python3_EXECUTABLE}"
+            "${PROJECT_SOURCE_DIR}/tests/stall_probe_cli_test.py" "$<TARGET_FILE:stall_probe>")
+        set_tests_properties(stall_probe_cli PROPERTIES TIMEOUT 30)
+        add_test(NAME audio_pump_probe_cli COMMAND "${Python3_EXECUTABLE}"
+            "${PROJECT_SOURCE_DIR}/tests/audio_pump_probe_cli_test.py" "$<TARGET_FILE:audio_pump_probe>")
+        set_tests_properties(audio_pump_probe_cli PROPERTIES TIMEOUT 30)
+        add_test(NAME audio_decode_probe_cli COMMAND "${Python3_EXECUTABLE}"
+            "${PROJECT_SOURCE_DIR}/tests/audio_decode_probe_cli_test.py" "$<TARGET_FILE:audio_decode_probe>")
+        set_tests_properties(audio_decode_probe_cli PROPERTIES TIMEOUT 30)
+        add_test(NAME feature_probe_cli COMMAND "${Python3_EXECUTABLE}"
+            "${PROJECT_SOURCE_DIR}/tests/feature_probe_cli_test.py" "$<TARGET_FILE:feature_probe>")
+        set_tests_properties(feature_probe_cli PROPERTIES TIMEOUT 30)
+        add_test(NAME applist_probe_cli COMMAND "${Python3_EXECUTABLE}"
+            "${PROJECT_SOURCE_DIR}/tests/applist_probe_cli_test.py" "$<TARGET_FILE:applist_probe>")
+        set_tests_properties(applist_probe_cli PROPERTIES TIMEOUT 30)
+        add_test(NAME app_launch_probe_cli COMMAND "${Python3_EXECUTABLE}"
+            "${PROJECT_SOURCE_DIR}/tests/app_launch_probe_cli_test.py" "$<TARGET_FILE:app_launch_probe>")
+        set_tests_properties(app_launch_probe_cli PROPERTIES TIMEOUT 30)
+    endif()
     add_test(NAME i18n COMMAND "${Python3_EXECUTABLE}"
         "${PROJECT_SOURCE_DIR}/tests/i18n_test.py" "$<TARGET_FILE:scrctl>")
     set_tests_properties(i18n PROPERTIES TIMEOUT 30)
@@ -353,113 +286,113 @@ if(SCRCTL_BUILD_TESTS)
         "${PROJECT_SOURCE_DIR}/tools/update_translations.py" --check)
     set_tests_properties(translation_catalogs PROPERTIES TIMEOUT 30)
 
-    add_executable(cli_test tests/cli_test.cpp)
+    scrctl_add_test_executable(cli_test tests/cli_test.cpp)
     target_link_libraries(cli_test PRIVATE scrctl_app)
     add_test(NAME cli COMMAND cli_test)
 
-    add_executable(app_lifecycle_test tests/app_lifecycle_test.cpp)
+    scrctl_add_test_executable(app_lifecycle_test tests/app_lifecycle_test.cpp)
     target_link_libraries(app_lifecycle_test PRIVATE scrctl_app)
     add_test(NAME app_lifecycle COMMAND app_lifecycle_test)
 
-    add_executable(annexb_test tests/annexb_test.cpp)
+    scrctl_add_test_executable(annexb_test tests/annexb_test.cpp)
     target_link_libraries(annexb_test PRIVATE scrctl_core)
 
-    add_executable(plist_test tests/plist_test.cpp)
+    scrctl_add_test_executable(plist_test tests/plist_test.cpp)
     target_link_libraries(plist_test PRIVATE scrctl_core)
     add_test(NAME plist COMMAND plist_test)
 
-    add_executable(rtp_test tests/rtp_test.cpp)
+    scrctl_add_test_executable(rtp_test tests/rtp_test.cpp)
     target_link_libraries(rtp_test PRIVATE scrctl_core)
     add_test(NAME rtp COMMAND rtp_test)
 
-    add_executable(pasteboard_test tests/pasteboard_test.cpp)
+    scrctl_add_test_executable(pasteboard_test tests/pasteboard_test.cpp)
     target_link_libraries(pasteboard_test PRIVATE scrctl_core)
     add_test(NAME pasteboard COMMAND pasteboard_test)
 
-    add_executable(displayinfo_test tests/displayinfo_test.cpp)
+    scrctl_add_test_executable(displayinfo_test tests/displayinfo_test.cpp)
     target_link_libraries(displayinfo_test PRIVATE scrctl_core)
     add_test(NAME displayinfo COMMAND displayinfo_test)
 
-    add_executable(app_test tests/app_test.cpp)
+    scrctl_add_test_executable(app_test tests/app_test.cpp)
     target_link_libraries(app_test PRIVATE scrctl_core)
     add_test(NAME app COMMAND app_test)
 
-    add_executable(hid_test tests/hid_test.cpp)
+    scrctl_add_test_executable(hid_test tests/hid_test.cpp)
     target_link_libraries(hid_test PRIVATE scrctl_core)
     add_test(NAME hid COMMAND hid_test)
 
-    add_executable(viewgeom_test tests/viewgeom_test.cpp)
+    scrctl_add_test_executable(viewgeom_test tests/viewgeom_test.cpp)
     target_link_libraries(viewgeom_test PRIVATE scrctl_core)
     add_test(NAME viewgeom COMMAND viewgeom_test)
 
     # 转屏渲染要真的画一遍才知道 SDL 的角度方向对不对，所以这个测试要链 SDL。
     # 它自己把视频驱动设成 dummy，因此无显示器（CI、SSH）也能跑。
-    add_executable(render_test tests/render_test.cpp)
+    scrctl_add_test_executable(render_test tests/render_test.cpp)
     target_link_libraries(render_test PRIVATE scrctl_app)
     add_test(NAME render COMMAND render_test)
 
-    add_executable(net_runtime_test tests/net_runtime_test.cpp)
+    scrctl_add_test_executable(net_runtime_test tests/net_runtime_test.cpp)
     target_link_libraries(net_runtime_test PRIVATE scrctl_core scrctl_lwip)
     add_test(NAME net_runtime COMMAND net_runtime_test)
     set_tests_properties(net_runtime PROPERTIES TIMEOUT 40)
 
-    add_executable(net_test tests/net_test.cpp)
+    scrctl_add_test_executable(net_test tests/net_test.cpp)
     target_link_libraries(net_test PRIVATE scrctl_core)
     add_test(NAME net COMMAND net_test)
 
     # POSIX 验证 SIGPIPE 防护；Windows 验证原生句柄、I/O 取消和 PSK TLS。
     if(WIN32)
-        add_executable(transport_test tests/transport_windows_test.cpp)
+        scrctl_add_test_executable(transport_test tests/transport_windows_test.cpp)
     else()
-        add_executable(transport_test tests/transport_test.cpp)
+        scrctl_add_test_executable(transport_test tests/transport_test.cpp)
     endif()
     target_link_libraries(transport_test PRIVATE scrctl_core)
     add_test(NAME transport COMMAND transport_test)
     set_tests_properties(transport PROPERTIES TIMEOUT 15)
 
-    add_executable(tcp_connect_test tests/tcp_connect_test.cpp)
+    scrctl_add_test_executable(tcp_connect_test tests/tcp_connect_test.cpp)
     target_link_libraries(tcp_connect_test PRIVATE scrctl_core)
     add_test(NAME tcp_connect COMMAND tcp_connect_test)
     set_tests_properties(tcp_connect PROPERTIES TIMEOUT 10)
 
-    add_executable(rsd_test tests/rsd_test.cpp)
+    scrctl_add_test_executable(rsd_test tests/rsd_test.cpp)
     target_link_libraries(rsd_test PRIVATE scrctl_core)
     add_test(NAME rsd COMMAND rsd_test)
     set_tests_properties(rsd PROPERTIES TIMEOUT 15)
 
-    add_executable(media_test tests/media_test.cpp)
+    scrctl_add_test_executable(media_test tests/media_test.cpp)
     target_link_libraries(media_test PRIVATE scrctl_core)
     add_test(NAME media COMMAND media_test)
 
-    add_executable(json_test tests/json_test.cpp)
+    scrctl_add_test_executable(json_test tests/json_test.cpp)
     target_link_libraries(json_test PRIVATE scrctl_core)
     add_test(NAME json COMMAND json_test)
 
     # 无线那一套（密码学 / TLV / 记录 / 帧）离线就能判，不需要设备。
-    add_executable(wifi_test tests/wifi_test.cpp tests/pair_setup_reply_test.cpp)
+    scrctl_add_test_executable(wifi_test tests/wifi_test.cpp tests/pair_setup_reply_test.cpp)
     target_link_libraries(wifi_test PRIVATE scrctl_core)
     add_test(NAME wifi COMMAND wifi_test)
 
-    add_executable(pairing_identity_test tests/pairing_identity_test.cpp)
+    scrctl_add_test_executable(pairing_identity_test tests/pairing_identity_test.cpp)
     target_link_libraries(pairing_identity_test PRIVATE scrctl_core)
     add_test(NAME pairing_identity COMMAND pairing_identity_test)
 
-    add_executable(xpc_test tests/xpc_test.cpp)
+    scrctl_add_test_executable(xpc_test tests/xpc_test.cpp)
     target_link_libraries(xpc_test PRIVATE scrctl_core)
     add_test(NAME xpc COMMAND xpc_test)
 
-    add_executable(http2_test tests/http2_test.cpp)
+    scrctl_add_test_executable(http2_test tests/http2_test.cpp)
     target_link_libraries(http2_test PRIVATE scrctl_core)
     add_test(NAME http2 COMMAND http2_test)
 
-    add_executable(remote_channel_test tests/remote_channel_test.cpp)
+    scrctl_add_test_executable(remote_channel_test tests/remote_channel_test.cpp)
     target_link_libraries(remote_channel_test PRIVATE scrctl_core)
     add_test(NAME remote_channel COMMAND remote_channel_test)
     # 32/64 MiB 输入上限测试需要大量缓冲复制；Debug + ASan/UBSan 显著慢于 Release。
     # 保留整个边界用例，给较慢的 CI runner 留出时间，仍用有限时限检测卡死。
     set_tests_properties(remote_channel PROPERTIES TIMEOUT 60)
 
-    add_executable(decode_test tests/decode_test.cpp)
+    scrctl_add_test_executable(decode_test tests/decode_test.cpp)
     target_link_libraries(decode_test PRIVATE scrctl_core)
 
     # 合成码流那部分自检不需要输入文件，任何时候都跑。
@@ -498,31 +431,3 @@ if(WIN32)
 elseif(APPLE)
     install(FILES docs/MACOS.md DESTINATION share/doc/scrctl)
 endif()
-
-add_executable(feature_schema_probe tools/feature_schema_probe.cpp)
-target_link_libraries(feature_schema_probe PRIVATE scrctl_core)
-
-add_executable(frame_probe tools/frame_probe.cpp)
-target_link_libraries(frame_probe PRIVATE scrctl_core)
-
-add_executable(pasteboard_probe tools/pasteboard_probe.cpp)
-target_link_libraries(pasteboard_probe PRIVATE scrctl_core)
-
-# 观察显示几何订阅；不启动媒体会话，具体行为见文件头。
-add_executable(display_info_probe tools/display_info_probe.cpp)
-target_link_libraries(display_info_probe PRIVATE scrctl_core)
-
-# 离线解码 rr_keepalive_probe --audio-out 的录制数据，保存为 WAV。
-add_executable(audio_decode_probe tools/audio_decode_probe.cpp)
-target_link_libraries(audio_decode_probe PRIVATE scrctl_core CLI11::CLI11)
-
-# 在真机流上注入故障，检查 PLI、重建和截图降级；模式说明见文件头。
-add_executable(stall_probe tools/stall_probe.cpp)
-target_link_libraries(stall_probe PRIVATE scrctl_app CLI11::CLI11)
-
-add_executable(audio_pump_probe tools/audio_pump_probe.cpp)
-target_link_libraries(audio_pump_probe PRIVATE scrctl_core CLI11::CLI11)
-
-# RemotePairing 的 USB 配对及 Wi-Fi 握手、隧道和 RSD 验证。
-add_executable(wifi_probe tools/wifi_probe.cpp)
-target_link_libraries(wifi_probe PRIVATE scrctl_core CLI11::CLI11)

@@ -1121,3 +1121,35 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
   假时钟和十进制 124 项、生命周期 CLI 245 项、PLI CLI 38 项、HID CLI 98 项；
   现有 RTP 111 项继续通过。HID 的 25 项编排和文件失败路径另用私有协议 / I/O
   替身验证，未进入 CI，不证明设备互操作。本轮没有连接手机或运行输入实验。
+
+## 第七十六轮：诊断工具按需构建，协议实验归档
+
+- 保留 10 个常用诊断工具，使用 `SCRCTL_BUILD_PROBES=ON` 启用。
+- 将 17 个历史协议实验及 2 个库适配实验移到 `tools/experiments/`。19 个源码与
+  前一轮修复后的版本逐字节相同；未合并不同的实验变量。历史组通过
+  `SCRCTL_BUILD_EXPERIMENTS=ON` 启用，lwIP / nghttp2 仍保留各自独立开关。
+- 所有诊断与实验开关默认 OFF。主程序继续位于构建根目录，常用工具、归档实验、
+  测试可执行文件分别输出到 `tools/`、`experiments/`、`tests/`；多配置生成器另加
+  配置子目录。CTest 按开关注册实际目标路径，工具不加入安装包。
+- 新增 `TOOLS.md` 说明用途、参数和会话清理约束；更新 README、库适配命令及
+  Python 环境路径。路线图同步已完成的 M6 / M2 身份校验和三轮 USB RTCP 对照，
+  保留跨平台、其他设备和弱网等待测范围。
+- CI 的 macOS、Ubuntu、Windows ARM64 和 sanitizer 配置显式启用两组工具，
+  继续检查编译与离线参数；两项库适配实验仍独立选择。
+
+### 验证
+
+- Release 全部 40/40 通过，45.33 秒；包含独立 lwIP / nghttp2 离线适配。
+- ASan + UBSan 全部 38/38 通过，121.33 秒，UBSan 遇错终止。
+  sanitizer 覆盖本次 C++ 构建，不将未仪表化的 lwIP C 代码计入覆盖。
+- 仓库内默认构建全部 26/26 通过，19.10 秒，`scrctl --help` 正常。
+- 全新目录的最小产品配置关闭测试、保持工具默认 OFF，完整构建及 `--help` 通过；
+  仅有 `scrctl` 可执行目标，无诊断、实验或测试输出目录。独立配置检查注册数量为
+  默认 26、常用诊断 36、历史实验 28、两组开启 38；这四项未重复构建。
+- 确认新目录的构建与测试通过后，清理本地 `build/` 根部 51 个已识别的旧 Mach-O
+  可执行文件，包括已删除 binary plist / JsonLite 测试的残留。主程序、静态库、
+  依赖源码、构建配置及下载的 Windows 包和源码归档均保留。
+
+本轮未操作真机，不把离线通过视为设备协议、输入或媒体的重新验证。
+本机证据：`/private/tmp/scrctl-tools-archive-proof.json`、
+`/private/tmp/scrctl-gating-independent-vpgpf3uh/gating-report.json`。

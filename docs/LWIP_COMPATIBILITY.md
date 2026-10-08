@@ -78,9 +78,9 @@ IPv6 重组已启用，但没有注入分片验证完整重组。ASan 结果不�
 cmake -S . -B build-lwip -DSCRCTL_LWIP_PROBE=ON
 cmake --build build-lwip -j
 ctest --test-dir build-lwip --output-on-failure
-./build-lwip/lwip_probe --usb
+./build-lwip/experiments/lwip_probe --usb
 # 已完成远程配对、设备能经局域网访问时：
-./build-lwip/lwip_probe --wifi <设备地址>
+./build-lwip/experiments/lwip_probe --wifi <设备地址>
 ```
 
 独立探针默认 OFF；生产始终使用 lwIP。构建从上游固定标签归档获取源码并
