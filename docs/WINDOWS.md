@@ -123,6 +123,19 @@ scrctl 使用 Apple 提供的 `127.0.0.1:27015` usbmux 通道。Windows 11 ARM64
 - 能列设备但 `ReadPairRecord` 失败：检查手机解锁、信任状态及当前 Windows 用户。
   不要在问题报告中附上配对记录，里面含有私钥。
 - `StartService` 返回锁屏或服务不可用：按错误检查手机解锁、开发者模式和 DDI。
+- Parallels 已勾选手机，但 Apple Mobile Device USB Composite Device 报 Code 10：
+  本轮重启该 PnP 设备未恢复；在 Parallels 中断开并重新连接手机后，复合设备和
+  Apple Mobile Device USB Device 恢复正常，scrctl 随后可连接。可在“设备 → USB”
+  中操作，或使用下列临时连接命令。设备 ID 从 `prlsrvctl usb list` 获取，不能照抄
+  其他手机的 ID；切换会中断当前 USB 会话。这是本轮恢复方法，不保证所有 Code 10
+  都由相同原因造成。
+
+  ```bash
+  # 在 macOS 宿主机终端运行
+  prlctl set Windows --device-disconnect '<完整 USB 设备 ID>'
+  prlctl set Windows --device-connect '<完整 USB 设备 ID>'
+  ```
+
 - 本轮 Windows 配对记录的 HostID 为 27 字符的不透明标识。修复后的 scrctl 会从它
   生成稳定的 UUIDv5；原本为 UUID 的 HostID 保持原值，lockdown 使用的原始记录不变。
 - 两组 NCM 网络接口仍有黄色叹号；本轮 USB 镜像通过 CoreDeviceProxy 与 lwIP 隧道，
@@ -151,7 +164,29 @@ scrctl 使用 Apple 提供的 `127.0.0.1:27015` usbmux 通道。Windows 11 ARM64
   UUIDv5 向量、已有 UUID 保持不变及同一不透明 HostID 重读后身份稳定的判据。
 
 这些是有限时长回归，不代表真实断网、物理拔插、多设备或长期运行已验证。
-Windows 音频、输入控制、新建配对及 DDI 的完整初始安装流程仍需分别验证。
+后续 USB 触摸验证见下一节。Windows 当前没有音频后端；新建配对及 DDI 的完整初始
+安装流程仍需分别验证。
+
+## 2026-10-08：USB 竖屏触摸回归
+
+使用 `4976b3b` 对应的 HID 及主程序源码，在独立目录
+`C:\Workspace\scrctl\hid-validation-83d5822-20261008` 构建；目录名保留最初快照的
+基线提交，实际 HID / CLI / 翻译文件已与 `4976b3b` 逐项核对。工具链位于
+`C:\opt\msys64`，主程序和诊断工具从搬移后的 `dist\bin` 启动，PATH 只包含该目录
+和 Windows 系统目录。仍沿用已有信任、配对记录和 DDI。
+
+- 重新连接 USB、恢复 Code 10 后，`hid_probe` 依次截图、枚举五个输入面、重开 HID
+  服务并发送三段三角形笔画，6.02 秒返回 0。手机前后截图确认三角形出现在请求位置。
+- 主程序开启视频窗口，关闭音频，窗口尺寸为 560×1213。用户在电脑窗口画两个 L，
+  并确认手机落点一致；回读手机截图确认两个 L，日志记录了 SDL 鼠标按下、移动及
+  对应的设备归一化坐标。这覆盖鼠标 → SDL → HID → 手机的竖屏路径。
+- Computer Use 对 Parallels 的自动鼠标尝试没有产生 SDL 输入记录；窗口测试由用户
+  实际操作完成，不能把自动化尝试记为通过，也不能据此判定产品输入失败。
+- NCM 接口仍有黄色叹号，未阻止本轮 usbmux、CoreDeviceProxy、截图和触摸。
+  未测试热点或直接 NCM 联网，也未重新验证 Apple Devices 界面的设备发现。
+
+本轮未覆盖横屏、键盘、硬件按键、Wi-Fi 输入、首次配对、DDI 初始安装或音频。
+原始截图和日志保存在本机 `/private/tmp/scrctl-hid-device-20261008/`。
 
 ## CI 产物
 

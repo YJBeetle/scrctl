@@ -1195,3 +1195,29 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
   这次只证明修复工具能运行并采样，不证明请求后的 IRAP 一定由 PLI 触发。
 - lifetime_probe 设 20 秒租期、1 秒观察预算且不发送音量键，2.10 秒完成清理并
   返回预期的 1，明确没有寿命样本，未把预算用完写成自然结束。
+
+## 第七十八轮：Windows USB 输入与两平台打包复核
+
+- Windows ARM64 使用独立源码快照构建的主程序和 hid_probe，HID / CLI / 翻译
+  文件与 `4976b3b` 一致。安装产物在系统目录和随包 bin 的 PATH 下运行，未依赖
+  开发工具链路径；工作目录位于 `C:\Workspace\scrctl`，工具链位于 `C:\opt\msys64`。
+- 切入 VM 后 Apple 复合 USB 设备报 Code 10，usbmux 设备列表为空。单独重启 PnP
+  设备未恢复；Parallels 临时断开并重新接入后，复合设备和 Apple USB Device 均
+  恢复正常。NCM 接口仍有黄色叹号，未阻止后续测试；过程见 [Windows 说明](WINDOWS.md)。
+- HID 工具依次截图、枚举五个输入面、重开通道、绘制三角形、再截图，6.02 秒
+  返回 0、无 stderr，辅助流收到 244 包。前后截图确认三角形出现在请求位置。
+- 主程序在竖屏视频窗口接收用户的鼠标绘图。用户确认手机同位置出现两个 L；
+  手机截图和 SDL 输入日志相互对应，覆盖电脑鼠标到设备触摸的完整路径。
+  Computer Use 的 Parallels 鼠标尝试没有 SDL 输入记录，由用户实际操作完成此项。
+- 这一轮不覆盖 Windows 横屏、键盘、硬件按键、Wi-Fi 输入、首次配对、DDI 初始
+  安装或音频。当前没有 Windows 音频后端，不能只将它列为“待验证”。
+- 提交 `4976b3b` 的 [CI run 37734682962](https://github.com/YJBeetle/scrctl/actions/runs/37734682962)
+  已完成：macOS、Windows ARM64、Ubuntu、ASan + UBSan 四个作业各通过 38/38 CTest。
+  macOS 与 Windows 日志明确包含 HID CLI 的 141 项判据，两平台安装、搬移及上传通过。
+- 实际下载 macOS 和 Windows 产品包，来源提交均为 `4976b3b`；新增 57 个消息均
+  包含于随包中文目录且有译文，产品包均没有诊断 probe 可执行文件。macOS 搬移
+  检查同时覆盖 23 个 dylib、签名和依赖路径；Windows 搬移后启动及语言选择通过。
+  CI 包检查与本地 Windows 真机二进制分别记录，没有将两者混作同一产物。
+
+真机证据：`/private/tmp/scrctl-hid-device-20261008/`；CI 日志和下载包：
+`/private/tmp/scrctl-hid-ci-37734682962/`。
