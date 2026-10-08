@@ -18,6 +18,7 @@ struct WindowSpec {
     bool borderless = false;
     bool fullscreen = false;
     bool want_readback = false;
+    uint16_t shortcut_mods = KMOD_LALT | KMOD_LGUI;
 };
 
 class Presenter {
@@ -48,6 +49,8 @@ class Presenter {
     void report_input(int raw_x, int raw_y, double fx, double fy, const char *tag) const;
 
     bool pump(const std::function<void(double, double, bool)> &on_touch);
+    /// 查询 SDL 的实际状态，设备转屏重建窗口时保留用户选择的全屏模式。
+    [[nodiscard]] bool is_fullscreen() const;
     /// 在重建窗口、退出或坐标依据失效时，释放最后一个有效的设备触摸点。
     void release_touch(const std::function<void(double, double, bool)> &on_touch);
 
@@ -61,6 +64,7 @@ class Presenter {
     /// 不能再次换算点数与像素；截图的方向依据不完整时返回 false。
     bool to_display(int raw_x, int raw_y, double &fx, double &fy) const;
     bool ensure_texture(int width, int height);
+    void toggle_fullscreen();
 
     uint8_t bg_[3] = {0, 0, 0};
     SDL_Window *window_ = nullptr;
@@ -79,6 +83,7 @@ class Presenter {
     bool release_pending_ = false;
     double last_touch_x_ = 0, last_touch_y_ = 0;
     bool debug_input_ = false;
+    uint16_t shortcut_mods_ = KMOD_LALT | KMOD_LGUI;
 };
 
 } // namespace scrctl::app

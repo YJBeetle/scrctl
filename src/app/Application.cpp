@@ -179,6 +179,7 @@ int run(int argc, char **argv) {
     int applied_degrees = -1;
     // 首次创建窗口不输出旋转提示。
     bool first_window = true;
+    bool window_fullscreen = o.fullscreen;
     bool input_geometry_warned = false;
     const Uint64 start = SDL_GetTicks64();
     Uint64 last_stats_at = SDL_GetTicks64();
@@ -267,6 +268,7 @@ int run(int argc, char **argv) {
         if (degrees != applied_degrees) {
             applied_degrees = degrees;
             if (presenter != nullptr) {
+                window_fullscreen = presenter->is_fullscreen();
                 presenter->release_touch(on_touch);
             }
             presenter.reset();
@@ -280,8 +282,9 @@ int run(int argc, char **argv) {
             spec.y = o.win_y.value_or(SDL_WINDOWPOS_CENTERED);
             spec.always_on_top = o.always_on_top;
             spec.borderless = o.borderless;
-            spec.fullscreen = o.fullscreen;
+            spec.fullscreen = window_fullscreen;
             spec.want_readback = o.verify_at > 0;
+            spec.shortcut_mods = o.shortcut_mods;
             presenter->set_background(o.bg[0], o.bg[1], o.bg[2]);
             if (!presenter->open(static_cast<int>(f.width), static_cast<int>(f.height),
                                  crop, degrees, o.scale, o.scale_given,

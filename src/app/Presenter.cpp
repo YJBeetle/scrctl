@@ -22,6 +22,7 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
     const int want_h = spec.want_h;
     src_ = crop;
     degrees_ = degrees;
+    shortcut_mods_ = spec.shortcut_mods;
     scrctl::app::viewport_size(crop, degrees_, view_w_, view_h_);
     SDL_Rect desk{};
     if (want_w == 0 && want_h == 0) {
@@ -42,12 +43,9 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
                     win_w_, win_h_);
     }
 
-    Uint32 win_flags = SDL_WINDOW_ALLOW_HIGHDPI;
+    Uint32 win_flags = SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE;
     // 创建窗口时传入全屏与无边框标志，避免先创建普通窗口再切全屏时保留旧尺寸
     // 约束，导致旋转后的画面不能铺满窗口。
-    if (!spec.fullscreen) {
-        win_flags |= SDL_WINDOW_RESIZABLE;
-    }
     if (spec.borderless) {
         win_flags |= SDL_WINDOW_BORDERLESS;
     }
@@ -260,11 +258,21 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) 
         case SDL_QUIT:
             quit = true;
             break;
-        case SDL_KEYDOWN:
-            if (e.key.keysym.sym == SDLK_ESCAPE || e.key.keysym.sym == SDLK_q) {
+        case SDL_KEYDOWN: {
+            // 与 scrcpy 相同：快捷键使用选定的修饰键；普通字符及 Esc 留给设备输入。
+            // 默认只选左 Alt / 左 Super，避免把 AltGr（右 Alt）误当作快捷键。
+            const auto mods = e.key.keysym.mod;
+            const bool shortcut = (mods & shortcut_mods_) != 0;
+            if (e.key.repeat) break;
+            if (shortcut && e.key.keysym.sym == SDLK_q) {
                 quit = true;
+            } else if ((shortcut && e.key.keysym.sym == SDLK_f && !(mods & KMOD_SHIFT)) ||
+                       (e.key.keysym.sym == SDLK_F11 &&
+                        !(mods & (KMOD_CTRL | KMOD_ALT | KMOD_GUI | KMOD_SHIFT)))) {
+                toggle_fullscreen();
             }
             break;
+        }
         case SDL_MOUSEBUTTONDOWN:
             if (e.button.button == SDL_BUTTON_LEFT && on_touch) {
                 if (!to_display(e.button.x, e.button.y, px, py)) {
@@ -319,6 +327,17 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) 
         release_touch(on_touch);
     }
     return quit;
+}
+
+bool Presenter::is_fullscreen() const {
+    return window_ != nullptr && (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
+}
+
+void Presenter::toggle_fullscreen() {
+    if (window_ != nullptr &&
+        SDL_SetWindowFullscreen(window_, is_fullscreen() ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP) != 0) {
+        std::fprintf(stderr, SCRCTL_TR("Failed to change fullscreen mode: %s\n"), SDL_GetError());
+    }
 }
 
 void Presenter::release_touch(const std::function<void(double, double, bool)> &on_touch) {

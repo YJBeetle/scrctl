@@ -1235,3 +1235,24 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
   会话。旧版裸 Q 在用户操作中未退出，关闭按钮正常，原因未确定。
 - 手机交回 Mac 后 USB 列表可见；证据保存在
   `/private/tmp/scrctl-hid-device-20261008/`，细节见 [Windows 说明](WINDOWS.md)。
+
+## 第八十轮：与 scrcpy 对齐窗口快捷键及参数语法
+
+- 去掉裸 Q / Esc 退出，使用 scrcpy 默认的左 Alt 或左 Super+Q；增加 MOD+F /
+  无修饰 F11 切换全屏，重复事件不切换。提供 `--shortcut-mod` 六个左右修饰键的
+  逗号列表，默认不截获 AltGr。退出仍释放正在按下的设备触点。
+- 设备朝向变化重建窗口时保留用户选择的全屏模式；从启动全屏退出后窗口可调整大小。
+  普通键盘文字输入仍未接入，没有将去掉 Q 退出描述为能够向设备输入 q。
+- 窗口位置接受 auto，背景色接受可选 # 的 RGB / RRGGBB；`--video-source=display`
+  对应实时流，旧 stream 值保留。`--no-control` 与测试触摸、按键和文字注入在解析
+  阶段互斥；独立剪贴板命令行为保留。显示方向和裁剪帮助说明录制内容保持原样。
+- 更新中英文帮助及错误提示，新增消息逐项翻译。Mac 的 cli、render、app_lifecycle、
+  i18n、translation_catalogs 五项相关回归通过；render 用实际 SDL 队列验证普通
+  Q / Esc、Ctrl+Q / AltGr+Q、自定义修饰键、全屏切换和退出释放触点。
+- 使用本地 HEVC 夹具的原生 Mac 窗口，Computer Use 输入普通 Q / Esc 后窗口保留，
+  Command+F 进入及退出全屏，左 Alt+Q 关闭程序并正常结束。F11 仅由 SDL 队列
+  回归覆盖，尚未验证系统是否拦截实体按键。此测试不连接设备或 VM。
+- 本轮未在 Windows VM 中重跑新快捷键，Windows 构建和离线验证交给 ARM64 CI。
+  与 scrcpy 的剩余差异见 [用法对照](SCRCPY_USAGE.md)。
+
+本机窗口证据：`/private/tmp/scrctl-usage-20261008/native-proof.json`。

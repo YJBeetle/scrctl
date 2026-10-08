@@ -50,6 +50,21 @@ Windows ARM64 和 macOS 作业另保存可搬移安装包；已下载的真实�
 scrctl 是独立产品，也是设备协议的验证项目。MaaFramework 后续倾向于参考这里
 验证过的实现独立接入；当前先完成 scrctl，不以公共 SDK 或稳定 C ABI 为目标。
 
+## 窗口操作与 scrcpy 用法
+
+常用参数和窗口快捷键以 scrcpy 为参照，当前支持：
+
+| 操作 | 快捷键 |
+| --- | --- |
+| 退出 | MOD+Q，或关闭窗口 |
+| 切换全屏 | MOD+F，或不带修饰键的 F11 |
+| 设备触摸 | 鼠标左键点击、拖动 |
+
+MOD 默认是左 Alt 或左 Super（Windows 键 / Mac Command），可以通过
+`--shortcut-mod=rctrl` 等配置。普通 Q 和 Esc 不退出；窗口目前尚不转发日常键盘
+输入，`--test-type` 是单独的诊断注入入口。与 scrcpy 的具体差异和后续对齐项见
+[用法对照](docs/SCRCPY_USAGE.md)。
+
 ## 命令行语言
 
 支持英文和简体中文，注释保持中文。默认 `--lang auto`，按首个非空的 `LC_ALL`、

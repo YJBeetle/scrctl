@@ -1,5 +1,6 @@
 #pragma once
 
+#include <SDL_keycode.h>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -16,6 +17,8 @@ struct Options {
     std::string record; ///< 录制实时 Annex-B 码流
     bool list_devices = false;
     bool no_control = false; ///< --no-control：关闭输入控制
+    /// 任意一个选定的修饰键按下时启用窗口快捷键；默认与 scrcpy 一致。
+    uint16_t shortcut_mods = KMOD_LALT | KMOD_LGUI;
     std::string title = "scrctl";
     bool stats = false;
     /// 画面来源：stream 默认实时流，系统版本拒绝时可自动切到截图；

@@ -580,6 +580,80 @@ void presenter_releases_touch_when_geometry_changes() {
     check(callbacks.size() == 9, "退出后的重复释放不新增回调");
 }
 
+void presenter_shortcuts_preserve_normal_input() {
+    const scrctl::app::Crop crop{0, 0, 64, 96, 64, 96};
+    scrctl::app::WindowSpec spec;
+    spec.title = "Presenter shortcut regression";
+    spec.want_w = crop.w;
+    spec.want_h = crop.h;
+    spec.want_readback = true;
+    scrctl::app::Presenter presenter;
+    const bool default_opened = presenter.open(64, 96, crop, 0, 1, false, spec);
+    check(default_opened, "创建快捷键事件回归窗口");
+    if (!default_opened) return;
+    SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+    int presses = 0, releases = 0;
+    const auto on_touch = [&](double, double, bool down) { down ? ++presses : ++releases; };
+    const auto key = [&](SDL_Keycode symbol, Uint16 mods = KMOD_NONE, Uint8 repeat = 0) {
+        SDL_Event event{};
+        event.type = SDL_KEYDOWN;
+        event.key.keysym.sym = symbol;
+        event.key.keysym.mod = mods;
+        event.key.repeat = repeat;
+        check(SDL_PushEvent(&event) == 1, "将键盘事件送入实际 SDL 队列");
+        return presenter.pump(on_touch);
+    };
+    SDL_Event down{};
+    down.type = SDL_MOUSEBUTTONDOWN;
+    down.button.button = SDL_BUTTON_LEFT;
+    down.button.x = 16;
+    down.button.y = 24;
+    check(SDL_PushEvent(&down) == 1 && !presenter.pump(on_touch), "快捷键测试前按下设备触点");
+    check(!key(SDLK_q) && !key(SDLK_q, KMOD_LSHIFT) && !key(SDLK_ESCAPE),
+          "普通 q、Q 和 Esc 不退出窗口");
+    check(!key(SDLK_q, KMOD_LCTRL) && !key(SDLK_q, KMOD_RGUI) &&
+              !key(SDLK_q, KMOD_RALT | KMOD_LCTRL),
+          "默认不截获 Ctrl+Q、右 Super+Q 或 AltGr+Q");
+    check(presses == 1 && releases == 0, "普通键不会结束正在进行的设备拖动");
+    check(key(SDLK_q, KMOD_LALT), "默认左 Alt+Q 退出");
+    check(presses == 1 && releases == 1, "快捷键退出释放一次设备触点");
+    check(key(SDLK_q, KMOD_LGUI), "默认左 Super+Q 退出");
+    check(!key(SDLK_q, KMOD_LALT, 1), "忽略退出快捷键的重复按键事件");
+    check(!presenter.is_fullscreen(), "窗口最初为普通模式");
+    key(SDLK_F11);
+    check(presenter.is_fullscreen(), "无修饰 F11 进入全屏");
+    key(SDLK_F11, KMOD_NONE, 1);
+    key(SDLK_F11, KMOD_LCTRL);
+    key(SDLK_f, KMOD_LALT | KMOD_LSHIFT);
+    check(presenter.is_fullscreen(), "重复 F11、Ctrl+F11 和 MOD+Shift+F 不切换全屏");
+    key(SDLK_f, KMOD_LALT);
+    check(!presenter.is_fullscreen(), "MOD+F 恢复普通窗口");
+    key(SDLK_f, KMOD_LGUI);
+    check(presenter.is_fullscreen(), "左 Super+F 进入全屏");
+    key(SDLK_F11);
+    check(!presenter.is_fullscreen(), "F11 可以退出全屏");
+
+    spec.shortcut_mods = KMOD_RCTRL;
+    spec.fullscreen = true;
+    scrctl::app::Presenter configured;
+    const bool opened = configured.open(64, 96, crop, 0, 1, false, spec);
+    check(opened, "使用自定义修饰键创建全屏窗口");
+    if (!opened) return;
+    SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+    const auto configured_key = [&](Uint16 mods, SDL_Keycode symbol) {
+        SDL_Event event{};
+        event.type = SDL_KEYDOWN;
+        event.key.keysym.sym = symbol;
+        event.key.keysym.mod = mods;
+        check(SDL_PushEvent(&event) == 1, "送入自定义快捷键事件");
+        return configured.pump({});
+    };
+    check(!configured_key(KMOD_LALT, SDLK_q) && configured_key(KMOD_RCTRL, SDLK_q),
+          "自定义修饰键替换默认退出组合");
+    configured_key(KMOD_RCTRL, SDLK_f);
+    check(!configured.is_fullscreen(), "从启动全屏模式退出后仍可切换窗口模式");
+}
+
 }  // namespace
 
 int main() {
@@ -627,6 +701,7 @@ int main() {
     check(letterbox_and_readback(), "等比留边的边上涂的是 --background-color，且回读覆盖整块输出");
     presenter_source_size_changes();
     presenter_releases_touch_when_geometry_changes();
+    presenter_shortcuts_preserve_normal_input();
 
     SDL_Quit();
     if (failures != 0) {

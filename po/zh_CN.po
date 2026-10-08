@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 13:44+0800\n"
+"POT-Creation-Date: 2026-10-08 14:53+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -77,50 +77,50 @@ msgstr "--test-type %s: 已注入\n"
 msgid "--test-type failed: %s\n"
 msgstr "--test-type 失败: %s\n"
 
-#: src/app/Application.cpp:198
+#: src/app/Application.cpp:199
 #, c-format
 msgid "Input injection failed (further attempts disabled): %s\n"
 msgstr "注入输入失败（已停止尝试）: %s\n"
 
-#: src/app/Application.cpp:209
+#: src/app/Application.cpp:210
 #, c-format
 msgid "Reached --time-limit %d seconds\n"
 msgstr "达到 --time-limit %d 秒\n"
 
-#: src/app/Application.cpp:213
+#: src/app/Application.cpp:214
 #, c-format
 msgid "Received exit signal; closing device session\n"
 msgstr "收到退出信号，正在关闭设备会话\n"
 
-#: src/app/Application.cpp:223
+#: src/app/Application.cpp:224
 #, c-format
 msgid ""
 "  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
 msgstr "  渲染：累计 %d 帧，本次 %d 帧 / %.1f fps，全程平均 %.1f fps\n"
 
-#: src/app/Application.cpp:249 src/app/Application.cpp:315
+#: src/app/Application.cpp:250 src/app/Application.cpp:318
 #, c-format
 msgid "Reached --exit-after %d\n"
 msgstr "达到 --exit-after %d\n"
 
-#: src/app/Application.cpp:264
+#: src/app/Application.cpp:265
 #, c-format
 msgid ""
 "Mouse input is unavailable: screenshot orientation or display dimensions are "
 "unknown or inconsistent\n"
 msgstr "截图的朝向或显示尺寸尚未确认，已暂停鼠标输入\n"
 
-#: src/app/Application.cpp:294
+#: src/app/Application.cpp:297
 #, c-format
 msgid "Render rotation changed to %d degrees clockwise; window recreated\n"
 msgstr "图像旋转角改为顺时针 %d°，窗口已重建\n"
 
-#: src/app/Application.cpp:329
+#: src/app/Application.cpp:332
 #, c-format
 msgid "Window readback was not reached (requested frame %d, rendered %d)\n"
 msgstr "未执行窗口回读：要求第 %d 帧，实际显示了 %d 帧\n"
 
-#: src/app/Application.cpp:333
+#: src/app/Application.cpp:336
 #, c-format
 msgid "Finished: processed %d frames\n"
 msgstr "完成：处理 %d 帧\n"
@@ -146,19 +146,25 @@ msgstr "iOS 屏幕镜像与控制"
 #: src/app/Cli.cpp:18
 msgid ""
 "With no arguments, mirror the connected device.\n"
-"The device chooses encoding dimensions, bitrate and frame rate; overrides "
-"are unavailable.\n"
-"Left mouse button maps to touch. Orientation does not support flip; "
-"recording preserves the source bitstream.\n"
+"Left mouse button maps to touch. Window keyboard input is not forwarded to "
+"the device yet.\n"
+"Quit: MOD+Q. Fullscreen: MOD+F or F11. MOD defaults to left Alt or left "
+"Super; change it with --shortcut-mod.\n"
+"The device chooses encoding dimensions, bitrate and frame rate. Display "
+"rotation and crop leave recordings unchanged; recording writes raw HEVC "
+"Annex-B without a container or audio.\n"
 "Wireless use requires pairing. --help / --version do not connect to the "
 "device."
 msgstr ""
-"无参数时镜像当前连接的设备。\n"
-"设备决定编码尺寸、码率和帧率，暂不支持修改这些参数。\n"
-"鼠标左键映射为触摸；方向不支持 flip，录制保留原始码流。\n"
-"无线需要先配对；--help / --version 不连接设备。"
+"不带参数时镜像已连接的设备。\n"
+"鼠标左键对应触摸。窗口目前尚不向设备转发键盘输入。\n"
+"退出：MOD+Q。切换全屏：MOD+F 或 F11。MOD 默认为左 Alt 或左 Super，可用 --"
+"shortcut-mod 修改。\n"
+"编码尺寸、码率和帧率由设备决定。显示旋转和裁剪不改变录制内容；录制保存裸 "
+"HEVC Annex-B，不含容器或音频。\n"
+"无线连接需要配对记录。--help / --version 不连接设备。"
 
-#: src/app/Cli.cpp:23 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
+#: src/app/Cli.cpp:25 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
 #: tools/audio_decode_probe.cpp:189 tools/audio_pump_probe.cpp:85
 #: tools/feature_probe.cpp:61 tools/hid_probe.cpp:184
 #: tools/screenshot_probe.cpp:52 tools/stall_probe.cpp:59
@@ -166,195 +172,214 @@ msgstr ""
 msgid "Show help"
 msgstr "显示帮助"
 
-#: src/app/Cli.cpp:24
+#: src/app/Cli.cpp:26
 msgid "Play an Annex-B HEVC file"
 msgstr "回放 Annex-B HEVC 文件"
 
-#: src/app/Cli.cpp:25 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
+#: src/app/Cli.cpp:27 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
 msgid "Device UDID"
 msgstr "设备 UDID"
 
-#: src/app/Cli.cpp:26
+#: src/app/Cli.cpp:28
 msgid "LAN address (requires an existing pairing record)"
 msgstr "局域网地址（需要已有配对记录）"
 
-#: src/app/Cli.cpp:27
+#: src/app/Cli.cpp:29
 msgid "Record the live stream as Annex-B"
 msgstr "将实时流录为 Annex-B"
 
-#: src/app/Cli.cpp:28
+#: src/app/Cli.cpp:30
 msgid ""
 "Launch bundle ID; ? matches name prefix, + terminates the previous instance"
 msgstr "启动 bundle id；? 按名称前缀，+ 先终止实例"
 
-#: src/app/Cli.cpp:29
+#: src/app/Cli.cpp:31
 msgid "Window title"
 msgstr "窗口标题"
 
-#: src/app/Cli.cpp:30
+#: src/app/Cli.cpp:32
 msgid "SDL render driver, e.g. metal / software"
 msgstr "SDL 渲染驱动，如 metal / software"
 
-#: src/app/Cli.cpp:32
-msgid "stream for live video or screenshot for polling; default: stream"
-msgstr "stream 实时流或 screenshot 截图轮询，默认 stream"
-
 #: src/app/Cli.cpp:34
+msgid ""
+"display for live video (default), screenshot for polling; stream is an alias "
+"for display"
+msgstr ""
+"display 为实时视频（默认），screenshot 为截图轮询；stream 是 display 的别名"
+
+#: src/app/Cli.cpp:36
 msgid "Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"
 msgstr "注入直线 X0,Y0,X1,Y1 后退出（归一化坐标）"
 
-#: src/app/Cli.cpp:41
+#: src/app/Cli.cpp:43
 msgid "Inject home/lock/volup/voldn/mute"
 msgstr "注入 home/lock/volup/voldn/mute"
 
-#: src/app/Cli.cpp:43
+#: src/app/Cli.cpp:45
 msgid "Inject ASCII text (device text field must have focus)"
 msgstr "注入 ASCII 文本（设备需已聚焦文本框）"
 
-#: src/app/Cli.cpp:44
+#: src/app/Cli.cpp:46
 msgid "Force alternating video fallback and recovery at T1,T2,... seconds"
 msgstr "按 T1,T2,... 秒交替强制降级与恢复"
 
-#: src/app/Cli.cpp:45
+#: src/app/Cli.cpp:47
 msgid "Write device clipboard and exit (supports Unicode)"
 msgstr "写入设备剪贴板后退出（支持中文）"
 
-#: src/app/Cli.cpp:46
+#: src/app/Cli.cpp:48
 msgid "List connected devices"
 msgstr "列出连接的设备"
 
-#: src/app/Cli.cpp:47
+#: src/app/Cli.cpp:49
 msgid "Disable input control"
 msgstr "关闭输入控制"
 
-#: src/app/Cli.cpp:48
+#: src/app/Cli.cpp:51
 msgid "List device apps"
 msgstr "列出设备 App"
 
-#: src/app/Cli.cpp:49
+#: src/app/Cli.cpp:52
 msgid "Show version"
 msgstr "显示版本"
 
-#: src/app/Cli.cpp:50
+#: src/app/Cli.cpp:53
 msgid "Desktop fullscreen"
 msgstr "桌面全屏"
 
-#: src/app/Cli.cpp:51
+#: src/app/Cli.cpp:54
 msgid "Keep window on top"
 msgstr "窗口置顶"
 
-#: src/app/Cli.cpp:52
+#: src/app/Cli.cpp:55
 msgid "Borderless window"
 msgstr "无边框窗口"
 
-#: src/app/Cli.cpp:53
+#: src/app/Cli.cpp:56
 msgid "Prevent local screen sleep while running"
 msgstr "运行期间禁止本机息屏"
 
-#: src/app/Cli.cpp:54
+#: src/app/Cli.cpp:57
 msgid "Do not start audio stream"
 msgstr "不启动音频流"
 
-#: src/app/Cli.cpp:55
+#: src/app/Cli.cpp:58
 msgid "Receive and decode audio without local playback"
 msgstr "接收和解码音频，但本机不播放"
 
-#: src/app/Cli.cpp:56
+#: src/app/Cli.cpp:59
 msgid "Run without a window"
 msgstr "无窗口运行"
 
-#: src/app/Cli.cpp:57
+#: src/app/Cli.cpp:60
 msgid "Use platform hardware decoder; default: software"
 msgstr "使用平台硬件解码，默认软件解码"
 
-#: src/app/Cli.cpp:58
+#: src/app/Cli.cpp:61
 msgid "Print input coordinates"
 msgstr "打印输入坐标"
 
-#: src/app/Cli.cpp:59
+#: src/app/Cli.cpp:62
 msgid "Add tunnel diagnostics to --stats"
 msgstr "在 --stats 中增加隧道网络诊断"
 
-#: src/app/Cli.cpp:60
+#: src/app/Cli.cpp:63
 msgid "Print statistics every second"
 msgstr "每秒打印统计"
 
-#: src/app/Cli.cpp:61
+#: src/app/Cli.cpp:64
 msgid "Read device clipboard; with --copy, read back after writing"
 msgstr "读取设备剪贴板；与 --copy 同用时写后读回"
 
-#: src/app/Cli.cpp:62
-msgid "Window horizontal position; default: centered"
-msgstr "窗口横坐标，默认居中"
+#: src/app/Cli.cpp:67
+msgid "Window horizontal position; integer or auto (default)"
+msgstr "窗口横坐标：整数或 auto（默认）"
 
-#: src/app/Cli.cpp:63
-msgid "Window vertical position; default: centered"
-msgstr "窗口纵坐标，默认居中"
+#: src/app/Cli.cpp:69
+msgid "Window vertical position; integer or auto (default)"
+msgstr "窗口纵坐标：整数或 auto（默认）"
 
-#: src/app/Cli.cpp:64
+#: src/app/Cli.cpp:71
+msgid ""
+"Shortcut modifiers, separated by commas: lctrl, rctrl, lalt, ralt, lsuper, "
+"rsuper; default: lalt,lsuper"
+msgstr ""
+"快捷键修饰键，用逗号分隔：lctrl、rctrl、lalt、ralt、lsuper、rsuper；默认 "
+"lalt,lsuper"
+
+#: src/app/Cli.cpp:72
 msgid "Window width; 0 for automatic"
 msgstr "窗口宽度，0 为自动"
 
-#: src/app/Cli.cpp:65
+#: src/app/Cli.cpp:73
 msgid "Window height; 0 for automatic"
 msgstr "窗口高度，0 为自动"
 
-#: src/app/Cli.cpp:66
+#: src/app/Cli.cpp:74
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr "运行秒数，0 为不限"
 
-#: src/app/Cli.cpp:68
+#: src/app/Cli.cpp:76
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr "音频缓冲毫秒数，默认 50，上限 1000"
 
-#: src/app/Cli.cpp:70
+#: src/app/Cli.cpp:78
 msgid "Exit after N frames; 0 for unlimited"
 msgstr "处理 N 帧后退出，0 为不限"
 
-#: src/app/Cli.cpp:72
+#: src/app/Cli.cpp:80
 msgid "Finite positive scale; default: fit screen"
 msgstr "有限正数缩放比例，默认自动适应屏幕"
 
-#: src/app/Cli.cpp:76
+#: src/app/Cli.cpp:84
 msgid ""
-"Clockwise display orientation; auto follows device and does not affect "
-"recording"
-msgstr "显示顺时针朝向；auto 跟随设备，不影响录制"
+"Clockwise display rotation; auto follows the device; recording is unchanged"
+msgstr "顺时针旋转显示；auto 跟随设备；不改变录制内容"
 
-#: src/app/Cli.cpp:78
-msgid "Crop WxH+X+Y or W:H:X:Y"
-msgstr "裁剪 WxH+X+Y 或 W:H:X:Y"
+#: src/app/Cli.cpp:87
+msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
+msgstr "裁剪显示像素：WxH+X+Y 或 W:H:X:Y；不改变录制内容"
 
-#: src/app/Cli.cpp:79
-msgid "Background color #RRGGBB"
-msgstr "背景色 #RRGGBB"
+#: src/app/Cli.cpp:89
+msgid "Background color: RGB or RRGGBB, with optional #"
+msgstr "背景色：RGB 或 RRGGBB，可带 # 前缀"
 
-#: src/app/Cli.cpp:80
+#: src/app/Cli.cpp:90
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr "第 N 帧回读窗口为 BMP：N FILE（需要窗口）"
 
-#: src/app/Cli.cpp:88
+#: src/app/Cli.cpp:105
+msgid "Expected an integer or auto"
+msgstr "请使用整数或 auto"
+
+#: src/app/Cli.cpp:125
+msgid ""
+"Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
+msgstr "请使用 lctrl、rctrl、lalt、ralt、lsuper 或 rsuper，以逗号分隔"
+
+#: src/app/Cli.cpp:136
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr "坐标必须是 [0, 1] 内的有限数"
 
-#: src/app/Cli.cpp:95
+#: src/app/Cli.cpp:143
 msgid "Requires a finite positive number"
 msgstr "需要有限正数"
 
-#: src/app/Cli.cpp:112
+#: src/app/Cli.cpp:160
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr "格式应为 WxH+X+Y 或 W:H:X:Y，尺寸为正、偏移非负"
 
-#: src/app/Cli.cpp:119
-msgid "Expected #RRGGBB"
-msgstr "需要 #RRGGBB"
+#: src/app/Cli.cpp:169
+msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
+msgstr "请使用 3 位或 6 位十六进制颜色，可带 # 前缀"
 
-#: src/app/Cli.cpp:132
+#: src/app/Cli.cpp:183
 msgid "Frame number must be a positive integer"
 msgstr "帧号需要正整数"
 
-#: src/app/Cli.cpp:137
+#: src/app/Cli.cpp:188
 msgid "Requires a window; incompatible with --no-window"
 msgstr "需要窗口，不能与 --no-window 同用"
 
@@ -718,40 +743,40 @@ msgstr ""
 "%llu，静音填充 %llu RR 成功/失败 %llu/%llu，重启 %llu，缓冲 %zu 帧，窗口 "
 "%.1f s\n"
 
-#: src/app/Presenter.cpp:37
+#: src/app/Presenter.cpp:38
 #, c-format
 msgid ""
 "Window dimensions are too large; reduce --scale or the requested window "
 "size\n"
 msgstr "窗口尺寸过大；请减小 --scale 或指定的窗口宽高\n"
 
-#: src/app/Presenter.cpp:41
+#: src/app/Presenter.cpp:42
 #, c-format
 msgid "Screen %dx%d points; window scaled to %dx%d (override with --scale)\n"
 msgstr "屏幕 %dx%d 点，窗口自动缩放到 %dx%d（可用 --scale 指定比例）\n"
 
-#: src/app/Presenter.cpp:59
+#: src/app/Presenter.cpp:57
 #, c-format
 msgid "Failed to create window: %s\n"
 msgstr "创建窗口失败: %s\n"
 
-#: src/app/Presenter.cpp:72
+#: src/app/Presenter.cpp:70
 #, c-format
 msgid "Failed to create renderer: %s\n"
 msgstr "创建渲染器失败: %s\n"
 
-#: src/app/Presenter.cpp:77
+#: src/app/Presenter.cpp:75
 #, c-format
 msgid "Render driver: %s\n"
 msgstr "渲染驱动: %s\n"
 
-#: src/app/Presenter.cpp:85 src/app/Presenter.cpp:156 src/app/Presenter.cpp:205
-#: src/app/Presenter.cpp:223
+#: src/app/Presenter.cpp:83 src/app/Presenter.cpp:154 src/app/Presenter.cpp:203
+#: src/app/Presenter.cpp:221
 #, c-format
 msgid "Failed to configure viewport: %s\n"
 msgstr "无法设置显示区域：%s\n"
 
-#: src/app/Presenter.cpp:96
+#: src/app/Presenter.cpp:94
 #, c-format
 msgid ""
 "Window %dx%d points / drawable %dx%d pixels / viewport %dx%d (source %dx%d, "
@@ -760,57 +785,57 @@ msgstr ""
 "窗口 %dx%d 点 / 绘制面 %dx%d 像素 / 视口 %dx%d（源帧 %dx%d，裁剪 %dx%d+%d+"
 "%d，转正顺时针 %d°）\n"
 
-#: src/app/Presenter.cpp:114
+#: src/app/Presenter.cpp:112
 #, c-format
 msgid "Failed to create texture: %s\n"
 msgstr "创建纹理失败: %s\n"
 
-#: src/app/Presenter.cpp:132 src/app/Presenter.cpp:140
+#: src/app/Presenter.cpp:130 src/app/Presenter.cpp:138
 #, c-format
 msgid "Cannot render frame: invalid dimensions or pixel buffer\n"
 msgstr "无法显示这一帧：图像尺寸或像素缓冲无效\n"
 
-#: src/app/Presenter.cpp:165 src/app/Presenter.cpp:175
+#: src/app/Presenter.cpp:163 src/app/Presenter.cpp:173
 #, c-format
 msgid "Failed to render frame: %s\n"
 msgstr "无法绘制这一帧：%s\n"
 
-#: src/app/Presenter.cpp:169
+#: src/app/Presenter.cpp:167
 #, c-format
 msgid "Failed to upload texture: %s\n"
 msgstr "上传纹理失败: %s\n"
 
-#: src/app/Presenter.cpp:189
+#: src/app/Presenter.cpp:187
 #, c-format
 msgid "Failed to query drawable dimensions: %s\n"
 msgstr "查询绘制面尺寸失败: %s\n"
 
-#: src/app/Presenter.cpp:194
+#: src/app/Presenter.cpp:192
 #, c-format
 msgid "Failed to create readback buffer: %s\n"
 msgstr "创建回读缓冲失败: %s\n"
 
-#: src/app/Presenter.cpp:198
+#: src/app/Presenter.cpp:196
 #, c-format
 msgid "Failed to lock readback buffer: %s\n"
 msgstr "锁定回读缓冲失败: %s\n"
 
-#: src/app/Presenter.cpp:218
+#: src/app/Presenter.cpp:216
 #, c-format
 msgid "Readback failed: %s\n"
 msgstr "回读失败: %s\n"
 
-#: src/app/Presenter.cpp:230
+#: src/app/Presenter.cpp:228
 #, c-format
 msgid "Failed to save image: %s\n"
 msgstr "存图失败: %s\n"
 
-#: src/app/Presenter.cpp:233
+#: src/app/Presenter.cpp:231
 #, c-format
 msgid "Window readback saved to %s (%dx%d pixels)\n"
 msgstr "窗口回读已保存到 %s (%dx%d 像素)\n"
 
-#: src/app/Presenter.cpp:243
+#: src/app/Presenter.cpp:241
 #, c-format
 msgid ""
 "[input] %s raw(%d,%d) viewport %d x%d (rotation %d degrees) / window %d "
@@ -819,13 +844,18 @@ msgstr ""
 "[input] %s 原始(%d,%d) 视口%d x%d（转%d°）/ 窗口%d x%d / 绘制面%d x%d -> "
 "(%.3f, %.3f)\n"
 
-#: src/app/Presenter.cpp:277
+#: src/app/Presenter.cpp:285
 msgid "down"
 msgstr "按下"
 
-#: src/app/Presenter.cpp:292
+#: src/app/Presenter.cpp:300
 msgid "move"
 msgstr "移动"
+
+#: src/app/Presenter.cpp:339
+#, c-format
+msgid "Failed to change fullscreen mode: %s\n"
+msgstr "切换全屏失败：%s\n"
 
 #: src/app/SourcePick.h:68
 msgid "Invalid number: \""
@@ -5453,8 +5483,19 @@ msgstr "不可用"
 #~ msgid "  Pair-verify completed; device accepted the host key\n"
 #~ msgstr "  pair-verify 已完成，设备已接受主机密钥\n"
 
+#~ msgid "Background color #RRGGBB"
+#~ msgstr "背景色 #RRGGBB"
+
+#~ msgid ""
+#~ "Clockwise display orientation; auto follows device and does not affect "
+#~ "recording"
+#~ msgstr "显示顺时针朝向；auto 跟随设备，不影响录制"
+
 #~ msgid "Create a pairing record over USB or the given Wi-Fi address"
 #~ msgstr "通过 USB 或指定的 Wi-Fi 地址建立配对记录"
+
+#~ msgid "Crop WxH+X+Y or W:H:X:Y"
+#~ msgstr "裁剪 WxH+X+Y 或 W:H:X:Y"
 
 #, c-format
 #~ msgid "Device clipboard (%zu bytes): %s\n"
@@ -5465,14 +5506,40 @@ msgstr "不可用"
 #~ "Display orientation changed to %d degrees clockwise; window recreated\n"
 #~ msgstr "显示方向已改为顺时针 %d°，窗口已重建\n"
 
+#~ msgid "Expected #RRGGBB"
+#~ msgstr "需要 #RRGGBB"
+
 #~ msgid "No device matches --udid"
 #~ msgstr "未找到与 --udid 匹配的设备"
 
 #~ msgid "Screenshot is the visible area"
 #~ msgstr "截图即可见区"
 
+#~ msgid "Window horizontal position; default: centered"
+#~ msgstr "窗口横坐标，默认居中"
+
+#~ msgid "Window vertical position; default: centered"
+#~ msgstr "窗口纵坐标，默认居中"
+
+#~ msgid ""
+#~ "With no arguments, mirror the connected device.\n"
+#~ "The device chooses encoding dimensions, bitrate and frame rate; overrides "
+#~ "are unavailable.\n"
+#~ "Left mouse button maps to touch. Orientation does not support flip; "
+#~ "recording preserves the source bitstream.\n"
+#~ "Wireless use requires pairing. --help / --version do not connect to the "
+#~ "device."
+#~ msgstr ""
+#~ "无参数时镜像当前连接的设备。\n"
+#~ "设备决定编码尺寸、码率和帧率，暂不支持修改这些参数。\n"
+#~ "鼠标左键映射为触摸；方向不支持 flip，录制保留原始码流。\n"
+#~ "无线需要先配对；--help / --version 不连接设备。"
+
 #~ msgid "pymobiledevice3 plist record; requires --host-id"
 #~ msgstr "pymobiledevice3 的 plist 配对记录；需指定 --host-id"
+
+#~ msgid "stream for live video or screenshot for polling; default: stream"
+#~ msgstr "stream 实时流或 screenshot 截图轮询，默认 stream"
 
 #~ msgid "verify-M4 TLV decode incomplete: "
 #~ msgstr "verify-M4 的 TLV 没解干净: "

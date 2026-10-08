@@ -15,11 +15,13 @@ namespace scrctl::app {
 ParseResult parse_args(int argc, char **argv, Options &o) {
     CLI::App app{SCRCTL_N_("iOS screen mirroring and control")};
     app.footer(SCRCTL_N_(
-        "With no arguments, mirror the connected device.\nThe device chooses encoding "
-        "dimensions, bitrate and frame rate; overrides are unavailable.\nLeft mouse "
-        "button maps to touch. Orientation does not support flip; recording preserves "
-        "the source bitstream.\nWireless use requires pairing. --help / --version do not "
-        "connect to the device."));
+        "With no arguments, mirror the connected device.\n"
+        "Left mouse button maps to touch. Window keyboard input is not forwarded to the device yet.\n"
+        "Quit: MOD+Q. Fullscreen: MOD+F or F11. MOD defaults to left Alt or left Super; "
+        "change it with --shortcut-mod.\n"
+        "The device chooses encoding dimensions, bitrate and frame rate. Display rotation and crop "
+        "leave recordings unchanged; recording writes raw HEVC Annex-B without a container or audio.\n"
+        "Wireless use requires pairing. --help / --version do not connect to the device."));
     app.set_help_flag("-h,--help", SCRCTL_N_("Show help"));
     app.add_option("--play", o.path, SCRCTL_N_("Play an Annex-B HEVC file"));
     app.add_option("-s,--serial", o.serial, SCRCTL_N_("Device UDID"));
@@ -29,8 +31,8 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.add_option("--window-title,--title", o.title, SCRCTL_N_("Window title"));
     app.add_option("--render-driver", o.render_driver, SCRCTL_N_("SDL render driver, e.g. metal / software"));
     app.add_option("--video-source", o.video_source,
-                   SCRCTL_N_("stream for live video or screenshot for polling; default: stream"))
-        ->check(CLI::IsMember({"stream", "screenshot"}));
+                   SCRCTL_N_("display for live video (default), screenshot for polling; stream is an alias for display"))
+        ->check(CLI::IsMember({"display", "stream", "screenshot"}));
     app.add_option("--test-touch", o.test_touch, SCRCTL_N_("Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"))
         ->delimiter(',')->expected(4);
     const std::map<std::string, uint16_t> button_codes = {
@@ -44,7 +46,8 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.add_option("--test-degrade", o.test_degrade, SCRCTL_N_("Force alternating video fallback and recovery at T1,T2,... seconds"));
     app.add_option("--copy", o.copy_text, SCRCTL_N_("Write device clipboard and exit (supports Unicode)"));
     app.add_flag("--list-devices", o.list_devices, SCRCTL_N_("List connected devices"));
-    app.add_flag("-n,--no-control", o.no_control, SCRCTL_N_("Disable input control"));
+    app.add_flag("-n,--no-control", o.no_control, SCRCTL_N_("Disable input control"))
+        ->excludes("--test-touch")->excludes("--test-button")->excludes("--test-type");
     app.add_flag("--list-apps", o.list_apps, SCRCTL_N_("List device apps"));
     app.add_flag("--version", o.show_version, SCRCTL_N_("Show version"));
     app.add_flag("-f,--fullscreen", o.fullscreen, SCRCTL_N_("Desktop fullscreen"));
@@ -59,8 +62,13 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.add_flag("--debug-net", o.debug_net, SCRCTL_N_("Add tunnel diagnostics to --stats"));
     app.add_flag("--stats", o.stats, SCRCTL_N_("Print statistics every second"));
     app.add_flag("--paste", o.paste, SCRCTL_N_("Read device clipboard; with --copy, read back after writing"));
-    app.add_option("--window-x", o.win_x, SCRCTL_N_("Window horizontal position; default: centered"));
-    app.add_option("--window-y", o.win_y, SCRCTL_N_("Window vertical position; default: centered"));
+    std::string window_x, window_y, shortcut_mod;
+    app.add_option("--window-x", window_x,
+                   SCRCTL_N_("Window horizontal position; integer or auto (default)"));
+    app.add_option("--window-y", window_y,
+                   SCRCTL_N_("Window vertical position; integer or auto (default)"));
+    app.add_option("--shortcut-mod", shortcut_mod,
+                   SCRCTL_N_("Shortcut modifiers, separated by commas: lctrl, rctrl, lalt, ralt, lsuper, rsuper; default: lalt,lsuper"));
     app.add_option("--window-width", o.win_w, SCRCTL_N_("Window width; 0 for automatic"))->check(CLI::NonNegativeNumber);
     app.add_option("--window-height", o.win_h, SCRCTL_N_("Window height; 0 for automatic"))->check(CLI::NonNegativeNumber);
     app.add_option("--time-limit", o.time_limit, SCRCTL_N_("Run duration in seconds; 0 for unlimited"))
@@ -73,15 +81,55 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     std::string orientation, crop, background;
     std::vector<std::string> verify;
     app.add_option("--display-orientation,--orientation", orientation,
-                   SCRCTL_N_("Clockwise display orientation; auto follows device and does not affect recording"))
+                   SCRCTL_N_("Clockwise display rotation; auto follows the device; recording is unchanged"))
         ->check(CLI::IsMember({"auto", "0", "90", "180", "270"}));
-    app.add_option("--crop", crop, SCRCTL_N_("Crop WxH+X+Y or W:H:X:Y"));
-    app.add_option("--background-color", background, SCRCTL_N_("Background color #RRGGBB"));
+    app.add_option("--crop", crop,
+                   SCRCTL_N_("Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"));
+    app.add_option("--background-color", background,
+                   SCRCTL_N_("Background color: RGB or RRGGBB, with optional #"));
     app.add_option("--verify", verify, SCRCTL_N_("Read window at frame N into BMP: N FILE (requires a window)"))->expected(2);
     i18n::CliLanguage language(app);
     try {
         app.parse(argc, argv);
         if (!language.select()) return ParseResult::Error;
+        if (o.video_source == "display") o.video_source = "stream";
+        auto position = [&](const char *name, const std::string &value, std::optional<int> &out) {
+            if (!app.count(name)) return;
+            if (value == "auto") {
+                out.reset();
+                return;
+            }
+            int parsed_position = 0;
+            // 沿用 CLI11 的整数转换，保留原有负坐标与溢出检查。
+            if (!CLI::detail::lexical_cast(value, parsed_position)) {
+                throw CLI::ValidationError(name, SCRCTL_TR("Expected an integer or auto"));
+            }
+            out = parsed_position;
+        };
+        position("--window-x", window_x, o.win_x);
+        position("--window-y", window_y, o.win_y);
+        if (app.count("--shortcut-mod")) {
+            const std::map<std::string, uint16_t> modifiers = {
+                {"lctrl", KMOD_LCTRL}, {"rctrl", KMOD_RCTRL},
+                {"lalt", KMOD_LALT}, {"ralt", KMOD_RALT},
+                {"lsuper", KMOD_LGUI}, {"rsuper", KMOD_RGUI},
+            };
+            uint16_t mask = 0;
+            std::size_t start = 0;
+            while (true) {
+                const auto comma = shortcut_mod.find(',', start);
+                const auto token = shortcut_mod.substr(start, comma - start);
+                const auto found = modifiers.find(token);
+                if (found == modifiers.end()) {
+                    throw CLI::ValidationError("--shortcut-mod", SCRCTL_TR(
+                        "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"));
+                }
+                mask |= found->second;
+                if (comma == std::string::npos) break;
+                start = comma + 1;
+            }
+            o.shortcut_mods = mask;
+        }
         if (!std::all_of(o.test_touch.begin(), o.test_touch.end(), [](double value) {
                 return std::isfinite(value) && value >= 0 && value <= 1;
             })) {
@@ -114,13 +162,16 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
             o.crop_set = true;
         }
         if (app.count("--background-color")) {
-            if (background.size() != 7 || background[0] != '#' ||
-                background.find_first_not_of("0123456789abcdefABCDEF", 1) != std::string::npos) {
-                throw CLI::ValidationError("--background-color", SCRCTL_TR("Expected #RRGGBB"));
+            if (!background.empty() && background.front() == '#') background.erase(0, 1);
+            if ((background.size() != 3 && background.size() != 6) ||
+                background.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) {
+                throw CLI::ValidationError("--background-color", SCRCTL_TR(
+                    "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"));
             }
+            const std::size_t channel_length = background.size() == 3 ? 1 : 2;
             for (int i = 0; i < 3; ++i) {
-                o.bg[i] =
-                    static_cast<uint8_t>(std::stoul(background.substr(1 + 2 * i, 2), nullptr, 16));
+                const auto channel = std::stoul(background.substr(channel_length * i, channel_length), nullptr, 16);
+                o.bg[i] = static_cast<uint8_t>(channel_length == 1 ? channel * 17 : channel);
             }
         }
         if (!verify.empty()) {
