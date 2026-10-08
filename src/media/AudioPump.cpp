@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <optional>
 #include <span>
 #include <thread>
 #include <utility>
@@ -182,8 +183,8 @@ bool AudioPump::start_session(std::string &err) {
         return false;
     }
     if (!started.has_remote_ssrc || !started.has_local_ssrc) {
-        // 缺少 SSRC 不影响当前收包和解码，但 RR 无法正确指向设备媒体源，
-        // 会话可能无法续期。输出协商值以便排查。
+        // 未协商设备来源时可绑定第一条合法音频 RTP；双方身份未确定前不发 RR。
+        // 缺少客户端身份时不能凭默认 0 续期，输出协商值以便排查。
         std::fprintf(stderr,
                      SCRCTL_TR("Audio answer missing SSRC (RemoteSSRC=%u LocalSSRC=%u); session renewal may fail\n"),
                      started.remote_ssrc, started.local_ssrc);
@@ -383,6 +384,11 @@ void AudioPump::loop() {
     uint64_t last_packet_ms = now_ms();
     uint64_t last_probe_ms = 0;
     scrctl::rt::RtpSeq seq;
+    // LocalSSRC 采用设备视角，是收到的媒体来源。显式 0 合法；缺失时等待
+    // 第一条合法、同 PT 的媒体 RTP，不能从 SR 或其他载荷类型猜测来源。
+    std::optional<uint32_t> media_source = session_->started().has_local_ssrc
+                                             ? std::optional<uint32_t>(session_->started().local_ssrc)
+                                             : std::nullopt;
     /// RTP 序号统计按会话重置；重置前将旧会话丢包值计入 lost_carry，
     /// 供整个 AudioPump 生命周期的累计统计使用。
     uint64_t lost_carry = 0;
@@ -401,6 +407,10 @@ void AudioPump::loop() {
                 std::printf(SCRCTL_TR("Audio session recreated, receive port=%u\n"), session_->receiver_port());
                 last_packet_ms = now_ms();
                 next_rtcp_ms = last_packet_ms + kRtcpPeriodMs;
+                last_probe_ms = 0;
+                media_source = session_->started().has_local_ssrc
+                                   ? std::optional<uint32_t>(session_->started().local_ssrc)
+                                   : std::nullopt;
                 // 新会话的序号空间与上一条无关，不重置会把第一包判成大片缺口。
                 lost_carry += seq.lost();
                 seq.reset();
@@ -419,12 +429,30 @@ void AudioPump::loop() {
             continue;
         }
 
+        // 每轮检查本流的静默，而非仅在 UDP 收包超时后检查。连续的无关数据报
+        // 不应绕过探测；确认会话结束后立即进入新会话，不能处理旧 epoch 的包。
+        const uint64_t quiet = now - last_packet_ms;
+        if (quiet >= kQuietProbeMs && now >= last_probe_ms + kRtcpPeriodMs) {
+            last_probe_ms = now;
+            std::string perr;
+            const auto state = StreamSession::probe(device_, session_->started().session_uuid,
+                                                    perr, verbose_);
+            if (state == StreamSession::ServerState::Ended) {
+                std::fprintf(stderr, SCRCTL_TR("Audio: device session ended (%llu ms without audio); recreating session\n"),
+                             static_cast<unsigned long long>(quiet));
+                session_.reset();
+                clear_live();
+                continue;
+            }
+        }
+
         // 保活使用每轮检查的单调时钟，不依赖收包超时；错过周期时从当前
-        // 时间重新调度，不连续补发过期 RR。
-        if (now >= next_rtcp_ms) {
+        // 时间重新调度，不连续补发过期 RR。只有双方身份已知才发送；0 是合法值，
+        // 不能把未协商的默认 0 当成发送者或报告目标。
+        if (media_source && session_->started().has_remote_ssrc && now >= next_rtcp_ms) {
             next_rtcp_ms = now + kRtcpPeriodMs;
             const auto rr = scrctl::rt::build_rr(session_->started().remote_ssrc,
-                                                 session_->started().local_ssrc, seq.high());
+                                                 *media_source, seq.high());
             std::string serr;
             const bool ok = session_->send_rtp(rr, session_->started().sender_port, serr);
             uint64_t failed_after = 0;
@@ -444,34 +472,44 @@ void AudioPump::loop() {
 
         uint16_t peer_port = 0;
         if (!session_->next_packet(datagram, peer_port, kPollTimeoutMs, err)) {
-            const uint64_t quiet = now_ms() - last_packet_ms;
-            if (quiet >= kQuietProbeMs && now_ms() >= last_probe_ms + kRtcpPeriodMs) {
-                last_probe_ms = now_ms();
-                std::string perr;
-                const auto state = StreamSession::probe(device_, session_->started().session_uuid,
-                                                        perr, verbose_);
-                if (state == StreamSession::ServerState::Ended) {
-                    std::fprintf(stderr, SCRCTL_TR("Audio: device session ended (%llu ms without audio); recreating session\n"),
-                                 static_cast<unsigned long long>(quiet));
-                    session_.reset();
-                    clear_live();
+            continue;
+        }
+
+        // RTP/RTCP 在此端口复用。RTCP 的 length 不是 RTP sequence，必须先分类。
+        // parser 校验 compound 边界及 SR/RR 字段；其他 RTCP 仅检查帧边界，
+        // 不将它们当作媒体活性。坏 RTCP 也不能落入 RTP 处理路径。
+        if (datagram.size() >= 2 && datagram[1] >= 192 && datagram[1] <= 223) {
+            std::vector<scrctl::rt::SenderReport> reports;
+            if (scrctl::rt::parse_sender_reports(datagram, reports)) {
+                for (const auto &report : reports) {
+                    if (media_source && report.ssrc == *media_source) {
+                        last_packet_ms = now_ms();
+                        break;
+                    }
                 }
+                std::lock_guard<std::mutex> lock(mutex_);
+                ++stats_.other_payload;
             }
             continue;
         }
-        last_packet_ms = now_ms();
 
         scrctl::rt::PacketInfo info;
         if (!scrctl::rt::parse_rtp_header(std::span<const uint8_t>(datagram), info)) {
             continue;
         }
-        // 先按载荷类型过滤，再统计 RTP 序号。RTCP 头的第 3–4 字节是
-        // 长度而非 RTP 序号，将 SR 计入序号空间会产生虚假的缺口。
+        // 载荷类型和来源都确认后才更新本流活性与序号。PT101 的 marker 置位
+        // 后第二字节为 229，仍是合法音频 RTP，不属于上面的 RTCP 范围。
         if (info.payload_type != session_->started().payload_type) {
             std::lock_guard<std::mutex> lock(mutex_);
             ++stats_.other_payload;
             continue;
         }
+        if (!media_source) {
+            media_source = info.ssrc;
+        } else if (info.ssrc != *media_source) {
+            continue;
+        }
+        last_packet_ms = now_ms();
         // 使用共享 rt::RtpSeq 处理序号回绕和乱序；最高序号不随迟到包回退。
         const auto verdict = seq.observe(info.sequence);
         {
@@ -485,6 +523,11 @@ void AudioPump::loop() {
             // 使用当前未补齐缺口数，允许迟到包减少丢包读数；旧会话值已保存在
             // lost_carry 中。
             stats_.seq_lost = lost_carry + seq.lost();
+        }
+        // 当前没有音频重排队列，无法把迟到帧插回已输出的 PCM。仍保留接收统计
+        // 的缺口补齐，但重复和迟到载荷不得再次送入有状态的 AAC 解码器。
+        if (verdict == scrctl::rt::RtpSeq::Verdict::kLate) {
+            continue;
         }
         // 当前 ELD 每包承载一帧（10 ms），不做重组或重传，只统计序号缺口。
         const auto payload = std::span<const uint8_t>(datagram).subspan(

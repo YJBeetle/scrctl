@@ -86,7 +86,7 @@ public:
                                                    int frame_length, bool first_read);
 
     struct Stats {
-        /// 载荷类型与音频配置匹配的 RTP 包数，包括解码失败的包。
+        /// 来源和载荷类型与本流匹配的 RTP 包数，包括迟到、重复及解码失败的包。
         std::uint64_t packets = 0;
         /// 输出非空 PCM 的包数，与 packets 的差值表示未输出 PCM 的包数。
         std::uint64_t decoded = 0;
@@ -95,10 +95,10 @@ public:
         std::uint64_t other_payload = 0;
         /// 序号向前跳跃的事件数，一次事件可以跨过多个包。
         std::uint64_t seq_gaps = 0;
-        /// 当前未补齐的序号数量，迟到的包可减少此值。
-        /// 缺口与迟到、重复分别统计，避免将乱序直接等同于永久丢包。
+        /// 当前未补齐的序号数量，迟到的包可减少此值，但不会补回已输出的 PCM。
+        /// 缺口与迟到、重复分别统计，接收统计不表示迟到载荷参与了解码。
         std::uint64_t seq_lost = 0;
-        /// 序号低于或等于已见最高值的包数，包括迟到和重复。
+        /// 序号低于或等于已见最高值的包数，包括迟到和重复；这些载荷不解码。
         std::uint64_t out_of_order = 0;
         std::uint64_t rtcp_sent = 0;
         std::uint64_t rtcp_failed = 0;
