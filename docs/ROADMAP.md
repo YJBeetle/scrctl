@@ -57,7 +57,10 @@
   新记录验证后才保存。macOS 正式命令的确认、新建及复用已通过，更多设备和 Windows 待验证。
 - 音频：macOS 使用 AudioToolbox，Windows / Linux 使用 FFmpeg AAC-ELD 与 libswresample。
   已修正旧 ASC 配置错误，真实音乐双后端对照通过；Windows USB 已实际发声，
-  持续连接、无线播放、Linux 真机及其他 ELD 配置仍需验证。
+  Mac USB / Wi-Fi 的平滑时钟补偿及 200 ms 缓冲已通过短时听感对照。
+  默认把音频转到电脑，`--audio-dup` 保留双端发声；`--no-audio` 保持设备原播放状态。
+  Mac USB 已确认三种路由及退出后手机声音恢复。新路由和补偿层的 Windows / Linux
+  真机输出、其他 ELD 配置及长时间运行仍需验证，见协议记录 §32。
 - 其他 CLI 功能：录制方向、水平翻转、录制随时起停等需要按具体需求推进；参数范围以
   当前 `scrctl --help` 为准。
 
@@ -81,6 +84,11 @@ SipHash 使用 OpenSSL；扫描器只负责网卡/socket 适配、本次记录�
 下一步使用 libavformat。离线 HEVC + AAC-ELD 的 MP4 / MKV 封装实验已通过，
 MP4 使用 hvc1；仍需将 RTP 时间戳、完整 AU、会话 epoch 和音视频共同时间轴
 接入生产，再验证断流恢复、磁盘失败和退出收尾。
+
+RTP 拆包已能交付完整 NAL 和来源信息，现有组帧器已能保留每个 AU 的采样 ticks；
+回绕工具和 SR 解析也已通过离线及真实捕获回放。下一步将这些接口接入媒体泵，
+旁路解码前 AAC，随后由同一个录制器建立两轨时间轴和写入有界队列。
+视频频率从有效 SR 验证，不将本台设备观测到的约 24 kHz 写成通用常量。
 
 AAC-ELD 原包可直存，离线 FFmpeg 解码及本机 AVFoundation MP4 解码通过；
 其他播放器兼容性不能由这组结果代替。录制方向与 --orientation 语义一起推进。

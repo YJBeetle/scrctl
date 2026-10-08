@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -145,8 +146,219 @@ void test_epb_kept() {
           "只在 03 后随 <=0x03 时去掉，末尾孤立的 03 保留");
 }
 
+namespace {
+
+using AccessUnit = scrctl::AnnexBParser::AccessUnit;
+
+scrctl::Nal make_nal(uint8_t type, bool first_slice, uint8_t tag) {
+    return {static_cast<uint8_t>(type << 1), 0x01,
+            static_cast<uint8_t>(first_slice ? 0x80 : 0x00), tag};
+}
+
+std::vector<uint8_t> annexb_bytes(const std::vector<scrctl::Nal> &nals) {
+    std::vector<uint8_t> bytes;
+    for (const auto &nal : nals) {
+        bytes.insert(bytes.end(), {0, 0, 0, 1});
+        bytes.insert(bytes.end(), nal.begin(), nal.end());
+    }
+    return bytes;
+}
+
+void test_sampling_timestamps() {
+    std::printf("\n== 完整 NAL 的采样时间和 AU 边界 ==\n");
+    std::vector<AccessUnit> got;
+    scrctl::AnnexBParser parser([&](AccessUnit &&au) { got.push_back(std::move(au)); });
+    const auto vps = make_nal(32, false, 1);
+    const auto sei = make_nal(39, false, 2);
+    const auto first = make_nal(19, true, 3);
+    const auto second = make_nal(19, false, 4);
+    check(parser.push_nal(vps, 9900) && parser.push_nal(sei, std::nullopt) &&
+              parser.push_nal(first, 400) && parser.push_nal(second, 400, true),
+          "参数/SEI 前缀和同一采样时间的两条 slice 可组成 AU");
+    check(got.size() == 1 && got[0].nals == std::vector<scrctl::Nal>{vps, sei, first, second} &&
+              got[0].sampling_timestamp == 400 && got[0].keyframe,
+          "marker 立即提交完整 AU，时间来自第一条 VCL，原始 NAL 顺序不变");
+
+    got.clear();
+    const auto a = make_nal(1, true, 5);
+    const auto b = make_nal(1, true, 6);
+    const auto c = make_nal(1, true, 7);
+    // 模拟一次拆包批次返回多条完整图像；最后一条没有 marker，flush 负责收尾。
+    check(parser.push_nal(a, 800) && parser.push_nal(b, 1200) && parser.push_nal(c, 1000),
+          "同批多图像允许不同时间，也保留合法的向后采样时间");
+    check(got.size() == 2 && got[0].nals == std::vector<scrctl::Nal>{a} &&
+              got[0].sampling_timestamp == 800 && got[1].nals == std::vector<scrctl::Nal>{b} &&
+              got[1].sampling_timestamp == 1200,
+          "后一图像触发提交时，前两条 AU 仍各自保留原采样时间");
+    parser.flush();
+    check(got.size() == 3 && got.back().nals == std::vector<scrctl::Nal>{c} &&
+              got.back().sampling_timestamp == 1000 && !got.back().keyframe,
+          "flush 提交最后一条 AU，不把采样 ticks 当作单调 DTS");
+
+    got.clear();
+    check(parser.push_nal(a) && parser.push_nal(b, 1600, true) && got.size() == 2 &&
+              !got[0].sampling_timestamp && got[1].sampling_timestamp == 1600,
+          "不同图像可分别 unknown/known：first slice 先提交旧 AU，再存新图像时间");
+
+    got.clear();
+    const auto suffix = make_nal(40, false, 8);
+    check(parser.push_nal(a, 2000) && parser.push_nal(sei, 7777), "prefix SEI 关闭前一图像");
+    check(got.size() == 1 && got[0].nals == std::vector<scrctl::Nal>{a} &&
+              got[0].sampling_timestamp == 2000,
+          "下一图像的 prefix SEI 不留在前一 AU，也不改写其时间");
+    check(parser.push_nal(b, 2400) && parser.push_nal(suffix, std::nullopt, true),
+          "suffix SEI 的 marker 可立即提交已包含 VCL 的 AU");
+    check(got.size() == 2 && got.back().nals == std::vector<scrctl::Nal>{sei, b, suffix} &&
+              got.back().sampling_timestamp == 2400,
+          "prefix/suffix 字节归入对应图像，非 VCL 的 unknown 时间不影响图像");
+
+    got.clear();
+    check(parser.push_nal(vps, 9000, true), "仅参数集的 marker 输入可处理");
+    parser.flush();
+    check(got.empty() && parser.vps() == vps, "参数集不能单独交付成 AU，但仍保留缓存");
+
+    const auto cra = make_nal(21, true, 9);
+    check(parser.push_nal(cra, -400, true) && got.size() == 1 && got[0].keyframe &&
+              got[0].sampling_timestamp == -400,
+          "沿用 CRA 的 IRAP bool 语义，不把负采样 ticks 当作错误");
+}
+
+void test_damaged_au() {
+    std::printf("\n== 残缺 AU 不交付 ==\n");
+    const auto first = make_nal(1, true, 1);
+    const auto next = make_nal(1, false, 2);
+    const auto vps = make_nal(32, false, 3);
+    const auto sps = make_nal(33, false, 4);
+    const auto pps = make_nal(34, false, 5);
+    std::vector<AccessUnit> got;
+    scrctl::AnnexBParser parser([&](AccessUnit &&au) { got.push_back(std::move(au)); });
+
+    struct Case {
+        std::optional<int64_t> first_time;
+        std::optional<int64_t> next_time;
+        const char *name;
+    };
+    for (const auto &test : {Case{400, 401, "两条 slice 的已知时间不同"},
+                             Case{400, std::nullopt, "第一条已知、后一条 unknown"},
+                             Case{std::nullopt, 400, "第一条 unknown、后一条已知"}}) {
+        parser.discard_pending();
+        check(parser.push_nal(first, test.first_time), std::string(test.name) + "：接收起始 slice");
+        check(!parser.push_nal(next, test.next_time, true),
+              std::string(test.name) + "：拒绝残缺时间组合");
+        parser.flush();
+        check(got.empty(), std::string(test.name) + "：marker/flush 均不能提交假完整 AU");
+        check(!parser.push_nal(next, test.next_time, true), "丢弃之后的残余 slice 不能重新开启图像");
+        check(parser.push_nal(first, 800, true) && got.size() == 1 &&
+                  got[0].sampling_timestamp == 800 && got[0].nals == std::vector<scrctl::Nal>{first},
+              "后续 first slice 可以开启独立、完整的新 AU");
+        got.clear();
+    }
+
+    parser.discard_pending();
+    check(parser.push_nal(first) && parser.push_nal(next, std::nullopt, true) &&
+              got.size() == 1 && !got[0].sampling_timestamp && got[0].nals.size() == 2,
+          "所有 slice 均 unknown 时保留无时间的正常 AU");
+    got.clear();
+
+    check(parser.push_nal(vps) && parser.push_nal(sps) && parser.push_nal(pps) &&
+              !parser.push_nal(next, 1200, true),
+          "参数集前缀不能让缺少 first slice 的残片成为图像");
+    check(got.empty() && parser.has_parameter_sets(), "残片拒绝不影响参数集缓存");
+
+    check(parser.push_nal(first, 1600), "丢片前的完整 NAL 暂存在 AU 中");
+    parser.discard_pending();
+    parser.flush();
+    check(got.empty() && parser.vps() == vps && parser.sps() == sps && parser.pps() == pps,
+          "确认丢片后 discard_pending 不交付旧 AU，保留全部参数集缓存");
+    check(!parser.push_nal(next, 1600, true) && parser.push_nal(first, 2000, true) &&
+              got.size() == 1 && got[0].nals == std::vector<scrctl::Nal>{first},
+          "丢片后的剩余 slice 被拒绝，下一完整图像可恢复");
+    got.clear();
+
+    check(parser.push_nal(first, 2400) && !parser.push_nal({0x02, 0x01}, 2400, true),
+          "过短的完整 NAL 使待提交 AU 失效");
+    parser.flush();
+    check(got.empty(), "过短 NAL 后 flush 也不能提交受损图像");
+}
+
+void test_input_modes() {
+    std::printf("\n== 字节输入与完整 NAL 输入的边界 ==\n");
+    const auto first = make_nal(1, true, 1);
+    const auto next = make_nal(1, true, 2);
+    const auto bytes = annexb_bytes({first});
+    std::vector<AccessUnit> got;
+    scrctl::AnnexBParser parser([&](AccessUnit &&au) { got.push_back(std::move(au)); });
+
+    check(parser.feed(nullptr, 0) && !parser.feed(nullptr, 1), "空 feed 无副作用，非空空指针被拒绝");
+    check(parser.feed(bytes.data(), bytes.size()) && !parser.push_nal(next, 400, true),
+          "有未定界字节时拒绝完整 NAL，不能偷用其 marker 提交半条字节 NAL");
+    parser.flush();
+    check(got.size() == 1 && got[0].nals == std::vector<scrctl::Nal>{first} &&
+              !got[0].sampling_timestamp,
+          "被拒绝的完整输入不改变字节解析状态，flush 输出仍与字节源一致");
+    got.clear();
+
+    check(parser.push_nal(next, 800) && !parser.feed(bytes.data(), bytes.size()),
+          "有完整 NAL AU 时拒绝字节输入，不能混入无时间 slice");
+    parser.flush();
+    check(got.size() == 1 && got[0].nals == std::vector<scrctl::Nal>{next} &&
+              got[0].sampling_timestamp == 800,
+          "被拒绝的字节输入不改写完整 NAL AU 或时间");
+    got.clear();
+
+    check(parser.feed(bytes.data(), 6), "输入未完成的字节 NAL");
+    parser.discard_pending();
+    parser.flush();
+    check(got.empty(), "discard_pending 清除 byte scanner，不输出截断 NAL");
+    check(parser.push_nal(first, 1200, true) && got.size() == 1 &&
+              got[0].sampling_timestamp == 1200,
+          "显式 discard 后可切换到完整 NAL 输入");
+    parser.discard_pending();
+    got.clear();
+    check(parser.feed(bytes.data(), bytes.size()), "显式 discard 后也可切回字节输入");
+    parser.flush();
+    check(got.size() == 1 && !got[0].sampling_timestamp, "切回后字节 AU 的时间保持 unknown");
+}
+
+void test_input_equivalence() {
+    std::printf("\n== 两种输入复用同一分组 ==\n");
+    const std::vector<scrctl::Nal> nals{make_nal(32, false, 1), make_nal(33, false, 2),
+                                      make_nal(34, false, 3), make_nal(39, false, 4),
+                                      make_nal(19, true, 5), make_nal(19, false, 6),
+                                      make_nal(40, false, 7), make_nal(35, false, 8),
+                                      make_nal(39, false, 9), make_nal(1, true, 10)};
+    const auto bytes = annexb_bytes(nals);
+    std::vector<AccessUnit> typed, streamed;
+    scrctl::AnnexBParser complete([&](AccessUnit &&au) { typed.push_back(std::move(au)); });
+    scrctl::AnnexBParser chunks([&](AccessUnit &&au) { streamed.push_back(std::move(au)); });
+    bool typed_accepted = true;
+    for (const auto &nal : nals) {
+        typed_accepted = complete.push_nal(nal) && typed_accepted;
+    }
+    bool bytes_accepted = true;
+    for (const auto byte : bytes) {
+        bytes_accepted = chunks.feed(&byte, 1) && bytes_accepted;
+    }
+    check(typed_accepted && bytes_accepted, "完整 NAL 和逐字节路径均接受全部合法输入");
+    complete.flush();
+    chunks.flush();
+    bool same = typed.size() == streamed.size();
+    for (size_t i = 0; same && i < typed.size(); ++i) {
+        same = typed[i].nals == streamed[i].nals && typed[i].keyframe == streamed[i].keyframe &&
+               !typed[i].sampling_timestamp && !streamed[i].sampling_timestamp;
+    }
+    check(same && typed.size() == 2 && typed[0].nals.size() == 7 && typed[1].nals.size() == 3,
+          "参数集、AUD、prefix/suffix SEI 与多 slice 的分组和原字节在两种路径相同");
+}
+
+}  // namespace
+
 int main(int argc, char **argv) {
     test_epb_kept();
+    test_sampling_timestamps();
+    test_damaged_au();
+    test_input_modes();
+    test_input_equivalence();
     if (argc < 2) {
         // 没录制文件也要能全绿跑完：合成部分已经覆盖了这次守住的不变量。
         std::printf("\n未给 .hevc 参数，跳过真机码流的 AU 断言。\n");
