@@ -1,14 +1,22 @@
-// 当前非 Apple 构建未接入音频解码后端；工厂返回空结果并提供共用提示。
-// 这是本构建的能力限制，不代表该平台或其他库不能解码 AAC-ELD。
-#include <string>
-
+// 非 Apple 平台按本构建的 libav 能力选择音频后端。
 #include "decode/AudioDecoder.h"
+#if defined(SCRCTL_HAVE_LIBAV)
+#include "decode/FFmpegEldDecoder.h"
+#endif
 
 namespace scrctl {
 
-std::unique_ptr<AudioDecoder> create_audio_decoder(int, int, int, std::string &err) {
+std::unique_ptr<AudioDecoder> create_audio_decoder(int sample_rate, int channels,
+                                                  int frame_length, std::string &err) {
+#if defined(SCRCTL_HAVE_LIBAV)
+    return create_ffmpeg_eld_decoder(sample_rate, channels, frame_length, err);
+#else
+    (void)sample_rate;
+    (void)channels;
+    (void)frame_length;
     err = SCRCTL_TR(kNoAudioDecoderMessage);
     return nullptr;
+#endif
 }
 
 }  // namespace scrctl

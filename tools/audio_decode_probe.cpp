@@ -14,6 +14,9 @@
 #include <vector>
 
 #include "decode/AudioDecoder.h"
+#if defined(SCRCTL_HAVE_LIBAV)
+#include "decode/FFmpegEldDecoder.h"
+#endif
 #include "i18n/CliLanguage.h"
 #include "i18n/Translation.h"
 
@@ -178,6 +181,7 @@ int main(int argc, char **argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     std::string input_path;
     std::string output_path;
+    std::string backend = "auto";
     int rate = 48000;
     int channels = 2;
     CLI::App app{SCRCTL_N_("Decode a recorded AAC-ELD audio dump to a WAV file")};
@@ -193,6 +197,9 @@ int main(int argc, char **argv) {
         ->check(CLI::Range(1, std::numeric_limits<int>::max()));
     app.add_option("CHANNELS", channels,
         SCRCTL_N_("Channel count (1-32767; default: 2)"))->check(CLI::Range(1, 32767));
+    app.add_option("--backend", backend,
+        SCRCTL_N_("Audio decoder backend: auto or ffmpeg (default: auto)"))
+        ->check(CLI::IsMember({"auto", "ffmpeg"}));
     scrctl::i18n::CliLanguage language(app);
     if (auto code = language.parse(argc, argv)) return *code;
     // 16 位 PCM 的 blockAlign 已由声道上限保证；byteRate 的 32 位边界还需要
@@ -213,7 +220,16 @@ int main(int argc, char **argv) {
     std::printf(SCRCTL_TR("Loaded %zu datagrams; target format: %d Hz, %d channels\n"),
                 dgrams.size(), rate, channels);
 
-    auto dec = scrctl::create_audio_decoder(rate, channels, 480, err);
+    std::unique_ptr<scrctl::AudioDecoder> dec;
+    if (backend == "ffmpeg") {
+#if defined(SCRCTL_HAVE_LIBAV)
+        dec = scrctl::create_ffmpeg_eld_decoder(rate, channels, 480, err);
+#else
+        err = SCRCTL_TR("FFmpeg AAC-ELD decoding is unavailable in this build; enable libav support");
+#endif
+    } else {
+        dec = scrctl::create_audio_decoder(rate, channels, 480, err);
+    }
     if (dec == nullptr) {
         std::fprintf(stderr, SCRCTL_TR("Failed to create audio decoder: %s\n"), err.c_str());
         return 1;

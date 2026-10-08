@@ -1,7 +1,9 @@
 # Windows 构建与验证
 
 目前已验证 Windows 11 ARM64、MSYS2 CLANGARM64 工具链。x64 和 MSVC 尚未验证。
-应用使用普通 `main`，视频使用 FFmpeg 软件解码，窗口使用 SDL2；当前没有 Windows 音频后端。
+应用使用普通 `main`，视频和 AAC-ELD 音频使用 FFmpeg，窗口与音频输出使用 SDL2。
+真实音乐离线解码及用户确认的短时 USB 播放已通过，持续连接验证仍在进行；配置与对照见
+[音频记录](coredevice.md#171-音频解码后端只能选-audiotoolbox实测同一份-dump-四路对照)。
 
 ## 构建
 
@@ -254,3 +256,22 @@ CI 包包含 DLL、翻译目录、已安装包版本、FFmpeg 构建配置、依
 MSYS2 当前 FFmpeg 包启用了 GPL 和 version3，属于 GPL-3.0-or-later 构建，不能将其标为
 纯 LGPL 包。本项目的 Apache-2.0 声明不会覆盖随包依赖的许可；对外发布前还需准备与实际
 二进制对应的第三方源码及构建材料，审核整个依赖组合的分发条件。当前 CI 产物用于开发验证。
+
+## FFmpeg 音频后端验证（2026-10-08）
+
+Windows / Linux 现在使用 FFmpeg 原生 AAC-ELD 解码和 libswresample，
+macOS 继续默认使用 AudioToolbox。当前支持 48 kHz、双声道、每帧每声道
+480 或 512 个采样；480 配置使用 ASC `F8 E6 50 00`。
+
+- Windows ARM64 对同一份真实音乐 RTP 解码 290/290 帧，无失败，输出
+  278400 个交织采样（2.9 秒），峰值 32497，四个时间段均非静音。
+- 同一份载荷在 macOS 上用 FFmpeg 和 AudioToolbox 解码，采样逐一对齐，
+  最大差异为 1 个 s16 量化单位，见 [后端对照](coredevice.md#171-音频解码后端只能选-audiotoolbox实测同一份-dump-四路对照)。
+- 用户已确认 Windows USB 实时播放时电脑发出音乐；日志显示 WASAPI 输出，
+  音频解码失败为 0。这一趟约 7 秒后以 `Tunnel TLS read failed` 断开，
+  用户确认未再次拔插。持续连接尚未通过，不能用短时发声替代稳定性验收。
+- 新音频测试及配对/发现的五组 Windows 离线回归通过；正式配对命令、
+  无线自动选择及新安装包的真机验证另行记录。
+
+FFmpeg 5.0/5.1 只完成官方头文件的 API 编译检查，未运行旧版解码库；
+512 配置目前只有静音样本。其他采样率、声道布局、ELD SBR 配置仍需独立验证。

@@ -17,13 +17,14 @@ Annex-B HEVC，不包含音轨。
 | 平台 | 当前范围 |
 | --- | --- |
 | macOS | 有真机连接、镜像、输入和音频记录；本轮验证结果见重构记录 |
-| Linux | CI 包含构建与离线测试，尚缺 Linux 真机端到端验证；当前无音频后端 |
-| Windows | ARM64 构建与离线测试、USB / Wi-Fi 镜像、截图切换及 USB 竖屏及横屏、Wi-Fi 横屏鼠标触摸已验证；当前无音频后端，其他输入与初始配对准备待验证，见 [安装说明](docs/WINDOWS.md) |
+| Linux | CI 包含构建与离线测试，音频使用 FFmpeg；尚缺 Linux 真机端到端验证 |
+| Windows | ARM64 构建与离线测试、USB / Wi-Fi 镜像、截图切换及竖横屏鼠标触摸已验证；FFmpeg 真实音乐解码与短时 USB 播放已通过，持续连接与初始配对准备待验证，见 [安装说明](docs/WINDOWS.md) |
 
-音频当前使用 macOS AudioToolbox 解码设备的 AAC-ELD 流。已测试的 FFmpeg 原生
-AAC 后端未能正确解码该流，不能据此推定其他库也不支持；
-[FDK AAC 提供 AAC-ELD 实现](https://github.com/mstorsjo/fdk-aac/blob/master/libAACdec/include/aacdecoder_lib.h)，
-尚未验证其与本项目配置及设备码流的兼容性。设备音量键不控制镜像音频的本机输出，
+音频在 macOS 使用 AudioToolbox，Windows / Linux 使用 FFmpeg 的原生 AAC-ELD
+解码器与 libswresample。当前 FFmpeg 适配支持 48 kHz、双声道、每帧每声道 480 或
+512 个采样；真实音乐的 480 配置已与 AudioToolbox 逐样本对照，最大差异为 1 个
+16 位量化单位。旧实验使用了错误的编码配置，其“不支持 ELD”的结论已修正，见
+[音频记录](docs/coredevice.md#171-音频解码后端只能选-audiotoolbox实测同一份-dump-四路对照)。设备音量键不控制镜像音频的本机输出，
 可使用本机音量或 `--no-audio-playback`。
 
 [协议调研记录](docs/coredevice.md) 保留原始观察与实验过程；
@@ -105,7 +106,7 @@ ctest --test-dir build-cmake              # 离线自检，不需要真机（项
 
 构建还需要 GNU gettext 工具（`msgfmt`）及消息运行库（Linux glibc 通常已内置；
 macOS 使用 gettext 的 libintl）。开启离线测试需要 Python 3。Debian/Ubuntu 可安装
-`gettext python3 libsdl2-dev libssl-dev libavcodec-dev libavutil-dev libswscale-dev`。
+`gettext python3 libsdl2-dev libssl-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev`。
 
 JSON、命令行和 XML plist 解析分别使用 nlohmann/json（>= 3.12.0）、CLI11（>= 2.5.0）和 pugixml（>= 1.16），许可依次为 MIT、BSD-3-Clause、MIT。
 CMake 优先找系统包，缺失时下载固定版本并校验 SHA256；首次配置需要网络。

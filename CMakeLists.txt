@@ -91,18 +91,18 @@ find_package(OpenSSL REQUIRED)
 # 找到 libavcodec 时编入软件 HEVC 解码，供 macOS 处理超限 NAL，并作为
 # Linux / Windows 的视频后端。缺少开发包时仍可构建：macOS 只保留平台后端，
 # 非 Apple 平台则没有可用的视频解码后端。
-option(SCRCTL_LIBAV "用 libavcodec 编软件 HEVC 解码后端（超大 NAL 的兜底）" ON)
+option(SCRCTL_LIBAV "使用 FFmpeg 软件视频与 AAC-ELD 音频解码" ON)
 set(SCRCTL_LIBAV_FOUND OFF)
 if(SCRCTL_LIBAV)
     find_package(PkgConfig QUIET)
     if(PkgConfig_FOUND)
-        pkg_check_modules(LIBAV IMPORTED_TARGET libavcodec libavutil libswscale)
+        pkg_check_modules(LIBAV IMPORTED_TARGET libavcodec libavutil libswscale libswresample)
     endif()
     if(LIBAV_FOUND)
         set(SCRCTL_LIBAV_FOUND ON)
     elseif(SCRCTL_LIBAV STREQUAL "ON")
         message(WARNING
-                "没找到 libavcodec/libswscale（pkg-config）。软件解码后端不编，"
+                "没找到 FFmpeg 开发库（libavcodec/libavutil/libswscale/libswresample）。软件解码后端不编，"
                 "关键帧超过 65535 字节的码流会出现无法解码的丢帧。"
                 "装 ffmpeg 开发件后重新配置即可。")
     endif()
@@ -181,7 +181,7 @@ else()
             src/decode/AudioDecoderNone.cpp)
 endif()
 if(SCRCTL_LIBAV_FOUND)
-    target_sources(scrctl_core PRIVATE src/decode/FFmpegDecoder.cpp)
+    target_sources(scrctl_core PRIVATE src/decode/FFmpegDecoder.cpp src/decode/FFmpegEldDecoder.cpp)
     # 静态库的 libav 符号由最终可执行文件链接，需要向使用方传递链接依赖。
     target_link_libraries(scrctl_core PUBLIC PkgConfig::LIBAV)
     # Decoder.h 的 kHaveDecoder 依赖这个宏；库与调用方必须看到相同定义，
@@ -396,6 +396,12 @@ if(SCRCTL_BUILD_TESTS)
 
     scrctl_add_test_executable(decode_test tests/decode_test.cpp)
     target_link_libraries(decode_test PRIVATE scrctl_core)
+
+    if(SCRCTL_LIBAV_FOUND)
+        scrctl_add_test_executable(audio_decoder_test tests/audio_decoder_test.cpp)
+        target_link_libraries(audio_decoder_test PRIVATE scrctl_core)
+        add_test(NAME audio_decoder COMMAND audio_decoder_test)
+    endif()
 
     # 合成码流那部分自检不需要输入文件，任何时候都跑。
     add_test(NAME annexb_synth COMMAND annexb_test)

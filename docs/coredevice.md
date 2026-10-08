@@ -1773,58 +1773,125 @@ avconferenced{AVConference}: VCAudioStream setupPayloads:786
 纯好看不像话）。真正给出答案的是**设备日志 + 有声时的字节**，不是对着静音包猜。
 教训照旧：认格式要有内容的那一段数据，加上一个会自己交代名字的来源。
 
-> **解码方案已更新**：下面“libav 原生 aac 加 extradata 就能解”的写法是实际后端验证前的推断。
-> 同一份设备载荷的后续对照没有支持它；当前 AudioToolbox 以协商的 ASBD 配置解码，未设置 magic cookie，见 [同一份 dump 的后端对照](#171-音频解码后端只能选-audiotoolbox实测同一份-dump-四路对照)。
+解码时需要提供帧外的编码配置。Apple 后端以 ASBD 指定 `'aace'`、48 kHz、
+双声道和每包 480 个采样，不设置 magic cookie；FFmpeg 后端根据已观察到的
+配置构造 AudioSpecificConfig，并同时设置解码上下文的采样率和声道布局。
+AOT 39 为 ER AAC ELD，`frameLengthFlag=1` 对应每声道 480 个采样。
+这里的 ASC 由这些配置字段构造，并非从当前媒体协商回复直接取出的 cookie。
+静音时设备仍发送约 100 包/秒（`isDTXEnabled=0`），因此静音不等于音频断流。
+配置纠错与同份载荷的后端比较见下一节。
 
-对实现的直接含义：解码要喂 `AVAudioCodecDescription` 里的 **AudioSpecificConfig**
-（AOT 39 = AAC-ELD v2，48kHz，2ch，frameLengthFlag=1 即 480），因为包里没有 AU 头也没有
-ADTS；libavcodec 的 `aac` 解码器带 extradata 就能解 ELD。静音时设备**照样 100 包/秒地发**
-（`isDTXEnabled=0`），所以"没声音"不会表现为断流。
+<a id="171-音频解码后端只能选-audiotoolbox实测同一份-dump-四路对照"></a>
 
-## 17.1 音频解码后端只能选 AudioToolbox（实测，同一份 dump 四路对照）
+## 17.1 音频后端：纠正 ASC 后的 FFmpeg 与 AudioToolbox 对照
 
-> **后端结论的范围**：本标题及下文“非 Apple 平台没有音频”描述本项目已验证、已接入的后端。
-> 原生 FFmpeg 在这份设备配置上失败，不能据此推断所有版本或所有平台都没有 AAC-ELD 实现。
-> 当前仅接入 macOS AudioToolbox；FDK AAC 等候选仍需用同一份载荷验证，计划见 [ROADMAP](ROADMAP.md)。
+**2026-10-08 更新：FFmpeg 原生 `aac` 可以解码本次设备的 AAC-ELD 音乐载荷。**
+此前“只能用 AudioToolbox”和“非 Apple 平台没有可用实现”的结论失效：旧实验使用
+了与设备配置不一致的 ASC，还混用了编码器能力、解码器名称和裸载荷拼接的结果。
+本节保留旧读数，并记录纠错后的实测与适用范围。
 
-编码定下来是 AAC-ELD 之后，下一个问题不是"怎么接"而是"**有没有东西能解它**"。
-判据是同一份真机 dump（1406 个 PT=101 的包，246~400 字节一个，14.06 秒）分别喂给
-四个候选：
+### 旧实验与配置错误
 
-| 后端 | 结果 |
-| --- | --- |
-| libav 原生 `aac` + 按规范拼的 ASC `F8 E6 28` | **连 `avcodec_open2` 都过不去**："AAC data resilience (flags 4) is not implemented" |
-| libav 原生 `aac` + 苹果自己那份 cookie `F8 E6 40 00` | 打得开，1406 帧只出得来 **109** 帧，每帧 **512** 采样（不是 480），峰值顶满 32768 —— 是解歪了的样子不是解错了几个字节 |
-| libav 的 AudioToolbox 壳 `aac_at` | 同一条 dump 同样只有 **109/1406** |
-| 直接对 AudioToolbox 的 `AudioConverter` | **1406/1406**，每帧正好 480 采样/声道，峰值 20434 |
+旧实验将同一份 1406 包、14.06 秒的 PT=101 dump 交给四条路径，得到以下读数。
+这些读数作为当时的实验记录保留，不再用于判断 FFmpeg 是否支持 ELD。
 
-第四行与参考实现（pymobiledevice3 用 ctypes 直调 AudioToolbox）逐项相同：样本总数
-1349760、时长 14.06 秒、峰值 20434、四段峰值 17715/20434/17499/18250。两条独立实现
-给出同一串数字，才敢说这不是"我们这边凑巧对上"。
+| 旧实验输入 / 后端 | 当时记录的结果 | 现在的判断 |
+| --- | --- | --- |
+| 原生 `aac`，ASC `F8 E6 28` | 初始化失败，报告 resilience flags=4 | ASC 声道、帧长和 resilience 均不符合所测设备；无法判断正确配置的解码能力 |
+| 原生 `aac`，旧记录称为 Apple cookie 的 `F8 E6 40 00` | 109/1406 帧，每帧 512 采样，峰值达到 32768 | 这份 ASC 指定 512，而设备载荷采用 480；没有测试正确的 480 配置 |
+| FFmpeg `aac_at` | 109/1406 帧 | 保留读数；该适配路径的失败不能推出系统后端或原生 `aac` 不支持 ELD |
+| 直接调用 AudioToolbox `AudioConverter` | 1406/1406 帧，每帧每声道 480，峰值 20434 | 当时已验证成功的系统后端；PCM 共 1349760 个样本 |
 
-顺带把 ffmpeg 自己的话也记下来：`-c:a aac -profile:a aac_eld` 直接回
-**"Profile not supported"**——它的原生编码器都不产 ELD，解码器更不是。
+ASC 按位解析后的区别如下，三者均声明 AOT 39 和 48 kHz：
 
-（2026-09-27 在 ffmpeg 9.0.2 上复验过一次，结论没变但报错内容更具体：`-decoders` 里
-只有 `aac / aac_fixed / aac_at / aac_latm`，**没有任何 ELD 解码器**；把 1014 个 PT=101
-的裸载荷按顺序拼成一个文件喂 `-c:a aac`，回的是 "Number of bands (43) exceeds limit
-(27)"、"channel element 1.1 is not allocated"，解码错误率 0.990099 后直接判死。前一条
-正是 ELD 的带宽扩展结构与 LC 的表不一致的形状，不是字节错位。）
+| ASC | 声道配置 | 每声道帧长 | Resilience flags | LD-SBR |
+| --- | --- | --- | --- | --- |
+| `F8 E6 28` | 1，单声道 | 512 | 4 | 关闭 |
+| `F8 E6 40 00` | 2，立体声 | 512 | 0 | 关闭 |
+| `F8 E6 50 00` | 2，立体声 | 480 | 0 | 关闭 |
 
-**AudioConverter 不需要 magic cookie。** 这一点值得单独记，因为它和"规范怎么说"相反：
-`AudioConverterSetProperty(conv, 'dmgc', ...)` 在这台 macOS 上无论塞规范拼的 ASC 还是
-塞苹果那份 cookie 都回 `!dat`（0x21646174），**而不塞照样全解出来**。ELD 的档位信息
-其实在 ASBD 里就齐了——`mFormatID='aace'` + `mFramesPerPacket=480`（1024 才是 LC）+
-`mBytesPerPacket=0`（变长）。所以代码里根本不去设那一位：设了只会把一个无关紧要的
-失败变成"看起来像初始化没成功"。
+当前 480 配置使用 `F8 E6 50 00`，ELD 扩展终止位与 epConfig 均为零。
+FFmpeg 的 ELD 输出路径还使用 `AVCodecContext.sample_rate`；只放入 extradata
+而未设置上下文采样率，仍不能得到完整、可用的输出格式。配置解析和 480/512
+帧长处理可在 [FFmpeg 5.1.7 的 AAC 解码源码](https://github.com/FFmpeg/FFmpeg/blob/n5.1.7/libavcodec/aacdec_template.c)
+中的 `decode_eld_specific_config` 与 `aac_decode_er_frame` 核对。
 
-（参考实现那边也没设成功——它同样忽略 `SetProperty` 的返回值。这条只有把返回值打出来
-才看得见，而我们是因为先当成致命错误才去打的。）
+旧记录中的 `-profile:a aac_eld` 失败属于编码器能力，不能据此推断解码器能力。
+`-decoders` 没有单列名为 ELD 的条目也不能得出该结论：ELD 是原生 `aac` 后端
+处理的 Audio Object Type。2026-09-27 将裸 RTP 载荷直接拼接为一个文件的尝试
+没有保持逐帧提交及正确 ASC，所记录的 bands/channel-element 错误同样不足以
+证明后端不支持本次设备配置。
 
-**后果要说白：非 Apple 平台没有音频。** 这不是"还没做完"，是这条码流在那些平台上
-没有能解它的自由实现（fdk-aac 能解但许可证不是自由的，不列进来）。所以
-`decode/AudioDecoder.h` 上有一个编译期常量 `kHaveAudioDecoder`，产品路径必须在
-**起流之前**问一句并说人话，而不是等第一帧音频到达时给一个空指针。
+### 当前音乐样本的双后端比较
+
+2026-10-08，Windows USB 音频探针保存了 113237 字节的音乐 RTP dump。
+采集设置为 5 秒，本文件实际包含 290 个完整 PT=101 数据报，可解码音频为
+2.90 秒；不将采集时限当作有效音频时长。随后在同一台 Mac 上将这份文件分别
+交给当前生产 AudioToolbox 工厂，以及新的 FFmpeg ELD 工厂。
+本机 FFmpeg 包为 9.0.1_1，libavcodec 版本为 63.1.101。
+
+| 检查项 | FFmpeg 原生 `aac` | AudioToolbox |
+| --- | --- | --- |
+| 输出帧 / 输入帧 | 290 / 290 | 290 / 290 |
+| 解码失败 | 0 | 0 |
+| 交织 s16 样本数 | 278400 | 278400 |
+| 每帧每声道采样数 | 480 | 480 |
+| 音频时长 | 2.90 秒 | 2.90 秒 |
+| 全程峰值 | 32497 | 32497 |
+| 四段峰值 | 32267 / 32363 / 31835 / 32497 | 32267 / 32363 / 31836 / 32497 |
+
+两份 PCM 按样本序号直接比较，**最大绝对差为 1 个 s16 量化单位**：
+139362 个样本相同，另 139038 个样本的 FFmpeg 结果比 AudioToolbox 小 1。
+差值 RMS 为 0.706695；两份音频 RMS 分别为 8160.002241 与 8160.003140，
+未移位的归一化内积为 0.999999996250。本次同份样本没有帧长或时间错位差异，
+四段都有非零输出。这证明本次配置与有声载荷能被正确解码，不能替代 Windows
+实际播放、长时间音质、丢包恢复或其他编码配置的验证。
+
+复现入口为已入库的 `tools/audio_decode_probe.cpp`，启用 `SCRCTL_BUILD_PROBES`
+和 libav 后，可在 Mac 对同一份记录分别运行：
+
+```sh
+cmake --build build --target audio_decode_probe
+./build/tools/audio_decode_probe music.rtp music-ffmpeg.wav --backend ffmpeg --lang en
+./build/tools/audio_decode_probe music.rtp music-audiotoolbox.wav --backend auto --lang en
+```
+
+两份 WAV 都为 48 kHz、双声道、16 位 PCM；去除 WAV 头后按样本比较，而非比较
+文件字节或仅检查进程退出码。本次输入 SHA256 为
+`c02d20eb141e35fbd0ae3e90bf79e43e1b21289eb58d3238453c186a9d6dccb6`。
+原始音乐不加入仓库；上面的配置、输入标识、计数和差值统计是本节保留的结果。
+本机详细证据包括
+`/private/tmp/scrctl-windows-audio-assessment-20261008/music-ffmpeg.log`、
+`music-ffmpeg.wav`、`music-audiotoolbox.wav` 与 `music-pcm-comparison.json`；输入为
+`/private/tmp/scrctl-mdns-device-20261008/music.rtp`。临时目录只是当前证据位置，
+复现接口和关键结果已保留在源码及本节，不依赖这些文件长期存在。
+
+同一个探针在默认执行沙箱中，AudioToolbox 初始化返回 `fmt?`；未修改代码、
+配置或输入，改在沙箱外运行后解码成功。这属于本次 AudioToolbox 执行环境限制，
+与 §31 的格式枚举对照一致，不用修改系统后端来适应该沙箱。
+
+### 接入与验证边界
+
+Apple 平台继续使用 AudioToolbox；其他平台启用 libav 时采用原生 `aac` 解码，
+由 libswresample 转成交织 s16 PCM。FFmpeg 工厂目前只接受 48000 Hz、双声道、
+480 或 512 个采样的帧长；其他采样率、声道数、LD-SBR、resilience 和 epConfig
+配置需要另行验证。512 配置当前仅用观察到的静音载荷检查了输出尺寸，真实音乐
+对照仅覆盖 480 配置。现有 AudioPump 请求 48 kHz / 双声道 / 480，不会根据裸帧
+猜测未知的编码配置。
+
+独立音频测试的 34 条判据通过 ASan + UBSan，覆盖配置拒绝、静音尺寸、空输入、
+损坏包、错误后继续解码与输入长度限制。FFmpeg 5.0.3 和 5.1.7 的官方头文件
+分别通过严格语法编译检查，验证旧、新声道布局 API 的条件分支；没有运行这两版
+解码库，不能将头文件检查写成旧版本音频已实测。接口切换版本可核对
+[FFmpeg APIchanges](https://github.com/FFmpeg/FFmpeg/blob/n5.1.7/doc/APIchanges)：
+AVChannelLayout 从 libavutil 57.24.100 引入，swr_alloc_set_opts2 从
+libswresample 4.5.100 引入。
+
+`AudioDecoder.h` 的 `kHaveAudioDecoder` 描述本构建是否包含后端，不保证所有
+ELD 配置都可初始化。无 libav 的非 Apple 构建在起流前报告音频不可用，
+`audio_decode_probe --backend ffmpeg` 也会明确报告缺少后端。
+Windows USB 采集成功与 Mac 离线解码对照已经完成；**Windows 生产路径的实际
+播放仍需单独验证**。
 
 ## 17.2 音频腿接进产品：四个问题的真机读数（`tools/audio_pump_probe`，ASan 下跑）
 

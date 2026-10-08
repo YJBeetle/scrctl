@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 14:53+0800\n"
+"POT-Creation-Date: 2026-10-08 16:44+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -161,7 +161,7 @@ msgid ""
 msgstr ""
 
 #: src/app/Cli.cpp:25 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
-#: tools/audio_decode_probe.cpp:189 tools/audio_pump_probe.cpp:85
+#: tools/audio_decode_probe.cpp:193 tools/audio_pump_probe.cpp:85
 #: tools/feature_probe.cpp:61 tools/hid_probe.cpp:184
 #: tools/screenshot_probe.cpp:52 tools/stall_probe.cpp:59
 #: tools/wifi_probe.cpp:642
@@ -865,11 +865,10 @@ msgstr ""
 msgid "Schedule requires at least one time"
 msgstr ""
 
-#: src/decode/AudioDecoder.h:54
+#: src/decode/AudioDecoder.h:52
 msgid ""
-"AAC-ELD decoding is unavailable on this platform. This build uses "
-"AudioToolbox on macOS; the tested native FFmpeg AAC decoder does not support "
-"ELD. Video can continue without audio."
+"AAC-ELD decoding is unavailable in this build. Video can continue without "
+"audio."
 msgstr ""
 
 #: src/decode/AudioToolboxEldDecoder.cpp:86
@@ -910,6 +909,60 @@ msgstr ""
 #: src/decode/FFmpegDecoder.cpp:150
 #, c-format
 msgid "Software decoder requires CPU frames; received format=%d %dx%d\n"
+msgstr ""
+
+#: src/decode/FFmpegEldDecoder.cpp:73
+msgid "AAC-ELD packet exceeds the single-datagram size limit"
+msgstr ""
+
+#: src/decode/FFmpegEldDecoder.cpp:80
+msgid "Failed to allocate FFmpeg AAC-ELD packet: "
+msgstr ""
+
+#: src/decode/FFmpegEldDecoder.cpp:89
+msgid "FFmpeg AAC-ELD rejected the packet: "
+msgstr ""
+
+#: src/decode/FFmpegEldDecoder.cpp:101
+msgid "FFmpeg AAC-ELD decode failed: "
+msgstr ""
+
+#: src/decode/FFmpegEldDecoder.cpp:105 src/decode/FFmpegEldDecoder.cpp:138
+#: src/decode/FFmpegEldDecoder.cpp:144
+msgid "FFmpeg AAC-ELD returned an unexpected audio format"
+msgstr ""
+
+#: src/decode/FFmpegEldDecoder.cpp:113
+msgid "AAC-ELD PCM output exceeds the buffer size limit"
+msgstr ""
+
+#: src/decode/FFmpegEldDecoder.cpp:161 src/decode/FFmpegEldDecoder.cpp:166
+msgid "Failed to configure AAC-ELD PCM conversion: "
+msgstr ""
+
+#: src/decode/FFmpegEldDecoder.cpp:176 src/decode/FFmpegEldDecoder.cpp:194
+msgid "AAC-ELD PCM conversion returned an invalid sample count"
+msgstr ""
+
+#: src/decode/FFmpegEldDecoder.cpp:190
+msgid "AAC-ELD PCM conversion failed: "
+msgstr ""
+
+#: src/decode/FFmpegEldDecoder.cpp:215
+msgid ""
+"FFmpeg AAC-ELD requires 48000 Hz, stereo, and 480 or 512 samples per frame"
+msgstr ""
+
+#: src/decode/FFmpegEldDecoder.cpp:220
+msgid "FFmpeg has no native AAC decoder"
+msgstr ""
+
+#: src/decode/FFmpegEldDecoder.cpp:227 src/decode/FFmpegEldDecoder.cpp:238
+msgid "Failed to allocate FFmpeg AAC-ELD decoder"
+msgstr ""
+
+#: src/decode/FFmpegEldDecoder.cpp:254
+msgid "Failed to initialize FFmpeg AAC-ELD decoder: "
 msgstr ""
 
 #: src/decode/VideoToolboxDecoder.cpp:59
@@ -3146,55 +3199,55 @@ msgstr ""
 msgid "Installed apps: %zu\n"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:28
+#: tools/audio_decode_probe.cpp:31
 msgid "Cannot open input file: "
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:34
+#: tools/audio_decode_probe.cpp:37
 msgid "Failed to close input file: "
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:41 tools/audio_decode_probe.cpp:56
+#: tools/audio_decode_probe.cpp:44 tools/audio_decode_probe.cpp:59
 msgid "Cannot seek input file: "
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:49
+#: tools/audio_decode_probe.cpp:52
 msgid "Cannot determine input file size: "
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:65
+#: tools/audio_decode_probe.cpp:68
 msgid "Failed to read input file: "
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:70
+#: tools/audio_decode_probe.cpp:73
 msgid "Input file ended before its measured size was read"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:132
+#: tools/audio_decode_probe.cpp:135
 msgid "PCM data is too large for a RIFF/WAV file"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:151
+#: tools/audio_decode_probe.cpp:154
 msgid "Cannot open output file: "
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:158
+#: tools/audio_decode_probe.cpp:161
 msgid "Failed to write WAV header: "
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:163
+#: tools/audio_decode_probe.cpp:166
 msgid "Failed to write PCM samples: "
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:169
+#: tools/audio_decode_probe.cpp:172
 msgid "Failed to close output file: "
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:183
+#: tools/audio_decode_probe.cpp:187
 msgid "Decode a recorded AAC-ELD audio dump to a WAV file"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:185
+#: tools/audio_decode_probe.cpp:189
 msgid ""
 "Input records are a 16-bit big-endian length followed by a UDP datagram, as "
 "saved by rr_keepalive_probe --audio-out. Only RTP payload type 101 is "
@@ -3203,80 +3256,89 @@ msgid ""
 "support. --help does not read or write files."
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:190
+#: tools/audio_decode_probe.cpp:194
 msgid "Recorded audio dump path"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:191
+#: tools/audio_decode_probe.cpp:195
 msgid "Output WAV path"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:192
+#: tools/audio_decode_probe.cpp:196
 msgid "Sample rate in Hz (positive integer; default: 48000)"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:195
+#: tools/audio_decode_probe.cpp:199
 msgid "Channel count (1-32767; default: 2)"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:202
+#: tools/audio_decode_probe.cpp:201
+msgid "Audio decoder backend: auto or ffmpeg (default: auto)"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:209
 msgid ""
 "Invalid arguments: sample rate and channel count exceed the WAV byte-rate "
 "limit"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:209
+#: tools/audio_decode_probe.cpp:216
 msgid "Input dump contains no complete datagrams"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:210
+#: tools/audio_decode_probe.cpp:217
 #, c-format
 msgid "Failed to load '%s': %s\n"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:213
+#: tools/audio_decode_probe.cpp:220
 #, c-format
 msgid "Loaded %zu datagrams; target format: %d Hz, %d channels\n"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:218
+#: tools/audio_decode_probe.cpp:228
+msgid ""
+"FFmpeg AAC-ELD decoding is unavailable in this build; enable libav support"
+msgstr ""
+
+#: tools/audio_decode_probe.cpp:234
 #, c-format
 msgid "Failed to create audio decoder: %s\n"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:221
+#: tools/audio_decode_probe.cpp:237
 #, c-format
 msgid "Audio decoder: %s\n"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:244
+#: tools/audio_decode_probe.cpp:260
 #, c-format
 msgid "  Decode failed after %llu output frames (%zu bytes): %s\n"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:275
+#: tools/audio_decode_probe.cpp:291
 #, c-format
 msgid ""
 "Output frames: %llu; decode failures: %llu; empty payloads: %llu; other "
 "payload types: %llu\n"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:279
+#: tools/audio_decode_probe.cpp:295
 #, c-format
 msgid "PCM samples: %zu (%.2f seconds); peak: %lld / 32767; quarter peaks:"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:287
+#: tools/audio_decode_probe.cpp:303
 #, c-format
 msgid "Average samples per channel per frame: %.1f (expected: 480)\n"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:291
+#: tools/audio_decode_probe.cpp:307
 #, c-format
 msgid "Failed to write WAV '%s': %s\n"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:294
+#: tools/audio_decode_probe.cpp:310
 #, c-format
 msgid "Saved WAV: %s\n"
 msgstr ""

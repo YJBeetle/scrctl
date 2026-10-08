@@ -40,7 +40,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             cmake pkg-config gettext python3 libsdl2-dev libssl-dev \
-            libavcodec-dev libavutil-dev libswscale-dev
+            libavcodec-dev libavutil-dev libswscale-dev libswresample-dev
 
       - name: 配置
         # 不指定 -G：默认生成器总归在，而 Ninja 是否预装是 runner 镜像的事。
@@ -54,6 +54,12 @@ jobs:
 
       - name: 构建
         run: cmake --build build --parallel
+
+      # 这些作业预期包含 FFmpeg；缺依赖导致的后端降级必须让 CI 失败。
+      - name: 确认 FFmpeg 音频测试已注册
+        run: >-
+          ctest --test-dir build --show-only=json-v1 |
+          python3 -c 'import json, sys; sys.exit(0 if any(t["name"] == "audio_decoder" for t in json.load(sys.stdin)["tests"]) else "Required FFmpeg audio_decoder test is missing")'
 
       # 链接成功不等于跑得起来：这一步只证明可执行文件在自己的平台上能起。
       # `--help` 在 SDL 初始化之前就到点了，所以无显示环境的 runner 也不需要屏幕。
@@ -129,6 +135,10 @@ jobs:
           -DSCRCTL_BUILD_PROBES=ON -DSCRCTL_BUILD_EXPERIMENTS=ON
       - name: 构建
         run: cmake --build build-win --parallel 4
+      - name: 确认 FFmpeg 音频测试已注册
+        run: >-
+          ctest --test-dir build-win --show-only=json-v1 |
+          python -c 'import json, sys; sys.exit(0 if any(t["name"] == "audio_decoder" for t in json.load(sys.stdin)["tests"]) else "Required FFmpeg audio_decoder test is missing")'
       - name: 可执行文件启动
         run: ./build-win/scrctl.exe --help > /dev/null
       - name: 离线自检
@@ -178,6 +188,11 @@ jobs:
 
       - name: 构建
         run: cmake --build build-san --parallel
+
+      - name: 确认 FFmpeg 音频测试已注册
+        run: >-
+          ctest --test-dir build-san --show-only=json-v1 |
+          python3 -c 'import json, sys; sys.exit(0 if any(t["name"] == "audio_decoder" for t in json.load(sys.stdin)["tests"]) else "Required FFmpeg audio_decoder test is missing")'
 
       - name: 离线自检
         env:
