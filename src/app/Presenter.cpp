@@ -58,6 +58,7 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
         std::fprintf(stderr, SCRCTL_TR("Failed to create window: %s\n"), SDL_GetError());
         return false;
     }
+    input_active_ = true;
     if (spec.always_on_top) {
         SDL_SetWindowAlwaysOnTop(window_, SDL_TRUE);
     }
@@ -258,12 +259,33 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) 
     // 重复 HID 报告。按下和抬起仍保留各自事件。
     bool pending_move = false;
     double px = 0, py = 0;
+    const Uint32 window_id = window_ != nullptr ? SDL_GetWindowID(window_) : 0;
     while (SDL_PollEvent(&e)) {
+        // 退出决定之后仍排空事件队列，但不再处理键盘、焦点恢复或鼠标尾部。
+        // 等待合并的移动也留给退出收尾丢弃，不在退出时补发新的按下。
+        if (quit) continue;
         switch (e.type) {
         case SDL_QUIT:
             quit = true;
             break;
+        case SDL_WINDOWEVENT:
+            // 焦点、可见性变化只影响本窗口。另一窗口的事件（包括没有身份的
+            // 合成事件）不能打断当前拖动，也不能丢弃本窗口等待合并的移动。
+            if (window_id == 0 || e.window.windowID != window_id) break;
+            if (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
+                input_active_ = true;
+            } else if (e.window.event == SDL_WINDOWEVENT_FOCUS_LOST ||
+                       e.window.event == SDL_WINDOWEVENT_HIDDEN ||
+                       e.window.event == SDL_WINDOWEVENT_MINIMIZED) {
+                // 先清待发移动，再释放最后实际交付的触点；否则本轮循环末尾
+                // 可能在抬起之后再次发送 down，或让抬起跳到未发送的位置。
+                pending_move = false;
+                input_active_ = false;
+                release_touch(on_touch);
+            }
+            break;
         case SDL_KEYDOWN: {
+            if (!input_active_ || window_id == 0 || e.key.windowID != window_id) break;
             // 与 scrcpy 相同：快捷键使用选定的修饰键；普通字符及 Esc 留给设备输入。
             // 默认只选左 Alt / 左 Super，避免把 AltGr（右 Alt）误当作快捷键。
             const auto mods = e.key.keysym.mod;
@@ -279,7 +301,8 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) 
             break;
         }
         case SDL_MOUSEBUTTONDOWN:
-            if (e.button.button == SDL_BUTTON_LEFT && on_touch) {
+            if (input_active_ && window_id != 0 && e.button.windowID == window_id &&
+                e.button.button == SDL_BUTTON_LEFT && on_touch) {
                 if (!to_display(e.button.x, e.button.y, px, py)) {
                     break;
                 }
@@ -293,14 +316,13 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) 
             }
             break;
         case SDL_MOUSEMOTION:
-            if (dragging_ && on_touch) {
+            if (input_active_ && window_id != 0 && e.motion.windowID == window_id &&
+                dragging_ && on_touch) {
                 if (!to_display(e.motion.x, e.motion.y, px, py)) {
                     pending_move = false;
                     release_touch(on_touch);
                     break;
                 }
-                last_touch_x_ = px;
-                last_touch_y_ = py;
                 if (debug_input_) {
                     report_input(e.motion.x, e.motion.y, px, py, SCRCTL_TR("move"));
                 }
@@ -308,9 +330,12 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) 
             }
             break;
         case SDL_MOUSEBUTTONUP:
-            if (e.button.button == SDL_BUTTON_LEFT && dragging_ && on_touch) {
+            if (input_active_ && window_id != 0 && e.button.windowID == window_id &&
+                e.button.button == SDL_BUTTON_LEFT && dragging_ && on_touch) {
                 if (pending_move) {
                     pending_move = false;
+                    last_touch_x_ = px;
+                    last_touch_y_ = py;
                     on_touch(px, py, true);
                 }
                 if (to_display(e.button.x, e.button.y, px, py)) {
@@ -324,12 +349,15 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch) 
             break;
         }
     }
-    if (pending_move && on_touch) {
-        pending_move = false;
-        on_touch(px, py, true);
-    }
     if (quit) {
+        input_active_ = false;
+        pending_move = false;
         release_touch(on_touch);
+    } else if (pending_move && on_touch) {
+        pending_move = false;
+        last_touch_x_ = px;
+        last_touch_y_ = py;
+        on_touch(px, py, true);
     }
     return quit;
 }

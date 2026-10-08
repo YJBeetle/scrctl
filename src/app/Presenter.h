@@ -84,6 +84,8 @@ class Presenter {
     /// 无法获取显示器边界时保留原始窗口尺寸。
     static constexpr int win_w_fallback = 1 << 20;
     static constexpr int win_h_fallback = 1 << 20;
+    /// 失焦、隐藏或最小化后暂停输入，直到本窗口重新获得焦点。
+    bool input_active_ = true;
     bool dragging_ = false;
     bool release_pending_ = false;
     double last_touch_x_ = 0, last_touch_y_ = 0;

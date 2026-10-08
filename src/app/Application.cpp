@@ -255,10 +255,10 @@ int run(int argc, char **argv) {
     std::string control_err;
     bool control_warned = false;
     auto on_touch = [&](double x, double y, bool down) {
-        if (!control_enabled || live == nullptr) {
+        if (!control_enabled || live == nullptr || control_warned) {
             return;
         }
-        if (!live->control(x, y, down, control_err) && !control_warned) {
+        if (!live->control(x, y, down, control_err)) {
             control_warned = true;
             std::fprintf(stderr, SCRCTL_TR("Input injection failed (further attempts disabled): %s\n"), control_err.c_str());
         }

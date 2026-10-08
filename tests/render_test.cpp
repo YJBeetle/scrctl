@@ -32,6 +32,20 @@ void check(bool ok, const char *what) {
     }
 }
 
+Uint32 window_id_from_events(const char *title) {
+    Uint32 window_id = 0;
+    SDL_Event event{};
+    while (SDL_PollEvent(&event)) {
+        if (event.type != SDL_WINDOWEVENT) continue;
+        SDL_Window *window = SDL_GetWindowFromID(event.window.windowID);
+        if (window && std::strcmp(SDL_GetWindowTitle(window), title) == 0) {
+            window_id = SDL_GetWindowID(window);
+        }
+    }
+    check(window_id != 0, "从真实 SDL 窗口事件取得被测 Presenter 的 windowID");
+    return window_id;
+}
+
 /// 面板尺寸与角块。取 40x60 是为了让"角块中心"离边缘有 6px，采样时不会被
 /// 纹理边缘的插值尾巴影响；取整宽高是为了 1:1 画进视口、完全不经过缩放滤波。
 constexpr int kPanelW = 40;
@@ -524,6 +538,7 @@ void presenter_releases_touch_when_geometry_changes() {
     const auto frame = colored_frame(80, 120, crop, colors, 0);
     scrctl::app::Presenter presenter;
     scrctl::app::WindowSpec spec;
+    spec.title = "Presenter geometry input regression";
     spec.want_w = crop.w;
     spec.want_h = crop.h;
     spec.want_readback = true;
@@ -531,7 +546,8 @@ void presenter_releases_touch_when_geometry_changes() {
     check(opened, "为 SDL 输入事件回归创建实际 Presenter");
     if (!opened) return;
     check(presenter.draw(frame, crop), "输入事件前绘制有效几何帧");
-    SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+    const Uint32 window_id = window_id_from_events(spec.title.c_str());
+    if (window_id == 0) return;
 
     struct Touch {
         double x, y;
@@ -546,13 +562,14 @@ void presenter_releases_touch_when_geometry_changes() {
     const auto push_mouse = [&](Uint32 type, int x, int y) {
         SDL_Event event{};
         event.type = type;
-        // 不指定 windowID，直接注入 Presenter 使用的 logical size 坐标；
-        // 避免 SDL 的窗口事件 watch 再把坐标按窗口点数缩放一次。
+        // 窗口和视口都是 1:1，事件携带真实身份，坐标不需要额外缩放。
         if (type == SDL_MOUSEMOTION) {
+            event.motion.windowID = window_id;
             event.motion.state = SDL_BUTTON_LMASK;
             event.motion.x = x;
             event.motion.y = y;
         } else {
+            event.button.windowID = window_id;
             event.button.button = SDL_BUTTON_LEFT;
             event.button.state = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
             event.button.x = x;
@@ -641,6 +658,7 @@ void presenter_flip_mouse_events() {
             scrctl::app::FrameGeometry{80, 120, pixel_degrees, true});
         const auto frame = colored_frame(source_w, source_h, crop, colors, 0);
         scrctl::app::WindowSpec spec;
+        spec.title = "Presenter flip input regression";
         spec.horizontal_flip = true;
         spec.want_readback = true;
         scrctl::app::viewport_size(crop, degrees, spec.want_w, spec.want_h);
@@ -649,7 +667,8 @@ void presenter_flip_mouse_events() {
         check(opened, "为翻转鼠标回归创建实际 Presenter");
         if (!opened) continue;
         check(presenter.draw(frame, crop), "绘制带裁剪和截图像素方向的翻转帧");
-        SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+        const Uint32 window_id = window_id_from_events(spec.title.c_str());
+        if (window_id == 0) continue;
         struct Touch { double x, y; bool down; };
         std::vector<Touch> callbacks;
         const auto on_touch = [&](double x, double y, bool down) { callbacks.push_back({x, y, down}); };
@@ -664,11 +683,13 @@ void presenter_flip_mouse_events() {
             }
             SDL_Event event{};
             event.type = type;
-            // 注入 logical size 坐标；windowID=0 避免 SDL 再次按窗口点数缩放。
+            // 事件携带真实窗口身份；测试窗口与当前视口是 1:1。
             if (type == SDL_MOUSEMOTION) {
+                event.motion.windowID = window_id;
                 event.motion.state = SDL_BUTTON_LMASK;
                 event.motion.x = viewport.x; event.motion.y = viewport.y;
             } else {
+                event.button.windowID = window_id;
                 event.button.button = SDL_BUTTON_LEFT;
                 event.button.state = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
                 event.button.x = viewport.x; event.button.y = viewport.y;
@@ -712,6 +733,171 @@ void presenter_flip_mouse_events() {
     }
 }
 
+void presenter_releases_touch_when_window_deactivates() {
+    const scrctl::app::Crop crop{10, 20, 40, 60, 80, 120};
+    scrctl::app::WindowSpec spec;
+    spec.title = "Presenter focus lifecycle regression";
+    spec.want_w = crop.w;
+    spec.want_h = crop.h;
+    spec.want_readback = true;
+    scrctl::app::Presenter presenter;
+    const bool opened = presenter.open(80, 120, crop, 0, 1, false, spec);
+    check(opened, "创建窗口失活触摸回归的实际 Presenter");
+    if (!opened) return;
+
+    // 从 SDL 实际生成的窗口事件取得身份，不为测试开放 Presenter 私有窗口。
+    const Uint32 own_id = window_id_from_events(spec.title.c_str());
+    if (own_id == 0) return;
+    std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> foreign(
+        SDL_CreateWindow("Unrelated focus lifecycle window", SDL_WINDOWPOS_UNDEFINED,
+                         SDL_WINDOWPOS_UNDEFINED, 40, 60, SDL_WINDOW_HIDDEN),
+        SDL_DestroyWindow);
+    check(foreign != nullptr, "创建另一窗口以验证失活事件的身份过滤");
+    if (!foreign) return;
+    const Uint32 foreign_id = SDL_GetWindowID(foreign.get());
+    SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+
+    struct Touch { double x, y; bool down; };
+    std::vector<Touch> callbacks;
+    const auto on_touch = [&](double x, double y, bool down) {
+        callbacks.push_back({x, y, down});
+    };
+    const auto push_mouse_for = [&](Uint32 type, int x, int y, Uint32 window_id) {
+        SDL_Event e{};
+        e.type = type;
+        if (type == SDL_MOUSEMOTION) {
+            e.motion.windowID = window_id;
+            e.motion.state = SDL_BUTTON_LMASK;
+            e.motion.x = x; e.motion.y = y;
+        } else {
+            e.button.windowID = window_id;
+            e.button.button = SDL_BUTTON_LEFT;
+            e.button.state = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
+            e.button.x = x; e.button.y = y;
+        }
+        check(SDL_PushEvent(&e) == 1, "将带窗口身份的鼠标事件送入实际 SDL 队列");
+    };
+    const auto push_mouse = [&](Uint32 type, int x, int y) {
+        push_mouse_for(type, x, y, own_id);
+    };
+    const auto push_window = [&](Uint8 state, Uint32 window_id) {
+        SDL_Event e{};
+        e.type = SDL_WINDOWEVENT;
+        e.window.windowID = window_id;
+        e.window.event = state;
+        check(SDL_PushEvent(&e) == 1, "将带窗口身份的状态事件送入实际 SDL 队列");
+    };
+    const auto push_key = [&](SDL_Keycode symbol, Uint16 mods, Uint32 window_id) {
+        SDL_Event e{};
+        e.type = SDL_KEYDOWN;
+        e.key.windowID = window_id;
+        e.key.keysym.sym = symbol;
+        e.key.keysym.mod = mods;
+        check(SDL_PushEvent(&e) == 1, "将带窗口身份的快捷键事件送入实际 SDL 队列");
+    };
+    const auto matches = [&](std::size_t index, bool down, int x, int y) {
+        return index < callbacks.size() && callbacks[index].down == down &&
+               std::fabs(callbacks[index].x - double(crop.x + x) / crop.display_w) < 1e-9 &&
+               std::fabs(callbacks[index].y - double(crop.y + y) / crop.display_h) < 1e-9;
+    };
+    for (const Uint8 state : {SDL_WINDOWEVENT_FOCUS_LOST, SDL_WINDOWEVENT_HIDDEN,
+                             SDL_WINDOWEVENT_MINIMIZED}) {
+        callbacks.clear();
+        push_mouse(SDL_MOUSEBUTTONDOWN, 8, 12);
+        push_mouse(SDL_MOUSEMOTION, 20, 30);
+        push_window(state, own_id);
+        // 鼠标系统可能仍有已经排队的尾部事件；它们不能在释放后恢复触摸。
+        push_mouse(SDL_MOUSEBUTTONDOWN, 28, 42);
+        push_mouse(SDL_MOUSEMOTION, 28, 42);
+        push_mouse(SDL_MOUSEBUTTONUP, 28, 42);
+        check(!presenter.pump(on_touch), "窗口失活释放触点而不退出程序");
+        check(callbacks.size() == 2 && matches(0, true, 8, 12) &&
+                  matches(1, false, 8, 12),
+              "失活仅在最后已交付的点抬起一次，不跳到未发送的移动位置");
+        push_window(SDL_WINDOWEVENT_FOCUS_GAINED, foreign_id);
+        push_window(SDL_WINDOWEVENT_FOCUS_GAINED, 0);
+        push_mouse(SDL_MOUSEBUTTONDOWN, 28, 42);
+        push_mouse(SDL_MOUSEMOTION, 28, 42);
+        push_mouse(SDL_MOUSEBUTTONUP, 28, 42);
+        push_key(SDLK_F11, KMOD_NONE, own_id);
+        push_key(SDLK_q, KMOD_LALT, own_id);
+        check(!presenter.pump(on_touch) && !presenter.is_fullscreen() && callbacks.size() == 2,
+              "失活持续到后续 pump，外部焦点事件不能恢复本窗口鼠标或快捷键");
+        push_window(state, own_id);
+        presenter.pump(on_touch);
+        presenter.release_touch(on_touch);
+        check(callbacks.size() == 2, "重复失活、pump 或显式释放不重复抬起");
+
+        push_window(SDL_WINDOWEVENT_FOCUS_GAINED, own_id);
+        push_mouse(SDL_MOUSEBUTTONDOWN, 4, 48);
+        presenter.pump(on_touch);
+        check(callbacks.size() == 3 && matches(2, true, 4, 48),
+              "窗口重新获得焦点后新的按下仍可使用");
+        presenter.release_touch(on_touch);
+        check(callbacks.size() == 4 && matches(3, false, 4, 48),
+              "新拖动仍以自身的最后有效点释放");
+
+        callbacks.clear();
+        push_mouse(SDL_MOUSEBUTTONDOWN, 8, 12);
+        push_mouse(SDL_MOUSEMOTION, 20, 30);
+        push_window(state, foreign_id);
+        push_window(state, 0);
+        presenter.pump(on_touch);
+        check(callbacks.size() == 2 && matches(0, true, 8, 12) &&
+                  matches(1, true, 20, 30),
+              "其他窗口和缺失 windowID 的事件不释放本窗口或丢弃其移动");
+        push_mouse(SDL_MOUSEBUTTONUP, 20, 30);
+        presenter.pump(on_touch);
+        check(callbacks.size() == 3 && matches(2, false, 20, 30),
+              "过滤外部失活事件后原拖动仍能正常抬起");
+    }
+
+    callbacks.clear();
+    push_mouse(SDL_MOUSEBUTTONDOWN, 8, 12);
+    push_mouse(SDL_MOUSEMOTION, 20, 30);
+    presenter.pump(on_touch);
+    push_mouse(SDL_MOUSEMOTION, 28, 42);
+    push_window(SDL_WINDOWEVENT_FOCUS_LOST, own_id);
+    presenter.pump(on_touch);
+    check(callbacks.size() == 3 && matches(0, true, 8, 12) &&
+              matches(1, true, 20, 30) && matches(2, false, 20, 30),
+          "前一轮已交付移动后失焦，沿用已交付点而非下一轮待发点抬起");
+
+    push_window(SDL_WINDOWEVENT_FOCUS_GAINED, own_id);
+    presenter.pump(on_touch);
+    callbacks.clear();
+    push_mouse(SDL_MOUSEBUTTONDOWN, 8, 12);
+    for (const Uint32 window_id : {foreign_id, Uint32{0}}) {
+        push_mouse_for(SDL_MOUSEBUTTONDOWN, 28, 42, window_id);
+        push_mouse_for(SDL_MOUSEMOTION, 28, 42, window_id);
+        push_mouse_for(SDL_MOUSEBUTTONUP, 28, 42, window_id);
+        push_key(SDLK_F11, KMOD_NONE, window_id);
+        push_key(SDLK_q, KMOD_LALT, window_id);
+    }
+    check(!presenter.pump(on_touch) && !presenter.is_fullscreen() &&
+              callbacks.size() == 1 && matches(0, true, 8, 12),
+          "其他窗口和缺失身份的 mouse/key 不改变本窗口触点、全屏或退出状态");
+    push_mouse(SDL_MOUSEBUTTONUP, 8, 12);
+    presenter.pump(on_touch);
+    check(callbacks.size() == 2 && matches(1, false, 8, 12),
+          "外部鼠标抬起不能释放本窗口，原窗口仍可正常释放");
+
+    callbacks.clear();
+    push_mouse(SDL_MOUSEBUTTONDOWN, 8, 12);
+    push_mouse(SDL_MOUSEMOTION, 20, 30);
+    SDL_Event quit{};
+    quit.type = SDL_QUIT;
+    check(SDL_PushEvent(&quit) == 1, "在未发送移动之后向 SDL 队列送入退出请求");
+    push_window(SDL_WINDOWEVENT_FOCUS_GAINED, own_id);
+    push_mouse(SDL_MOUSEBUTTONDOWN, 28, 42);
+    push_mouse(SDL_MOUSEMOTION, 28, 42);
+    push_mouse(SDL_MOUSEBUTTONUP, 28, 42);
+    push_key(SDLK_F11, KMOD_NONE, own_id);
+    check(presenter.pump(on_touch) && !presenter.is_fullscreen() && callbacks.size() == 2 &&
+              matches(0, true, 8, 12) && matches(1, false, 8, 12),
+          "退出后不恢复焦点或派发队列尾部，只在已交付位置释放一次");
+}
+
 void presenter_shortcuts_preserve_normal_input() {
     const scrctl::app::Crop crop{0, 0, 64, 96, 64, 96};
     scrctl::app::WindowSpec spec;
@@ -723,12 +909,14 @@ void presenter_shortcuts_preserve_normal_input() {
     const bool default_opened = presenter.open(64, 96, crop, 0, 1, false, spec);
     check(default_opened, "创建快捷键事件回归窗口");
     if (!default_opened) return;
-    SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+    const Uint32 window_id = window_id_from_events(spec.title.c_str());
+    if (window_id == 0) return;
     int presses = 0, releases = 0;
     const auto on_touch = [&](double, double, bool down) { down ? ++presses : ++releases; };
     const auto key = [&](SDL_Keycode symbol, Uint16 mods = KMOD_NONE, Uint8 repeat = 0) {
         SDL_Event event{};
         event.type = SDL_KEYDOWN;
+        event.key.windowID = window_id;
         event.key.keysym.sym = symbol;
         event.key.keysym.mod = mods;
         event.key.repeat = repeat;
@@ -737,6 +925,7 @@ void presenter_shortcuts_preserve_normal_input() {
     };
     SDL_Event down{};
     down.type = SDL_MOUSEBUTTONDOWN;
+    down.button.windowID = window_id;
     down.button.button = SDL_BUTTON_LEFT;
     down.button.x = 16;
     down.button.y = 24;
@@ -749,7 +938,17 @@ void presenter_shortcuts_preserve_normal_input() {
     check(presses == 1 && releases == 0, "普通键不会结束正在进行的设备拖动");
     check(key(SDLK_q, KMOD_LALT), "默认左 Alt+Q 退出");
     check(presses == 1 && releases == 1, "快捷键退出释放一次设备触点");
+    const auto restore_focus = [&] {
+        SDL_Event event{};
+        event.type = SDL_WINDOWEVENT;
+        event.window.windowID = window_id;
+        event.window.event = SDL_WINDOWEVENT_FOCUS_GAINED;
+        check(SDL_PushEvent(&event) == 1 && !presenter.pump(on_touch),
+              "独立检查下一快捷键之前显式恢复本窗口焦点");
+    };
+    restore_focus();
     check(key(SDLK_q, KMOD_LGUI), "默认左 Super+Q 退出");
+    restore_focus();
     check(!key(SDLK_q, KMOD_LALT, 1), "忽略退出快捷键的重复按键事件");
     check(!presenter.is_fullscreen(), "窗口最初为普通模式");
     key(SDLK_F11);
@@ -766,24 +965,27 @@ void presenter_shortcuts_preserve_normal_input() {
     check(!presenter.is_fullscreen(), "F11 可以退出全屏");
 
     spec.shortcut_mods = KMOD_RCTRL;
+    spec.title = "Presenter configured shortcut regression";
     spec.fullscreen = true;
     scrctl::app::Presenter configured;
     const bool opened = configured.open(64, 96, crop, 0, 1, false, spec);
     check(opened, "使用自定义修饰键创建全屏窗口");
     if (!opened) return;
-    SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+    const Uint32 configured_id = window_id_from_events(spec.title.c_str());
+    if (configured_id == 0) return;
     const auto configured_key = [&](Uint16 mods, SDL_Keycode symbol) {
         SDL_Event event{};
         event.type = SDL_KEYDOWN;
+        event.key.windowID = configured_id;
         event.key.keysym.sym = symbol;
         event.key.keysym.mod = mods;
         check(SDL_PushEvent(&event) == 1, "送入自定义快捷键事件");
         return configured.pump({});
     };
-    check(!configured_key(KMOD_LALT, SDLK_q) && configured_key(KMOD_RCTRL, SDLK_q),
-          "自定义修饰键替换默认退出组合");
+    check(!configured_key(KMOD_LALT, SDLK_q), "自定义修饰键不再接受默认退出组合");
     configured_key(KMOD_RCTRL, SDLK_f);
     check(!configured.is_fullscreen(), "从启动全屏模式退出后仍可切换窗口模式");
+    check(configured_key(KMOD_RCTRL, SDLK_q), "自定义修饰键替换默认退出组合");
 }
 
 }  // namespace
@@ -835,6 +1037,7 @@ int main() {
     presenter_source_size_changes();
     presenter_releases_touch_when_geometry_changes();
     presenter_flip_mouse_events();
+    presenter_releases_touch_when_window_deactivates();
     presenter_shortcuts_preserve_normal_input();
 
     SDL_Quit();
