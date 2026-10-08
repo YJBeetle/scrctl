@@ -3,6 +3,11 @@
 namespace scrctl::rt {
 namespace {
 
+uint32_t read32(std::span<const uint8_t> bytes, std::size_t offset) {
+    return (uint32_t(bytes[offset]) << 24) | (uint32_t(bytes[offset + 1]) << 16) |
+           (uint32_t(bytes[offset + 2]) << 8) | uint32_t(bytes[offset + 3]);
+}
+
 void put16(std::vector<uint8_t> &v, uint16_t x) {
     v.push_back(static_cast<uint8_t>(x >> 8));
     v.push_back(static_cast<uint8_t>(x));
@@ -35,6 +40,50 @@ std::vector<uint8_t> sdes_with_cname(uint32_t sender_ssrc, std::string_view cnam
 }
 
 }  // namespace
+
+bool parse_sender_reports(std::span<const uint8_t> datagram,
+                          std::vector<SenderReport> &reports) {
+    if (datagram.empty()) {
+        return false;
+    }
+    std::vector<SenderReport> parsed;
+    while (!datagram.empty()) {
+        if (datagram.size() < 4 || (datagram[0] >> 6) != 2 ||
+            datagram[1] < 192 || datagram[1] > 223) {
+            return false;
+        }
+        const std::size_t words = (std::size_t(datagram[2]) << 8) | datagram[3];
+        const std::size_t size = (words + 1) * 4;
+        if (size > datagram.size()) {
+            return false;
+        }
+        auto packet = datagram.first(size);
+        if ((packet[0] & 0x20) != 0) {
+            // RFC 3550：填充只能位于末包，末字节包含填充量，且须为四的倍数。
+            const std::size_t padding = packet.back();
+            if (size != datagram.size() || padding == 0 || padding % 4 != 0 ||
+                padding > size - 4) {
+                return false;
+            }
+            packet = packet.first(size - padding);
+        }
+        const std::size_t count = packet[0] & 0x1f;
+        if (packet[1] == 200 || packet[1] == 201) {
+            const std::size_t base = packet[1] == 200 ? 28 : 8;
+            if (packet.size() < base + count * 24) {
+                return false;
+            }
+            if (packet[1] == 200) {
+                parsed.push_back({read32(packet, 4), read32(packet, 8),
+                                  read32(packet, 12), read32(packet, 16),
+                                  read32(packet, 20), read32(packet, 24)});
+            }
+        }
+        datagram = datagram.subspan(size);
+    }
+    reports.swap(parsed);
+    return true;
+}
 
 std::vector<uint8_t> build_rr(uint32_t sender_ssrc, uint32_t media_ssrc, uint32_t ext_high) {
     std::vector<uint8_t> v;

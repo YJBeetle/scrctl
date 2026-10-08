@@ -421,6 +421,100 @@ void test_rtcp_shapes() {
     }
 }
 
+void test_sender_reports() {
+    std::printf("\n== RTCP 发送者时钟解析 ==\n");
+    const auto write32 = [](std::vector<uint8_t> &bytes, std::size_t at, uint32_t value) {
+        for (int i = 0; i < 4; ++i) bytes[at + i] = uint8_t(value >> (24 - i * 8));
+    };
+    auto sr = scrctl::rt::build_sr(0xb6d5b756, 364, 401673);
+    write32(sr, 8, 0xee5fe7ad);
+    write32(sr, 12, 0xce849000);
+    write32(sr, 16, 0x57fb);
+    const scrctl::rt::SenderReport expected{0xb6d5b756, 0xee5fe7ad, 0xce849000,
+                                           0x57fb, 364, 401673};
+    std::vector<scrctl::rt::SenderReport> reports;
+    check(scrctl::rt::parse_sender_reports(sr, reports) &&
+          reports == std::vector{expected}, "RC=0 SR 保留完整 NTP/RTP、SSRC 和发送计数");
+
+    // RC=1 需要一个标准的24字节接收报告块；这里按设备52字节SR的布局构造。
+    auto counted = sr;
+    counted[0] = 0x81;
+    counted[3] = 12;
+    counted.resize(52, 0);
+    auto sdes = scrctl::rt::build_sdes(expected.ssrc);
+    auto compound = counted;
+    compound.insert(compound.end(), sdes.begin(), sdes.end());
+    check(scrctl::rt::parse_sender_reports(compound, reports) &&
+          reports == std::vector{expected}, "52字节SR加SDES按各自长度关联，不误读报告块");
+
+    auto second = sr;
+    write32(second, 4, 42);
+    write32(second, 16, 0xfffffff0);
+    compound.insert(compound.end(), second.begin(), second.end());
+    check(scrctl::rt::parse_sender_reports(compound, reports) && reports.size() == 2 &&
+          reports[0] == expected && reports[1].ssrc == 42 &&
+          reports[1].rtp_timestamp == 0xfffffff0, "复合包内多个SR保留各自时钟和顺序");
+    check(scrctl::rt::parse_sender_reports(scrctl::rt::build_rr(1, 2, 3), reports) &&
+          reports.empty(), "有效RR没有SR，清空旧锚点");
+    check(scrctl::rt::parse_sender_reports(scrctl::rt::build_sr(9, 0, 0), reports) &&
+          reports.size() == 1 && reports[0].ntp_seconds == 0 &&
+          reports[0].ntp_fraction == 0, "全零NTP保持原值，解析层不伪造时间");
+
+    auto padded = sr;
+    padded[0] |= 0x20;
+    padded[3] = 7;
+    padded.insert(padded.end(), {0, 0, 0, 4});
+    check(scrctl::rt::parse_sender_reports(padded, reports) &&
+          reports == std::vector{expected}, "末包有效填充不改变SR字段");
+    auto extended = sr;
+    extended[3] = 7;
+    extended.insert(extended.end(), {1, 2, 3, 4});
+    check(scrctl::rt::parse_sender_reports(extended, reports) &&
+          reports == std::vector{expected}, "允许SR末尾profile扩展");
+
+    const auto reject = [&](const std::vector<uint8_t> &bytes, const std::string &why) {
+        reports = {expected};
+        check(!scrctl::rt::parse_sender_reports(bytes, reports) &&
+              reports == std::vector{expected}, why + "；失败保留原输出");
+    };
+    bool truncations_rejected = true;
+    for (std::size_t size = 0; size < sr.size(); ++size) {
+        reports = {expected};
+        truncations_rejected &= !scrctl::rt::parse_sender_reports(
+            std::span<const uint8_t>(sr).first(size), reports) &&
+            reports == std::vector{expected};
+    }
+    check(truncations_rejected, "SR每个截断位置均拒绝，且不交付部分锚点");
+    auto bad = sr;
+    bad[0] = 0x40;
+    reject(bad, "拒绝非v2头");
+    reject(packet(1, 2, false, single(1, {0x80})), "拒绝RTP媒体包");
+    bad = sr;
+    bad[0] = 0x81;
+    reject(bad, "拒绝RC声明多于实际报告块");
+    bad = scrctl::rt::build_rr(1, 2, 3);
+    bad[0] = 0x82;
+    reject(bad, "拒绝不完整RR报告块");
+    bad = padded;
+    bad.back() = 0;
+    reject(bad, "拒绝零长度填充");
+    bad.back() = 3;
+    reject(bad, "拒绝非四字节对齐的填充，不将残留字节当profile扩展");
+    bad.back() = 28;
+    reject(bad, "拒绝吞掉SR固定字段的填充");
+    bad.back() = 252;
+    reject(bad, "拒绝越过包边界的填充");
+    bad = padded;
+    bad.insert(bad.end(), sdes.begin(), sdes.end());
+    reject(bad, "拒绝非末包的填充");
+    bad = sr;
+    bad.insert(bad.end(), {0x80, 202, 0, 2, 0});
+    reject(bad, "有效SR后接截断SDES时整体拒绝");
+    bad = sr;
+    bad.push_back(0);
+    reject(bad, "拒绝复合包末尾不足一个头的字节");
+}
+
 void test_sequence_reordering() {
     std::printf("\n== 乱序到达不该被记成丢包 ==\n");
     // 这条链路上乱序是实测常态（一秒 100 个包的音频流里每 2 秒就有几次）。旧写法把
@@ -525,6 +619,7 @@ int main() {
     test_payload_type_filter();
     test_feeds_annexb_parser();
     test_rtcp_shapes();
+    test_sender_reports();
     test_sequence_reordering();
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;

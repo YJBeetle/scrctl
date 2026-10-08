@@ -7,6 +7,27 @@
 
 namespace scrctl::rt {
 
+/// SR 中的一组媒体时钟锚点。NTP 保留原始秒/分数值，不在解析时假定其为
+/// 日历时间；发送端也可使用共同的相对时钟，或用全零表示没有时钟信息。
+/// RTP 时间戳与该 NTP 时刻对应，不必等于相邻媒体包的时间戳。
+struct SenderReport {
+    uint32_t ssrc = 0;
+    uint32_t ntp_seconds = 0;
+    uint32_t ntp_fraction = 0;
+    uint32_t rtp_timestamp = 0;
+    uint32_t packet_count = 0;
+    uint32_t octet_count = 0;
+    bool operator==(const SenderReport &) const = default;
+};
+
+/// 从单个或复合 RTCP 数据报提取全部 SR。校验公共头、声明长度、末包填充，
+/// 以及 SR/RR 的固定字段与 RC 个 24 字节报告块；其他 PT 仅校验帧边界。
+/// 允许独立 SR 及 profile 扩展，不要求完整会话的 SDES/CNAME 策略。
+/// 成功替换 reports（无 SR 时为空）；失败保留原值，不交付有效前缀的锚点。
+/// 本接口不替代现有设备心跳分类，也不证明音视频发送端的 NTP 时钟同步。
+[[nodiscard]] bool parse_sender_reports(std::span<const uint8_t> datagram,
+                                        std::vector<SenderReport> &reports);
+
 /// RTCP 报告、源描述和反馈包的字节构造。
 ///
 /// 当前设备媒体会话需要定期发送 RTCP，以维持 startmediastream 的 timeout
