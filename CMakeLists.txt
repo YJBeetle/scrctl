@@ -108,6 +108,16 @@ if(SCRCTL_LIBAV)
     endif()
 endif()
 
+# libavformat 只用于容器录制；缺少它不影响已有解码器或裸 HEVC 文件。
+option(SCRCTL_LIBAVFORMAT "使用 FFmpeg 封装 MP4 / MKV 录制" ON)
+set(SCRCTL_LIBAVFORMAT_FOUND OFF)
+if(SCRCTL_LIBAVFORMAT AND SCRCTL_LIBAV_FOUND)
+    pkg_check_modules(RECORDING_AVFORMAT IMPORTED_TARGET libavformat)
+    if(RECORDING_AVFORMAT_FOUND)
+        set(SCRCTL_LIBAVFORMAT_FOUND ON)
+    endif()
+endif()
+
 # ------------------------------------------------------------- core lib -----
 add_library(scrctl_core STATIC
         src/i18n/Translation.cpp
@@ -126,6 +136,7 @@ add_library(scrctl_core STATIC
         src/media/AudioRegulator.cpp
         src/media/RecordingClock.cpp
         src/media/RecordingVideoConfig.cpp
+        src/media/RecordingMuxer.cpp
         src/rt/RtpHevc.cpp
         src/rt/RtpSeq.cpp
         src/rt/RtpTimestamp.cpp
@@ -178,6 +189,11 @@ target_compile_definitions(scrctl_core PRIVATE
         SCRCTL_INSTALL_LOCALEDIR="${CMAKE_INSTALL_FULL_LOCALEDIR}")
 add_dependencies(scrctl_core scrctl_translations)
 target_compile_options(scrctl_core PRIVATE -Wall -Wextra)
+
+if(SCRCTL_LIBAVFORMAT_FOUND)
+    target_link_libraries(scrctl_core PUBLIC PkgConfig::RECORDING_AVFORMAT)
+    target_compile_definitions(scrctl_core PUBLIC SCRCTL_HAVE_LIBAVFORMAT=1)
+endif()
 
 # Apple 平台启用 VideoToolbox 和 AudioToolbox；其他平台没有对应的系统后端。
 # 软件视频解码另按 libavcodec 的可用性选择实现或报告不可用的占位实现。
@@ -326,6 +342,10 @@ if(SCRCTL_BUILD_TESTS)
     scrctl_add_test_executable(recording_video_config_test tests/recording_video_config_test.cpp)
     target_link_libraries(recording_video_config_test PRIVATE scrctl_core)
     add_test(NAME recording_video_config COMMAND recording_video_config_test)
+
+    scrctl_add_test_executable(recording_muxer_test tests/recording_muxer_test.cpp)
+    target_link_libraries(recording_muxer_test PRIVATE scrctl_core)
+    add_test(NAME recording_muxer COMMAND recording_muxer_test)
 
     scrctl_add_test_executable(pasteboard_test tests/pasteboard_test.cpp)
     target_link_libraries(pasteboard_test PRIVATE scrctl_core)

@@ -130,7 +130,7 @@ ctest --test-dir build-cmake              # 离线自检，不需要真机（项
 
 构建还需要 GNU gettext 工具（`msgfmt`）及消息运行库（Linux glibc 通常已内置；
 macOS 使用 gettext 的 libintl）。开启离线测试需要 Python 3。Debian/Ubuntu 可安装
-`gettext python3 libsdl2-dev libssl-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev`。
+`gettext python3 libsdl2-dev libssl-dev libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev`。
 
 JSON、命令行和 XML plist 解析分别使用 nlohmann/json（>= 3.12.0）、CLI11（>= 2.5.0）和 pugixml（>= 1.16），许可依次为 MIT、BSD-3-Clause、MIT。
 CMake 优先找系统包，缺失时下载固定版本并校验 SHA256；首次配置需要网络。
@@ -151,6 +151,9 @@ FFmpeg 软件解码是默认的视频后端，`--hw-decode` 选择平台硬件�
 `-DSCRCTL_LIBAV=OFF` 可关闭软件解码。当前 VideoToolbox 适配使用 2 字节 NAL 长度
 前缀，不能处理超过 65535 字节的 NAL；已有真机记录包含超过这一上限的帧，因此
 通常应保留软件后端。非 Apple 平台目前只有软件视频后端。
+
+容器写入模块还使用 libavformat，可通过 `-DSCRCTL_LIBAVFORMAT=OFF` 关闭。
+该模块正在接入录制流程；当前 `--record` 仍保存裸 HEVC。
 
 默认不构建开发探针。离线测试可执行文件位于 `build-cmake/tests/`，主程序仍位于
 构建目录根部。只需要主程序时加 `-DSCRCTL_BUILD_TESTS=OFF`；开发诊断用

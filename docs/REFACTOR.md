@@ -1652,3 +1652,45 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
 - 实现、独立审查和捕获对照归档到夹具目录的 `video-config-validation/`。
   本轮不操作手机或恢复音乐；该检查尚未接入正式 Recorder，生产 --record
   仍输出裸 HEVC，没有增加 MP4 / MKV 产品功能。
+- 提交 41a98f7 的 Mac、Windows ARM64、Ubuntu 和 sanitizer 作业各通过
+  49/49，包括实际执行的配置检查。CI 的 libavcodec 版本分别为 Mac / sanitizer
+  63.1.101、Windows 63.1.102、Ubuntu 60.31.102；不据此声称 FFmpeg 5 运行兼容。
+  Mac / Windows 打包、搬移启动和语言检查通过，本轮没有重复下载安装包。
+
+## 第九十九轮：复用 libavformat 的独立容器写入层
+
+- 新增 RecordingMuxer，串行接收完整 HEVC Annex-B AU 和可选的 AAC-ELD 原包，
+  由 libavformat 写入本地 MP4 / MKV。调用方负责组帧、公共时钟、线程队列和文件
+  提交；本层不生成临时路径，不重命名、不删除文件，也未连接 CLI。
+- HEVC 参数重新通过 RecordingVideoConfig 检查，使用公开软件解码器导出
+  codecpar，不手写 hvcC 或通过临时 HEVC 文件补元数据。MP4 使用 hvc1；AAC
+  首版限定已验证的 48 kHz 双声道、480 / 512 采样配置，保留原始编码包。
+- 输入时间使用共同原点下的微秒，写入时按 header 之后的实际 time_base 换算。
+  每轨 DTS 严格递增，拒绝溢出、重排序、超出容器精度的时长及超过 16 MiB 的
+  单个 AU。libavformat 的交错等待设为 100 ms；这是媒体时间限制，不能当作
+  库内存或进程 RSS 的字节上限，正式录制器仍需自己的等待和队列预算。
+- MP4 要求每个视频 AU 有已知正时长。普通 MP4 的 edit list 会隐藏零时长尾帧；
+  `delay_moov` 分段对照虽然保留所有编码包，却没有 AAC roll 组信息，本机原生
+  解码实际少了开头 256 个采样。去掉 `delay_moov` 的对照丢失 AAC 包；较新库的
+  `hybrid_fragmented` 恢复 roll，但收尾后的普通 moov 又隐藏零时长尾帧。因此首版
+  显式拒绝未知时长的 MP4，不移动音频、不删除采样，也不套用固定帧率补时长。
+- MKV 可接收未知视频时长，但两轨时间必须非负。负音频时间在本轮解复用中被
+  截为 0；本层明确拒绝。调用方可选择位于两轨之前的共同原点来保留相对偏移，
+  不能逐轨钳制。末帧边界与正式录制器的接入仍是后续工作。
+- 写入、trailer、flush 和 close 保存最早错误，失败后仍释放资源；显式 finish
+  的结果保持稳定，析构仅作兜底。缺少 libavformat 时返回不支持，不影响现有
+  解码及裸 HEVC 录制。Ubuntu CI 增加开发包以实际运行封装测试。
+- 1195 项有库检查、3 项无库检查、本机完整 50/50 CTest 和独立严格编译、
+  ASan / UBSan 通过。仅子进程的文件大小限额触发写入及收尾失败，首错与资源
+  回收符合预期。FFmpeg 5.0 / 5.1 的公开头语法检查通过，不代表旧库运行验证。
+- 最终生产写入层重放既有 30 秒 USB 捕获：两种容器均保留 1770 个视频 AU、
+  2991 个 AAC 包及共同 SR 时间轴，AAC 原字节一致，完整 FFmpeg 解码通过。
+  本机 AVFoundation 解码普通 MP4 的 1770 帧和 1435680 个原始音频采样；
+  另有起始偏移对应的 1166 个静音采样。roll 组保留，首部无额外裁剪，与此前
+  普通 MP4 的原生 PCM 最多相差 1 个量化单位。
+- 原生 asset duration 仍比容器 movie duration 少约 5.33 ms，属于第九十五轮
+  已记录的独立差异；不修改时间来迎合该值。本轮使用旧 mode 6 / 8 捕获，
+  未操作手机、恢复音乐或声称 mode 10 实时录制和物理声画同步通过。
+- 实现、独立审查、格式负例及完整捕获对照归档至夹具目录的
+  `muxer-validation/`。CLI `--record` 仍是裸 HEVC；正式 Recorder、解码前 AAC
+  接入、共同原点、队列和末帧结束策略尚未完成。
