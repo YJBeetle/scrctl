@@ -16,7 +16,7 @@ scrctl 是独立产品，也是设备协议与恢复行为的验证项目。MaaF
 | 基础资源管理 | Base64 使用 OpenSSL；SDL 和系统 TCP 建连已收敛 | 本轮系统 socket 建连不替代隧道内 TCP 栈 |
 | 配对密码运算 | HKDF、SRP 摘要和 Ed25519 使用 OpenSSL；正式 M6/M2 已校验并保存设备原始标识和长期公钥 | USB 新建配对保存/重连、严格 Wi-Fi 身份校验及隧道/RSD 已通过；旧记录缺设备身份须 USB 重配，其他设备版本待验证 |
 | 恢复策略和旧 review 问题 | 可追溯旧项已逐项复查，线程信息和剪贴板边界本轮补修 | 长时间、物理断线和真实无线重连仍待验证，具体结论见下表 |
-| 注释与命令行文案 | 主要模块注释已整理；应用、核心输出及九个独立探针支持 en / zh-CN / auto，默认跟随 locale | 其余 tools、零散注释与历史文档继续整理 |
+| 注释与命令行文案 | 主要模块注释已整理；应用、核心输出及十个常用诊断工具支持 en / zh-CN / auto，默认跟随 locale | 归档实验、零散注释与历史文档继续整理 |
 | MaaFramework | 按用户安排暂缓 | 后续参考 scrctl 验证过的实现，当前未修改 MaaFramework |
 
 XPC、OPACK、Apple 配对和控制语义、SRP 的 Apple 适配、Deflate 小工具暂时保留。
@@ -80,7 +80,7 @@ XPC、OPACK、Apple 配对和控制语义、SRP 的 Apple 适配、Deflate 小�
 
 | 剩余项 | 类型 | 下一步 |
 | --- | --- | --- |
-| tools 的输出和语言选择 | 文本 / 功能 | screenshot_probe、rr_keepalive_probe、wifi_probe、stall_probe、audio_pump_probe、audio_decode_probe、feature_probe、applist_probe 和 app_launch_probe 的帮助、错误及运行期说明已接入 en / zh-CN / auto；其余探针继续整理 |
+| tools 的输出和语言选择 | 文本 / 功能 | 十个常用诊断工具的帮助、错误及运行期说明已接入 en / zh-CN / auto，包括 hid_probe；归档实验的独立文案继续整理 |
 | 零散注释与历史文档 | 文本 | 保留必要的详细协议说明，整理重复、过时和口语化表述；主要模块及配对注释已完成首轮 |
 | HTTP/2 库方案 | 功能 / 验证 | 生产继续保留当前帧层；后续获得实际 FileTransfer 子流证据后，再评估偶数文件流的适配 |
 | 设备长期身份认证 | 验证 / 使用 | 正式 M6/M2、USB 新建配对保存/重连和严格 Wi-Fi 身份校验/隧道/RSD 已通过；无设备身份的旧记录需 USB 重配，其他设备版本仍待测 |
