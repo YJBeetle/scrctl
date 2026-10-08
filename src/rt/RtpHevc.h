@@ -56,7 +56,8 @@ public:
         uint64_t malformed = 0;
         /// seq_gaps 统计向前跳过序号的事件数，一次事件可以涉及多个缺失包。
         /// seq_lost 是 RtpSeq 当前未补齐的缺口数，窗口内迟到补齐会使其减少。
-        /// reordered 包含迟到包和重复包；不能只凭前两项是否相等判断乱序。
+        /// reordered 包含迟到包和重复包；这些载荷不会交付，补齐 seq_lost
+        /// 仅证明该序号到达，不代表媒体已按正确顺序组装或可用于解码。
         /// 分片缺失可能使图像不完整或破坏参考链，上层据此判断是否需要请求刷新或重建会话。
         uint64_t seq_gaps = 0;
         uint64_t seq_lost = 0;
@@ -76,7 +77,8 @@ public:
     /// malformed 或 dropped_fragments，不产出伪完整 NAL。AP 先验证全包再交付。
     /// 保留旧入口对仅一个 NAL 的 AP 的容忍；RFC 7798 标准形态至少含两个 NAL。
     /// FU 不缓存乱序分片：缺口或身份不符会作废当前 NAL，等待下一个起始分片。
-    /// 紧邻的重复分片只跳过；单一 NAL 和 AP 的迟到包仍可完整交付。
+    /// 所有迟到/重复序号只更新接收统计，不交付载荷，也不改变当前 FU。
+    /// 采样时间回退本身不被丢弃：序号向前的合法包仍可按原始时间交付。
     /// 只在组装 FU 时核对 SSRC，不代替调用方的源选择与会话隔离。
     bool push_nals(std::span<const uint8_t> datagram, std::vector<ReceivedNal> &out,
                    std::string &err);

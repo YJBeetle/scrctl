@@ -212,7 +212,7 @@ void test_single_and_offsets() {
     with_csrc.push_back(0x92);  // V=2, X=1, CC=2 -> 8 字节 CSRC 再接 8 字节扩展头
     with_csrc.push_back(100);
     with_csrc.push_back(0);
-    with_csrc.push_back(3);
+    with_csrc.push_back(8);  // 与前一包连续，单独验证 CSRC/扩展偏移。
     for (int i = 0; i < 8; ++i) {  // 补齐到 12 字节 RTP 头
         with_csrc.push_back(0);
     }
@@ -236,7 +236,7 @@ void test_single_and_offsets() {
     with_ext.push_back(0x90);  // V=2, X=1, CC=0
     with_ext.push_back(100);
     with_ext.push_back(0);
-    with_ext.push_back(4);
+    with_ext.push_back(9);
     for (int i = 0; i < 8; ++i) {
         with_ext.push_back(0);
     }
@@ -491,7 +491,7 @@ void test_fragment_integrity() {
           "valid contiguous fragments still complete after unrelated malformed data");
 
     // RC=0 的合法 RTCP RR 只有八字节，不能被十二字节 RTP 头解析器识别。
-    // FramePump 当前仍将 SR 以外的数据报送入此入口；RR 不占用视频序号。
+    // 调用方可能把尚未分类的数据报送入低层入口；RR 不占用视频序号。
     HevcRtpDepacketizer short_rr;
     out.clear();
     short_rr.push_nals(start, out, err);
@@ -639,6 +639,88 @@ void test_invalid_nal_headers() {
               !d.mid_fragment() && d.stats().malformed == 1,
               "invalid or unsupported HEVC payload does not escape as a complete NAL");
     }
+}
+
+void test_late_payload_isolation() {
+    std::printf("\n== Late RTP payload isolation ==\n");
+    const auto idr = single(20, {0x80, 1});
+    const auto next = single(1, {0x80, 2});
+    for (const bool aggregate : {false, true}) {
+        const auto old_payload = aggregate ? aggregation({idr, single(40, {3})}) : idr;
+        HevcRtpDepacketizer typed, legacy;
+        std::vector<scrctl::rt::ReceivedNal> nals;
+        std::vector<uint8_t> bytes;
+        std::string err;
+        const auto old = packet(100, 400, true, old_payload);
+        const auto later = packet(102, 1200, true, next);
+        typed.push_nals(old, nals, err);
+        typed.push_nals(later, nals, err);
+        legacy.push(old, bytes, err);
+        legacy.push(later, bytes, err);
+        const auto before_nals = nals;
+        const auto before_bytes = bytes;
+        // seq=101 从未交付，迟到时补齐接收缺口；seq=100 是重复旧 IDR。
+        for (const auto &old_packet : {packet(101, 800, true, old_payload), old}) {
+            check(typed.push_nals(old_packet, nals, err) && legacy.push(old_packet, bytes, err),
+                  "late/duplicate valid RTP is accepted for reception accounting");
+        }
+        check(nals == before_nals && bytes == before_bytes &&
+              typed.stats().seq_gaps == 1 && typed.stats().seq_lost == 0 &&
+              typed.stats().reordered == 2 && typed.last_sequence() == 102 &&
+              legacy.stats().seq_lost == 0 && legacy.stats().reordered == 2,
+              "late or repeated complete IDR cannot publish again through either output path");
+    }
+
+    auto bad_old = idr;
+    bad_old[0] |= 0x80;
+    const std::vector<std::vector<uint8_t>> old_payloads{
+        idr, aggregation({idr, single(40, {3})}),
+        fragment(20, {0x80, 9}, true, false), bad_old};
+    for (const auto &old_payload : old_payloads) {
+        HevcRtpDepacketizer typed, legacy;
+        std::string err;
+        std::vector<scrctl::rt::ReceivedNal> nals;
+        std::vector<uint8_t> bytes;
+        const auto initial = packet(100, 400, true, idr);
+        const auto start = packet(101, 800, false, fragment(20, {0x80, 4}, true, false, 37, 4));
+        const auto old = packet(100, 400, true, old_payload);
+        // 相同最高序号但时间/标记/头部不同的副本也不能覆盖原始分片。
+        const auto duplicate = packet(101, 999, true, fragment(21, {0x80, 9}, true, false));
+        const auto finish = packet(102, 800, true, fragment(20, {5}, false, true, 37, 4));
+        typed.push_nals(initial, nals, err);
+        legacy.push(initial, bytes, err);
+        nals.clear();
+        for (const auto &p : {start, old, duplicate}) {
+            typed.push_nals(p, nals, err);
+            legacy.push(p, bytes, err);
+        }
+        check(nals.empty() && typed.mid_fragment() && legacy.mid_fragment() &&
+              typed.fragment_timestamp() == 800 && typed.last_sequence() == 101 &&
+              typed.stats().dropped_fragments == 0 && typed.stats().malformed == 0,
+              "late single/AP/FU/bad payload and changed duplicate leave current FU untouched");
+        typed.push_nals(finish, nals, err);
+        legacy.push(finish, bytes, err);
+        auto complete = nal_header(20, 37, 4);
+        complete.insert(complete.end(), {0x80, 4, 5});
+        check(nals.size() == 1 && nals[0].bytes == complete && nals[0].timestamp == 800 &&
+              nals[0].ssrc == 0xdeadbeefU && nals[0].first_sequence == 101 &&
+              nals[0].last_sequence == 102 && nals[0].ends_access_unit &&
+              split_annexb(bytes) == std::vector<std::vector<uint8_t>>({idr, complete}) &&
+              typed.stats().nals == 2 && typed.stats().reordered == 2 &&
+              typed.stats().seq_gaps == 0 && typed.stats().seq_lost == 0 &&
+              typed.stats().dropped_fragments == 0 && legacy.stats().dropped_fragments == 0,
+              "continuous FU end after old packets publishes original bytes and metadata once");
+    }
+
+    HevcRtpDepacketizer sampling_order;
+    std::vector<scrctl::rt::ReceivedNal> nals;
+    std::string err;
+    sampling_order.push_nals(packet(65535, 1200, true, idr), nals, err);
+    sampling_order.push_nals(packet(0, 800, true, next), nals, err);
+    check(nals.size() == 2 && nals[0].timestamp == 1200 && nals[1].timestamp == 800 &&
+          nals[1].first_sequence == 0 && sampling_order.stats().reordered == 0 &&
+          sampling_order.stats().seq_gaps == 0,
+          "forward RTP sequence across wrap retains backward sampling timestamps");
 }
 
 /// RTCP 那几种包的字节形状。
@@ -945,6 +1027,7 @@ int main() {
     test_rtp_padding();
     test_shared_output_paths();
     test_invalid_nal_headers();
+    test_late_payload_isolation();
     test_rtcp_shapes();
     test_sender_reports();
     test_sequence_reordering();

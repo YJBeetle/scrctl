@@ -118,7 +118,10 @@ bool HevcRtpDepacketizer::push_nals(std::span<const uint8_t> datagram,
         break;
     case RtpSeq::Verdict::kLate:
         ++stats_.reordered;
-        break;
+        // 当前没有媒体重排队列。旧包即使补齐接收统计中的缺口，也不能插回
+        // 已处理的 NAL/AU 顺序；重复或迟到载荷不得关闭/替换正在组装的 FU。
+        stats_.seq_lost = seq_.lost();
+        return true;
     case RtpSeq::Verdict::kFirst:
     case RtpSeq::Verdict::kInOrder:
         break;
@@ -192,10 +195,6 @@ bool HevcRtpDepacketizer::push_nals(std::span<const uint8_t> datagram,
         const bool same_nal = !partial_.bytes.empty() &&
             partial_.timestamp == info.timestamp && partial_.ssrc == info.ssrc &&
             partial_.bytes[0] == header[0] && partial_.bytes[1] == header[1];
-        // 不重复附加紧邻的同序号分片。不同身份即使序号相等也不能当成重复包。
-        if (same_nal && info.sequence == partial_.last_sequence) {
-            return true;
-        }
         if (start) {
             reset();
             partial_ = {{header[0], header[1]}, info.timestamp, info.ssrc,
