@@ -12,7 +12,8 @@
   及断线退出验证。本轮补修了 Ubuntu CI 发现的 glibc 语言回退问题；CI 不覆盖设备运行。
 - Windows：ARM64 构建、离线回归及 USB / Wi-Fi 镜像、截图切换已通过，ARM64 CI
   构建、安装检查及下载的真实 Release 包独立启动已通过；USB 竖屏下的 HID 绘图及
-  SDL 窗口鼠标触摸也已通过。横屏、键盘、硬件按键、Wi-Fi 输入、新建配对、DDI 初始安装、
+  SDL 窗口鼠标触摸也已通过；USB / Wi-Fi 横屏视频输入及 Wi-Fi 横屏截图回读通过。
+  日常键盘输入、硬件按键、Windows 新建配对、DDI 初始安装、
   x64 和 MSVC 待验证。当前没有 Windows 音频后端，需要先实现，见
   [Windows 说明](WINDOWS.md)。发布产物还需完善对应第三方源码及分发材料。
 - lwIP：离线模拟已覆盖丢包、重传、多个连接 / 网络接口和取消等待；USB / Wi-Fi
