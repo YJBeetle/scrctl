@@ -94,6 +94,11 @@ SR 解析也已通过离线及真实捕获回放。独立 RecordingClock 和因�
 视频频率从有效 SR 验证，不将本台设备观测到的约 24 kHz 写成通用常量。
 SR 等待、缓存和首尾外推必须有预算；无可信时钟或配置变化时明确结束录制。
 首版 DTS=PTS 仅用于确实无重排序的配置，一般 HEVC DTS 仍需独立实现。
+独立 RecordingVideoConfig 已复用 libavcodec 检查单套 HEVC 参数的语法与重排序限额；
+无重排序、需要重排序、无效与不支持分别返回，未解析配置不使用默认 0 放行。
+首版限定基础层和单 temporal layer，参数或 epoch 变化必须重新检查。
+该模块尚未接入正式 Recorder，不能据此认为 MP4 / MKV 录制已完成。
+现有裸 HEVC 的写入、刷新和关闭错误已修复，镜像可继续，最终退出码非零。
 
 AAC-ELD 原包可直存，离线 FFmpeg 解码及本机 AVFoundation MP4 解码通过；
 其他播放器兼容性不能由这组结果代替。录制方向与 --orientation 语义一起推进。

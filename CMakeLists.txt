@@ -125,6 +125,7 @@ add_library(scrctl_core STATIC
         src/media/AudioPump.cpp
         src/media/AudioRegulator.cpp
         src/media/RecordingClock.cpp
+        src/media/RecordingVideoConfig.cpp
         src/rt/RtpHevc.cpp
         src/rt/RtpSeq.cpp
         src/rt/RtpTimestamp.cpp
@@ -321,6 +322,10 @@ if(SCRCTL_BUILD_TESTS)
     scrctl_add_test_executable(recording_clock_test tests/recording_clock_test.cpp)
     target_link_libraries(recording_clock_test PRIVATE scrctl_core)
     add_test(NAME recording_clock COMMAND recording_clock_test)
+
+    scrctl_add_test_executable(recording_video_config_test tests/recording_video_config_test.cpp)
+    target_link_libraries(recording_video_config_test PRIVATE scrctl_core)
+    add_test(NAME recording_video_config COMMAND recording_video_config_test)
 
     scrctl_add_test_executable(pasteboard_test tests/pasteboard_test.cpp)
     target_link_libraries(pasteboard_test PRIVATE scrctl_core)

@@ -1625,3 +1625,30 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
 - 音乐保持暂停，测试使用 --no-audio，没有恢复播放或调整音量。源码、替身和
   真机日志归档到本地夹具目录的 `raw-recording-io/`。正式 MP4 / MKV Recorder
   仍待接入，本轮修复现有裸 HEVC 录制的错误处理。
+
+## 第九十八轮：复用 libavcodec 检查 HEVC 录制配置
+
+- 独立 RecordingVideoConfig 接收各一条原始 VPS / SPS / PPS，明确区分无重排序、
+  需要重排序、无效和不支持。仅已确认无重排序的配置允许首版 DTS=PTS，未知
+  深度保持 -1；无 libav、软件 HEVC 解码器或参数检查滤镜时明确不支持。
+- 使用公开 hevc_metadata BSF 检查参数语法，再用独立软件 HEVC context 的
+  extradata 初始化结果取得尺寸、格式和 has_b_frames。没有提交图像、读取
+  FFmpeg 私有对象或解析日志，也没有新增完整 SPS / PPS 解析器。
+- 测试发现 FFmpeg 9 对某个截断 PPS 会报告错误但让 decoder open 返回成功，
+  且仍导出有效 SPS 尺寸及默认零深度；仅检查 open 不能证明三条参数完整。
+  公开 BSF 的错误返回拒绝了这条路径，负例保留。BSF 可能重序列化参数，
+  所以只使用检查状态，返回的参数保留原始 EPB 和全部输入字节。
+- 首版限定基础 layer 0、单 temporal layer，拒绝夹带第二套 NAL 和超出 1 MiB
+  合计预算的参数；尺寸和重排序结论只属于返回的这一套参数。参数或 epoch
+  变化必须重新检查，录制仍需保持解码顺序并拒绝倒退 PTS。配置声明不能
+  证明未来 AU 的引用关系或完整性，一般重排序 DTS 仍未实现。
+- 140 项有 libav 检查和 139 项无 libav 检查通过，独立严格编译及 ASan / UBSan
+  通过。FFmpeg 5.0 / 5.1 的公开头文件语法检查通过，未将此记作旧库运行验证。
+  本机完整构建、49/49 CTest 和翻译检查通过。
+- 生产函数对既有 1770 帧 USB 捕获和本轮 367 帧 Wi-Fi 录制均确认深度 0，
+  参数在全段 AU 中保持一致；独立 x265 bframes=0 / 3 的两段各 12 帧，声明的
+  深度分别为 0 / 2，后者不允许 DTS=PTS。原始参数字节全部保留，不能把
+  编码器的 bframes 数当作声明的重排序深度。
+- 实现、独立审查和捕获对照归档到夹具目录的 `video-config-validation/`。
+  本轮不操作手机或恢复音乐；该检查尚未接入正式 Recorder，生产 --record
+  仍输出裸 HEVC，没有增加 MP4 / MKV 产品功能。
