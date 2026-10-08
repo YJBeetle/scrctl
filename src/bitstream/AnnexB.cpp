@@ -127,14 +127,6 @@ bool AnnexBParser::on_nal(Nal &&nal, std::optional<int64_t> sampling_timestamp) 
     // 读取这两项不需要去除 EPB。
     const uint8_t type = nal_type_of(nal);
 
-    if (type == static_cast<uint8_t>(NalType::Vps)) {
-        vps_ = nal;
-    } else if (type == static_cast<uint8_t>(NalType::Sps)) {
-        sps_ = nal;
-    } else if (type == static_cast<uint8_t>(NalType::Pps)) {
-        pps_ = nal;
-    }
-
     if (is_vcl(type)) {
         // 新图像开始且当前 AU 已含 VCL 时提交前一 AU。
         // 尚未包含 VCL 的 VPS/SPS/PPS 前缀与本图像合并。
@@ -166,6 +158,15 @@ bool AnnexBParser::on_nal(Nal &&nal, std::optional<int64_t> sampling_timestamp) 
         // 尚无图像时继续累积前缀，避免把下一帧的 SEI 交给前一帧。
         if (au_has_vcl_) {
             close_au();
+        }
+        // 前一 AU 的回调可能使用缓存补齐未重复发送的参数集；提交完成后，
+        // 才能让下一图像的参数覆盖缓存。
+        if (type == static_cast<uint8_t>(NalType::Vps)) {
+            vps_ = nal;
+        } else if (type == static_cast<uint8_t>(NalType::Sps)) {
+            sps_ = nal;
+        } else if (type == static_cast<uint8_t>(NalType::Pps)) {
+            pps_ = nal;
         }
         au_open_ = true;
         cur_au_.push_back(std::move(nal));

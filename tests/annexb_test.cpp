@@ -223,6 +223,93 @@ void test_sampling_timestamps() {
           "沿用 CRA 的 IRAP bool 语义，不把负采样 ticks 当作错误");
 }
 
+void test_parameter_cache_at_au_callback() {
+    std::printf("\n== 提交 AU 时的参数集缓存 ==\n");
+    const std::vector<scrctl::Nal> old_parameters{make_nal(32, false, 1),
+                                                make_nal(33, false, 2),
+                                                make_nal(34, false, 3)};
+    const std::vector<scrctl::Nal> new_parameters{make_nal(32, false, 11),
+                                                make_nal(33, false, 12),
+                                                make_nal(34, false, 13)};
+    const auto initial_picture = make_nal(19, true, 4);
+    const auto old_picture = make_nal(1, true, 5);
+    const auto new_picture = make_nal(19, true, 6);
+    struct Snapshot {
+        AccessUnit au;
+        std::vector<scrctl::Nal> parameters;
+    };
+
+    // 三种参数都可能成为下一 AU 的首个前缀。中间的图像不重复参数集，
+    // 它的消费者必须在回调中读取缓存，不能借用下一图像的新配置。
+    for (size_t first = 0; first < new_parameters.size(); ++first) {
+        const std::string label = std::string(first == 0 ? "VPS" : first == 1 ? "SPS" : "PPS");
+        std::vector<scrctl::Nal> prefixes{new_parameters[first]};
+        for (size_t i = 0; i < new_parameters.size(); ++i) {
+            if (i != first) prefixes.push_back(new_parameters[i]);
+        }
+
+        std::vector<Snapshot> typed;
+        scrctl::AnnexBParser *current = nullptr;
+        scrctl::AnnexBParser parser([&](AccessUnit &&au) {
+            typed.push_back({std::move(au), {current->vps(), current->sps(), current->pps()}});
+        });
+        current = &parser;
+        bool accepted = true;
+        for (const auto &nal : old_parameters) accepted = parser.push_nal(nal) && accepted;
+        accepted = parser.push_nal(initial_picture, 0) && accepted;
+        accepted = parser.push_nal(old_picture, 400) && accepted;
+        accepted = parser.push_nal(prefixes.front(), 9900) && accepted;
+        check(accepted && typed.size() == 2 && typed[0].parameters == old_parameters &&
+                  typed[1].parameters == old_parameters &&
+                  typed[1].au.nals == std::vector<scrctl::Nal>{old_picture} &&
+                  typed[1].au.sampling_timestamp == 400,
+              label + " 新前缀提交旧 AU 时，回调仍读取旧缓存且图像字节/时间不变");
+
+        auto partially_updated = old_parameters;
+        partially_updated[first] = new_parameters[first];
+        check(std::vector<scrctl::Nal>{parser.vps(), parser.sps(), parser.pps()} == partially_updated,
+              label + " 回调结束后才更新本次前缀对应的参数缓存");
+        for (size_t i = 1; i < prefixes.size(); ++i) {
+            accepted = parser.push_nal(prefixes[i], 9900) && accepted;
+        }
+        accepted = parser.push_nal(new_picture, 800, true) && accepted;
+        auto new_au_nals = prefixes;
+        new_au_nals.push_back(new_picture);
+        check(accepted && typed.size() == 3 && typed.back().parameters == new_parameters &&
+                  typed.back().au.nals == new_au_nals && typed.back().au.sampling_timestamp == 800 &&
+                  typed.back().au.keyframe,
+              label + " 新 AU 提交时读取完整新缓存，前缀顺序和采样时间保留");
+
+        auto nals = old_parameters;
+        nals.push_back(initial_picture);
+        nals.push_back(old_picture);
+        nals.insert(nals.end(), prefixes.begin(), prefixes.end());
+        nals.push_back(new_picture);
+        const auto bytes = annexb_bytes(nals);
+        std::vector<Snapshot> streamed;
+        scrctl::AnnexBParser *byte_current = nullptr;
+        scrctl::AnnexBParser byte_parser([&](AccessUnit &&au) {
+            streamed.push_back({std::move(au),
+                                {byte_current->vps(), byte_current->sps(), byte_current->pps()}});
+        });
+        byte_current = &byte_parser;
+        bool bytes_accepted = true;
+        for (const auto byte : bytes) bytes_accepted = byte_parser.feed(&byte, 1) && bytes_accepted;
+        byte_parser.flush();
+        bool same = streamed.size() == typed.size();
+        for (size_t i = 0; same && i < typed.size(); ++i) {
+            same = streamed[i].parameters == typed[i].parameters &&
+                   streamed[i].au.nals == typed[i].au.nals &&
+                   streamed[i].au.keyframe == typed[i].au.keyframe &&
+                   !streamed[i].au.sampling_timestamp;
+        }
+        check(bytes_accepted && same && streamed.size() == 3 &&
+                  streamed[1].parameters == old_parameters &&
+                  streamed.back().parameters == new_parameters,
+              label + " 逐字节文件输入具有相同的回调缓存、NAL 字节和分组，时间保持 unknown");
+    }
+}
+
 void test_damaged_au() {
     std::printf("\n== 残缺 AU 不交付 ==\n");
     const auto first = make_nal(1, true, 1);
@@ -356,6 +443,7 @@ void test_input_equivalence() {
 int main(int argc, char **argv) {
     test_epb_kept();
     test_sampling_timestamps();
+    test_parameter_cache_at_au_callback();
     test_damaged_au();
     test_input_modes();
     test_input_equivalence();
