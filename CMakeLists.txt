@@ -126,6 +126,7 @@ add_library(scrctl_core STATIC
         src/media/AudioRegulator.cpp
         src/rt/RtpHevc.cpp
         src/rt/RtpSeq.cpp
+        src/rt/RtpTimestamp.cpp
         src/rt/Rtcp.cpp
         src/transport/Socket.cpp
         src/transport/SocketPlatform.cpp
@@ -311,6 +312,10 @@ if(SCRCTL_BUILD_TESTS)
     scrctl_add_test_executable(rtp_test tests/rtp_test.cpp)
     target_link_libraries(rtp_test PRIVATE scrctl_core)
     add_test(NAME rtp COMMAND rtp_test)
+
+    scrctl_add_test_executable(rtp_timestamp_test tests/rtp_timestamp_test.cpp)
+    target_link_libraries(rtp_timestamp_test PRIVATE scrctl_core)
+    add_test(NAME rtp_timestamp COMMAND rtp_timestamp_test)
 
     scrctl_add_test_executable(pasteboard_test tests/pasteboard_test.cpp)
     target_link_libraries(pasteboard_test PRIVATE scrctl_core)
