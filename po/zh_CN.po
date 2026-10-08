@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 17:39+0800\n"
+"POT-Creation-Date: 2026-10-08 18:14+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -844,6 +844,23 @@ msgstr ""
 "      播放累计：启动丢弃 %llu 帧，预缓冲静音 %llu 帧，欠载静音 %llu 帧（%llu "
 "次回调）\n"
 
+#: src/app/LiveStats.cpp:177
+#, c-format
+msgid ""
+"      Audio clock: %s, average buffer %.1f ms, compensation %d ppm, added/"
+"removed %llu/%llu frames, updates %llu, failures %llu\n"
+msgstr ""
+"      音频时钟：%s，平均缓冲 %.1f ms，补偿 %d ppm，增加/减少 %llu/%llu 帧，更"
+"新 %llu 次，失败 %llu 次\n"
+
+#: src/app/LiveStats.cpp:179
+msgid "active"
+msgstr "已启用"
+
+#: src/app/LiveStats.cpp:179
+msgid "inactive"
+msgstr "未启用"
+
 #: src/app/Presenter.cpp:38
 #, c-format
 msgid ""
@@ -1223,12 +1240,12 @@ msgstr "输入过大"
 msgid "Nesting too deep"
 msgstr "嵌套过深"
 
-#: src/media/AudioPump.cpp:98
+#: src/media/AudioPump.cpp:99
 #, c-format
 msgid "Clamped --audio-buffer %d to %d ms and adjusted buffer capacity\n"
 msgstr "已将 --audio-buffer %d 限制为 %d ms，并按此配置缓冲容量\n"
 
-#: src/media/AudioPump.cpp:135
+#: src/media/AudioPump.cpp:144
 #, c-format
 msgid ""
 "Audio answer missing SSRC (RemoteSSRC=%u LocalSSRC=%u); session renewal may "
@@ -1236,31 +1253,70 @@ msgid ""
 msgstr ""
 "音频协商响应缺少 SSRC（RemoteSSRC=%u LocalSSRC=%u），音频会话可能无法续期\n"
 
-#: src/media/AudioPump.cpp:297
+#: src/media/AudioPump.cpp:260
+#, c-format
+msgid "Audio clock compensation failed: %s; continuing playback\n"
+msgstr "音频时钟补偿失败：%s；继续播放\n"
+
+#: src/media/AudioPump.cpp:357
 #, c-format
 msgid "Audio session recreated, receive port=%u\n"
 msgstr "音频会话已重建，收流端口=%u\n"
 
-#: src/media/AudioPump.cpp:305
+#: src/media/AudioPump.cpp:365
 #, c-format
 msgid "Failed to recreate audio session: %s (retry in 1 second)\n"
 msgstr "重建音频会话失败: %s（1 秒后再试）\n"
 
-#: src/media/AudioPump.cpp:332
+#: src/media/AudioPump.cpp:392
 #, c-format
 msgid "Failed to send audio RTCP keepalive: %s\n"
 msgstr "音频 RTCP 保活包发送失败: %s\n"
 
-#: src/media/AudioPump.cpp:345
+#: src/media/AudioPump.cpp:405
 #, c-format
 msgid ""
 "Audio: device session ended (%llu ms without audio); recreating session\n"
 msgstr "音频：设备会话已结束（%llu ms 未收到音频），重建会话\n"
 
-#: src/media/AudioPump.cpp:392
+#: src/media/AudioPump.cpp:452
 #, c-format
 msgid "Audio decode failed (%zu-byte payload): %s\n"
 msgstr "音频解码失败（载荷 %zu 字节）: %s\n"
+
+#: src/media/AudioRegulator.cpp:72
+msgid "Failed to initialize audio clock resampling: "
+msgstr "初始化音频时钟重采样失败："
+
+#: src/media/AudioRegulator.cpp:117
+msgid ""
+"Audio clock resampling requires a valid PCM format and at most one second of "
+"buffering"
+msgstr "音频时钟重采样需要有效的 PCM 格式，缓冲时长不能超过一秒"
+
+#: src/media/AudioRegulator.cpp:137
+msgid "Audio clock resampling is unavailable in this build"
+msgstr "当前构建未包含音频时钟重采样"
+
+#: src/media/AudioRegulator.cpp:144
+msgid "Audio clock resampling received an invalid PCM block"
+msgstr "音频时钟重采样收到无效的 PCM 数据块"
+
+#: src/media/AudioRegulator.cpp:156
+msgid "Audio clock resampling returned an invalid sample count"
+msgstr "音频时钟重采样返回无效的采样数量"
+
+#: src/media/AudioRegulator.cpp:165
+msgid "Audio clock resampling failed: "
+msgstr "音频时钟重采样失败："
+
+#: src/media/AudioRegulator.cpp:166
+msgid "invalid sample count"
+msgstr "无效的采样数量"
+
+#: src/media/AudioRegulator.cpp:232
+msgid "Failed to adjust the audio clock: "
+msgstr "调整音频时钟失败："
 
 #: src/media/FramePump.cpp:68
 #, c-format
@@ -3718,49 +3774,49 @@ msgstr "读取“%s”失败：%s\n"
 msgid "Loaded %zu datagrams; target format: %d Hz, %d channels\n"
 msgstr "已读入 %zu 条数据报；目标格式：%d Hz，%d 声道\n"
 
-#: tools/audio_decode_probe.cpp:228
+#: tools/audio_decode_probe.cpp:248
 msgid ""
 "FFmpeg AAC-ELD decoding is unavailable in this build; enable libav support"
 msgstr "当前构建不支持 FFmpeg AAC-ELD 解码；请启用 libav 支持"
 
-#: tools/audio_decode_probe.cpp:234
+#: tools/audio_decode_probe.cpp:254
 #, c-format
 msgid "Failed to create audio decoder: %s\n"
 msgstr "创建音频解码器失败：%s\n"
 
-#: tools/audio_decode_probe.cpp:237
+#: tools/audio_decode_probe.cpp:257
 #, c-format
 msgid "Audio decoder: %s\n"
 msgstr "音频解码器：%s\n"
 
-#: tools/audio_decode_probe.cpp:260
+#: tools/audio_decode_probe.cpp:263
 #, c-format
 msgid "  Decode failed after %llu output frames (%zu bytes): %s\n"
 msgstr "  已输出 %llu 帧后遇到解码失败（载荷 %zu 字节）：%s\n"
 
-#: tools/audio_decode_probe.cpp:291
+#: tools/audio_decode_probe.cpp:294
 #, c-format
 msgid ""
 "Output frames: %llu; decode failures: %llu; empty payloads: %llu; other "
 "payload types: %llu\n"
 msgstr "输出帧数：%llu；解码失败：%llu；空载荷：%llu；其他载荷类型：%llu\n"
 
-#: tools/audio_decode_probe.cpp:295
+#: tools/audio_decode_probe.cpp:298
 #, c-format
 msgid "PCM samples: %zu (%.2f seconds); peak: %lld / 32767; quarter peaks:"
 msgstr "PCM 采样数：%zu（%.2f 秒）；峰值：%lld / 32767；四段峰值："
 
-#: tools/audio_decode_probe.cpp:303
+#: tools/audio_decode_probe.cpp:306
 #, c-format
 msgid "Average samples per channel per frame: %.1f (expected: 480)\n"
 msgstr "每帧每声道平均采样数：%.1f（期望：480）\n"
 
-#: tools/audio_decode_probe.cpp:307
+#: tools/audio_decode_probe.cpp:310
 #, c-format
 msgid "Failed to write WAV '%s': %s\n"
 msgstr "写入 WAV 文件“%s”失败：%s\n"
 
-#: tools/audio_decode_probe.cpp:310
+#: tools/audio_decode_probe.cpp:313
 #, c-format
 msgid "Saved WAV: %s\n"
 msgstr "已保存 WAV：%s\n"
@@ -3785,13 +3841,13 @@ msgstr "观察音频流、恢复过程和缓冲水位"
 msgid ""
 "PCM is read only to measure sample peaks; no local audio playback or window "
 "is opened. --mute lowers the phone volume with 25 VolumeDown presses, then "
-"sends 25 VolumeUp presses when the test ends; it does not restore the "
-"original volume or silence the mirrored stream. --help does not connect to a "
-"device."
+"sends 25 VolumeUp presses when the test ends; this does not restore the "
+"original volume and may also silence the captured audio. --help does not "
+"connect to a device."
 msgstr ""
 "PCM 只用于统计采样峰值，不在本机播放音频或打开窗口。--mute 会发送 25 次 "
-"VolumeDown 降低手机音量，测试结束后发送 25 次 VolumeUp；这不能恢复原来的音"
-"量，也不会让镜像音频静音。--help 不连接设备。"
+"VolumeDown 降低手机音量，测试结束后发送 25 次 VolumeUp；这不能恢复原来的音量，"
+"也可能让捕获的声音消失。--help 不连接设备。"
 
 #: tools/audio_pump_probe.cpp:87
 msgid "Observation duration in seconds (positive integer; default: 30)"
@@ -5969,6 +6025,17 @@ msgstr "不可用"
 
 #~ msgid "No device matches --udid"
 #~ msgstr "未找到与 --udid 匹配的设备"
+
+#~ msgid ""
+#~ "PCM is read only to measure sample peaks; no local audio playback or "
+#~ "window is opened. --mute lowers the phone volume with 25 VolumeDown "
+#~ "presses, then sends 25 VolumeUp presses when the test ends; it does not "
+#~ "restore the original volume or silence the mirrored stream. --help does "
+#~ "not connect to a device."
+#~ msgstr ""
+#~ "PCM 只用于统计采样峰值，不在本机播放音频或打开窗口。--mute 会发送 25 次 "
+#~ "VolumeDown 降低手机音量，测试结束后发送 25 次 VolumeUp；这不能恢复原来的音"
+#~ "量，也不会让镜像音频静音。--help 不连接设备。"
 
 #~ msgid "Screenshot is the visible area"
 #~ msgstr "截图即可见区"

@@ -39,6 +39,7 @@ class LiveStats {
         uint64_t preroll_silence = 0;
         uint64_t underrun_silence = 0;
         uint64_t underrun_callbacks = 0;
+        int sample_rate = 48000;
         std::size_t buffered_frames = 0;
         bool output_open = false;
         std::string output_driver;

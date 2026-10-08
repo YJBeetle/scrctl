@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <span>
 #include <thread>
+#include <utility>
 
 #include "remote/Device.h"
 #include "rt/Rtcp.h"
@@ -103,6 +104,14 @@ std::unique_ptr<AudioPump> AudioPump::start(remote::Device &device, const Option
     if (!pump->start_session(err)) {
         return nullptr;
     }
+    std::string clock_error;
+    pump->regulator_ = AudioRegulator::create(options.sample_rate, options.channels,
+                                              pump->target_frames_, clock_error);
+    if (pump->regulator_ != nullptr) {
+        pump->stats_.clock = pump->regulator_->stats();
+    } else if (!clock_error.empty()) {
+        pump->report_clock_failure(clock_error);
+    }
     pump->worker_ = std::thread([raw = pump.get()] { raw->loop(); });
     return pump;
 }
@@ -136,6 +145,13 @@ bool AudioPump::start_session(std::string &err) {
                      started.remote_ssrc, started.local_ssrc);
     }
     session_ = std::move(session);
+    if (regulator_ != nullptr) {
+        regulator_->reset();
+        std::lock_guard<std::mutex> lock(mutex_);
+        clock_silence_pending_ = 0;
+        clock_discard_pending_ = 0;
+        stats_.clock = regulator_->stats();
+    }
     publish_live();
     return true;
 }
@@ -177,55 +193,96 @@ void AudioPump::stop() {
 }
 
 void AudioPump::push(const std::vector<int16_t> &pcm) {
+    std::vector<int16_t> adjusted;
+    std::string clock_error;
+    const bool regulated = regulator_ != nullptr && regulator_->process(pcm, adjusted, clock_error);
+    if (!clock_error.empty()) {
+        report_clock_failure(clock_error);
+    }
+    // 库暂时不可用时播放原始 PCM，不让补偿错误结束解码或设备会话。
+    const auto &output = regulated ? adjusted : pcm;
     const std::size_t channels =
         options_.channels > 0 ? static_cast<std::size_t>(options_.channels) : 1;
-    const std::size_t frames = pcm.size() / channels;
-    if (frames == 0) {
-        return;
-    }
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (ring_.empty()) {
-        ring_.assign(capacity_frames_ * channels, 0);
-    }
-    // 缓冲满时丢弃最旧音频，避免实时播放延迟持续增长。
-    std::size_t from = 0;
-    if (frames >= capacity_frames_) {
-        // 输入超过整个环容量时仅保留最新部分，保持 used_ <= capacity。
-        // 正常 ELD 一帧 480 个采样点，此分支仍处理异常尺寸。
-        stats_.dropped_stale += used_ + frames - capacity_frames_;
-        used_ = 0;
-        read_ = write_;
-        from = frames - capacity_frames_;
-    } else if (used_ + frames > capacity_frames_) {
-        const std::size_t drop = used_ + frames - capacity_frames_;
-        read_ = (read_ + drop) % capacity_frames_;
-        used_ -= drop;
-        stats_.dropped_stale += drop;
-    }
-    for (std::size_t f = from; f < frames; ++f) {
-        const std::size_t slot = ((write_ + (f - from)) % capacity_frames_) * channels;
-        for (std::size_t c = 0; c < channels; ++c) {
-            ring_[slot + c] = pcm[f * channels + c];
+    const std::size_t frames = output.size() / channels;
+    AudioRegulator::Observation observation;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (ring_.empty()) {
+            ring_.assign(capacity_frames_ * channels, 0);
         }
+        // 短 burst 的音频仍会在后续收包间隙消费，不能因暂时超过两倍目标
+        // 就硬裁。仅环满时丢弃旧数据；正常水位由软补偿逐渐回到固定目标。
+        std::size_t from = 0;
+        if (frames >= capacity_frames_) {
+            const std::size_t drop = used_ + frames - capacity_frames_;
+            stats_.dropped_stale += drop;
+            clock_discard_pending_ += drop;
+            used_ = 0;
+            read_ = write_;
+            from = frames - capacity_frames_;
+        } else if (used_ + frames > capacity_frames_) {
+            const std::size_t drop = used_ + frames - capacity_frames_;
+            read_ = (read_ + drop) % capacity_frames_;
+            used_ -= drop;
+            stats_.dropped_stale += drop;
+            clock_discard_pending_ += drop;
+        }
+        for (std::size_t f = from; f < frames; ++f) {
+            const std::size_t slot = ((write_ + (f - from)) % capacity_frames_) * channels;
+            for (std::size_t c = 0; c < channels; ++c) {
+                ring_[slot + c] = output[f * channels + c];
+            }
+        }
+        write_ = (write_ + (frames - from)) % capacity_frames_;
+        used_ += frames - from;
+        observation.buffered_frames = used_;
+        observation.playing = read_started_;
+        observation.inserted_silence = std::exchange(clock_silence_pending_, 0);
+        observation.discarded_frames = std::exchange(clock_discard_pending_, 0);
     }
-    write_ = (write_ + (frames - from)) % capacity_frames_;
-    used_ += frames - from;
+    if (regulated && !regulator_->observe(observation, clock_error)) {
+        report_clock_failure(clock_error);
+    }
+    if (regulator_ != nullptr) {
+        const auto clock_stats = regulator_->stats();
+        std::lock_guard<std::mutex> lock(mutex_);
+        stats_.clock = clock_stats;
+    }
+}
+
+void AudioPump::report_clock_failure(const std::string &err) {
+    std::uint64_t failures;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        failures = ++stats_.clock_failed;
+    }
+    if (failures <= 3) {
+        std::fprintf(stderr, SCRCTL_TR("Audio clock compensation failed: %s; continuing playback\n"),
+                     err.c_str());
+    }
 }
 
 std::size_t AudioPump::read(int16_t *dst, std::size_t frames) {
     const std::size_t channels =
         options_.channels > 0 ? static_cast<std::size_t>(options_.channels) : 1;
     std::lock_guard<std::mutex> lock(mutex_);
-    if (ring_.empty() || frames == 0) {
+    if (frames == 0) {
+        return 0;
+    }
+    if (ring_.empty()) {
+        if (read_started_) {
+            clock_silence_pending_ += frames;
+        }
         return 0;
     }
     // 本次将播放的 frames 不是额外积压；将它也算入目标会在正常节拍下反复
-    // 丢掉少量样本。普通回调保持连续 PCM，仅裁初始或明显过大的积压。
+    // 丢掉少量样本。软补偿只裁启动积压；直接 PCM 路径还保留大积压保护。
     const auto trim = compute_read_trim(used_, frames, target_frames_, options_.frame_length,
                                        !read_started_);
-    if (trim.frames > 0) {
+    if (trim.frames > 0 && (trim.startup || regulator_ == nullptr)) {
         read_ = (read_ + trim.frames) % capacity_frames_;
         used_ -= trim.frames;
+        clock_discard_pending_ += trim.frames;
         if (trim.startup) {
             stats_.startup_trimmed += trim.frames;
         } else {
@@ -243,6 +300,9 @@ std::size_t AudioPump::read(int16_t *dst, std::size_t frames) {
     used_ -= take;
     if (take > 0) {
         read_started_ = true;
+    }
+    if (read_started_) {
+        clock_silence_pending_ += frames - take;
     }
     return take;
 }

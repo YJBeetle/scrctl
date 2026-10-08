@@ -1,8 +1,8 @@
 // 观察独立音频会话的收包、解码、RTCP 续期和缓冲水位。PCM 只用于统计峰值，
 // 不打开播放设备或窗口。可同时启动视频，或在指定时刻停止/追加媒体会话。
 //
-// --mute 只降低手机扬声器音量，不能让镜像音频变为静音；镜像流可能取自音量
-// 调节之前。判断内容是否静音应结合 PCM 峰值，不能仅凭收包数量。
+// --mute 降低手机媒体音量，也可能让捕获的声音消失；它不是独立的扬声器路由
+// 开关。判断内容是否静音应结合 PCM 峰值，不能仅凭收包数量。
 // --kill-at 停止设备上的所有媒体会话；--revideo-at 不先停止已有会话，直接起视频。
 // 不同会话对彼此的影响需要设备实测，历史结果见 docs/coredevice.md §17.2。
 //
@@ -80,8 +80,8 @@ int main(int argc, char **argv) {
     app.footer(SCRCTL_N_(
         "PCM is read only to measure sample peaks; no local audio playback or window is opened. "
         "--mute lowers the phone volume with 25 VolumeDown presses, then sends 25 VolumeUp "
-        "presses when the test ends; it does not restore the original volume or silence the "
-        "mirrored stream. --help does not connect to a device."));
+        "presses when the test ends; this does not restore the original volume and may "
+        "also silence the captured audio. --help does not connect to a device."));
     app.set_help_flag("-h,--help", SCRCTL_N_("Show help"));
     auto *seconds_option = app.add_option("-s,--seconds", seconds,
         SCRCTL_N_("Observation duration in seconds (positive integer; default: 30)"))
@@ -136,8 +136,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    // 音量键只调整手机扬声器，镜像 PCM 仍可能有声音。测试结束会发送同等数量
-    // 的音量加按键；这会提高音量，不能精确恢复测试前的音量。
+    // 音量键会调整手机媒体音量，可能同时影响捕获的 PCM。测试结束会发送同等
+    // 数量的音量加按键；这会提高音量，不能精确恢复测试前的音量。
     std::unique_ptr<scrctl::hid::Buttons> buttons;
     if (mute) {
         std::string berr;

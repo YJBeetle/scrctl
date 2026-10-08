@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 17:39+0800\n"
+"POT-Creation-Date: 2026-10-08 18:14+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -821,6 +821,21 @@ msgid ""
 "frames, underrun silence %llu frames in %llu callbacks\n"
 msgstr ""
 
+#: src/app/LiveStats.cpp:177
+#, c-format
+msgid ""
+"      Audio clock: %s, average buffer %.1f ms, compensation %d ppm, added/"
+"removed %llu/%llu frames, updates %llu, failures %llu\n"
+msgstr ""
+
+#: src/app/LiveStats.cpp:179
+msgid "active"
+msgstr ""
+
+#: src/app/LiveStats.cpp:179
+msgid "inactive"
+msgstr ""
+
 #: src/app/Presenter.cpp:38
 #, c-format
 msgid ""
@@ -1192,42 +1207,81 @@ msgstr ""
 msgid "Nesting too deep"
 msgstr ""
 
-#: src/media/AudioPump.cpp:98
+#: src/media/AudioPump.cpp:99
 #, c-format
 msgid "Clamped --audio-buffer %d to %d ms and adjusted buffer capacity\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:135
+#: src/media/AudioPump.cpp:144
 #, c-format
 msgid ""
 "Audio answer missing SSRC (RemoteSSRC=%u LocalSSRC=%u); session renewal may "
 "fail\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:297
+#: src/media/AudioPump.cpp:260
+#, c-format
+msgid "Audio clock compensation failed: %s; continuing playback\n"
+msgstr ""
+
+#: src/media/AudioPump.cpp:357
 #, c-format
 msgid "Audio session recreated, receive port=%u\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:305
+#: src/media/AudioPump.cpp:365
 #, c-format
 msgid "Failed to recreate audio session: %s (retry in 1 second)\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:332
+#: src/media/AudioPump.cpp:392
 #, c-format
 msgid "Failed to send audio RTCP keepalive: %s\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:345
+#: src/media/AudioPump.cpp:405
 #, c-format
 msgid ""
 "Audio: device session ended (%llu ms without audio); recreating session\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:392
+#: src/media/AudioPump.cpp:452
 #, c-format
 msgid "Audio decode failed (%zu-byte payload): %s\n"
+msgstr ""
+
+#: src/media/AudioRegulator.cpp:72
+msgid "Failed to initialize audio clock resampling: "
+msgstr ""
+
+#: src/media/AudioRegulator.cpp:117
+msgid ""
+"Audio clock resampling requires a valid PCM format and at most one second of "
+"buffering"
+msgstr ""
+
+#: src/media/AudioRegulator.cpp:137
+msgid "Audio clock resampling is unavailable in this build"
+msgstr ""
+
+#: src/media/AudioRegulator.cpp:144
+msgid "Audio clock resampling received an invalid PCM block"
+msgstr ""
+
+#: src/media/AudioRegulator.cpp:156
+msgid "Audio clock resampling returned an invalid sample count"
+msgstr ""
+
+#: src/media/AudioRegulator.cpp:165
+msgid "Audio clock resampling failed: "
+msgstr ""
+
+#: src/media/AudioRegulator.cpp:166
+msgid "invalid sample count"
+msgstr ""
+
+#: src/media/AudioRegulator.cpp:232
+msgid "Failed to adjust the audio clock: "
 msgstr ""
 
 #: src/media/FramePump.cpp:68
@@ -3652,49 +3706,49 @@ msgstr ""
 msgid "Loaded %zu datagrams; target format: %d Hz, %d channels\n"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:228
+#: tools/audio_decode_probe.cpp:248
 msgid ""
 "FFmpeg AAC-ELD decoding is unavailable in this build; enable libav support"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:234
+#: tools/audio_decode_probe.cpp:254
 #, c-format
 msgid "Failed to create audio decoder: %s\n"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:237
+#: tools/audio_decode_probe.cpp:257
 #, c-format
 msgid "Audio decoder: %s\n"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:260
+#: tools/audio_decode_probe.cpp:263
 #, c-format
 msgid "  Decode failed after %llu output frames (%zu bytes): %s\n"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:291
+#: tools/audio_decode_probe.cpp:294
 #, c-format
 msgid ""
 "Output frames: %llu; decode failures: %llu; empty payloads: %llu; other "
 "payload types: %llu\n"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:295
+#: tools/audio_decode_probe.cpp:298
 #, c-format
 msgid "PCM samples: %zu (%.2f seconds); peak: %lld / 32767; quarter peaks:"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:303
+#: tools/audio_decode_probe.cpp:306
 #, c-format
 msgid "Average samples per channel per frame: %.1f (expected: 480)\n"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:307
+#: tools/audio_decode_probe.cpp:310
 #, c-format
 msgid "Failed to write WAV '%s': %s\n"
 msgstr ""
 
-#: tools/audio_decode_probe.cpp:310
+#: tools/audio_decode_probe.cpp:313
 #, c-format
 msgid "Saved WAV: %s\n"
 msgstr ""
@@ -3716,9 +3770,9 @@ msgstr ""
 msgid ""
 "PCM is read only to measure sample peaks; no local audio playback or window "
 "is opened. --mute lowers the phone volume with 25 VolumeDown presses, then "
-"sends 25 VolumeUp presses when the test ends; it does not restore the "
-"original volume or silence the mirrored stream. --help does not connect to a "
-"device."
+"sends 25 VolumeUp presses when the test ends; this does not restore the "
+"original volume and may also silence the captured audio. --help does not "
+"connect to a device."
 msgstr ""
 
 #: tools/audio_pump_probe.cpp:87

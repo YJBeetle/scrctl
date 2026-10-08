@@ -24,8 +24,13 @@ Annex-B HEVC，不包含音轨。
 解码器与 libswresample。当前 FFmpeg 适配支持 48 kHz、双声道、每帧每声道 480 或
 512 个采样；真实音乐的 480 配置已与 AudioToolbox 逐样本对照，最大差异为 1 个
 16 位量化单位。旧实验使用了错误的编码配置，其“不支持 ELD”的结论已修正，见
-[音频记录](docs/coredevice.md#171-音频解码后端只能选-audiotoolbox实测同一份-dump-四路对照)。设备音量键不控制镜像音频的本机输出，
-可使用本机音量或 `--no-audio-playback`。
+[音频记录](docs/coredevice.md#171-音频解码后端只能选-audiotoolbox实测同一份-dump-四路对照)。
+本机播放音量由电脑控制，也可使用 `--no-audio-playback` 关闭；手机媒体音量可能
+同时影响捕获声音，不能靠将手机静音来实现只在电脑播放。
+
+启用 FFmpeg 的构建使用 libswresample 平滑补偿音频时钟差异，macOS 的 AudioToolbox
+解码也共用这层补偿。`--audio-buffer` 默认 50 ms，目标保持固定；网络或调度抖动
+较大时可增加到 `--audio-buffer=200`，以较高延迟换取更连续的播放。
 
 [协议调研记录](docs/coredevice.md) 保留原始观察与实验过程；
 [重构记录](docs/REFACTOR.md) 说明当前实现及验证边界；

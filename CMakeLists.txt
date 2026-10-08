@@ -123,6 +123,7 @@ add_library(scrctl_core STATIC
         src/media/FramePump.cpp
         src/media/ScreenshotSource.cpp
         src/media/AudioPump.cpp
+        src/media/AudioRegulator.cpp
         src/rt/RtpHevc.cpp
         src/rt/RtpSeq.cpp
         src/rt/Rtcp.cpp
@@ -429,6 +430,10 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(decode_test PRIVATE scrctl_core)
 
     if(SCRCTL_LIBAV_FOUND)
+        scrctl_add_test_executable(audio_regulator_test tests/audio_regulator_test.cpp)
+        target_link_libraries(audio_regulator_test PRIVATE scrctl_core)
+        add_test(NAME audio_regulator COMMAND audio_regulator_test)
+
         scrctl_add_test_executable(audio_decoder_test tests/audio_decoder_test.cpp)
         target_link_libraries(audio_decoder_test PRIVATE scrctl_core)
         add_test(NAME audio_decoder COMMAND audio_decoder_test)

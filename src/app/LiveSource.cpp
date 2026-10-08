@@ -370,6 +370,7 @@ void LiveSource::print_stats() {
             audio.preroll_silence = audio_out_.preroll_silence();
             audio.underrun_silence = audio_out_.underrun_silence();
             audio.underrun_callbacks = audio_out_.underrun_callbacks();
+            audio.sample_rate = audio_->sample_rate();
             audio.buffered_frames = audio_->buffered_frames();
             snapshot.audio = std::move(audio);
         }

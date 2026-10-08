@@ -173,6 +173,16 @@ void LiveStats::print(const Snapshot &snapshot) {
                     static_cast<unsigned long long>(audio.preroll_silence),
                     static_cast<unsigned long long>(audio.underrun_silence),
                     static_cast<unsigned long long>(audio.underrun_callbacks));
+        std::printf(SCRCTL_TR(
+            "      Audio clock: %s, average buffer %.1f ms, compensation %d ppm, "
+            "added/removed %llu/%llu frames, updates %llu, failures %llu\n"),
+                    as.clock.active ? SCRCTL_TR("active") : SCRCTL_TR("inactive"),
+                    audio.sample_rate > 0 ? as.clock.average_frames * 1000.0 / audio.sample_rate : 0.0,
+                    as.clock.compensation_ppm,
+                    static_cast<unsigned long long>(as.clock.added_frames),
+                    static_cast<unsigned long long>(as.clock.removed_frames),
+                    static_cast<unsigned long long>(as.clock.compensation_updates),
+                    static_cast<unsigned long long>(as.clock_failed));
         last_audio_packets_ = as.packets;
         last_audio_decoded_ = as.decoded;
         last_audio_delivered_ = audio.delivered;

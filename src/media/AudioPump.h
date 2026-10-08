@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "decode/AudioDecoder.h"
+#include "media/AudioRegulator.h"
 #include "media/StreamSession.h"
 #include "remote/Device.h"
 
@@ -38,12 +39,13 @@ public:
         /// 默认 50 ms，上限 1000 ms。超出上限时限制到上限并告知调用方。
         ///
         /// 目标水位限制实时播放延迟。启动时消费方可能晚于接收线程准备好，
-        /// 额外积累的音频不会在生产、消费速率相等时自动减少；read() 通过
-        /// 仅在初次读取或积压明显超出目标时裁去旧采样。正常包到达与音频回调
-        /// 的节拍差不应触发逐回调丢样本；长期时钟漂移尚未用重采样补偿。
+        /// 额外积累的音频不会在生产、消费速率相等时自动减少。启用 libav 时
+        /// 通过 AudioRegulator 平滑补偿水位和时钟偏差，运行时仅在环满时丢弃；
+        /// read() 可裁去首次输出前积累的旧采样。无 libav 时保留大积压裁剪。
+        /// 正常包到达与音频回调的节拍差不应触发逐回调丢样本。
         ///
-        /// 延迟开放消费端的验证见 docs/coredevice.md §17.2：read() 应将
-        /// 超过两倍目标的积压在一次调用内降至目标附近，而后维持稳定水位。
+        /// 延迟开放消费端的验证见 docs/coredevice.md §17.2：首次 read() 应将
+        /// 额外的启动积压一次降至目标附近；开始播放后的短 burst 则应保留。
         int target_backlog_ms = 50;
     };
 
@@ -66,7 +68,8 @@ public:
     };
 
     /// 以本次读取后的剩余帧数判断积压。初次输出可裁去启动期间积累的旧数据；
-    /// 后续只处理超过两倍目标加一个编码帧的大积压，正常回调不跳过样本。
+    /// 无软补偿时可用它处理超过两倍目标加一个编码帧的大积压；有软补偿时
+    /// 只采用 startup 分支，运行积压交给重采样及环容量保护。
     /// 纯函数供离线节拍和缓冲策略验证，不访问设备或修改缓冲。
     [[nodiscard]] static ReadTrim compute_read_trim(std::size_t buffered,
                                                    std::size_t requested,
@@ -95,7 +98,11 @@ public:
         /// 首次输出前裁去的旧音频帧数，不计入运行时的积压调整。
         std::uint64_t startup_trimmed = 0;
         /// 开始输出后，为控制过大积压而跳过的音频帧数。
+        /// 软时钟补偿可用时为零；极端环满丢弃单独记入 dropped_stale。
         std::uint64_t steered = 0;
+        /// 解码后共享的 PCM 时钟调节状态，不描述硬件原生采样率。
+        AudioRegulator::Stats clock;
+        std::uint64_t clock_failed = 0;
         std::uint64_t restarts = 0;
     };
 
@@ -159,11 +166,15 @@ private:
     void clear_live();
     void loop();
     void push(const std::vector<int16_t> &pcm);
+    void report_clock_failure(const std::string &err);
 
     remote::Device &device_;
     Options options_;
     bool verbose_ = false;
     std::unique_ptr<AudioDecoder> decoder_;
+    /// 仅工作线程访问库状态；消费线程不做重采样。指针在工作线程启动前
+    /// 设置，之后保持不变，read() 仅用它判断是否采用软补偿的积压策略。
+    std::unique_ptr<AudioRegulator> regulator_;
     /// 仅工作线程及 join 后的 stop() 访问 session_。对外信息经 live_
     /// 快照提供，不能将重建时会被 reset 的指针交给其他线程。
     std::unique_ptr<StreamSession> session_;
@@ -181,6 +192,9 @@ private:
     std::size_t read_ = 0;
     std::size_t used_ = 0;
     bool read_started_ = false;
+    /// 消费端与生产端在 mutex_ 内交接时间线调整，避免丢失欠载或裁剪事件。
+    std::uint64_t clock_silence_pending_ = 0;
+    std::uint64_t clock_discard_pending_ = 0;
     std::size_t target_frames_ = 0;
     /// 环容量（音频帧），与目标水位由 compute_waterline() 一起计算。
     std::size_t capacity_frames_ = 0;
