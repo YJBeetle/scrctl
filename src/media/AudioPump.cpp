@@ -487,7 +487,8 @@ void AudioPump::loop() {
             stats_.seq_lost = lost_carry + seq.lost();
         }
         // 当前 ELD 每包承载一帧（10 ms），不做重组或重传，只统计序号缺口。
-        const auto payload = std::span<const uint8_t>(datagram).subspan(info.payload_offset);
+        const auto payload = std::span<const uint8_t>(datagram).subspan(
+            info.payload_offset, info.payload_size);
         std::vector<int16_t> pcm;
         std::string derr;
         if (!decoder_->decode(payload, pcm, derr)) {

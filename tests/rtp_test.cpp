@@ -31,7 +31,8 @@ using scrctl::rt::RtpSeq;
 /// 上一版测试用了"X=0 + 8 字节私有子头"，正好和被测代码里多跳 8 字节的错误自洽，
 /// 于是测试全绿、真机全废。
 std::vector<uint8_t> packet(uint16_t seq, uint32_t ts, bool marker,
-                            const std::vector<uint8_t> &payload, uint8_t pt = 100) {
+                            const std::vector<uint8_t> &payload, uint8_t pt = 100,
+                            uint32_t ssrc = 0xDEADBEEF) {
     std::vector<uint8_t> p;
     p.push_back(0x90);  // V=2, P=0, X=1, CC=0
     p.push_back(pt | (marker ? 0x80 : 0));
@@ -41,7 +42,7 @@ std::vector<uint8_t> packet(uint16_t seq, uint32_t ts, bool marker,
         p.push_back(static_cast<uint8_t>(ts >> (8 * i)));
     }
     for (int i = 0; i < 4; ++i) {
-        p.push_back(static_cast<uint8_t>(0xDEADBEEF >> (8 * (3 - i))));
+        p.push_back(static_cast<uint8_t>(ssrc >> (8 * (3 - i))));
     }
     p.push_back(0x90);
     p.push_back(0x11);  // profile
@@ -55,8 +56,9 @@ std::vector<uint8_t> packet(uint16_t seq, uint32_t ts, bool marker,
 }
 
 /// 一个 HEVC NAL 头。
-std::vector<uint8_t> nal_header(uint8_t type) {
-    return {static_cast<uint8_t>((type << 1) & 0x7E), 0x01};
+std::vector<uint8_t> nal_header(uint8_t type, uint8_t layer = 0, uint8_t tid = 1) {
+    return {static_cast<uint8_t>(((type << 1) & 0x7E) | ((layer >> 5) & 1)),
+            static_cast<uint8_t>((layer << 3) | (tid & 7))};
 }
 
 std::vector<uint8_t> aggregation(const std::vector<std::vector<uint8_t>> &nals) {
@@ -70,8 +72,8 @@ std::vector<uint8_t> aggregation(const std::vector<std::vector<uint8_t>> &nals) 
 }
 
 std::vector<uint8_t> fragment(uint8_t type, const std::vector<uint8_t> &body, bool start,
-                              bool end) {
-    std::vector<uint8_t> out = nal_header(49);
+                              bool end, uint8_t layer = 0, uint8_t tid = 1) {
+    std::vector<uint8_t> out = nal_header(49, layer, tid);
     out.push_back(static_cast<uint8_t>((start ? 0x80 : 0) | (end ? 0x40 : 0) | type));
     out.insert(out.end(), body.begin(), body.end());
     return out;
@@ -318,6 +320,325 @@ void test_feeds_annexb_parser() {
     check(au_sizes.size() == 2, "切出 2 个 AU: " + std::to_string(au_sizes.size()));
     check(keyframes == 1, "其中 1 个是关键帧");
     check(!au_sizes.empty() && au_sizes[0] == 3, "关键帧 AU = VPS + SPS + IDR");
+}
+
+void test_complete_nal_metadata() {
+    std::printf("\n== Complete NAL metadata ==\n");
+    using scrctl::rt::ReceivedNal;
+    HevcRtpDepacketizer d;
+    std::string err;
+    const ReceivedNal sentinel = {{0x40, 1, 0x91}, 3, 4, 5, 5, false};
+    std::vector<ReceivedNal> out{sentinel};
+    const auto original = single(1, {0x80, 0, 0, 3, 1, 0x55});
+    check(d.push_nals(packet(65000, 0xfedcba98U, true, original, 100, 0x12345678U), out, err),
+          "complete single NAL is accepted");
+    check(out.size() == 2 && out[0] == sentinel &&
+          out[1] == ReceivedNal{original, 0xfedcba98U, 0x12345678U, 65000, 65000, true},
+          "single NAL preserves bytes, unsigned timestamp, SSRC, sequence and marker; output appends");
+    d.push_nals(packet(65001, 90, false, original, 100, 0x12345678U), out, err);
+    check(out.size() == 3 && out.back().timestamp == 90 && !out.back().ends_access_unit,
+          "raw timestamp is preserved without expansion, clamping or epoch inference");
+
+    const auto vps = single(32, {0x11, 0x22});
+    const auto idr = single(20, {0x80, 0x33});
+    out.clear();
+    d.push_nals(packet(65002, 120, true, aggregation({vps, idr}), 100, 0x12345678U), out, err);
+    check(out.size() == 2 &&
+          out[0] == ReceivedNal{vps, 120, 0x12345678U, 65002, 65002, false} &&
+          out[1] == ReceivedNal{idr, 120, 0x12345678U, 65002, 65002, true},
+          "AP retains each NAL and attaches the packet marker only to its final NAL");
+    out.clear();
+    d.push_nals(packet(65003, 140, false, aggregation({vps})), out, err);
+    check(out.size() == 1 && out[0].bytes == vps && !out[0].ends_access_unit,
+          "one-NAL AP remains accepted for compatibility with the previous entry point");
+
+    HevcRtpDepacketizer fu;
+    out.clear();
+    fu.push_nals(packet(65535, 0xf1234567U, false, fragment(20, {0, 0}, true, false, 37, 4),
+                        100, 0x87654321U), out, err);
+    check(out.empty() && fu.mid_fragment() && fu.fragment_timestamp() == 0xf1234567U,
+          "FU start retains metadata but does not publish an incomplete NAL");
+    fu.push_nals(packet(0, 0xf1234567U, false, fragment(20, {3, 7}, false, false, 37, 4),
+                        100, 0x87654321U), out, err);
+    fu.push_nals(packet(1, 0xf1234567U, true, fragment(20, {8}, false, true, 37, 4),
+                        100, 0x87654321U), out, err);
+    auto expected = nal_header(20, 37, 4);
+    expected.insert(expected.end(), {0, 0, 3, 7, 8});
+    check(out.size() == 1 &&
+          out[0] == ReceivedNal{expected, 0xf1234567U, 0x87654321U, 65535, 1, true} &&
+          !fu.mid_fragment(),
+          "FU restores both layer bits and temporal ID, retains raw bytes and crosses sequence wrap");
+}
+
+void test_aggregation_atomicity() {
+    std::printf("\n== AP validation before output ==\n");
+    const auto first = single(32, {0x91});
+    const auto second = single(33, {0x92, 0x93});
+    std::vector<std::vector<uint8_t>> malformed;
+    auto truncated = aggregation({first, second});
+    truncated.pop_back();
+    malformed.push_back(truncated);
+    auto trailing = aggregation({first, second});
+    trailing.push_back(0xaa);
+    malformed.push_back(trailing);
+    auto zero_length = aggregation({first});
+    zero_length.insert(zero_length.end(), {0, 0});
+    malformed.push_back(zero_length);
+    auto short_header = aggregation({first});
+    short_header.insert(short_header.end(), {0, 1, 2});
+    malformed.push_back(short_header);
+    malformed.push_back(aggregation({first, aggregation({second})}));
+    malformed.push_back(aggregation({first, fragment(1, {0x80}, true, false)}));
+    malformed.push_back(aggregation({first, single(50, {0x80})}));
+    auto forbidden = second;
+    forbidden[0] |= 0x80;
+    malformed.push_back(aggregation({first, forbidden}));
+    auto no_temporal_id = second;
+    no_temporal_id[1] &= 0xf8;
+    malformed.push_back(aggregation({first, no_temporal_id}));
+    malformed.push_back(nal_header(48));
+
+    for (std::size_t i = 0; i < malformed.size(); ++i) {
+        HevcRtpDepacketizer typed, legacy;
+        std::string err;
+        const scrctl::rt::ReceivedNal sentinel = {first, 10, 11, 12, 12, false};
+        std::vector<scrctl::rt::ReceivedNal> nals{sentinel};
+        std::vector<uint8_t> bytes{0xde, 0xad};
+        const auto bad = packet(1, 500, true, malformed[i]);
+        check(typed.push_nals(bad, nals, err) && nals.size() == 1 && nals[0] == sentinel &&
+              typed.stats().nals == 0 && typed.stats().malformed == 1,
+              "malformed AP retains typed output without publishing its valid prefix: " + std::to_string(i));
+        check(legacy.push(bad, bytes, err) && bytes == std::vector<uint8_t>({0xde, 0xad}) &&
+              legacy.stats().nals == 0 && legacy.stats().malformed == 1,
+              "malformed AP retains Annex-B output without publishing its valid prefix: " + std::to_string(i));
+    }
+}
+
+void test_fragment_integrity() {
+    std::printf("\n== FU identity and continuity ==\n");
+    const auto start = packet(10, 500, false, fragment(20, {0x80, 1}, true, false, 37, 4));
+    const auto middle = packet(11, 500, false, fragment(20, {2, 3}, false, false, 37, 4));
+    const auto finish = packet(12, 500, true, fragment(20, {4, 5}, false, true, 37, 4));
+    const std::vector<std::vector<uint8_t>> mismatched = {
+        packet(12, 500, false, fragment(20, {2, 3}, false, false, 37, 4)),
+        packet(11, 501, false, fragment(20, {2, 3}, false, false, 37, 4)),
+        packet(11, 500, false, fragment(20, {2, 3}, false, false, 37, 4), 100, 0x12345678),
+        packet(11, 500, false, fragment(21, {2, 3}, false, false, 37, 4)),
+        packet(11, 500, false, fragment(20, {2, 3}, false, false, 36, 4)),
+        packet(11, 500, false, fragment(20, {2, 3}, false, false, 5, 4)),
+        packet(11, 500, false, fragment(20, {2, 3}, false, false, 37, 3)),
+        packet(11, 500, false, fragment(20, {}, false, false, 37, 4)),
+        packet(11, 500, false, fragment(20, {2, 3}, true, true, 37, 4)),
+        packet(11, 500, true, fragment(20, {2, 3}, false, false, 37, 4)),
+        packet(11, 500, false, fragment(49, {2, 3}, false, false, 37, 4)),
+    };
+    for (std::size_t i = 0; i < mismatched.size(); ++i) {
+        HevcRtpDepacketizer d;
+        std::string err;
+        std::vector<scrctl::rt::ReceivedNal> out;
+        d.push_nals(start, out, err);
+        d.push_nals(mismatched[i], out, err);
+        d.push_nals(finish, out, err);
+        check(out.empty() && !d.mid_fragment() && d.stats().dropped_fragments > 0,
+              "FU mismatch discards the partial NAL and later tail: " + std::to_string(i));
+        // 无需重置序号统计即可接收下一条合法 NAL；错误不能留下旧载荷。
+        d.push_nals(packet(20, 600, false, fragment(1, {0x80, 6}, true, false)), out, err);
+        d.push_nals(packet(21, 600, false, fragment(1, {7}, false, true)), out, err);
+        check(out.size() == 1 && out[0].bytes == single(1, {0x80, 6, 7}) &&
+              out[0].timestamp == 600 && out[0].first_sequence == 20 &&
+              out[0].last_sequence == 21 && !out[0].ends_access_unit,
+              "next complete FU has only its own bytes and metadata: " + std::to_string(i));
+    }
+
+    HevcRtpDepacketizer duplicates;
+    std::vector<scrctl::rt::ReceivedNal> out;
+    std::string err;
+    for (const auto &p : {start, start, middle, middle, finish, finish}) {
+        duplicates.push_nals(p, out, err);
+    }
+    auto complete = nal_header(20, 37, 4);
+    complete.insert(complete.end(), {0x80, 1, 2, 3, 4, 5});
+    check(out.size() == 1 && out[0].bytes == complete && duplicates.stats().reordered == 3,
+          "repeated adjacent FU fragments neither duplicate bytes nor publish the completed NAL twice");
+
+    HevcRtpDepacketizer reordered;
+    out.clear();
+    for (const auto &p : {start, finish, middle}) reordered.push_nals(p, out, err);
+    check(out.empty() && !reordered.mid_fragment(),
+          "out-of-order FU parts do not reconstruct a truncated or shuffled NAL");
+
+    // 同端口的其他 PT 不属于本次 FU，也不应破坏它；视频序号按自身连续。
+    HevcRtpDepacketizer interleaved;
+    out.clear();
+    interleaved.push_nals(start, out, err);
+    interleaved.push_nals(packet(900, 0, false, single(1, {0x80}), 101), out, err);
+    interleaved.push_nals(middle, out, err);
+    interleaved.push_nals(finish, out, err);
+    check(out.size() == 1 && out[0].bytes == complete && interleaved.stats().other_payload == 1 &&
+          interleaved.stats().seq_gaps == 0,
+          "another payload type is excluded from FU data and video sequence tracking");
+
+    HevcRtpDepacketizer unidentified;
+    out.clear();
+    unidentified.push_nals(start, out, err);
+    check(!unidentified.push_nals(std::vector<uint8_t>{1, 2, 3}, out, err) &&
+          unidentified.mid_fragment(),
+          "an unidentifiable datagram does not discard a valid FU from another source");
+    unidentified.push_nals(middle, out, err);
+    unidentified.push_nals(finish, out, err);
+    check(out.size() == 1 && out[0].bytes == complete && unidentified.stats().malformed == 1 &&
+          unidentified.stats().dropped_fragments == 0,
+          "valid contiguous fragments still complete after unrelated malformed data");
+
+    // RC=0 的合法 RTCP RR 只有八字节，不能被十二字节 RTP 头解析器识别。
+    // FramePump 当前仍将 SR 以外的数据报送入此入口；RR 不占用视频序号。
+    HevcRtpDepacketizer short_rr;
+    out.clear();
+    short_rr.push_nals(start, out, err);
+    const std::vector<uint8_t> rr{0x80, 201, 0, 1, 0x12, 0x34, 0x56, 0x78};
+    check(!short_rr.push_nals(rr, out, err) && short_rr.mid_fragment() && out.empty(),
+          "eight-byte RTCP RR does not discard an in-progress video FU");
+    short_rr.push_nals(packet(11, 500, true, fragment(20, {2, 3, 4, 5}, false, true, 37, 4)), out, err);
+    check(out.size() == 1 && out[0].bytes == complete && out[0].timestamp == 500 &&
+          out[0].ssrc == 0xdeadbeefU && out[0].first_sequence == 10 &&
+          out[0].last_sequence == 11 && out[0].ends_access_unit &&
+          short_rr.stats().packets == 2 && short_rr.stats().seq_gaps == 0 &&
+          short_rr.stats().dropped_fragments == 0,
+          "contiguous FU end after short RR retains the original metadata and complete bytes");
+
+    for (const auto &replacement : {single(1, {0x80, 0x42}), aggregation({single(32, {0x42})})}) {
+        HevcRtpDepacketizer d;
+        out.clear();
+        d.push_nals(start, out, err);
+        d.push_nals(packet(11, 600, true, replacement), out, err);
+        d.push_nals(finish, out, err);
+        check(out.size() == 1 && out[0].timestamp == 600 && !d.mid_fragment(),
+              "a new complete payload discards the preceding incomplete FU");
+    }
+
+    HevcRtpDepacketizer reset;
+    out.clear();
+    reset.push_nals(start, out, err);
+    reset.reset();
+    check(!reset.mid_fragment() && reset.fragment_timestamp() == 0 &&
+          reset.last_sequence() == 10 && reset.stats().dropped_fragments == 1,
+          "explicit fragment reset clears bytes and metadata but preserves sequence accounting");
+    reset.push_nals(finish, out, err);
+    check(out.empty(), "a tail after reset cannot complete a NAL from the previous assembly");
+}
+
+std::vector<uint8_t> padded(std::vector<uint8_t> p, uint8_t count) {
+    p[0] |= 0x20;
+    p.insert(p.end(), count, 0xa5);
+    p.back() = count;
+    return p;
+}
+
+void test_rtp_padding() {
+    std::printf("\n== RTP payload and padding boundaries ==\n");
+    const auto original = single(1, {0x80, 0x55, 3});
+    const auto valid = padded(packet(7, 800, true, original), 3);
+    scrctl::rt::PacketInfo info;
+    check(scrctl::rt::parse_rtp_header(valid, info) && info.payload_offset == 20 &&
+          info.payload_size == original.size(),
+          "RTP accepts three padding bytes and reports only the actual payload size");
+    HevcRtpDepacketizer typed, legacy;
+    std::vector<scrctl::rt::ReceivedNal> nals;
+    std::vector<uint8_t> bytes;
+    std::string err;
+    typed.push_nals(valid, nals, err);
+    legacy.push(valid, bytes, err);
+    check(nals.size() == 1 && nals[0].bytes == original &&
+          split_annexb(bytes) == std::vector<std::vector<uint8_t>>({original}),
+          "padding is absent from both complete-NAL and Annex-B outputs");
+
+    HevcRtpDepacketizer fu;
+    nals.clear();
+    fu.push_nals(padded(packet(8, 900, false, fragment(20, {0x80, 1}, true, false)), 1), nals, err);
+    fu.push_nals(padded(packet(9, 900, true, fragment(20, {2, 3}, false, true)), 255), nals, err);
+    check(nals.size() == 1 && nals[0].bytes == single(20, {0x80, 1, 2, 3}) &&
+          nals[0].first_sequence == 8 && nals[0].last_sequence == 9,
+          "FU assembly excludes one-byte and maximum-count RTP padding");
+    nals.clear();
+    fu.push_nals(padded(packet(10, 1000, true, aggregation({original, original})), 7), nals, err);
+    check(nals.size() == 2 && nals[0].bytes == original && nals[1].bytes == original &&
+          !nals[0].ends_access_unit && nals[1].ends_access_unit,
+          "AP validation stops at payload_size rather than treating padding as another length");
+    auto audio = padded(packet(11, 1100, false, {0x41, 0x42, 0x43}, 101), 5);
+    check(scrctl::rt::parse_rtp_header(audio, info) && info.payload_type == 101 && info.payload_size == 3,
+          "valid padded audio RTP remains accepted by the shared header parser");
+
+    std::vector<std::vector<uint8_t>> malformed;
+    auto zero = valid;
+    zero.back() = 0;
+    malformed.push_back(zero);
+    auto crosses_header = valid;
+    crosses_header.back() = static_cast<uint8_t>(crosses_header.size());
+    malformed.push_back(crosses_header);
+    auto no_payload = valid;
+    no_payload.back() = static_cast<uint8_t>(valid.size() - 20);
+    malformed.push_back(no_payload);
+    auto one_byte = valid;
+    one_byte.back() = static_cast<uint8_t>(valid.size() - 21);
+    malformed.push_back(one_byte);
+    for (const auto &bad : malformed) {
+        const scrctl::rt::PacketInfo sentinel{true, 127, 60000, 1, 2, 3, 4};
+        info = sentinel;
+        HevcRtpDepacketizer d;
+        const scrctl::rt::ReceivedNal old = {original, 1, 2, 3, 3, true};
+        nals = {old};
+        check(!scrctl::rt::parse_rtp_header(bad, info) && info.marker == sentinel.marker &&
+              info.payload_type == sentinel.payload_type && info.sequence == sentinel.sequence &&
+              info.timestamp == sentinel.timestamp && info.ssrc == sentinel.ssrc &&
+              info.payload_offset == sentinel.payload_offset && info.payload_size == sentinel.payload_size,
+              "invalid RTP padding leaves the caller's parsed header unchanged");
+        check(!d.push_nals(bad, nals, err) && nals.size() == 1 && nals[0] == old &&
+              d.stats().malformed == 1,
+              "invalid RTP padding cannot publish a NAL or replace existing output");
+    }
+}
+
+void test_shared_output_paths() {
+    std::printf("\n== Shared complete-NAL and Annex-B state ==\n");
+    HevcRtpDepacketizer d;
+    std::vector<uint8_t> bytes;
+    std::vector<scrctl::rt::ReceivedNal> nals;
+    std::string err;
+    d.push(packet(1, 400, false, fragment(20, {0x80, 1}, true, false)), bytes, err);
+    d.push_nals(packet(2, 400, true, fragment(20, {2}, false, true)), nals, err);
+    check(bytes.empty() && nals.size() == 1 && nals[0].bytes == single(20, {0x80, 1, 2}) &&
+          nals[0].first_sequence == 1 && nals[0].last_sequence == 2,
+          "Annex-B start and complete-NAL finish use the same FU assembly state");
+    nals.clear();
+    d.push_nals(packet(3, 800, false, fragment(1, {0x80, 3}, true, false)), nals, err);
+    d.push(packet(4, 800, true, fragment(1, {4}, false, true)), bytes, err);
+    check(nals.empty() && split_annexb(bytes) ==
+          std::vector<std::vector<uint8_t>>({single(1, {0x80, 3, 4})}) && d.stats().nals == 2,
+          "complete-NAL start and Annex-B finish share bytes and count completed NALs only once");
+}
+
+void test_invalid_nal_headers() {
+    std::printf("\n== Invalid NAL headers ==\n");
+    std::vector<std::vector<uint8_t>> invalid;
+    auto forbidden = single(1, {0x80});
+    forbidden[0] |= 0x80;
+    invalid.push_back(forbidden);
+    auto no_temporal_id = single(1, {0x80});
+    no_temporal_id[1] = 0;
+    invalid.push_back(no_temporal_id);
+    invalid.push_back(single(50, {0x80}));
+    invalid.push_back(single(63, {0x80}));
+    invalid.push_back(fragment(20, {0x80}, true, true));
+    invalid.push_back(fragment(20, {}, true, false));
+    invalid.push_back(nal_header(49));
+    for (const auto &payload : invalid) {
+        HevcRtpDepacketizer d;
+        std::vector<scrctl::rt::ReceivedNal> nals;
+        std::string err;
+        check(d.push_nals(packet(1, 400, true, payload), nals, err) && nals.empty() &&
+              !d.mid_fragment() && d.stats().malformed == 1,
+              "invalid or unsupported HEVC payload does not escape as a complete NAL");
+    }
 }
 
 /// RTCP 那几种包的字节形状。
@@ -618,6 +939,12 @@ int main() {
     test_single_and_offsets();
     test_payload_type_filter();
     test_feeds_annexb_parser();
+    test_complete_nal_metadata();
+    test_aggregation_atomicity();
+    test_fragment_integrity();
+    test_rtp_padding();
+    test_shared_output_paths();
+    test_invalid_nal_headers();
     test_rtcp_shapes();
     test_sender_reports();
     test_sequence_reordering();

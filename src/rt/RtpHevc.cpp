@@ -1,7 +1,7 @@
 #include "i18n/Translation.h"
 #include "rt/RtpHevc.h"
 
-#include <cstring>
+#include <utility>
 
 namespace scrctl::rt {
 namespace {
@@ -20,9 +20,15 @@ void append_start_code(std::vector<uint8_t> &out) {
     out.insert(out.end(), kStartCode, kStartCode + 4);
 }
 
-void append_annexb(std::vector<uint8_t> &out, const uint8_t *nal, std::size_t len) {
-    append_start_code(out);
-    out.insert(out.end(), nal, nal + len);
+bool valid_nal_header(std::span<const uint8_t> nal) {
+    // 只交付未标记语法损坏的 NAL；temporal_id_plus1 必须非零。
+    return nal.size() >= 2 && (nal[0] & 0x80) == 0 && (nal[1] & 7) != 0;
+}
+
+ReceivedNal complete_nal(std::span<const uint8_t> bytes, const PacketInfo &info,
+                         bool ends_access_unit) {
+    return {{bytes.begin(), bytes.end()}, info.timestamp, info.ssrc,
+            info.sequence, info.sequence, ends_access_unit};
 }
 
 }  // namespace
@@ -34,12 +40,6 @@ bool parse_rtp_header(std::span<const uint8_t> d, PacketInfo &out) {
     if ((d[0] >> 6) != 2) {
         return false;  // 只认 RTP v2
     }
-    out.marker = (d[1] & 0x80) != 0;
-    out.payload_type = static_cast<uint8_t>(d[1] & 0x7F);
-    out.sequence = be16(d.data() + 2);
-    out.timestamp = be32(d.data() + 4);
-    out.ssrc = be32(d.data() + 8);
-
     std::size_t pos = kRtpHeaderLen;
     const std::size_t csrc = static_cast<std::size_t>(d[0] & 0x0F) * 4;
     if (csrc > 0) {
@@ -60,30 +60,51 @@ bool parse_rtp_header(std::span<const uint8_t> d, PacketInfo &out) {
         }
         pos += ext;
     }
-    if (d.size() < pos + 2) {
+    std::size_t end = d.size();
+    if ((d[0] & 0x20) != 0) {
+        const std::size_t padding = d.back();
+        if (padding == 0 || padding > end - pos) {
+            return false;
+        }
+        end -= padding;
+    }
+    if (end - pos < 2) {
         return false;
     }
-    out.payload_offset = pos;
+    out = {(d[1] & 0x80) != 0, static_cast<uint8_t>(d[1] & 0x7F),
+           be16(d.data() + 2), be32(d.data() + 4), be32(d.data() + 8), pos, end - pos};
     return true;
 }
 
 void HevcRtpDepacketizer::reset() {
-    if (!partial_.empty()) {
+    if (!partial_.bytes.empty()) {
         ++stats_.dropped_fragments;
     }
-    partial_.clear();
-    partial_ts_ = 0;
-    partial_type_ = 0;
+    partial_ = {};
 }
 
 bool HevcRtpDepacketizer::push(std::span<const uint8_t> datagram, std::vector<uint8_t> &out,
                                std::string &err) {
+    std::vector<ReceivedNal> nals;
+    const bool ok = push_nals(datagram, nals, err);
+    for (const auto &nal : nals) {
+        append_start_code(out);
+        out.insert(out.end(), nal.bytes.begin(), nal.bytes.end());
+    }
+    return ok;
+}
+
+bool HevcRtpDepacketizer::push_nals(std::span<const uint8_t> datagram,
+                                    std::vector<ReceivedNal> &out, std::string &err) {
     PacketInfo info;
     if (!parse_rtp_header(datagram, info)) {
         ++stats_.malformed;
+        // 无法识别其 PT/来源时，不让无关的坏包作废已收到的 FU。
+        // 若缺失的是视频分片，下一条合法 FU 的序号连续性仍会拒绝残缺 NAL。
         err = SCRCTL_TR("Not an RTP packet");
         return false;
     }
+    err.clear();
     if (info.payload_type != video_pt_) {
         // 非视频 PT 整包跳过，不参与当前视频流的序号统计。
         ++stats_.other_payload;
@@ -104,79 +125,108 @@ bool HevcRtpDepacketizer::push(std::span<const uint8_t> datagram, std::vector<ui
     }
     // 直接读取当前缺口数，保留窗口内迟到补齐带来的减少。
     stats_.seq_lost = seq_.lost();
-    std::span<const uint8_t> body = datagram.subspan(info.payload_offset);
+    const auto payload = datagram.subspan(info.payload_offset, info.payload_size);
+    if (!valid_nal_header(payload)) {
+        ++stats_.malformed;
+        reset();
+        return true;
+    }
+    const uint8_t type = static_cast<uint8_t>((payload[0] >> 1) & 0x3F);
+    auto body = payload.subspan(2);
 
-    while (body.size() >= 2) {
-        const uint8_t *nal_header = body.data();
-        const uint8_t type = static_cast<uint8_t>((body[0] >> 1) & 0x3F);
-        body = body.subspan(2);
-
-        if (type == kTypeAgg16) {
-            // 聚合包：(2 字节大端长度 + 完整 NAL)*
-            while (body.size() >= 2) {
-                const std::size_t len = be16(body.data());
-                body = body.subspan(2);
-                if (len == 0 || len > body.size()) {
-                    break;  // 长度为零或超过剩余载荷，停止解析此聚合包
-                }
-                append_annexb(out, body.data(), len);
-                body = body.subspan(len);
-                ++stats_.nals;
-            }
-            break;
-        }
-
-        if (type == kTypeFragment) {
-            if (body.empty()) {
+    if (type == kTypeAgg16) {
+        // AP 不能接续 FU。先校验所有长度和完整 NAL 头，禁止嵌套 AP/FU/PACI；
+        // 若后部损坏，不将已验证的前缀交给调用方。
+        reset();
+        auto rest = body;
+        std::size_t count = 0;
+        while (!rest.empty()) {
+            if (rest.size() < 2) {
                 ++stats_.malformed;
-                break;
+                return true;
             }
-            const uint8_t fu = body[0];
-            const bool start = (fu & 0x80) != 0;
-            const bool end = (fu & 0x40) != 0;
-            const uint8_t inner_type = static_cast<uint8_t>(fu & 0x3F);
-            body = body.subspan(1);
-
-            if (start) {
-                if (!partial_.empty()) {
-                    // 新起始分片到达时，前一个 NAL 仍未完成，计为丢弃。
-                    ++stats_.dropped_fragments;
-                }
-                partial_.clear();
-                partial_type_ = inner_type;
-                partial_ts_ = info.timestamp;
-            } else if (partial_.empty()) {
-                // 没有已缓存的起始分片，无法重组中间或结尾分片。
-                ++stats_.dropped_fragments;
-                break;
+            const std::size_t len = be16(rest.data());
+            rest = rest.subspan(2);
+            if (len < 2 || len > rest.size() || !valid_nal_header(rest.first(len)) ||
+                ((rest[0] >> 1) & 0x3F) >= kTypeAgg16) {
+                ++stats_.malformed;
+                return true;
             }
-            // 当前适配不含 DONL，FU 头后全部字节均作为分片数据。
-            partial_.insert(partial_.end(), body.begin(), body.end());
-            if (end) {
-                // 使用起始分片的 TU 构造两字节 NAL 头，随后连接全部缓存分片数据。
-                // 当前实现写入 layer_id=0、temporal_id_plus1=1。
-                const uint8_t header[2] = {static_cast<uint8_t>((partial_type_ << 1) & 0x7E),
-                                           0x01};
-                append_start_code(out);
-                out.insert(out.end(), header, header + 2);
-                out.insert(out.end(), partial_.begin(), partial_.end());
-                ++stats_.nals;
-                partial_.clear();
-            }
-            break;
+            rest = rest.subspan(len);
+            ++count;
         }
+        if (count == 0) {
+            ++stats_.malformed;
+            return true;
+        }
+        while (!body.empty()) {
+            const std::size_t len = be16(body.data());
+            body = body.subspan(2);
+            out.push_back(complete_nal(body.first(len), info,
+                                       info.marker && body.size() == len));
+            body = body.subspan(len);
+        }
+        stats_.nals += count;
+        return true;
+    }
 
-        // 单一 NAL：剩下整个都是它。
-        {
-            std::vector<uint8_t> nal(2);
-            nal[0] = nal_header[0];
-            nal[1] = nal_header[1];
-            nal.insert(nal.end(), body.begin(), body.end());
-            append_annexb(out, nal.data(), nal.size());
+    if (type == kTypeFragment) {
+        if (body.size() < 2) {  // 至少 FU 头和一个载荷字节。
+            ++stats_.malformed;
+            reset();
+            return true;
+        }
+        const uint8_t fu = body[0];
+        const bool start = (fu & 0x80) != 0;
+        const bool end = (fu & 0x40) != 0;
+        const uint8_t inner_type = static_cast<uint8_t>(fu & 0x3F);
+        if ((start && end) || inner_type >= kTypeAgg16 || (info.marker && !end)) {
+            ++stats_.malformed;
+            reset();
+            return true;
+        }
+        // 保留起始片的 F、LayerId 和 TID，只有六位 type 来自 FU 头。
+        const uint8_t header[2] = {
+            static_cast<uint8_t>((payload[0] & 0x81) | (inner_type << 1)), payload[1]};
+        body = body.subspan(1);
+        const bool same_nal = !partial_.bytes.empty() &&
+            partial_.timestamp == info.timestamp && partial_.ssrc == info.ssrc &&
+            partial_.bytes[0] == header[0] && partial_.bytes[1] == header[1];
+        // 不重复附加紧邻的同序号分片。不同身份即使序号相等也不能当成重复包。
+        if (same_nal && info.sequence == partial_.last_sequence) {
+            return true;
+        }
+        if (start) {
+            reset();
+            partial_ = {{header[0], header[1]}, info.timestamp, info.ssrc,
+                        info.sequence, info.sequence, false};
+        } else if (partial_.bytes.empty()) {
+            ++stats_.dropped_fragments;
+            return true;
+        } else if (!same_nal ||
+                   info.sequence != static_cast<uint16_t>(partial_.last_sequence + 1U)) {
+            reset();
+            return true;
+        }
+        // 当前适配不含 DONL，FU 头之后的字节全部属于原始 NAL 载荷。
+        partial_.bytes.insert(partial_.bytes.end(), body.begin(), body.end());
+        partial_.last_sequence = info.sequence;
+        if (end) {
+            partial_.ends_access_unit = info.marker;
+            out.push_back(std::move(partial_));
+            partial_ = {};
             ++stats_.nals;
         }
-        break;
+        return true;
     }
+
+    reset();
+    if (type >= kTypeAgg16) {  // 未实现 PACI，不将其包头当作原始 NAL。
+        ++stats_.malformed;
+        return true;
+    }
+    out.push_back(complete_nal(payload, info, info.marker));
+    ++stats_.nals;
     return true;
 }
 
