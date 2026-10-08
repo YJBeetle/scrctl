@@ -14,7 +14,7 @@ jobs:
   ctest:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: ${{ matrix.timeout_minutes }}
     strategy:
       fail-fast: false
       matrix:
@@ -23,8 +23,13 @@ jobs:
             # 标准 macos-15 runner 是 ARM64；固定系统，避免 latest 升到 26
             # 后把主程序和 Homebrew bottles 的最低系统要求一起提升。
             os: macos-15
+            # 最近一轮构建用了 18 分 18 秒，为测试和打包保留时间。
+            timeout_minutes: 30
+            build_jobs: 3
           - name: Ubuntu
             os: ubuntu-latest
+            timeout_minutes: 20
+            build_jobs: 4
     # 两个平台都必须成功；构建、测试和可执行文件启动分别检查。
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +58,8 @@ jobs:
             -DSCRCTL_BUILD_PROBES=ON -DSCRCTL_BUILD_EXPERIMENTS=ON $EXTRA
 
       - name: 构建
-        run: cmake --build build --parallel
+        # Make 生成器下，无数值的 --parallel 会传入无上限的 -j。
+        run: cmake --build build --parallel ${{ matrix.build_jobs }}
 
       # 这些作业预期包含 FFmpeg；缺依赖导致的后端降级必须让 CI 失败。
       - name: 确认 FFmpeg 音频测试已注册
@@ -188,7 +194,7 @@ jobs:
           -DOPENSSL_ROOT_DIR="$(brew --prefix openssl)"
 
       - name: 构建
-        run: cmake --build build-san --parallel
+        run: cmake --build build-san --parallel 3
 
       - name: 确认 FFmpeg 音频测试已注册
         run: >-
