@@ -211,8 +211,9 @@ void check_start_answer() {
         check(parsed && parsed->sender_port == port.expected && err.empty() &&
                   status == StartStatus::Started,
               std::string("合法端口被接受并清空旧错误：") + port.description);
-        check(parsed && parsed->payload_type == 101 && parsed->local_ssrc == 0xff112233 &&
-                  parsed->remote_ssrc == 0x44556677,
+        check(parsed && parsed->payload_type == 101 && parsed->has_local_ssrc &&
+                  parsed->local_ssrc == 0xff112233 &&
+                  parsed->remote_ssrc == 0x44556677 && parsed->has_remote_ssrc,
               std::string("保留 PT 低七位及协商 SSRC：") + port.description);
         check(parsed && parsed->session_uuid == uuid && encode(parsed->answer) == wire &&
                   encode(answer) == wire,
@@ -274,9 +275,55 @@ void check_start_answer() {
         std::string err = "previous error";
         const auto parsed = parse_start_answer(std::move(answer), uuid, err);
         check(parsed && parsed->sender_port == 0 && parsed->payload_type == 100 &&
-                  parsed->local_ssrc == 0 && parsed->remote_ssrc == 0 && err.empty() &&
+                  parsed->local_ssrc == 0 && !parsed->has_local_ssrc &&
+                  parsed->remote_ssrc == 0 && !parsed->has_remote_ssrc && err.empty() &&
                   parsed->session_uuid == uuid && encode(parsed->answer) == wire,
               "字段缺失保留默认值与完整回复：层级 " + std::to_string(depth));
+    }
+}
+
+void check_source_ssrc() {
+    using namespace scrctl::xpc;
+    using scrctl::media::parse_start_answer;
+    using StartStatus = scrctl::media::StreamSession::StartStatus;
+    const auto answer_for = [](const std::string &field, Value source) {
+        auto config = make_dict();
+        dict_set(config, field, std::move(source));
+        auto connection = make_dict();
+        dict_set(connection, "streamConfig", std::move(config));
+        auto answer = make_dict();
+        dict_set(answer, "connection", std::move(connection));
+        return answer;
+    };
+    for (const std::string field : {"LocalSSRC", "RemoteSSRC"}) {
+        for (const uint64_t source : {uint64_t(0), uint64_t(1), uint64_t(0xffffffff)}) {
+            for (const auto &value : {make_uint64(source), make_int64(static_cast<int64_t>(source))}) {
+                auto answer = answer_for(field, value);
+                const auto original = encode(answer);
+                std::string err = "previous error";
+                StartStatus status = StartStatus::AcceptedInvalidAnswer;
+                auto parsed = parse_start_answer(std::move(answer), {}, err, &status);
+                check(parsed && err.empty() && status == StartStatus::Started &&
+                          (field == "LocalSSRC" ? parsed->local_ssrc : parsed->remote_ssrc) == source &&
+                          parsed->has_local_ssrc == (field == "LocalSSRC") &&
+                          parsed->has_remote_ssrc == (field == "RemoteSSRC") &&
+                          encode(parsed->answer) == original,
+                      field + " 接受完整 u32 范围，包括显式 0，并保留字段存在性和原始答复");
+            }
+        }
+        const std::vector<Value> invalid{make_int64(-1), make_uint64(uint64_t(1) << 32),
+            make_int64(std::numeric_limits<int64_t>::max()),
+            make_uint64(std::numeric_limits<uint64_t>::max()), make_null(), make_bool(false),
+            make_bool(true), make_double(1.0), make_string("1"), make_data({1}), make_dict(), make_array()};
+        for (const auto &value : invalid) {
+            std::string err = "previous error";
+            StartStatus status = StartStatus::Started;
+            const auto parsed = parse_start_answer(answer_for(field, value), {}, err, &status);
+            check(!parsed && status == StartStatus::AcceptedInvalidAnswer &&
+                      err.find("connection.streamConfig." + field) != std::string::npos &&
+                      err.find("0..4294967295") != std::string::npos,
+                  field + " 拒绝非法类型或溢出，不能转换成缺失或截断后的媒体源");
+        }
     }
 }
 
@@ -350,6 +397,7 @@ int main() {
 
     std::printf("== 起流回复端口及会话参数 ==\n");
     check_start_answer();
+    check_source_ssrc();
 
     std::printf("== 音频路由答复校验 ==\n");
     check_audio_routing();

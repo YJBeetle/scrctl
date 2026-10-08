@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 19:21+0800\n"
+"POT-Creation-Date: 2026-10-08 20:42+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1312,7 +1312,7 @@ msgid ""
 "Audio: device session ended (%llu ms without audio); recreating session\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:501
+#: src/media/AudioPump.cpp:502
 #, c-format
 msgid "Audio decode failed (%zu-byte payload): %s\n"
 msgstr ""
@@ -1351,7 +1351,7 @@ msgstr ""
 msgid "Failed to adjust the audio clock: "
 msgstr ""
 
-#: src/media/FramePump.cpp:68
+#: src/media/FramePump.cpp:70
 #, c-format
 msgid ""
 "Software decoder (libavcodec) is not included; continuing with the platform "
@@ -1361,80 +1361,86 @@ msgid ""
 "Install FFmpeg development packages and reconfigure the build.\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:106
+#: src/media/FramePump.cpp:108
 msgid "Cannot open recording file "
 msgstr ""
 
-#: src/media/FramePump.cpp:132
+#: src/media/FramePump.cpp:134
 #, c-format
 msgid ""
 "Failed to stop device video session (device will release it when the lease "
 "expires): %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:156
+#: src/media/FramePump.cpp:158
 #, c-format
 msgid "Failed to stop previous video session (still attempting restart): %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:190
+#: src/media/FramePump.cpp:177
+#, c-format
+msgid ""
+"Video negotiation failed during recovery; stopping video reception: %s\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:202
 #, c-format
 msgid "Video session recreated, receive port=%u\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:251
+#: src/media/FramePump.cpp:269
 #, c-format
 msgid "Failed to send PLI: %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:271
+#: src/media/FramePump.cpp:295
 #, c-format
 msgid ""
-"Sequence gap or discarded fragment detected: requesting keyframe, wait limit "
-"%d ms\n"
+"Video packet loss or payload damage detected: requesting keyframe, wait "
+"limit %d ms\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:301
+#: src/media/FramePump.cpp:326
 #, c-format
 msgid "Decoder switched to %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:339
+#: src/media/FramePump.cpp:366
 #, c-format
 msgid ""
 "After %d restarts, NALs still exceed the decoder limit. Video is "
 "unavailable; retrying every %llu seconds. Callers can use screenshots.\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:393
+#: src/media/FramePump.cpp:417
 #, c-format
 msgid "Test: injected keyframe decode failure (%s)\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:394
+#: src/media/FramePump.cpp:418
 msgid "further PLI disabled"
 msgstr ""
 
-#: src/media/FramePump.cpp:395
+#: src/media/FramePump.cpp:419
 msgid "PLI continues"
 msgstr ""
 
-#: src/media/FramePump.cpp:485
+#: src/media/FramePump.cpp:515
 #, c-format
 msgid ""
 "%s: no data for %llu ms; device reports session alive, continuing to wait\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:490
+#: src/media/FramePump.cpp:520
 #, c-format
 msgid "%s: no data for %llu ms, %s; recreating video session\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:493
+#: src/media/FramePump.cpp:523
 msgid "device session ended"
 msgstr ""
 
-#: src/media/FramePump.cpp:494 src/media/ScreenshotSource.cpp:72
+#: src/media/FramePump.cpp:524 src/media/ScreenshotSource.cpp:72
 #: src/net/Stack.cpp:359 src/net/TcpStream.cpp:44 src/net/TcpStream.cpp:122
 #: src/net/TcpStream.cpp:126 src/net/UdpSocket.cpp:109
 #: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:255
@@ -1443,79 +1449,91 @@ msgstr ""
 msgid ")"
 msgstr ""
 
-#: src/media/FramePump.cpp:494
+#: src/media/FramePump.cpp:524
 msgid "session status query failed ("
 msgstr ""
 
-#: src/media/FramePump.cpp:497 src/media/FramePump.cpp:510
+#: src/media/FramePump.cpp:528 src/media/FramePump.cpp:543
 #, c-format
 msgid "Failed to recreate video session: %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:525
+#: src/media/FramePump.cpp:559
 #, c-format
 msgid ""
 "%s: no data for %llu ms; recovery threshold exceeded, recreating video "
 "session\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:546
+#: src/media/FramePump.cpp:587
 #, c-format
 msgid "Failed to recreate video session: %s (retry in 1 second)\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:576
+#: src/media/FramePump.cpp:617
 #, c-format
 msgid "Failed to send RTCP keepalive: %s\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:581
+#: src/media/FramePump.cpp:622
 msgid "Input or frame request"
 msgstr ""
 
-#: src/media/FramePump.cpp:589
+#: src/media/FramePump.cpp:630
 #, c-format
 msgid "Video fallback active for %llu seconds; retrying video session\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:596
+#: src/media/FramePump.cpp:637
 #, c-format
 msgid "%s; recreating video session to obtain a keyframe\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:597
+#: src/media/FramePump.cpp:638
 msgid "Scheduled video retry after fallback"
 msgstr ""
 
-#: src/media/FramePump.cpp:598
+#: src/media/FramePump.cpp:639
 msgid "NAL exceeds platform decoder length limit"
 msgstr ""
 
-#: src/media/FramePump.cpp:634
+#: src/media/FramePump.cpp:675
 #, c-format
 msgid "Keyframe wait reached %d ms; recreating video session\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:649
+#: src/media/FramePump.cpp:690
 #, c-format
 msgid ""
 "No keyframe output after %llu seconds; recreating video session (%d/%d)\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:657
+#: src/media/FramePump.cpp:698
 #, c-format
 msgid ""
 "No keyframe output after %d restarts. Video is unavailable; callers can use "
 "screenshots. Retrying every %llu seconds.\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:680
+#: src/media/FramePump.cpp:721
 msgid "Receive silence timeout"
 msgstr ""
 
-#: src/media/FramePump.cpp:719
+#: src/media/FramePump.cpp:786
 #, c-format
 msgid "Test: dropped video packet %d to inject a sequence gap\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:822
+msgid ""
+"Video sampling timestamp is ambiguous; discarding the access unit and "
+"requesting a keyframe.\n"
+msgstr ""
+
+#: src/media/FramePump.cpp:829
+msgid ""
+"Video access-unit input is inconsistent; discarding the access unit and "
+"requesting a keyframe.\n"
 msgstr ""
 
 #: src/media/ScreenshotSource.cpp:38
@@ -1550,26 +1568,38 @@ msgstr ""
 msgid "Screenshot response missing image data"
 msgstr ""
 
-#: src/media/StreamSession.cpp:152
+#: src/media/StreamSession.cpp:150
+msgid ""
+"Invalid startmediastream answer: connection.streamConfig.LocalSSRC must be "
+"an integer in 0..4294967295"
+msgstr ""
+
+#: src/media/StreamSession.cpp:159
+msgid ""
+"Invalid startmediastream answer: connection.streamConfig.RemoteSSRC must be "
+"an integer in 0..4294967295"
+msgstr ""
+
+#: src/media/StreamSession.cpp:186
 msgid ""
 "Invalid startmediastream answer: connection.sender.port must be an integer "
 "or decimal string in 1..65535"
 msgstr ""
 
-#: src/media/StreamSession.cpp:189 src/remote/App.cpp:218
+#: src/media/StreamSession.cpp:223 src/remote/App.cpp:218
 #: src/transport/TcpConnect.cpp:27
 msgid ": "
 msgstr ""
 
-#: src/media/StreamSession.cpp:189
+#: src/media/StreamSession.cpp:223
 msgid "Failed to bind UDP port "
 msgstr ""
 
-#: src/media/StreamSession.cpp:222
+#: src/media/StreamSession.cpp:256
 msgid "startmediastream failed on the retained connection (transport failed)"
 msgstr ""
 
-#: src/media/StreamSession.cpp:301
+#: src/media/StreamSession.cpp:335
 msgid "getmediastreamserverstatus response missing sessions array"
 msgstr ""
 
@@ -2572,7 +2602,7 @@ msgid ""
 "button input may still be available; see docs/coredevice.md section 23)"
 msgstr ""
 
-#: src/rt/RtpHevc.cpp:84
+#: src/rt/RtpHevc.cpp:104
 msgid "Not an RTP packet"
 msgstr ""
 

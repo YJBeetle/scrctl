@@ -16,6 +16,24 @@ using namespace scrctl;
 constexpr int64_t kAccessNetworkType = 1;
 constexpr int64_t kTransportProtocolType = 2;
 
+/// SSRC 是完整的无符号 32 位值，包括 0。只在范围及实际 XPC 类型均合法时收窄，
+/// 避免负数、大 UInt64 或 Bool 被 as_int_or 隐式转换成另一个媒体源。
+bool parse_ssrc(const xpc::Value &value, uint32_t &out) {
+    uint64_t source = 0;
+    if (value.type == xpc::Type::UInt64) {
+        source = value.uint64;
+    } else if (value.type == xpc::Type::Int64 && value.int64 >= 0) {
+        source = static_cast<uint64_t>(value.int64);
+    } else {
+        return false;
+    }
+    if (source > std::numeric_limits<uint32_t>::max()) {
+        return false;
+    }
+    out = static_cast<uint32_t>(source);
+    return true;
+}
+
 /// 将 options 参数放入带类型标签的字典：{"int": …}、{"string": …} 或
 /// {"uuid": …}。该包装来自已验证的 CoreDevice 请求形状，不能省略这一层。
 xpc::Value typed(const char *tag, xpc::Value inner) {
@@ -126,8 +144,24 @@ std::optional<StreamSession::Started> parse_start_answer(
             // 名称采用设备视角：LocalSSRC 是设备媒体源，客户端 RTCP 报告块引用它；
             // RemoteSSRC 是客户端反馈的发送者身份。已测设备回显 offer 中声明的 SSRC，
             // 不代表总会另行生成新值；反馈使用本次 answer 中的两个值。
-            started.local_ssrc = static_cast<uint32_t>(sc->at("LocalSSRC").as_int_or(0));
-            started.remote_ssrc = static_cast<uint32_t>(sc->at("RemoteSSRC").as_int_or(0));
+            if (const auto *source = sc->find("LocalSSRC"); source != nullptr) {
+                if (!parse_ssrc(*source, started.local_ssrc)) {
+                    err = SCRCTL_TR(
+                        "Invalid startmediastream answer: connection.streamConfig.LocalSSRC must "
+                        "be an integer in 0..4294967295");
+                    return std::nullopt;
+                }
+                started.has_local_ssrc = true;
+            }
+            if (const auto *source = sc->find("RemoteSSRC"); source != nullptr) {
+                if (!parse_ssrc(*source, started.remote_ssrc)) {
+                    err = SCRCTL_TR(
+                        "Invalid startmediastream answer: connection.streamConfig.RemoteSSRC must "
+                        "be an integer in 0..4294967295");
+                    return std::nullopt;
+                }
+                started.has_remote_ssrc = true;
+            }
         }
         if (const auto *sender = connection->find("sender"); sender != nullptr) {
             if (const auto *p = sender->find("port"); p != nullptr) {

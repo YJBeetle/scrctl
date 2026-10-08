@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 19:21+0800\n"
+"POT-Creation-Date: 2026-10-08 20:42+0800\n"
 "PO-Revision-Date: 2026-10-07 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -1355,7 +1355,7 @@ msgid ""
 "Audio: device session ended (%llu ms without audio); recreating session\n"
 msgstr "音频：设备会话已结束（%llu ms 未收到音频），重建会话\n"
 
-#: src/media/AudioPump.cpp:501
+#: src/media/AudioPump.cpp:502
 #, c-format
 msgid "Audio decode failed (%zu-byte payload): %s\n"
 msgstr "音频解码失败（载荷 %zu 字节）: %s\n"
@@ -1394,7 +1394,7 @@ msgstr "无效的采样数量"
 msgid "Failed to adjust the audio clock: "
 msgstr "调整音频时钟失败："
 
-#: src/media/FramePump.cpp:68
+#: src/media/FramePump.cpp:70
 #, c-format
 msgid ""
 "Software decoder (libavcodec) is not included; continuing with the platform "
@@ -1408,45 +1408,51 @@ msgstr ""
 "会话，可能暂时无新画面。\n"
 "请安装 FFmpeg 开发包并重新配置、构建项目。\n"
 
-#: src/media/FramePump.cpp:106
+#: src/media/FramePump.cpp:108
 msgid "Cannot open recording file "
 msgstr "打不开录制文件 "
 
-#: src/media/FramePump.cpp:132
+#: src/media/FramePump.cpp:134
 #, c-format
 msgid ""
 "Failed to stop device video session (device will release it when the lease "
 "expires): %s\n"
 msgstr "停止设备视频会话失败（设备端将在租期到期后释放）: %s\n"
 
-#: src/media/FramePump.cpp:156
+#: src/media/FramePump.cpp:158
 #, c-format
 msgid "Failed to stop previous video session (still attempting restart): %s\n"
 msgstr "停止旧视频会话失败（仍尝试重建）: %s\n"
 
-#: src/media/FramePump.cpp:190
+#: src/media/FramePump.cpp:177
+#, c-format
+msgid ""
+"Video negotiation failed during recovery; stopping video reception: %s\n"
+msgstr "视频恢复起流的协商答复无效，停止接收视频：%s\n"
+
+#: src/media/FramePump.cpp:202
 #, c-format
 msgid "Video session recreated, receive port=%u\n"
 msgstr "视频会话已重建，收流端口=%u\n"
 
-#: src/media/FramePump.cpp:251
+#: src/media/FramePump.cpp:269
 #, c-format
 msgid "Failed to send PLI: %s\n"
 msgstr "PLI 发送失败: %s\n"
 
-#: src/media/FramePump.cpp:271
+#: src/media/FramePump.cpp:295
 #, c-format
 msgid ""
-"Sequence gap or discarded fragment detected: requesting keyframe, wait limit "
-"%d ms\n"
-msgstr "检测到序号缺口或丢弃分片：请求关键帧，等待上限 %d ms\n"
+"Video packet loss or payload damage detected: requesting keyframe, wait "
+"limit %d ms\n"
+msgstr "检测到视频丢包或载荷损坏，请求关键帧；最多等待 %d ms\n"
 
-#: src/media/FramePump.cpp:301
+#: src/media/FramePump.cpp:326
 #, c-format
 msgid "Decoder switched to %s\n"
 msgstr "解码后端已切换为 %s\n"
 
-#: src/media/FramePump.cpp:339
+#: src/media/FramePump.cpp:366
 #, c-format
 msgid ""
 "After %d restarts, NALs still exceed the decoder limit. Video is "
@@ -1455,35 +1461,35 @@ msgstr ""
 "连续 %d 次重建仍因 NAL 超过后端长度上限而无画面输出。视频暂不可用，将每 %llu "
 "秒重试；调用方可切换至截图服务。\n"
 
-#: src/media/FramePump.cpp:393
+#: src/media/FramePump.cpp:417
 #, c-format
 msgid "Test: injected keyframe decode failure (%s)\n"
 msgstr "测试：注入关键帧解码失败（%s）\n"
 
-#: src/media/FramePump.cpp:394
+#: src/media/FramePump.cpp:418
 msgid "further PLI disabled"
 msgstr "后续禁止 PLI"
 
-#: src/media/FramePump.cpp:395
+#: src/media/FramePump.cpp:419
 msgid "PLI continues"
 msgstr "继续发送 PLI"
 
-#: src/media/FramePump.cpp:485
+#: src/media/FramePump.cpp:515
 #, c-format
 msgid ""
 "%s: no data for %llu ms; device reports session alive, continuing to wait\n"
 msgstr "%s：%llu ms 未收到数据，设备报告会话仍运行，继续等待\n"
 
-#: src/media/FramePump.cpp:490
+#: src/media/FramePump.cpp:520
 #, c-format
 msgid "%s: no data for %llu ms, %s; recreating video session\n"
 msgstr "%s：%llu ms 未收到数据，%s，重建视频会话\n"
 
-#: src/media/FramePump.cpp:493
+#: src/media/FramePump.cpp:523
 msgid "device session ended"
 msgstr "设备会话已结束"
 
-#: src/media/FramePump.cpp:494 src/media/ScreenshotSource.cpp:72
+#: src/media/FramePump.cpp:524 src/media/ScreenshotSource.cpp:72
 #: src/net/Stack.cpp:359 src/net/TcpStream.cpp:44 src/net/TcpStream.cpp:122
 #: src/net/TcpStream.cpp:126 src/net/UdpSocket.cpp:109
 #: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:255
@@ -1492,66 +1498,66 @@ msgstr "设备会话已结束"
 msgid ")"
 msgstr "）"
 
-#: src/media/FramePump.cpp:494
+#: src/media/FramePump.cpp:524
 msgid "session status query failed ("
 msgstr "查询会话状态失败（"
 
-#: src/media/FramePump.cpp:497 src/media/FramePump.cpp:510
+#: src/media/FramePump.cpp:528 src/media/FramePump.cpp:543
 #, c-format
 msgid "Failed to recreate video session: %s\n"
 msgstr "重建视频会话失败: %s\n"
 
-#: src/media/FramePump.cpp:525
+#: src/media/FramePump.cpp:559
 #, c-format
 msgid ""
 "%s: no data for %llu ms; recovery threshold exceeded, recreating video "
 "session\n"
 msgstr "%s：%llu ms 未收到数据，超过恢复阈值，重建视频会话\n"
 
-#: src/media/FramePump.cpp:546
+#: src/media/FramePump.cpp:587
 #, c-format
 msgid "Failed to recreate video session: %s (retry in 1 second)\n"
 msgstr "重建视频会话失败: %s（1 秒后再试）\n"
 
-#: src/media/FramePump.cpp:576
+#: src/media/FramePump.cpp:617
 #, c-format
 msgid "Failed to send RTCP keepalive: %s\n"
 msgstr "RTCP 保活包发送失败: %s\n"
 
-#: src/media/FramePump.cpp:581
+#: src/media/FramePump.cpp:622
 msgid "Input or frame request"
 msgstr "收到操作"
 
-#: src/media/FramePump.cpp:589
+#: src/media/FramePump.cpp:630
 #, c-format
 msgid "Video fallback active for %llu seconds; retrying video session\n"
 msgstr "视频降级已满 %llu 秒，重试视频会话\n"
 
-#: src/media/FramePump.cpp:596
+#: src/media/FramePump.cpp:637
 #, c-format
 msgid "%s; recreating video session to obtain a keyframe\n"
 msgstr "%s，重建视频会话以取得关键帧\n"
 
-#: src/media/FramePump.cpp:597
+#: src/media/FramePump.cpp:638
 msgid "Scheduled video retry after fallback"
 msgstr "视频降级后的定时重试"
 
-#: src/media/FramePump.cpp:598
+#: src/media/FramePump.cpp:639
 msgid "NAL exceeds platform decoder length limit"
 msgstr "NAL 超过平台后端长度上限"
 
-#: src/media/FramePump.cpp:634
+#: src/media/FramePump.cpp:675
 #, c-format
 msgid "Keyframe wait reached %d ms; recreating video session\n"
 msgstr "等待关键帧达到 %d ms，重建视频会话\n"
 
-#: src/media/FramePump.cpp:649
+#: src/media/FramePump.cpp:690
 #, c-format
 msgid ""
 "No keyframe output after %llu seconds; recreating video session (%d/%d)\n"
 msgstr "启动 %llu 秒仍无关键帧输出，重建视频会话 (%d/%d)\n"
 
-#: src/media/FramePump.cpp:657
+#: src/media/FramePump.cpp:698
 #, c-format
 msgid ""
 "No keyframe output after %d restarts. Video is unavailable; callers can use "
@@ -1560,14 +1566,26 @@ msgstr ""
 "连续 %d 次重建仍未输出关键帧，视频暂不可用。调用方可切换至截图服务；将每 "
 "%llu 秒重试视频会话。\n"
 
-#: src/media/FramePump.cpp:680
+#: src/media/FramePump.cpp:721
 msgid "Receive silence timeout"
 msgstr "静默超时"
 
-#: src/media/FramePump.cpp:719
+#: src/media/FramePump.cpp:786
 #, c-format
 msgid "Test: dropped video packet %d to inject a sequence gap\n"
 msgstr "测试：丢弃第 %d 个视频包以注入序号缺口\n"
+
+#: src/media/FramePump.cpp:822
+msgid ""
+"Video sampling timestamp is ambiguous; discarding the access unit and "
+"requesting a keyframe.\n"
+msgstr "无法确定视频采样时间，丢弃当前帧并请求关键帧。\n"
+
+#: src/media/FramePump.cpp:829
+msgid ""
+"Video access-unit input is inconsistent; discarding the access unit and "
+"requesting a keyframe.\n"
+msgstr "视频帧数据不一致，丢弃当前帧并请求关键帧。\n"
 
 #: src/media/ScreenshotSource.cpp:38
 msgid "FFmpeg has no PNG decoder"
@@ -1601,7 +1619,19 @@ msgstr "设备目录缺少服务："
 msgid "Screenshot response missing image data"
 msgstr "截图响应缺少 image 数据"
 
-#: src/media/StreamSession.cpp:152
+#: src/media/StreamSession.cpp:150
+msgid ""
+"Invalid startmediastream answer: connection.streamConfig.LocalSSRC must be "
+"an integer in 0..4294967295"
+msgstr "起流回复中的媒体源 LocalSSRC 无效：必须是 0..4294967295 范围内的整数"
+
+#: src/media/StreamSession.cpp:159
+msgid ""
+"Invalid startmediastream answer: connection.streamConfig.RemoteSSRC must be "
+"an integer in 0..4294967295"
+msgstr "起流回复中的反馈源 RemoteSSRC 无效：必须是 0..4294967295 范围内的整数"
+
+#: src/media/StreamSession.cpp:186
 msgid ""
 "Invalid startmediastream answer: connection.sender.port must be an integer "
 "or decimal string in 1..65535"
@@ -1609,20 +1639,20 @@ msgstr ""
 "startmediastream 回复无效：connection.sender.port 必须是 1..65535 范围内的整"
 "数或十进制字符串"
 
-#: src/media/StreamSession.cpp:189 src/remote/App.cpp:218
+#: src/media/StreamSession.cpp:223 src/remote/App.cpp:218
 #: src/transport/TcpConnect.cpp:27
 msgid ": "
 msgstr " 失败: "
 
-#: src/media/StreamSession.cpp:189
+#: src/media/StreamSession.cpp:223
 msgid "Failed to bind UDP port "
 msgstr "绑 UDP 端口 "
 
-#: src/media/StreamSession.cpp:222
+#: src/media/StreamSession.cpp:256
 msgid "startmediastream failed on the retained connection (transport failed)"
 msgstr "在持有的连接上发 startmediastream 失败（链路断了）"
 
-#: src/media/StreamSession.cpp:301
+#: src/media/StreamSession.cpp:335
 msgid "getmediastreamserverstatus response missing sessions array"
 msgstr "getmediastreamserverstatus 的回复里没有 sessions 数组"
 
@@ -2636,7 +2666,7 @@ msgstr ""
 "（设备拒绝此系统版本：已测试 iOS 27 设备支持实时媒体，已测试 iOS 18 设备拒"
 "绝；截图回退和按键输入可能仍可用，见 docs/coredevice.md §23）"
 
-#: src/rt/RtpHevc.cpp:84
+#: src/rt/RtpHevc.cpp:104
 msgid "Not an RTP packet"
 msgstr "不是 RTP 包"
 
@@ -6132,6 +6162,12 @@ msgstr "不可用"
 
 #~ msgid "Screenshot is the visible area"
 #~ msgstr "截图即可见区"
+
+#, c-format
+#~ msgid ""
+#~ "Sequence gap or discarded fragment detected: requesting keyframe, wait "
+#~ "limit %d ms\n"
+#~ msgstr "检测到序号缺口或丢弃分片：请求关键帧，等待上限 %d ms\n"
 
 #, c-format
 #~ msgid "Using the only remote pairing record (device suffix %s)\n"

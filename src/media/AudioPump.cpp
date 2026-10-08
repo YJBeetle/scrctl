@@ -181,7 +181,7 @@ bool AudioPump::start_session(std::string &err) {
         // 不能调用 stopAll，因为视频已在运行。也不能为获得声音而静默改成双端播放。
         return false;
     }
-    if (started.remote_ssrc == 0 || started.local_ssrc == 0) {
+    if (!started.has_remote_ssrc || !started.has_local_ssrc) {
         // 缺少 SSRC 不影响当前收包和解码，但 RR 无法正确指向设备媒体源，
         // 会话可能无法续期。输出协商值以便排查。
         std::fprintf(stderr,

@@ -80,10 +80,15 @@ public:
         /// answer 的 streamConfig.LocalSSRC，名字采用设备视角。
         /// 已测值与设备发送的 RTP SSRC 一致；客户端 RTCP 报告块用它指明被报告的媒体源。
         uint32_t local_ssrc = 0;
+        /// 是否实际协商了 LocalSSRC。显式 0 是合法源；缺失字段仍保留标量默认值，
+        /// 收包方可在缺失时绑定第一条合法媒体 RTP，不把默认 0 误当成协商值。
+        bool has_local_ssrc = false;
         /// answer 的 streamConfig.RemoteSSRC，表示客户端侧 SSRC。
         /// 已测设备回显 offer 声明的 SSRC，不应理解为设备总会另行分配新值。
         /// 客户端发送 RTCP 时使用本次回复的此值，避免与报告的会话身份不匹配。
         uint32_t remote_ssrc = 0;
+        /// 同样以字段存在性区分缺失与合法 0，不能用 remote_ssrc 的数值判断缺失。
+        bool has_remote_ssrc = false;
         /// 起流回复原文，供上层读取和记录完整协商结果。
         scrctl::xpc::Value answer;
         /// 本次请求中 ClientSessionID 的 16 字节 XPC UUID 原文，用于 probe() 匹配会话。

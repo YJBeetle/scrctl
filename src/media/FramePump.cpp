@@ -4,11 +4,13 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <optional>
 
 #include "bitstream/AnnexB.h"
 #include "media/StreamSession.h"
 #include "remote/Device.h"
 #include "rt/Rtcp.h"
+#include "rt/RtpTimestamp.h"
 
 namespace scrctl::media {
 namespace {
@@ -163,8 +165,18 @@ bool FramePump::restart(std::string &err) {
     request.offer = options_.offer;
     // 请求租期使用统一常量，保证保活策略与设备执行的租期一致。
     request.timeout_seconds = kSessionLeaseSeconds;
-    session_ = StreamSession::start(device_, request, err, verbose_);
+    StreamSession::StartStatus start_status = StreamSession::StartStatus::NotConfirmed;
+    session_ = StreamSession::start(device_, request, err, verbose_, nullptr, &start_status);
     if (session_ == nullptr) {
+        if (start_status == StreamSession::StartStatus::AcceptedInvalidAnswer) {
+            // 设备可能已经起流；再次请求会产生无人接收的会话。停止视频接收和
+            // 续期，等待本次租期释放，不能用 stopAll 中断可能仍在播放的音频。
+            negotiation_invalid_ = true;
+            video_unusable_ = true;
+            if (worker_running_) {
+                std::fprintf(stderr, SCRCTL_TR("Video negotiation failed during recovery; stopping video reception: %s\n"), err.c_str());
+            }
+        }
         reviving_ = false;  // 重建失败，结束本次恢复标记。
         return false;
     }
@@ -216,6 +228,9 @@ void FramePump::loop() {
     }
     bool configured = false;
     std::unique_ptr<scrctl::rt::HevcRtpDepacketizer> depacketizer;
+    scrctl::rt::RtpTimestamp sampling_clock;
+    // 0 是合法 SSRC，不能用其数值区分缺失。没有协商来源时只由合法的视频 RTP 绑定。
+    std::optional<uint32_t> media_source;
     /// 探针用视频接收计数，不包含 SR。
     uint64_t video_seen = 0;
 
@@ -229,6 +244,9 @@ void FramePump::loop() {
         if (first_pli_ms_ == 0) {
             first_pli_ms_ = now_ms();
         }
+        if (!media_source) {
+            return;  // 尚无来源可作为 PLI 目标，不构造猜测的 0 SSRC。
+        }
         if (options_.debug_suppress_pli || pli_off_) {
             // 测试模式可禁止 PLI，用来单独验证等待超时后的会话重建路径。
             std::lock_guard<std::mutex> lock(mutex_);
@@ -241,7 +259,7 @@ void FramePump::loop() {
         next_pli_ms_ = now_ms() + kPliPeriodMs;
         last_pli_ms_ = now_ms();
         const auto pli = scrctl::rt::build_pli(session_->started().remote_ssrc,
-                                               session_->started().local_ssrc);
+                                               *media_source);
         std::string serr;
         if (session_->send_rtp(pli, session_->started().sender_port, serr)) {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -252,32 +270,39 @@ void FramePump::loop() {
         }
     };
 
-    /// 每次拆包后立即检查序号缺口和作废分片，启动关键帧等待与后备计时。
+    auto discard_for_recovery = [&] {
+        parser_->discard_pending();
+        awaiting_idr_from_loss_ = true;
+        need_keyframe_ = true;
+        request_keyframe();
+    };
+
+    /// 每次拆包后立即检查序号缺口、作废分片和已匹配 RTP 内的载荷损坏，
+    /// 先丢弃未提交 AU，再启动关键帧等待与后备计时。
     /// 不能只在 AU 回调检查：丢包后可能只剩 SR，不再产生 AU。
     auto note_loss = [&] {
         if (depacketizer == nullptr) {
             return;
         }
         const auto &dst = depacketizer->stats();
-        const uint64_t loss_now = dst.seq_gaps + dst.dropped_fragments;
+        const uint64_t loss_now = dst.seq_gaps + dst.dropped_fragments + dst.malformed;
         if (loss_now <= loss_seen_) {
             return;
         }
         loss_seen_ = loss_now;
-        loss_since_au_ = true;
-        awaiting_idr_from_loss_ = true;
         if (!need_keyframe_) {
             // 仅在进入关键帧等待状态时输出一次。
-            std::printf(SCRCTL_TR("Sequence gap or discarded fragment detected: requesting keyframe, wait limit %d ms\n"),
+            std::printf(SCRCTL_TR("Video packet loss or payload damage detected: requesting keyframe, wait limit %d ms\n"),
                         options_.stall_restart_ms);
         }
-        need_keyframe_ = true;
-        request_keyframe();
+        discard_for_recovery();
     };
 
     // 每个会话重新创建解析器，避免将旧会话未完成的 NAL 或 AU 拼入新会话。
     auto make_parser = [&]() {
-        return std::make_unique<AnnexBParser>([&](std::vector<Nal> &&au, bool keyframe) {
+        return std::make_unique<AnnexBParser>([&](AnnexBParser::AccessUnit &&unit) {
+            auto &au = unit.nals;
+            const bool keyframe = unit.keyframe;
             {
                 std::lock_guard<std::mutex> lock(mutex_);
                 ++stats_.aus;
@@ -305,7 +330,9 @@ void FramePump::loop() {
                         software_only = false;
                     }
                 }
-                Nal vps, sps, pps;
+                // 参数前缀可能随受损 AU 被丢弃，但完整参数 NAL 已缓存。
+                // 优先保留本 AU 原文；缺少的参数才使用当前会话缓存。
+                Nal vps = parser_->vps(), sps = parser_->sps(), pps = parser_->pps();
                 for (const auto &n : au) {
                     if (n.size() < 2) {
                         continue;
@@ -352,19 +379,16 @@ void FramePump::loop() {
                 }
                 return;
             }
-            // 丢包后等待完整关键帧，避免继续使用可能受损的参考链。
-            // note_loss() 在收包时启动等待；此处消费自上个 AU 以来的丢包标记，
-            // 用于判断本次关键帧的组装过程是否也受到丢包影响。
-            const bool lost_since_prev = loss_since_au_;
-            loss_since_au_ = false;
+            // 受损 AU 已在 note_loss() 中丢弃；此后只能由新 first-slice 开启图像。
+            // 后续完整关键帧可直接恢复，不能再用旧的损失标记额外丢掉它。
             // 保存进入回调时的等待状态，成功解码并取得像素后才解除。
             const bool was_awaiting = need_keyframe_;
             // 故障注入使用进入回调时的快照，避免测试触发条件依赖随后被修改的
             // 恢复状态。否则提前清除状态会使注入失效，无法验证恢复逻辑。
             const bool awaiting_at_entry = awaiting_idr_from_loss_;
             if (need_keyframe_) {
-                if (!keyframe || lost_since_prev) {
-                    // 不完整关键帧及非关键帧不能解除等待，继续请求关键帧。
+                if (!keyframe) {
+                    // 非关键帧不能修复参考链，继续请求关键帧。
                     request_keyframe();
                     std::lock_guard<std::mutex> lock(mutex_);
                     ++stats_.dropped_awaiting_keyframe;
@@ -441,6 +465,10 @@ void FramePump::loop() {
     /// 关键帧被误判为不完整。跨会话的重试策略与测试选项另行保留。
     auto new_session_state = [&] {
         depacketizer = std::make_unique<scrctl::rt::HevcRtpDepacketizer>(session_->started().payload_type);
+        sampling_clock.reset();
+        media_source = session_->started().has_local_ssrc
+                           ? std::optional<uint32_t>(session_->started().local_ssrc)
+                           : std::nullopt;
         configured = false;
         parser_ = make_parser();
         session_start_ms_ = now_ms();
@@ -455,7 +483,6 @@ void FramePump::loop() {
         ever_keyframe_ = false;
         need_keyframe_ = false;
         loss_seen_ = 0;
-        loss_since_au_ = false;
         // 测试禁止 PLI 的选项跨会话保留，继续隔离会话重建恢复路径。
         // 视频故障注入的计数则按会话归零，避免新会话也被持续忽略。
         video_seen = 0;
@@ -467,6 +494,9 @@ void FramePump::loop() {
             stats_.session_packets_base = stats_.packets;
             stats_.dev_sent_packets = 0;
             stats_.dev_sent_octets = 0;
+            stats_.other_payload = 0;
+            stats_.gaps = 0;
+            stats_.dropped_fragments = 0;
         }
     };
     new_session_state();
@@ -494,7 +524,9 @@ void FramePump::loop() {
                         : (SCRCTL_TR("session status query failed (") + perr + SCRCTL_TR(")")).c_str());
         std::string restart_err;
         if (!restart(restart_err)) {
-            std::fprintf(stderr, SCRCTL_TR("Failed to recreate video session: %s\n"), restart_err.c_str());
+            if (!negotiation_invalid_) {
+                std::fprintf(stderr, SCRCTL_TR("Failed to recreate video session: %s\n"), restart_err.c_str());
+            }
             reviving_ = false;
             return false;
         }
@@ -507,7 +539,9 @@ void FramePump::loop() {
     auto restart_now = [&]() {
         std::string restart_err;
         if (!restart(restart_err)) {
-            std::fprintf(stderr, SCRCTL_TR("Failed to recreate video session: %s\n"), restart_err.c_str());
+            if (!negotiation_invalid_) {
+                std::fprintf(stderr, SCRCTL_TR("Failed to recreate video session: %s\n"), restart_err.c_str());
+            }
             return false;
         }
         new_session_state();
@@ -535,13 +569,20 @@ void FramePump::loop() {
     };
 
     for (;;) {
-        // restart() 失败会使 session_ 为空。统一在此重试并跳过后续会话访问；
+        // 已接受但不可用的协商结果不再重试。其设备会话不续期，等待租期释放。
+        if (negotiation_invalid_) {
+            return;
+        }
+        // 普通 restart() 失败会使 session_ 为空。统一在此重试并跳过后续会话访问；
         // 通过可取消的条件变量等待实现一秒退避，使停止请求能够及时退出。
         if (session_ == nullptr) {
             std::string rerr;
             if (restart(rerr)) {
                 new_session_state();
                 continue;
+            }
+            if (negotiation_invalid_) {
+                return;
             }
             std::fprintf(stderr, SCRCTL_TR("Failed to recreate video session: %s (retry in 1 second)\n"), rerr.c_str());
             std::unique_lock<std::mutex> lock(mutex_);
@@ -555,10 +596,10 @@ void FramePump::loop() {
         // 调度置于每轮循环，不能依赖读包超时，否则连续视频包会阻止发送。
         // 沿用真机验证的 32 字节裸 RR：发送者为 answer.RemoteSSRC，
         // 报告块指向设备 LocalSSRC，发至 sender.port（已验证与 SourcePort 一致）。
-        if (!options_.debug_suppress_rr && now_ms() >= next_rtcp_ms_) {
+        if (!options_.debug_suppress_rr && media_source && now_ms() >= next_rtcp_ms_) {
             next_rtcp_ms_ += kRtcpPeriodMs;
             const auto rr = scrctl::rt::build_rr(session_->started().remote_ssrc,
-                                                 session_->started().local_ssrc,
+                                                 *media_source,
                                                  depacketizer ? depacketizer->last_sequence() : 0);
             std::string serr;
             const bool ok = session_->send_rtp(rr, session_->started().sender_port, serr);
@@ -681,16 +722,39 @@ void FramePump::loop() {
             }
             continue;  // 超时不是结束
         }
-        last_packet_ms_ = now_ms();
-        // 视频端口同时接收裸 RTCP SR。is_rtcp_sr 校验后读取偏移 20 和 24
+        // 视频端口同时接收裸 RTCP SR。按既有设备心跳形态识别后读取偏移 20 和 24
         // 的设备累计视频包数与字节数；这些值只反映最后一份 SR 的时刻。
         const bool is_sr = scrctl::rt::is_rtcp_sr(datagram);
+        const auto be32 = [&datagram](std::size_t off) {
+            return (uint32_t(datagram[off]) << 24) | (uint32_t(datagram[off + 1]) << 16) |
+                   (uint32_t(datagram[off + 2]) << 8) | datagram[off + 3];
+        };
+        if (is_sr) {
+            // 未协商来源时不能用心跳猜测媒体源，等待第一条合法同 PT 的视频 RTP。
+            if (!media_source || be32(4) != *media_source) {
+                continue;
+            }
+        } else {
+            // 合法的短 RR 等控制包不占用 RTP 序号，也不能让待提交 AU 失效。
+            // 保留上述设备心跳分类；这里仅将其他已验证 RTCP 隔离出视频拆包路径。
+            std::vector<scrctl::rt::SenderReport> reports;
+            if (scrctl::rt::parse_sender_reports(datagram, reports)) {
+                continue;
+            }
+            scrctl::rt::PacketInfo info;
+            if (!scrctl::rt::parse_rtp_header(datagram, info) ||
+                info.payload_type != session_->started().payload_type) {
+                continue;
+            }
+            if (!media_source) {
+                media_source = info.ssrc;
+            } else if (info.ssrc != *media_source) {
+                continue;  // 在拆包器观察序号前排除外来源，保持本会话的 FU/ticks 状态。
+            }
+        }
+        last_packet_ms_ = now_ms();
         uint64_t dev_pkts = 0, dev_octets = 0;
         if (is_sr) {
-            const auto be32 = [&datagram](std::size_t off) {
-                return (uint64_t(datagram[off]) << 24) | (uint64_t(datagram[off + 1]) << 16) |
-                       (uint64_t(datagram[off + 2]) << 8) | datagram[off + 3];
-            };
             dev_pkts = be32(20);
             dev_octets = be32(24);
         }
@@ -702,6 +766,7 @@ void FramePump::loop() {
             ++stats_.packets;
             if (is_sr) {
                 ++stats_.sr_packets;
+                ++stats_.other_payload;
             } else {
                 ++stats_.video_packets;
             }
@@ -711,11 +776,13 @@ void FramePump::loop() {
             }
         }
 
-        if (!is_sr) {
-            ++video_seen;
+        if (is_sr) {
+            continue;
         }
-        if (options_.debug_drop_nth_packet > 0 && !is_sr &&
-            static_cast<int>(video_seen) == options_.debug_drop_nth_packet) {
+
+        ++video_seen;
+        if (options_.debug_drop_nth_packet > 0 &&
+            video_seen == static_cast<uint64_t>(options_.debug_drop_nth_packet)) {
             std::printf(SCRCTL_TR("Test: dropped video packet %d to inject a sequence gap\n"),
                         options_.debug_drop_nth_packet);
             options_.debug_drop_nth_packet = 0;  // 一次性：重起之后的新会话不该再被丢
@@ -723,28 +790,47 @@ void FramePump::loop() {
             stats_.debug_dropped_at_ms = now_ms();  // 记录故障注入时间，供测试检查恢复期限。
             continue;
         }
-        if (options_.debug_ignore_video_after > 0 && !is_sr &&
-            static_cast<int>(video_seen) > options_.debug_ignore_video_after) {
+        if (options_.debug_ignore_video_after > 0 &&
+            video_seen > static_cast<uint64_t>(options_.debug_ignore_video_after)) {
             // 测试模式忽略超过指定计数的视频包，仅保留 SR，用于验证持续收到
             // RTCP 但无视频输出时恢复计时仍能触发。
             continue;
         }
-        std::vector<uint8_t> bytes;
+        std::vector<scrctl::rt::ReceivedNal> nals;
         const uint64_t t_dp0 = now_ms();
-        const bool pushed = depacketizer->push(datagram, bytes, err);
+        const bool pushed = depacketizer->push_nals(datagram, nals, err);
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            stats_.other_payload = depacketizer->stats().other_payload;
+            stats_.gaps = depacketizer->stats().seq_gaps;
+            stats_.dropped_fragments = depacketizer->stats().dropped_fragments;
             stats_.ms_depacketize += static_cast<double>(now_ms() - t_dp0);
         }
         note_loss();
-        if (!pushed || bytes.empty()) {
+        if (!pushed || nals.empty()) {
             continue;
         }
-        if (record_ != nullptr) {
-            std::fwrite(bytes.data(), 1, bytes.size(), record_);
+        for (auto &nal : nals) {
+            if (record_ != nullptr) {
+                // 裸 HEVC 仍写原始完整 NAL 与四字节 Annex-B 起始码，不因 ticks 改变格式。
+                static constexpr uint8_t start_code[] = {0, 0, 0, 1};
+                std::fwrite(start_code, 1, sizeof(start_code), record_);
+                std::fwrite(nal.bytes.data(), 1, nal.bytes.size(), record_);
+            }
+            const auto timestamp = sampling_clock.observe(nal.timestamp);
+            if (!timestamp) {
+                if (!need_keyframe_) {
+                    std::fputs(SCRCTL_TR("Video sampling timestamp is ambiguous; discarding the access unit and requesting a keyframe.\n"), stderr);
+                }
+                discard_for_recovery();
+                continue;
+            }
+            if (!parser_->push_nal(std::move(nal.bytes), timestamp, nal.ends_access_unit)) {
+                if (!need_keyframe_) {
+                    std::fputs(SCRCTL_TR("Video access-unit input is inconsistent; discarding the access unit and requesting a keyframe.\n"), stderr);
+                }
+                discard_for_recovery();
+            }
         }
-        parser_->feed(bytes.data(), bytes.size());
 
     }
 }

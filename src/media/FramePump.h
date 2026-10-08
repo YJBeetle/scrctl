@@ -103,10 +103,10 @@ public:
         /// 本地 packets 包含 SR 等数据报，且 SR 报告存在时间滞后，不能直接相减计算丢包。
         uint64_t dev_sent_packets = 0;
         uint64_t dev_sent_octets = 0;
-        /// 非视频载荷（设备的 RTCP SR）被跳过的包数。
+        /// 已匹配会话来源的设备 RTCP SR 被跳过的包数。
         uint64_t other_payload = 0;
-        /// 按数据报头区分 SR 和其他包，video_packets + sr_packets == packets。
-        /// other_payload 则由拆包器按 payload type 计数，两者分类位置不同。
+        /// 当前来源的 SR 和视频 RTP；video_packets + sr_packets == packets。
+        /// 外来源、无法解析的头、其他 PT/RTCP 不参与这三项统计及静默保活。
         uint64_t sr_packets = 0;
         uint64_t video_packets = 0;
         /// RR 发送成功和失败次数。成功只表示交给本地传输层，不证明设备已经收到
@@ -157,6 +157,7 @@ public:
 
     /// 多次重建仍无法输出画面时标记视频暂不可用，例如帧超过后端能力或
     /// 关键帧持续无输出。调用方可使用截图；后台低频重试，成功解码后清除标记。
+    /// 恢复起流已被接受但答复不可用时也置位，此时停止后台重试，等待设备租期释放。
     [[nodiscard]] bool video_unusable() const { return video_unusable_; }
 
     /// 等待帧号大于 since，返回帧号；超时为 0。
@@ -187,6 +188,8 @@ private:
     std::unique_ptr<StreamSession> session_;
     std::thread worker_;
     bool worker_running_ = false;
+    /// 仅由启动线程/worker 访问；已接受但不可用的答复使本泵停止重试及续期。
+    bool negotiation_invalid_ = false;
     FILE *record_ = nullptr;
 
     /// 解析器仅由后台线程访问，每次重建会话时替换。
@@ -244,9 +247,6 @@ private:
     /// 丢包后等待完整关键帧，避免继续发布依赖受损参考链的画面。
     std::atomic<bool> need_keyframe_ { false };
     uint64_t loss_seen_ = 0;
-    /// 自上一个 AU 后是否发生丢包；loss_seen_ 是累计基线，
-    /// 此标记用于判断当前关键帧组装期间是否出现损失。
-    bool loss_since_au_ = false;
 };
 
 /// 编码帧里"真正显示出来"的那一块。
