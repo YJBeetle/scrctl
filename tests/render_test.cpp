@@ -14,10 +14,12 @@
 #include <filesystem>
 #include <limits>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "app/Presenter.h"
 #include "app/RenderPanel.h"
+#include "hid/Hid.h"
 
 namespace {
 
@@ -1849,9 +1851,10 @@ void presenter_display_flips() {
                       "触点还原回读原角块，保留偏心crop并逆截图已应用的90度方向");
                 f.touches.clear();
             }
+            const auto after_clicks = f.presenter.input_generation();
             f.key(SDL_KEYDOWN, second, KMOD_LGUI | KMOD_RSHIFT); f.key(SDL_KEYUP,second);
             check(!f.pump() && f.presenter.display_degrees(base) == base &&
-                      f.presenter.input_generation() == generation + 2,
+                      f.presenter.input_generation() == after_clicks + 1,
                   "左右H以及上下V分别等价，连续两次镜像回到原CLI/来源方向");
             std::array<int,4> original{};
             std::copy_n(initial_order[cli_flip ? 1 : 0][base/90],4,original.begin());
@@ -1908,17 +1911,18 @@ void presenter_display_flips() {
         f.key(SDL_KEYDOWN,arrow,KMOD_NONE,1); f.key(SDL_KEYDOWN,arrow);
         f.key(SDL_KEYUP,arrow); f.key(SDL_KEYUP,SDL_SCANCODE_LSHIFT); f.key(SDL_KEYUP,SDL_SCANCODE_A);
         f.key(SDL_KEYDOWN,SDL_SCANCODE_B); f.key(SDL_KEYUP,SDL_SCANCODE_B);
-        check(!f.pump() && f.presenter.input_generation() == generation+1 && f.touches.size() == 2 &&
+        check(!f.pump() && f.presenter.input_generation() == generation+2 && f.touches.size() == 2 &&
                   f.touches[0].down && !f.touches[1].down &&
                   f.touches[0].x == f.touches[1].x && f.touches[0].y == f.touches[1].y,
-              "同view镜像抬起最后已交付点，清pending_move和own pointer，Local保留到真实UP");
+              "镜像及随后新B各更新代次，清pending_move和own pointer，Local保留到真实UP");
         f.expect({{4},{4,225},{},{5},{}}, "镜像释放真实设备Shift/A，重复本地箭头不泄漏且后续键完整处理");
         const auto held = f.presenter.display_degrees(0);
         f.key(SDL_KEYDOWN,arrow); check(!f.pump(), "普通箭头在翻转后仍交给设备");
+        const auto after_arrow = f.presenter.input_generation();
         f.key(SDL_KEYDOWN,arrow,KMOD_LALT | KMOD_LSHIFT,1);
         f.key(SDL_KEYDOWN,arrow,KMOD_LALT | KMOD_LSHIFT);
         check(!f.pump() && f.presenter.display_degrees(0) == held &&
-                  f.presenter.input_generation() == generation+1,
+                  f.presenter.input_generation() == after_arrow,
               "先归设备的箭头后来加入MOD/Shift或重复DOWN不能抢作mirror");
         f.key(SDL_KEYUP,arrow); check(!f.pump(), "设备箭头实际UP释放一次");
         f.expect({{static_cast<uint16_t>(arrow)},{}}, "普通上下/左右箭头保持实际HID生命周期");
@@ -2026,7 +2030,8 @@ void presenter_display_flips() {
             const auto generation = altgr.presenter.input_generation();
             altgr.key(SDL_KEYDOWN,SDL_SCANCODE_RIGHT,KMOD_RALT | KMOD_LSHIFT);
             altgr.key(SDL_KEYUP,SDL_SCANCODE_RIGHT);
-            check(!altgr.pump() && altgr.presenter.input_generation() == generation,
+            check(!altgr.pump() && altgr.presenter.input_generation() == generation+1 &&
+                      altgr.presenter.display_degrees(0) == 0,
                   "默认右Alt+Shift+箭头保留设备输入，不误当成显示mirror");
             altgr.expect({{225,230},{79,225,230},{}}, "AltGr和Shift按实际设备修饰键集合完整释放");
         }
@@ -2515,6 +2520,115 @@ void presenter_clipboard_request_context() {
           "无按住输入的显式退出清理也使异步作业失效");
 }
 
+void presenter_clipboard_context_after_complete_input() {
+    ButtonFixture f("Presenter pending paste after complete device input");
+    if (!f.window_id) return;
+    struct Request { uint64_t id, generation; };
+    std::vector<Request> requests;
+    const auto paste = [&] {
+        check(f.presenter.ready_for_paste(), "粘贴请求捕获时没有设备输入按住");
+        requests.push_back({static_cast<uint64_t>(requests.size()) + 1,
+                            f.presenter.input_generation()});
+    };
+    const auto pump = [&] {
+        return f.presenter.pump(f.on_touch(), f.on_keyboard(), paste, f.on_button());
+    };
+    const auto request = [&] {
+        const auto generation = f.presenter.input_generation();
+        const auto count = requests.size();
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_LALT, KMOD_LALT);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_V, KMOD_LALT);
+        f.key(SDL_KEYUP, SDL_SCANCODE_LALT);
+        f.key(SDL_KEYUP, SDL_SCANCODE_V);
+        check(!pump() && requests.size() == count + 1 &&
+                  requests.back().generation == generation &&
+                  f.presenter.input_generation() == generation &&
+                  f.presenter.ready_for_paste(),
+              "实际 MOD+V 请求及先松 MOD 不使自身作业失效");
+        f.expect({}, "MOD+V 仍是本地输入，不泄漏设备 V 或修饰键");
+        return requests.back();
+    };
+    const auto invalidated = [&](const Request &pending, const char *message) {
+        check(f.presenter.ready_for_paste() && requests.back().id == pending.id &&
+                  f.presenter.input_generation() != pending.generation, message);
+    };
+
+    auto pending = request();
+    f.mouse(SDL_MOUSEBUTTONDOWN, 8, 16);
+    f.mouse(SDL_MOUSEBUTTONUP, 8, 16);
+    check(!pump() && f.touches.size() == 2 && f.touches.front().down &&
+              !f.touches.back().down, "同轮完整触摸点击仍交付正常 DOWN/UP");
+    invalidated(pending, "点击已松开且可粘贴，原作业代号仍因上下文代次改变失效");
+    f.touches.clear();
+
+    const auto request_count = requests.size();
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_V, KMOD_LALT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_V);
+    f.mouse(SDL_MOUSEBUTTONDOWN, 8, 16);
+    f.mouse(SDL_MOUSEBUTTONUP, 8, 16);
+    check(!pump() && requests.size() == request_count + 1 && f.touches.size() == 2,
+          "同一实际SDL队列先创建粘贴请求再完整点击，输入仍依次交付");
+    invalidated(requests.back(), "同pump创建的作业也不能越过后续完整点击恢复有效");
+    f.touches.clear();
+
+    pending = request();
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+    f.key(SDL_KEYUP, SDL_SCANCODE_A);
+    check(!pump(), "同轮普通 A 输入不退出窗口");
+    f.expect({{4}, {}}, "使旧粘贴失效不改变普通 A 的完整设备报告");
+    invalidated(pending, "普通键已抬起，原作业仍不能因 held 再为空而恢复有效");
+
+    pending = request();
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_A, KMOD_LCTRL);
+    f.key(SDL_KEYUP, SDL_SCANCODE_A, KMOD_LCTRL);
+    f.key(SDL_KEYUP, SDL_SCANCODE_LCTRL);
+    check(!pump(), "设备 Control+A 组合正常处理");
+    f.expect({{224}, {4, 224}, {224}, {}}, "组合键保留修饰前缀与最终释放顺序");
+    invalidated(pending, "修饰前缀及主键均松开后，旧粘贴上下文仍失效");
+
+    for (const auto &[scancode, usage] : {
+             std::pair{SDL_SCANCODE_H, scrctl::hid::button::kHome},
+             std::pair{SDL_SCANCODE_P, scrctl::hid::button::kLock},
+             std::pair{SDL_SCANCODE_UP, scrctl::hid::button::kVolumeUp},
+             std::pair{SDL_SCANCODE_DOWN, scrctl::hid::button::kVolumeDown}}) {
+        pending = request();
+        f.key(SDL_KEYDOWN, scancode, KMOD_LALT);
+        f.key(SDL_KEYUP, scancode);
+        check(!pump(), "设备按钮快捷键的完整按下抬起不退出窗口");
+        f.expect_buttons({{scrctl::hid::button::kUsagePageConsumer, usage, true},
+                          {scrctl::hid::button::kUsagePageConsumer, usage, false}},
+                         "旧粘贴失效不增加或省略 Consumer DOWN/UP");
+        f.expect({}, "设备按钮仍不泄漏为普通 keyboard 报告");
+        invalidated(pending, "HOME/P/音量已松开，旧作业仍保持失效");
+    }
+
+    pending = request();
+    f.middle(SDL_MOUSEBUTTONDOWN);
+    f.middle(SDL_MOUSEBUTTONUP);
+    check(!pump(), "同轮中键 HOME 完整点击正常处理");
+    f.expect_buttons({{scrctl::hid::button::kUsagePageConsumer, scrctl::hid::button::kHome, true},
+                      {scrctl::hid::button::kUsagePageConsumer, scrctl::hid::button::kHome, false}},
+                     "中键 HOME 只交付一组按钮报告");
+    invalidated(pending, "中键 HOME 松开后不能继续完成原粘贴");
+
+    pending = request();
+    f.mouse(SDL_MOUSEMOTION, 8, 16);
+    f.mouse(SDL_MOUSEBUTTONDOWN, -1, 16);
+    f.mouse(SDL_MOUSEBUTTONUP, -1, 16);
+    f.mouse(SDL_MOUSEBUTTONDOWN, 8, 16, 1, 0, f.window_id + 1);
+    f.mouse(SDL_MOUSEBUTTONUP, 8, 16, 1, 0, f.window_id + 1);
+    f.key_for(SDL_KEYDOWN, SDL_SCANCODE_A, KMOD_NONE, 0, f.window_id + 1);
+    f.key_for(SDL_KEYUP, SDL_SCANCODE_A, KMOD_NONE, 0, f.window_id + 1);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_K, KMOD_LALT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_K);
+    check(!pump() && f.touches.empty() && f.presenter.ready_for_paste() &&
+              f.presenter.input_generation() == pending.generation &&
+              requests.back().id == pending.id,
+          "悬停、无效边界、外窗事件和无设备动作的本地组合不取消原粘贴");
+    f.expect({}, "没有实际设备输入时不新增 keyboard 报告");
+    f.expect_buttons({}, "本地无动作组合不生成设备按钮");
+}
+
 void window_action_geometry() {
     using scrctl::app::content_rect;
     scrctl::app::ContentRect content;
@@ -2887,8 +3001,8 @@ void presenter_window_actions() {
     f.mouse(SDL_MOUSEMOTION, 90, 90);
     f.key(SDL_KEYDOWN, SDL_SCANCODE_G, KMOD_LALT);
     check(!f.pump() && size_is(64, 96), "MOD+G 通过实际 SDL 窗口恢复 64x96 点");
-    check(f.presenter.input_generation() == generation + 1,
-          "一次尺寸动作使已请求粘贴的代次失效一次");
+    check(f.presenter.input_generation() == generation + 3,
+          "普通A、实际触摸和一次尺寸动作分别使旧粘贴上下文失效");
     f.expect({{4}, {}}, "G 在尺寸变化前释放已有设备键，不注入本地 G");
     check(f.touches.size() == 2 && f.touches.front().down && !f.touches.back().down &&
               f.touches.front().x == f.touches.back().x && f.touches.front().y == f.touches.back().y,
@@ -3212,6 +3326,7 @@ int main() {
     presenter_physical_keyboard_events();
     presenter_keyboard_quit_and_close();
     presenter_clipboard_request_context();
+    presenter_clipboard_context_after_complete_input();
     window_action_geometry();
     content_change_geometry();
     presenter_content_updates();

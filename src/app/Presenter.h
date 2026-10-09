@@ -73,7 +73,8 @@ class Presenter {
     bool pump(const std::function<void(double, double, bool)> &on_touch,
               const KeyboardHandler &on_keyboard = {}, const PasteHandler &on_paste = {},
               const ButtonHandler &on_button = {});
-    /// 异步粘贴完成时必须再次检查焦点、按住状态和代次；释放输入使旧代次失效。
+    /// 异步粘贴完成时必须再次检查焦点、按住状态和代次。释放输入及新设备
+    /// DOWN 使旧代次失效，完整点击/按键抬起后也不能向已改变的上下文粘贴。
     [[nodiscard]] uint64_t input_generation() const { return input_generation_; }
     [[nodiscard]] bool ready_for_paste() const;
     /// 查询 SDL 的实际全屏状态，不缓存用户的窗口模式选择。

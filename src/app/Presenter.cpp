@@ -390,8 +390,12 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                 !(mods & (KMOD_CTRL | KMOD_ALT | KMOD_GUI | KMOD_SHIFT));
             const SDL_Scancode scancode = e.key.keysym.scancode;
             const bool fresh = !e.key.repeat && !keyboard_.is_pressed(scancode);
-            for (const auto &report : keyboard_.key_down(scancode, mods, e.key.repeat != 0,
-                                                        shortcut || local_f11)) {
+            const auto reports = keyboard_.key_down(scancode, mods, e.key.repeat != 0,
+                                                     shortcut || local_f11);
+            // 一次完整 DOWN/UP 也可能换控件或修改文本；按住门控只能保护中间状态。
+            // 仅真实设备报告使旧粘贴失效，MOD+V 自身不能取消刚创建的请求。
+            if (on_keyboard && !reports.empty()) ++input_generation_;
+            for (const auto &report : reports) {
                 if (on_keyboard) on_keyboard(report);
             }
             const int key_index = static_cast<int>(scancode);
@@ -403,6 +407,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                 on_button && button_key && button_key->down &&
                 (button_key->usage == hid::button::kVolumeUp ||
                  button_key->usage == hid::button::kVolumeDown)) {
+                ++input_generation_;
                 if (!on_button(hid::button::kUsagePageConsumer, button_key->usage, true)) {
                     button_failed_ = true;
                     button_failed();
@@ -513,6 +518,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                 if (!to_display(e.button.x, e.button.y, px, py)) {
                     break;
                 }
+                ++input_generation_;
                 dragging_ = true;
                 last_touch_x_ = px;
                 last_touch_y_ = py;
@@ -882,9 +888,12 @@ bool Presenter::press_button(ButtonKey &key, uint16_t usage, const ButtonHandler
     const bool already_down = button_down(usage);
     // 先记录尝试，失败时同样尽力 UP。HOME 键和中键共持时只交付首 DOWN/末 UP。
     key = {usage, true};
-    if (!already_down && !on_button(hid::button::kUsagePageConsumer, usage, true)) {
-        button_failed_ = true;
-        return false;
+    if (!already_down) {
+        ++input_generation_;
+        if (!on_button(hid::button::kUsagePageConsumer, usage, true)) {
+            button_failed_ = true;
+            return false;
+        }
     }
     return true;
 }
