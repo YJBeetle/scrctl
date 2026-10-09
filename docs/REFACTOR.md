@@ -2532,3 +2532,42 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   23 项相对路径 SHA256 全部核验。Linux 列举失败的原始有界命令与只读清理记录
   保留在上一轮横屏归档的 `discovery/`；`--discovery-timeout` 当前只限制无线扫描，
   不能覆盖前置 USB 枚举阻塞，该路径的绝对预算与取消另行修复。
+
+## 第一百三十一轮：USB 枚举预算与集中验收收尾
+
+- `3a1528c` 为发现专用 usbmux 连接加入默认 1 秒绝对 I/O 预算，覆盖连接、
+  请求发送、回复头及负载。socket 等待按最多 50 ms 检查取消；部分进展和
+  EINTR 不延长期限。USB 不可用时继续无线扫描，取消时结束发现。
+  原配对、媒体及普通 Usbmux 接口未改变。
+- 新回归使用私有 AF_UNIX / Windows loopback socket，覆盖无回应、滴流、
+  共享预算与取消；取消测试自身也有握手期限。独立审查后的本地完整门槛
+  48/48 通过（50.75 秒）。修前私有无回应服务等待 2000 ms，修后五个超时
+  场景约 1000–1001 ms，取消延迟 15/14 ms。
+- Debian ARM64 重新编译固定 `3a1528c`，304 个源码文件和五个依赖的 hash
+  在构建前后匹配。三个发现 CTest 3/3 通过。实际 `--list-devices` 在
+  3.740 秒退出 0，警告 USB 来源不可用，同时返回手机的 IPv4 和带 scope 的
+  IPv6 候选，均匹配已有配对记录。系统 usbmuxd 前后都是 inactive、Job 空、
+  无 runtime mask；无残留 scrctl。此项证明不可用来源的退化返回，不是原
+  阻塞 daemon 的同状态 A/B，也不证明 Linux USB 媒体已恢复。
+- `1a73962` 的 Ubuntu、macOS、Windows ARM64 和 ASan+UBSan CI 均为
+  59/59；真实 AudioPump/libswresample 暂停恢复回归各 3621 检查、0 失败。
+  Mac 搬移打包 25 dylib、Windows 独立目录启动 98 DLL 的门槛均通过。
+- 集中输入验收使用原 `2112924` 的 Debian Wi-Fi / Wayland 窗口：用户确认
+  普通 Q 不退出、输入及退格、中文/符号/emoji 粘贴、HOME、音量长按重复与
+  锁屏全部正常。窗口约 239.75 秒退出 0，无 480 秒到时标记。其他平台物理
+  键盘和按钮效果不由这次结果外推。
+- 新版 `3a1528c` 的 Mac Wi-Fi / CoreAudio、200 ms 默认路由运行约 181 秒，
+  用户反馈“效果不错”。日志显示初始约 13 秒零 PCM 后恢复，平均缓冲从
+  首个打印恢复快照 94.9 ms 收敛到最终 199.6 ms；约恢复后 4 秒停止新增欠载，
+  随后约 158 秒没有新增欠载。没有第二段 35 秒暂停的日志证据；旧非零补偿
+  清除继续由离线真实 resampler 回归证明。
+- `3a1528c` 的三组非 Windows CI 成功；Windows 构建发现 FFmpegDecoder.cpp
+  使用 `std::string` 却缺少显式 `<string>`，测试和包装尚未执行。
+  已补齐该头文件，本地完整构建及该翻译单元语法检查通过，后续 CI 验证。
+- 明确正式无线流程的边界：`--pair` 经 USB 完成首次记录创建及 fresh verify，
+  已配对后可以无线发现、选择和连接；完全通过 Wi-Fi 首次配对仍未接入。
+  当前设备的网络入口拒绝 PairSetup，网络首次可信身份确认仍需协议研究。
+- 小日志与 hash 证据保存在 fixtures 的 `recording-clock-20261008/` 下：
+  `usbmux-discovery-deadline-20261010/`、`audio-pause-ci-20261010/`、
+  `linux-keyboard-buttons-2112924-20261010/`；其余本轮实际运行原始日志在对应
+  临时目录，归档不含私钥、临时执行文件或音乐数据。

@@ -17,7 +17,7 @@ MP4 / MKV（HEVC 和 AAC-ELD）及裸 Annex-B HEVC。
 | 平台 | 当前范围 |
 | --- | --- |
 | macOS | 有真机连接、镜像、输入和音频记录；本轮验证结果见重构记录 |
-| Linux | Debian ARM64 的构建、离线回归及 Wi-Fi 软件解码、Wayland 窗口、竖横屏鼠标落点、缩放和音频路由短测已通过；USB 发生端点 STALL，尚未通过；DDI 初始安装、日常键盘与物理断线仍待验证 |
+| Linux | Debian ARM64 的构建、离线回归及 Wi-Fi 软件解码、Wayland 窗口、竖横屏鼠标落点、缩放、键盘、Unicode 粘贴、设备按钮和音频路由短测已通过；USB 发生端点 STALL，尚未通过；DDI 初始安装与物理断线仍待验证 |
 | Windows | ARM64 构建与离线测试、USB / Wi-Fi 镜像、截图切换及竖横屏鼠标触摸已验证；FFmpeg 真实音乐解码与短时 USB 播放已通过，持续连接与初始配对准备待验证，见 [安装说明](docs/WINDOWS.md) |
 
 音频在 macOS 使用 AudioToolbox，Windows / Linux 使用 FFmpeg 的原生 AAC-ELD
@@ -111,8 +111,8 @@ MOD 默认是左 Alt 或左 Super（Windows 键 / Mac Command），可以通过
 
 设备按钮跟随实际按下和松开；音量快捷键会转发主机重复事件，HOME 和侧键不重复
 发送。普通 H、P 和方向键仍发给手机。按钮快捷键只在启用设备控制时生效，
-无视频背景窗口也能使用。新的窗口按钮路径已做离线回归，设备长按和音量重复
-效果仍待真机验证。
+无视频背景窗口也能使用。Debian Wi-Fi 窗口已验证 HOME、音量长按重复和锁屏；
+其他平台的物理按钮路径及无视频背景窗口仍需分别验证。
 
 显示旋转和镜像按当前电脑画面的方向组合，后续帧和设备转屏仍保留这个变换；
 静止画面也立即更新。镜像不改变窗口尺寸、手机方向或录制。普通方向键仍发给
@@ -128,7 +128,8 @@ MOD+V 只在明确按下时读取电脑剪贴板。后台写入手机后另开�
 在约五秒后请求取消；取消不能撤销手机已经接受的剪贴板写入。目标控件是否允许
 粘贴由手机决定。系统可能提示从 `dtpasteboardd` 粘贴，这是苹果的远程剪贴板
 服务；允许后才能完成粘贴。Mac USB 已验证中文和符号实际进入 Safari 输入框，
-emoji、多行及 Windows 窗口粘贴仍需分别验证。`--test-type` 仅是 ASCII 诊断入口。
+Debian Wi-Fi 窗口已验证中文、符号和 emoji；多行及 Windows 窗口粘贴仍需分别验证。
+`--test-type` 仅是 ASCII 诊断入口。
 与 scrcpy 的具体差异和后续对齐项见
 [用法对照](docs/SCRCPY_USAGE.md)。
 
@@ -310,7 +311,9 @@ Wi-Fi 需要设备可达和已有 RemotePairing 记录。使用 `scrctl --pair -
 [路线图](docs/ROADMAP.md)。
 记录现在需要包含 USB 配对时校验并保存的设备标识和长期公钥；旧记录缺少这些字段时，
 请重新通过 USB 配对。探针的 `--pmd3-record` 当前只导入主机密钥，因此也不能直接用于
-设备身份验证。通过 Wi-Fi 地址进行首次配对仅供实验，需显式指定 `--no-save`。
+设备身份验证。正式命令不支持完全通过 Wi-Fi 首次配对；研究工具
+`wifi_probe --pair-setup --address <IP> --no-save` 仅用于协议实验。
+当前设备的无线入口拒绝 PairSetup，网络首次身份确认也仍待验证。
 
 ```bash
 scrctl --list-devices
@@ -322,7 +325,8 @@ scrctl --help
 ```
 
 `--list-devices` 合并 usbmux 与 RemotePairing 的发现结果，默认扫描无线服务约 3 秒；
-`--discovery-timeout` 可以设置 0..60000 毫秒。每台设备保留所有地址、实际服务端口和
+`--discovery-timeout` 可以设置 0..60000 毫秒。USB 枚举另有默认 1 秒 I/O 预算；
+异常 USB 来源会报告警告并继续无线扫描。每台设备保留所有地址、实际服务端口和
 网络接口；IPv6 link-local 地址包含 `%接口索引`。USB 网络地址也可能出现在发现结果中，
 列出地址不代表已经验证其可达性。
 
