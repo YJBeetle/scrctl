@@ -2387,3 +2387,28 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
 - 实际公开解析入口的严格编译及 ASan / UBSan / float-cast-overflow 各 80/0。
   本次 sanitizer 仅覆盖实际 DisplayInfo.cpp 与其测试，依赖仍是预编译对象；
   不把这组结果当作全项目或真机异常输入验收。改前失真和运行错误分别保留。
+- [固定 a243c99 的 CI](https://github.com/YJBeetle/scrctl/actions/runs/37973240460)
+  四平台各 58/58，displayinfo 均为 80/0；sanitizer 错误标记为零。
+  Mac / Windows 的依赖和搬移启动通过，固定源码、日志摘要及产物元数据已核对；
+  本轮只下载小日志，没有下载并执行大包。
+
+## 第一百二十五轮：Debian 构建与 Wi-Fi 无窗口真机短测
+
+- 用户完成升级后的 Debian 13 / trixie ARM64 VM，GCC 14.2、SDL2 2.32.4、
+  FFmpeg 7.1.5 和 OpenSSL 3.5.7。以普通用户和独立目录构建，保留旧文件；
+  固定 71a2ae3 全量构建及离线 CTest 58/58、40.94 秒通过。
+  a243c99 的独立源码与固定归档逐文件一致，核心和主程序构建及完整帮助通过，
+  DisplayInfo 为 80/0、相关 CTest 1/1；没有再运行第二套全量 CTest。
+- Mac 上这台手机已有的配对记录迁移到 Linux 用户私有目录，文件 0600，
+  传输经 stdin、哈希一致且未输出密钥。复用已验证记录不等于 Linux 新建配对。
+- 使用固定 a243c99 主程序，显式 Wi-Fi 地址 `10.24.24.7:49152`、UDID，
+  `--no-window --no-audio --no-control --exit-after=1800 --time-limit=30 --stats`。
+  Linux 软件解码实际处理 1066 帧，30 秒限时正常退出；外层进程共 32.268 秒。
+  最后采样的 sequence gaps、dropped fragments、restarts 均为 0。
+  帧率有变化，不能由零计数或短测推出稳定 60 fps、弱网或长期运行通过。
+- 本轮没有创建可见窗口、请求音频路由或发送设备输入。Linux USB、DDI 初始安装、
+  窗口绘制与落点、真实键盘、音频和物理断线仍分别待测；无窗口统计中的
+  Render 计数表示处理帧数，不是可见桌面渲染验收。
+- 两份固定源码与构建、原始 CTest、真机终端日志及独立复核长期保存于
+  `/Volumes/Data/Workspace/Github/scrctl-fixtures/linux-debian-20261010/`；
+  配对密钥内容没有复制到该证据目录。
