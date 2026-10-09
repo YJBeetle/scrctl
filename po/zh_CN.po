@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-09 16:37+0800\n"
+"POT-Creation-Date: 2026-10-09 19:56+0800\n"
 "PO-Revision-Date: 2026-10-09 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -80,8 +80,9 @@ msgstr ""
 
 #: src/app/Application.cpp:212
 #, c-format
-msgid "Local audio playback disabled; receiving and decoding continue\n"
-msgstr "已禁用本机音频播放，继续接收和解码音频\n"
+msgid ""
+"Local audio playback disabled; recording original AAC without PCM decoding\n"
+msgstr "电脑音频播放已关闭；直接录制原始 AAC，不解码为 PCM\n"
 
 #: src/app/Application.cpp:236 tools/rr_keepalive_probe.cpp:770
 msgid "failed"
@@ -188,7 +189,11 @@ msgstr "未执行窗口回读：要求第 %d 帧，实际显示了 %d 帧\n"
 msgid "Finished: processed %d frames\n"
 msgstr "完成：处理 %d 帧\n"
 
-#: src/app/AudioOut.cpp:38
+#: src/app/AudioOut.cpp:11 src/app/LiveSource.cpp:302
+msgid "Audio playback is unavailable because PCM decoding is disabled"
+msgstr "音频未解码为 PCM，无法在电脑播放"
+
+#: src/app/AudioOut.cpp:42
 #, c-format
 msgid ""
 "Audio device returned %d Hz / %d channels / format 0x%x; stream requires %d "
@@ -197,7 +202,7 @@ msgstr ""
 "音频设备返回 %d Hz / %d 声道 / 格式 0x%x，流要求 %d Hz / %d 声道 / 0x%x，无法"
 "直接播放"
 
-#: src/app/AudioOut.cpp:47
+#: src/app/AudioOut.cpp:51
 #, c-format
 msgid ""
 "Audio output opened: %d Hz / %d channels, backend %s, callback %u frames (%u "
@@ -475,7 +480,7 @@ msgid ""
 "Audio capture is disabled; --audio-dup requires playback or MP4/MKV recording"
 msgstr "音频采集已关闭；--audio-dup 需要电脑播放或 MP4/MKV 音轨录制"
 
-#: src/app/Cli.cpp:155 src/app/LiveSource.cpp:60
+#: src/app/Cli.cpp:155 src/app/LiveSource.cpp:64
 msgid ""
 "Container recording requires live video; screenshot polling cannot be "
 "recorded"
@@ -489,7 +494,7 @@ msgstr ""
 "录制不支持翻转；只翻转显示请使用 --display-orientation，或在后面用 --record-"
 "orientation 指定旋转角度"
 
-#: src/app/Cli.cpp:163 src/app/LiveSource.cpp:70
+#: src/app/Cli.cpp:163 src/app/LiveSource.cpp:74
 msgid ""
 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate "
 "only the display"
@@ -755,69 +760,75 @@ msgstr "录制失败：%s。录制文件可能不完整。\n"
 msgid "Device startup cancelled"
 msgstr "已取消设备启动"
 
-#: src/app/LiveSource.cpp:64
+#: src/app/LiveSource.cpp:60 src/media/AudioPump.cpp:100
+msgid ""
+"Audio capture without PCM decoding requires a container recording with an "
+"audio track"
+msgstr "不解码音频时，需要录制到包含音轨的 MP4 或 MKV 文件"
+
+#: src/app/LiveSource.cpp:68
 msgid "Container recording is unavailable in this build (libavformat required)"
 msgstr "此构建不支持容器录制，需要 libavformat"
 
-#: src/app/LiveSource.cpp:76
+#: src/app/LiveSource.cpp:80
 msgid "Invalid --test-degrade: "
 msgstr "--test-degrade 参数无效："
 
-#: src/app/LiveSource.cpp:124
+#: src/app/LiveSource.cpp:128
 #, c-format
 msgid "Failed to query display dimensions: %s (using model crop table)\n"
 msgstr "查询显示尺寸失败: %s（使用机型裁剪表）\n"
 
-#: src/app/LiveSource.cpp:125
+#: src/app/LiveSource.cpp:129
 msgid "Update contains no usable dimensions"
 msgstr "推送里没有可用的尺寸"
 
-#: src/app/LiveSource.cpp:138
+#: src/app/LiveSource.cpp:142
 #, c-format
 msgid ""
 "Failed to subscribe to display changes: %s (automatic rotation unavailable)\n"
 msgstr "订阅显示变化失败: %s（无法自动跟随旋转）\n"
 
-#: src/app/LiveSource.cpp:172 src/app/LiveSource.cpp:476
+#: src/app/LiveSource.cpp:176 src/app/LiveSource.cpp:485
 msgid "Live video unavailable; recording stopped"
 msgstr "实时视频不可用，录制已停止"
 
-#: src/app/LiveSource.cpp:177
+#: src/app/LiveSource.cpp:181
 #, c-format
 msgid "Media stream unavailable: %s\n"
 msgstr "媒体流不可用：%s\n"
 
-#: src/app/LiveSource.cpp:180
+#: src/app/LiveSource.cpp:184
 #, c-format
 msgid ""
 "Using screenshot polling; refresh rate depends on capture time. Input "
 "control remains available\n"
 msgstr "已改用截图轮询，刷新率取决于截图耗时；输入控制仍可用\n"
 
-#: src/app/LiveSource.cpp:184
+#: src/app/LiveSource.cpp:188
 msgid "Failed to start screenshot polling: "
 msgstr "启动截图轮询失败: "
 
-#: src/app/LiveSource.cpp:199
+#: src/app/LiveSource.cpp:203
 msgid "No first screenshot within 5 seconds"
 msgstr "5 秒内未取得首张截图"
 
-#: src/app/LiveSource.cpp:206
+#: src/app/LiveSource.cpp:210
 msgid "No first decoded frame within 5 seconds"
 msgstr "5 秒内未解出首帧"
 
-#: src/app/LiveSource.cpp:213
+#: src/app/LiveSource.cpp:217
 #, c-format
 msgid "Screenshot mirroring started: %s / iOS %s, %ux%u\n"
 msgstr "截图镜像已建立：%s / iOS %s，尺寸 %ux%u\n"
 
-#: src/app/LiveSource.cpp:217
+#: src/app/LiveSource.cpp:221
 #, c-format
 msgid ""
 "Video stream started: %s / iOS %s, receive port=%u PT=%u, first frame %ux%u\n"
 msgstr "视频流已建立：%s / iOS %s，收流端口=%u PT=%u，首帧 %ux%u\n"
 
-#: src/app/LiveSource.cpp:226
+#: src/app/LiveSource.cpp:230
 #, c-format
 msgid ""
 "Display geometry: visible area %dx%d (displayId=%llu %s), UI rotation %d "
@@ -826,22 +837,22 @@ msgstr ""
 "显示几何：设备报可见区 %dx%d（displayId=%llu %s），界面旋转顺时针 %d°，码流 "
 "%ux%u\n"
 
-#: src/app/LiveSource.cpp:233
+#: src/app/LiveSource.cpp:237
 #, c-format
 msgid "Screenshot mode cannot record Annex-B; ignoring --record\n"
 msgstr "截图模式无法录制 Annex-B，已忽略 --record\n"
 
-#: src/app/LiveSource.cpp:235
+#: src/app/LiveSource.cpp:239
 #, c-format
 msgid "Recording to %s\n"
 msgstr "录制到 %s\n"
 
-#: src/app/LiveSource.cpp:242
+#: src/app/LiveSource.cpp:246
 #, c-format
 msgid "Screenshot mode does not start audio\n"
 msgstr "截图模式不启动音频流\n"
 
-#: src/app/LiveSource.cpp:255
+#: src/app/LiveSource.cpp:260
 #, c-format
 msgid ""
 "Forwarding audio to the computer. Switching routes may pause the phone's "
@@ -850,76 +861,76 @@ msgstr ""
 "正在将音频转到电脑。切换路由可能暂停手机播放器；如有需要，请在手机上继续播"
 "放。\n"
 
-#: src/app/LiveSource.cpp:265
+#: src/app/LiveSource.cpp:270
 #, c-format
 msgid "Failed to start audio: %s (video continues)\n"
 msgstr "启动音频流失败: %s（继续显示画面）\n"
 
-#: src/app/LiveSource.cpp:270
+#: src/app/LiveSource.cpp:275
 #, c-format
 msgid "Audio stream started: receive port=%u PT=%u backend=%s\n"
 msgstr "音频流已建立：收流端口=%u PT=%u 后端=%s\n"
 
-#: src/app/LiveSource.cpp:273
+#: src/app/LiveSource.cpp:278
 msgid "Audio routing: phone and computer (--audio-dup)"
 msgstr "音频路由：手机和电脑（--audio-dup）"
 
-#: src/app/LiveSource.cpp:274
+#: src/app/LiveSource.cpp:279
 msgid "Audio routing: computer; phone playback is suppressed"
 msgstr "音频路由：电脑；手机停止发声"
 
-#: src/app/LiveSource.cpp:281
+#: src/app/LiveSource.cpp:286
 #, c-format
 msgid "--test-degrade: from now,"
 msgstr "--test-degrade：从现在起"
 
-#: src/app/LiveSource.cpp:283
+#: src/app/LiveSource.cpp:288
 #, c-format
 msgid " at %.1f seconds: %s"
 msgstr " %.1f 秒%s"
 
-#: src/app/LiveSource.cpp:284
+#: src/app/LiveSource.cpp:289
 msgid "force fallback"
 msgstr "强制降级"
 
-#: src/app/LiveSource.cpp:284
+#: src/app/LiveSource.cpp:289
 msgid "release override"
 msgstr "放开"
 
-#: src/app/LiveSource.cpp:286
+#: src/app/LiveSource.cpp:291
 #, c-format
 msgid " (test mode)\n"
 msgstr "（测试模式）\n"
 
-#: src/app/LiveSource.cpp:293
+#: src/app/LiveSource.cpp:298
 msgid ""
 "No playable audio stream (disabled, failed to start, or unsupported build)"
 msgstr "没有可播放的音频流（已禁用、启动失败或构建不支持）"
 
-#: src/app/LiveSource.cpp:307
+#: src/app/LiveSource.cpp:316
 msgid "Audio capture stopped before recording finished"
 msgstr "录制尚未完成，音频采集已停止"
 
-#: src/app/LiveSource.cpp:318
+#: src/app/LiveSource.cpp:327
 msgid "Device input is unavailable before a session is started"
 msgstr "尚未建立设备会话，无法发送输入"
 
-#: src/app/LiveSource.cpp:328
+#: src/app/LiveSource.cpp:337
 #, c-format
 msgid "Device input connection established\n"
 msgstr "设备输入连接已建立\n"
 
-#: src/app/LiveSource.cpp:340
+#: src/app/LiveSource.cpp:349
 #, c-format
 msgid "Failed to release device touch: %s\n"
 msgstr "未能释放设备触点：%s\n"
 
-#: src/app/LiveSource.cpp:348
+#: src/app/LiveSource.cpp:357
 #, c-format
 msgid "Failed to release device keys: %s\n"
 msgstr "未能松开设备按键：%s\n"
 
-#: src/app/LiveSource.cpp:480
+#: src/app/LiveSource.cpp:489
 #, c-format
 msgid ""
 "Live video unavailable; using screenshot polling while retrying video in the "
@@ -927,26 +938,26 @@ msgid ""
 msgstr ""
 "实时视频暂不可用，已切换到截图轮询；后台继续尝试恢复视频，成功后自动切回\n"
 
-#: src/app/LiveSource.cpp:483
+#: src/app/LiveSource.cpp:492
 #, c-format
 msgid "Failed to switch to screenshots: %s (retry in %llu seconds)\n"
 msgstr "切换到截图失败: %s（%llu 秒后重试）\n"
 
-#: src/app/LiveSource.cpp:489
+#: src/app/LiveSource.cpp:498
 #, c-format
 msgid "Live video recovered; switched back to video stream\n"
 msgstr "实时视频已恢复，已切回视频流\n"
 
-#: src/app/LiveSource.cpp:504 src/media/FramePump.cpp:174
+#: src/app/LiveSource.cpp:513 src/media/FramePump.cpp:174
 #, c-format
 msgid "Recording failed: %s. Mirroring continues; the file is incomplete.\n"
 msgstr "录制失败：%s。镜像继续，录制文件不完整。\n"
 
-#: src/app/LiveSource.cpp:536
+#: src/app/LiveSource.cpp:545
 msgid "); closing session"
 msgstr "），正在关闭会话"
 
-#: src/app/LiveSource.cpp:536
+#: src/app/LiveSource.cpp:545
 msgid "Device connection lost ("
 msgstr "设备连接已断开（"
 
@@ -1478,22 +1489,22 @@ msgstr "输入过大"
 msgid "Nesting too deep"
 msgstr "嵌套过深"
 
-#: src/media/AudioPump.cpp:101
+#: src/media/AudioPump.cpp:106
 #, c-format
 msgid "Clamped --audio-buffer %d to %d ms and adjusted buffer capacity\n"
 msgstr "已将 --audio-buffer %d 限制为 %d ms，并按此配置缓冲容量\n"
 
-#: src/media/AudioPump.cpp:132
+#: src/media/AudioPump.cpp:139
 msgid "Audio routing was not confirmed: answer has no valid AudioStreamMode"
 msgstr "无法确认音频路由：设备答复缺少有效的 AudioStreamMode"
 
-#: src/media/AudioPump.cpp:138
+#: src/media/AudioPump.cpp:145
 msgid ""
 "Phone-and-computer audio routing was not accepted (--audio-dup requires "
 "AudioStreamMode 8)"
 msgstr "设备未接受双端播放路由（--audio-dup 要求 AudioStreamMode 8）"
 
-#: src/media/AudioPump.cpp:139
+#: src/media/AudioPump.cpp:146
 msgid ""
 "Computer-only audio routing was not accepted (requires AudioStreamMode 10); "
 "not falling back to --audio-dup"
@@ -1501,7 +1512,7 @@ msgstr ""
 "设备未接受仅在电脑播放的路由（要求 AudioStreamMode 10）；不会自动改为 --"
 "audio-dup"
 
-#: src/media/AudioPump.cpp:150
+#: src/media/AudioPump.cpp:157
 #, c-format
 msgid ""
 ". Audio keepalive has stopped; wait for session expiry (about %u seconds), "
@@ -1509,7 +1520,7 @@ msgid ""
 msgstr ""
 "。音频已停止续期，请等待会话到期（约 %u 秒）；如有需要，再在手机上继续播放"
 
-#: src/media/AudioPump.cpp:190
+#: src/media/AudioPump.cpp:197
 #, c-format
 msgid ""
 "Audio answer missing SSRC (RemoteSSRC=%u LocalSSRC=%u); session renewal may "
@@ -1517,50 +1528,50 @@ msgid ""
 msgstr ""
 "音频协商响应缺少 SSRC（RemoteSSRC=%u LocalSSRC=%u），音频会话可能无法续期\n"
 
-#: src/media/AudioPump.cpp:310
+#: src/media/AudioPump.cpp:315
 #, c-format
 msgid "Audio clock compensation failed: %s; continuing playback\n"
 msgstr "音频时钟补偿失败：%s；继续播放\n"
 
-#: src/media/AudioPump.cpp:407
+#: src/media/AudioPump.cpp:413
 msgid "Audio session was recreated during container recording"
 msgstr "容器录制期间音频会话被重建"
 
-#: src/media/AudioPump.cpp:415
+#: src/media/AudioPump.cpp:421
 #, c-format
 msgid "Audio session recreated, receive port=%u\n"
 msgstr "音频会话已重建，收流端口=%u\n"
 
-#: src/media/AudioPump.cpp:428
+#: src/media/AudioPump.cpp:434
 #, c-format
 msgid "Audio negotiation failed during recovery; disabling audio: %s\n"
 msgstr "恢复时音频协商失败，已禁用音频：%s\n"
 
-#: src/media/AudioPump.cpp:432
+#: src/media/AudioPump.cpp:438
 #, c-format
 msgid "Failed to recreate audio session: %s (retry in 1 second)\n"
 msgstr "重建音频会话失败: %s（1 秒后再试）\n"
 
-#: src/media/AudioPump.cpp:450
+#: src/media/AudioPump.cpp:456
 msgid "Device ended the recorded audio session"
 msgstr "设备结束了正在录制的音频会话"
 
-#: src/media/AudioPump.cpp:452
+#: src/media/AudioPump.cpp:458
 #, c-format
 msgid ""
 "Audio: device session ended (%llu ms without audio); recreating session\n"
 msgstr "音频：设备会话已结束（%llu ms 未收到音频），重建会话\n"
 
-#: src/media/AudioPump.cpp:480
+#: src/media/AudioPump.cpp:486
 #, c-format
 msgid "Failed to send audio RTCP keepalive: %s\n"
 msgstr "音频 RTCP 保活包发送失败: %s\n"
 
-#: src/media/AudioPump.cpp:547
+#: src/media/AudioPump.cpp:553
 msgid "Audio packet loss ended container recording"
 msgstr "音频丢包，容器录制已停止"
 
-#: src/media/AudioPump.cpp:566
+#: src/media/AudioPump.cpp:573
 #, c-format
 msgid "Audio decode failed (%zu-byte payload): %s\n"
 msgstr "音频解码失败（载荷 %zu 字节）: %s\n"
@@ -1924,47 +1935,47 @@ msgstr "等待可用媒体数据或可信发送端报告超时"
 msgid "Recording worker could not process its input"
 msgstr "录制线程无法处理输入数据"
 
-#: src/media/Recorder.cpp:522 src/media/RecordingMuxer.cpp:27
+#: src/media/Recorder.cpp:524 src/media/RecordingMuxer.cpp:27
 msgid "Container recording requires libavformat and libavcodec"
 msgstr "容器录制需要 libavformat 和 libavcodec"
 
-#: src/media/Recorder.cpp:530
+#: src/media/Recorder.cpp:532
 msgid "Invalid Recorder path or bounded buffering/clock limits"
 msgstr "录制路径、缓冲上限或时钟限制无效"
 
-#: src/media/Recorder.cpp:538
+#: src/media/Recorder.cpp:540
 msgid "Cannot create the recording worker"
 msgstr "无法创建录制线程"
 
-#: src/media/Recorder.cpp:552
+#: src/media/Recorder.cpp:554
 msgid "Recording track selection or session UUID is invalid"
 msgstr "录制轨道选择或会话 UUID 无效"
 
-#: src/media/Recorder.cpp:564
+#: src/media/Recorder.cpp:566
 msgid "Recording session UUID is invalid"
 msgstr "录制会话 UUID 无效"
 
-#: src/media/Recorder.cpp:569
+#: src/media/Recorder.cpp:571
 msgid "Recording HEVC AU is incomplete or exceeds the packet budget"
 msgstr "录制的 HEVC 访问单元不完整或超过包大小上限"
 
-#: src/media/Recorder.cpp:573
+#: src/media/Recorder.cpp:575
 msgid "Recording HEVC AU has an invalid or unsupported layer header"
 msgstr "录制 HEVC 访问单元的头部无效，或使用了不支持的层"
 
-#: src/media/Recorder.cpp:577
+#: src/media/Recorder.cpp:579
 msgid "Recording HEVC AU is empty"
 msgstr "录制的 HEVC 访问单元为空"
 
-#: src/media/Recorder.cpp:581
+#: src/media/Recorder.cpp:583
 msgid "Recording HEVC parameters exceed the configuration budget"
 msgstr "HEVC 录制参数超过配置大小上限"
 
-#: src/media/Recorder.cpp:608
+#: src/media/Recorder.cpp:610
 msgid "Recording AAC-ELD track, session or payload is invalid"
 msgstr "录制的 AAC-ELD 轨道、会话或编码数据无效"
 
-#: src/media/Recorder.cpp:624
+#: src/media/Recorder.cpp:626
 msgid "Recording sender-report track or session is invalid"
 msgstr "录制发送端报告的轨道或会话无效"
 
@@ -6723,6 +6734,9 @@ msgstr "不可用"
 #~ "此平台没有 AAC-ELD 解码后端。本项目在 macOS 使用 AudioToolbox；已测试的 "
 #~ "FFmpeg 原生 AAC 解码器不支持 ELD。视频可继续运行。"
 
+#~ msgid "Audio capture without PCM decoding requires a container recording"
+#~ msgstr "不解码音频时，需要录制到 MP4 或 MKV 文件"
+
 #, c-format
 #~ msgid "Audio output opened: %d Hz / %d channels, backend %s\n"
 #~ msgstr "音频输出已打开：%d Hz / %d 声道，后端 %s\n"
@@ -6799,6 +6813,10 @@ msgstr "不可用"
 
 #~ msgid "List connected devices"
 #~ msgstr "列出连接的设备"
+
+#, c-format
+#~ msgid "Local audio playback disabled; receiving and decoding continue\n"
+#~ msgstr "已禁用本机音频播放，继续接收和解码音频\n"
 
 #~ msgid ""
 #~ "MKV audio recording requires an audio stream. Use --no-audio-playback to "

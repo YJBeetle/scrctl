@@ -327,7 +327,7 @@ void check_source_ssrc() {
     }
 }
 
-void check_audio_routing() {
+void check_audio_routing(bool decode_pcm) {
     using namespace scrctl::xpc;
     using scrctl::media::AudioPump;
     using scrctl::media::StreamSession;
@@ -342,6 +342,7 @@ void check_audio_routing() {
         return started;
     };
     AudioPump::Options options;
+    options.decode_pcm = decode_pcm;
     check(!options.audio_dup, "音频默认请求只在电脑播放");
     for (const auto &mode : {make_int64(10), make_uint64(10)}) {
         const auto started = answer_with_mode(mode);
@@ -400,7 +401,8 @@ int main() {
     check_source_ssrc();
 
     std::printf("== 音频路由答复校验 ==\n");
-    check_audio_routing();
+    check_audio_routing(true);
+    check_audio_routing(false);
 
     std::printf("== AudioToolbox 状态诊断 ==\n");
     {

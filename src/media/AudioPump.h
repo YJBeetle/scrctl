@@ -17,13 +17,16 @@ namespace scrctl::media {
 
 class Recorder;
 
-/// 独立接收并解码音频，使用环形缓冲向调用方提供 PCM。
+/// 独立接收音频；播放时解码并提供 PCM，仅录音轨时可保留原 AAC 而跳过解码。
 /// 音频工作线程与视频帧循环分离，避免静止画面阻塞音频接收。
 class AudioPump {
 public:
     struct Options {
         /// 借用拥有者的容器录制器；旁路解码前原包。销毁录制器前须 stop/join。
         Recorder *recorder = nullptr;
+        /// false 仅向录制器投递原 AAC，不创建 PCM 解码器、补偿器或播放缓冲。
+        /// 此模式必须提供包含音轨的 recorder；不会改变 audio_dup 路由策略。
+        bool decode_pcm = true;
         /// false 将手机音频转到电脑（negotiator mode 10）；true 保留手机播放（mode 6）。
         /// 起流和会话重建使用相同策略，不自动切换为双端播放。
         bool audio_dup = false;
@@ -92,7 +95,7 @@ public:
     struct Stats {
         /// 来源和载荷类型与本流匹配的 RTP 包数，包括迟到、重复及解码失败的包。
         std::uint64_t packets = 0;
-        /// 输出非空 PCM 的包数，与 packets 的差值表示未输出 PCM 的包数。
+        /// 输出非空 PCM 的包数；主动关闭 PCM 解码时为零，不表示解码失败。
         std::uint64_t decoded = 0;
         std::uint64_t decode_failed = 0;
         /// 同端口收到的其他载荷类型，包括 RTCP SR。
@@ -137,6 +140,8 @@ public:
     /// 协商及解码使用的采样率与声道数，播放设备应采用同样配置。
     [[nodiscard]] int sample_rate() const { return options_.sample_rate; }
     [[nodiscard]] int channels() const { return options_.channels; }
+    /// 构造时确定的播放解码需求；接收、录制和会话恢复期间保持不变。
+    [[nodiscard]] bool decoding_enabled() const { return options_.decode_pcm; }
 
     /// 当前缓冲音频帧数，供播放端判断是否达到预滚水位。
     [[nodiscard]] std::size_t buffered_frames() const;
@@ -183,7 +188,7 @@ private:
     void report_clock_failure(const std::string &err);
 
     remote::Device &device_;
-    Options options_;
+    const Options options_;
     bool verbose_ = false;
     /// 设备已接受请求但答复无效（含路由不符）时终止音频；与传输失败分开，
     /// 避免每秒重做会打断播放器的路由切换。只在启动线程或后续工作线程内访问。

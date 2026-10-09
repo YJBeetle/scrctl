@@ -79,7 +79,7 @@ struct Recorder::Impl {
         int64_t pts = 0;
     };
 
-    Options options;
+    const Options options;
     mutable std::mutex mutex;
     std::condition_variable changed;
     std::deque<Event> ingress;
@@ -514,6 +514,8 @@ struct Recorder::Impl {
 };
 
 Recorder::Recorder(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
+
+bool Recorder::includes_audio() const { return impl_->options.include_audio; }
 
 std::unique_ptr<Recorder> Recorder::start(const Options& options, std::string& error) {
     if (!RecordingMuxer::validate_video_orientation(options.format, options.video_orientation, error))

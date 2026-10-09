@@ -49,6 +49,7 @@ uint64_t now_ms() {
 
 AudioPump::Waterline AudioPump::compute_waterline(const Options &options) {
     Waterline w;
+    if (!options.decode_pcm) return w;
     int ms = options.target_backlog_ms;
     if (ms > kMaxTargetBacklogMs) {
         w.clamped_to_ms = kMaxTargetBacklogMs;
@@ -95,6 +96,10 @@ AudioPump::ReadTrim AudioPump::compute_read_trim(std::size_t buffered,
 
 std::unique_ptr<AudioPump> AudioPump::start(remote::Device &device, const Options &options,
                                            std::string &err, bool verbose) {
+    if (!options.decode_pcm && (options.recorder == nullptr || !options.recorder->includes_audio())) {
+        err = SCRCTL_TR("Audio capture without PCM decoding requires a container recording with an audio track");
+        return nullptr;
+    }
     // 起流前计算并提示被限制的配置，与构造函数采用相同纯函数。
     const Waterline w = compute_waterline(options);
     if (w.clamped_to_ms != 0) {
@@ -106,13 +111,15 @@ std::unique_ptr<AudioPump> AudioPump::start(remote::Device &device, const Option
     if (!pump->start_session(err)) {
         return nullptr;
     }
-    std::string clock_error;
-    pump->regulator_ = AudioRegulator::create(options.sample_rate, options.channels,
-                                              pump->target_frames_, clock_error);
-    if (pump->regulator_ != nullptr) {
-        pump->stats_.clock = pump->regulator_->stats();
-    } else if (!clock_error.empty()) {
-        pump->report_clock_failure(clock_error);
+    if (options.decode_pcm) {
+        std::string clock_error;
+        pump->regulator_ = AudioRegulator::create(options.sample_rate, options.channels,
+                                                  pump->target_frames_, clock_error);
+        if (pump->regulator_ != nullptr) {
+            pump->stats_.clock = pump->regulator_->stats();
+        } else if (!clock_error.empty()) {
+            pump->report_clock_failure(clock_error);
+        }
     }
     pump->worker_ = std::thread([raw = pump.get()] { raw->loop(); });
     return pump;
@@ -155,7 +162,7 @@ void AudioPump::reject_negotiation(std::string &err) {
 
 bool AudioPump::start_session(std::string &err) {
     // 先确认解码器可用再起流，避免构建缺少后端时占用设备媒体会话。
-    if (decoder_ == nullptr) {
+    if (options_.decode_pcm && decoder_ == nullptr) {
         decoder_ = create_audio_decoder(options_.sample_rate, options_.channels,
                                        options_.frame_length, err);
         if (decoder_ == nullptr) {
@@ -219,9 +226,7 @@ void AudioPump::publish_live() {
         live.remote_ssrc = started.remote_ssrc;
         live.local_ssrc = started.local_ssrc;
     }
-    if (decoder_ != nullptr) {
-        backend_name_ = decoder_->backend_name();
-    }
+    backend_name_ = decoder_ != nullptr ? decoder_->backend_name() : "none";
     live_ = live;
 }
 
@@ -313,6 +318,7 @@ void AudioPump::report_clock_failure(const std::string &err) {
 }
 
 std::size_t AudioPump::read(int16_t *dst, std::size_t frames) {
+    if (!options_.decode_pcm) return 0;
     const std::size_t channels =
         options_.channels > 0 ? static_cast<std::size_t>(options_.channels) : 1;
     std::lock_guard<std::mutex> lock(mutex_);
@@ -553,6 +559,7 @@ void AudioPump::loop() {
             (void)options_.recorder->audio(session_->started().session_uuid, *media_source,
                 info.timestamp, payload);
         }
+        if (!options_.decode_pcm) continue;
         std::vector<int16_t> pcm;
         std::string derr;
         if (!decoder_->decode(payload, pcm, derr)) {

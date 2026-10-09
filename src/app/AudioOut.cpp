@@ -7,6 +7,10 @@
 namespace scrctl::app {
 
 bool AudioOut::open(scrctl::media::AudioPump &pump, std::string &err) {
+    if (!pump.decoding_enabled()) {
+        err = SCRCTL_TR("Audio playback is unavailable because PCM decoding is disabled");
+        return false;
+    }
     pump_ = &pump;
     channels_ = pump.channels() > 0 ? pump.channels() : 2;
     preroll_ = pump.preroll_frames();

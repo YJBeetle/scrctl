@@ -130,7 +130,7 @@ int run(int argc, char **argv) {
         if (!made->start(o.serial, o.wifi, o.record, o.hw_decode, !o.no_window,
                          want_audio, o.audio_buffer_ms, o.video_source, o.test_degrade, err,
                          o.wifi_port, o.audio_dup, [&runtime] { return runtime.stop_requested(); },
-                         o.record_orientation)) {
+                         o.record_orientation, !o.no_audio_playback)) {
             if (exit_requested()) {
                 return finish_source(made.get(), 0);
             }
@@ -209,7 +209,7 @@ int run(int argc, char **argv) {
             }
         }
     } else if (live != nullptr && live->has_audio() && o.no_audio_playback) {
-        std::printf(SCRCTL_TR("Local audio playback disabled; receiving and decoding continue\n"));
+        std::printf(SCRCTL_TR("Local audio playback disabled; recording original AAC without PCM decoding\n"));
     }
     if (exit_requested()) {
         return finish_exit(0);

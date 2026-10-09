@@ -206,6 +206,10 @@ int main() {
     {
         scrctl::app::LiveSource source;
         std::string err = "previous error";
+        check(!source.start("must-not-connect", "must-not-resolve", "", false, false,
+                            true, 200, "stream", "", err, 49152, false, {}, 0, false) &&
+                  err.find("requires a container recording") != std::string::npos && !source.has_audio(),
+              "capture-only without a container fails before connecting a device or routing audio");
         check(source.keyboard_state({}, err) && err.empty(),
               "empty keyboard cleanup needs no device session or HID connection");
         err = "previous error";

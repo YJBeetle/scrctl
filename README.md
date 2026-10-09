@@ -125,6 +125,10 @@ scrctl --record capture.mkv --audio-dup --no-audio-playback  # 保留手机声�
 scrctl --record capture.hevc              # 原有裸 HEVC 方式，不录音频
 ```
 
+`--no-audio-playback` 录制 MP4/MKV 时直接保存原始 AAC 音轨，不执行 PCM 解码、
+播放时钟补偿或播放缓冲。音频来源检查、序号、时间戳与会话续期仍然保留；
+它只关闭电脑播放，不改变所选的手机音频路由。
+
 扩展名 `.mp4` / `.mkv`（不区分大小写）选择容器录制；其他扩展名保留裸 HEVC
 行为，建议使用 `.hevc`。`--play` 只支持裸 HEVC，不能与 `--record` 同时使用；
 播放容器文件请使用支持 HEVC / AAC-ELD 的播放器。FFmpeg 解码已验证，其他播放器

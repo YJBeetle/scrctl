@@ -40,6 +40,8 @@ public:
     /// MP4 用下一批准视频点的 PTS 差作为前包时长，最后包显示 100 ms。
     /// 这个末帧时长是展示规则，不是源端结束时间；MKV 保留未知时长 0。
     [[nodiscard]] static std::unique_ptr<Recorder> start(const Options&, std::string& error);
+    /// 创建时选定的音轨消费者；录制、失败及收尾期间保持不变，不查询 worker 状态。
+    [[nodiscard]] bool includes_audio() const;
     ~Recorder();
     Recorder(const Recorder&) = delete;
     Recorder& operator=(const Recorder&) = delete;

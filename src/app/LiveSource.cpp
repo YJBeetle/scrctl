@@ -43,7 +43,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
                        bool want_audio, int audio_buffer_ms, const std::string &video_source,
                        const std::string &test_degrade, std::string &err, uint16_t wifi_port,
                        bool audio_dup, const std::function<bool()> &should_cancel,
-                       int record_orientation) {
+                       int record_orientation, bool decode_audio) {
     const auto cancelled = [&] {
         if (!should_cancel || !should_cancel()) {
             return false;
@@ -56,6 +56,10 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     }
     const auto container_format = record_container_format(record_path);
     const bool container_recording = container_format.has_value();
+    if (want_audio && !decode_audio && !container_recording) {
+        err = SCRCTL_TR("Audio capture without PCM decoding requires a container recording with an audio track");
+        return false;
+    }
     if (container_recording && video_source == "screenshot") {
         err = SCRCTL_TR("Container recording requires live video; screenshot polling cannot be recorded");
         return false;
@@ -242,7 +246,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
         std::printf(SCRCTL_TR("Screenshot mode does not start audio\n"));
     }
     if (want_audio && screenshot_.source == nullptr) {
-        if (!scrctl::kHaveAudioDecoder) {
+        if (decode_audio && !scrctl::kHaveAudioDecoder) {
             if (recorder_ != nullptr) recorder_->fail(SCRCTL_TR(scrctl::kNoAudioDecoderMessage));
             std::fprintf(stderr, "%s\n", SCRCTL_TR(scrctl::kNoAudioDecoderMessage));
         } else {
@@ -250,6 +254,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             ao.target_backlog_ms = audio_buffer_ms;
             ao.audio_dup = audio_dup;
             ao.recorder = recorder_.get();
+            ao.decode_pcm = decode_audio;
             if (!audio_dup) {
                 std::printf(SCRCTL_TR(
                     "Forwarding audio to the computer. Switching routes may pause the phone's "
@@ -264,7 +269,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
                 if (recorder_ != nullptr) recorder_->fail(aerr);
                 std::fprintf(stderr, SCRCTL_TR("Failed to start audio: %s (video continues)\n"), aerr.c_str());
             } else {
-                // 音频统计使用独立时间基线。切到截图期间音频仍在独立线程接收和解码，
+                // 音频统计使用独立时间基线。切到截图期间音频仍在独立线程接收，
                 // 不能用视频统计窗口计算这段音频增量。
                 stats_.audio_started(SDL_GetTicks64());
                 std::printf(SCRCTL_TR("Audio stream started: receive port=%u PT=%u backend=%s\n"), audio_->receiver_port(),
@@ -291,6 +296,10 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
 bool LiveSource::start_playback(std::string &err) {
     if (audio_ == nullptr) {
         err = SCRCTL_TR("No playable audio stream (disabled, failed to start, or unsupported build)");
+        return false;
+    }
+    if (!audio_->decoding_enabled()) {
+        err = SCRCTL_TR("Audio playback is unavailable because PCM decoding is disabled");
         return false;
     }
     if (!audio_out_.open(*audio_, err)) {

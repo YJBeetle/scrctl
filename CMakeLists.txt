@@ -497,6 +497,13 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(audio_buffer_test PRIVATE scrctl_core)
     add_test(NAME audio_buffer COMMAND audio_buffer_test)
 
+    # 真实接收循环与录制器，替换已有网络/解码/声卡边界；不访问真机或音频设备。
+    scrctl_add_test_executable(audio_capture_test tests/audio_capture_test.cpp
+        src/media/AudioPump.cpp src/app/AudioOut.cpp)
+    target_link_libraries(audio_capture_test PRIVATE scrctl_core Scrctl::SDL2)
+    add_test(NAME audio_capture COMMAND audio_capture_test)
+    set_tests_properties(audio_capture PROPERTIES TIMEOUT 15)
+
     scrctl_add_test_executable(decode_test tests/decode_test.cpp)
     target_link_libraries(decode_test PRIVATE scrctl_core)
 

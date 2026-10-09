@@ -110,7 +110,8 @@ scrctl 的默认路由已在 macOS、iPhone14,4 / iOS 27 的 USB 与 Wi-Fi 音�
 `--no-audio` 相同。裸 HEVC 录制没有音轨，不会让音频继续采集。
 
 录制 MP4/MKV 时，`--no-audio-playback` 保留音轨采集，仍使用默认电脑路由
-（手机无声）。要在录音轨时保留手机播放，可使用
+（手机无声）。原始 AAC 直接进入录制器，跳过 PCM 解码、播放时钟补偿及播放缓冲；
+来源、序号、时间戳与会话续期检查保留。要在录音轨时保留手机播放，可使用
 `-r capture.mkv --audio-dup --no-audio-playback`，MP4 也支持同样组合。
 `--audio-dup` 与显式或归一化后的 `--no-audio` 冲突，会在连接前报错。
 
