@@ -1,4 +1,5 @@
 #include "media/Recorder.h"
+#include "RecordingAudioEvidence.h"
 #include "media/RecordingMuxer.h"
 
 #include <array>
@@ -114,10 +115,11 @@ bool wait_for_error(Recorder& recorder) {
     return !recorder.error().empty();
 }
 
-struct Packet { int64_t pts, dts, duration; Nal bytes; };
+struct Packet { int64_t pts, dts, duration; Nal bytes; recording_test::AudioPacketEvidence audio_evidence; };
 struct File {
     std::vector<Packet> video, audio;
     unsigned tracks = 0;
+    recording_test::AudioTailEvidence audio_tail;
     std::optional<int> clockwise_orientation;
 };
 File read(const std::filesystem::path& path) {
@@ -157,12 +159,14 @@ File read(const std::filesystem::path& path) {
             Packet sample{av_rescale_q(packet->pts, stream->time_base, AVRational{1, 1000000}),
                           av_rescale_q(packet->dts, stream->time_base, AVRational{1, 1000000}),
                           av_rescale_q(packet->duration, stream->time_base, AVRational{1, 1000000}),
-                          Nal(packet->data, packet->data + packet->size)};
+                          Nal(packet->data, packet->data + packet->size), {}};
             if (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
                 check(stream->codecpar->codec_id == AV_CODEC_ID_HEVC, "Recorder writes a HEVC track");
                 result.video.push_back(std::move(sample));
             } else {
                 check(stream->codecpar->codec_id == AV_CODEC_ID_AAC, "Recorder writes a raw AAC-ELD track");
+                sample.audio_evidence = recording_test::inspect_audio_packet(*input, *packet);
+                result.audio_tail = recording_test::inspect_audio_tail(*input, static_cast<unsigned>(packet->stream_index));
                 result.audio.push_back(std::move(sample));
             }
             av_packet_unref(packet);
@@ -188,6 +192,8 @@ void verify_audio(const File& file, std::span<const int64_t> pts) {
     for (std::size_t i = 0; i < file.audio.size() && i < pts.size(); ++i) {
         check(near(file.audio[i].pts, pts[i]), "audio preserves its shared-origin SR timing");
         check(file.audio[i].bytes == silence, "AAC-ELD is not resampled or reencoded");
+        if (!near(file.audio[i].pts, pts[i]) || file.audio[i].bytes != silence)
+            std::fprintf(stderr, "AUDIO: %s\n", file.audio[i].audio_evidence.diagnostic().c_str());
     }
 }
 
@@ -214,9 +220,17 @@ void audio_only_recording(const Directory& directory) {
         check(file.tracks == 1 && file.video.empty(), "audio-only Recorder publishes exactly one AAC track");
         const std::array<int64_t, 3> pts{0, 10000, 20000};
         verify_audio(file, pts);
-        for (const auto& packet : file.audio)
-            check(packet.dts == packet.pts && near(packet.duration, 10000) && packet.duration > 0,
-                  "audio-only duration follows its 480-sample SR interval, including the final packet");
+        for (const auto& packet : file.audio) {
+            const auto& evidence = packet.audio_evidence;
+            check(packet.dts == packet.pts, "audio-only PTS and DTS remain equal at every approved SR interval");
+            check(evidence.frame_valid(), "audio-only original AAC actually yields 480 samples at 48kHz stereo");
+            check(evidence.duration_valid(), "present SR-approved packet duration is 10ms; missing MKV duration needs actual AAC proof");
+            if (packet.dts != packet.pts || !evidence.frame_valid() || !evidence.duration_valid())
+                std::fprintf(stderr, "AUDIO: %s\n", evidence.diagnostic().c_str());
+        }
+        check(file.audio_tail.valid(30000), "audio-only container includes exactly the final 10ms audio interval");
+        if (!file.audio_tail.valid(30000))
+            std::fprintf(stderr, "TAIL: %s\n", file.audio_tail.diagnostic(30000).c_str());
     }
 }
 

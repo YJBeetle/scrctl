@@ -1,4 +1,5 @@
 #include "media/RecordingMuxer.h"
+#include "RecordingAudioEvidence.h"
 
 #include <array>
 #include <chrono>
@@ -144,6 +145,7 @@ struct Packet {
     int64_t pts = 0, dts = 0, duration = 0;
     Nal bytes;
     bool key = false;
+    recording_test::AudioPacketEvidence audio_evidence;
 };
 struct Track {
     AVCodecID codec = AV_CODEC_ID_NONE;
@@ -156,6 +158,7 @@ struct Track {
 struct File {
     Track video, audio;
     unsigned streams = 0;
+    recording_test::AudioTailEvidence audio_tail;
 };
 
 File read(const std::filesystem::path& path) {
@@ -225,6 +228,8 @@ File read(const std::filesystem::path& path) {
                 sample.pts = av_rescale_q(packet->pts, time_base, AVRational{1, 1000000});
                 sample.dts = av_rescale_q(packet->dts, time_base, AVRational{1, 1000000});
                 sample.duration = av_rescale_q(packet->duration, time_base, AVRational{1, 1000000});
+                if (track == &result.audio)
+                    sample.audio_evidence = recording_test::inspect_audio_packet(*input, *packet);
                 sample.bytes.assign(packet->data, packet->data + packet->size);
                 sample.key = (packet->flags & AV_PKT_FLAG_KEY) != 0;
                 track->packets.push_back(std::move(sample));
@@ -233,6 +238,8 @@ File read(const std::filesystem::path& path) {
         }
         check(ret == AVERROR_EOF, "demux ends normally after all packets");
     }
+    if (audio_index >= 0)
+        result.audio_tail = recording_test::inspect_audio_tail(*input, static_cast<unsigned>(audio_index));
     av_packet_free(&packet);
     avformat_close_input(&input);
     return result;
@@ -269,6 +276,8 @@ void check_audio(const Track& audio, std::span<const int64_t> pts, int frame_sam
         check(near(packet.pts, pts[i]) && packet.dts == packet.pts,
               "AAC starts at the caller offset and follows mapped packet PTS");
         check(packet.bytes == silence, "AAC-ELD payload is neither dropped nor reencoded");
+        if (!near(packet.pts, pts[i]) || packet.bytes != silence)
+            std::fprintf(stderr, "AUDIO: %s\n", packet.audio_evidence.diagnostic().c_str());
     }
 }
 
@@ -395,9 +404,17 @@ void audio_only_containers(const Directory& directory) {
         check(file.streams == 1 && file.video.codec == AV_CODEC_ID_NONE && file.video.packets.empty(),
               "audio-only output has exactly one audio stream and no dummy video stream");
         check_audio(file.audio, pts, 480);
-        for (const auto& packet : file.audio.packets)
-            check(near(packet.duration, 10000) && packet.duration > 0,
-                  "all audio-only packets retain their 480-sample duration without a video-tail rule");
+        for (const auto& packet : file.audio.packets) {
+            const auto& evidence = packet.audio_evidence;
+            check(packet.dts == packet.pts, "audio-only PTS and DTS remain equal");
+            check(evidence.frame_valid(), "audio-only packets actually decode to 480 samples at 48kHz stereo");
+            check(evidence.duration_valid(), "present packet duration is exactly 10ms; missing MKV duration needs real AAC proof");
+            if (packet.dts != packet.pts || !evidence.frame_valid() || !evidence.duration_valid())
+                std::fprintf(stderr, "AUDIO: %s\n", evidence.diagnostic().c_str());
+        }
+        check(file.audio_tail.valid(30000), "audio-only container ends exactly 10ms after its final packet PTS");
+        if (!file.audio_tail.valid(30000))
+            std::fprintf(stderr, "TAIL: %s\n", file.audio_tail.diagnostic(30000).c_str());
 
         writer = Muxer::open(audio_options(directory.path / ("audio-only-misuse-" + std::to_string(index)), format), error);
         check(writer != nullptr, "audio-only wrong-track fixture opens");
@@ -415,6 +432,65 @@ void audio_only_containers(const Directory& directory) {
     check(!Muxer::open(audio_options(directory.path / "missing" / "audio.mkv", Muxer::Format::Matroska), error) &&
           error.find("open the recording file") != std::string::npos,
           "audio-only container propagates a real local file-open failure");
+}
+
+void audio_evidence_negative_cases(const Directory& directory) {
+    enum class Case { Asc512, Asc512Trimmed, CorruptPacket, Mp4Duration, MkvTail, MissingMp4Duration, MissingMkvEnd };
+    for (const auto failure : {Case::Asc512, Case::Asc512Trimmed, Case::CorruptPacket, Case::Mp4Duration, Case::MkvTail,
+                               Case::MissingMp4Duration, Case::MissingMkvEnd}) {
+        const auto format = failure == Case::MkvTail || failure == Case::MissingMkvEnd ?
+                            Muxer::Format::Matroska : Muxer::Format::Mp4;
+        const auto path = directory.path / ("audio-evidence-negative-" + std::to_string(static_cast<int>(failure)));
+        auto config = audio_options(path, format);
+        if (failure == Case::Asc512 || failure == Case::Asc512Trimmed) config.audio->frame_samples = 512;
+        std::string error;
+        auto writer = Muxer::open(config, error);
+        check(writer != nullptr, "negative evidence fixture opens an actual selected-track container");
+        if (!writer) continue;
+        const Nal corrupt{0xff, 0x00, 0xff, 0xff};  // Invalid ELD scalefactor-band count; not an ADTS prefix.
+        const auto& bytes = failure == Case::CorruptPacket ? corrupt : silence;
+        const int64_t duration = failure == Case::Asc512 ? 10667 :
+                                 failure == Case::Mp4Duration || failure == Case::MkvTail ? 20000 : 10000;
+        check(writer->write_audio(bytes, {0, 0, duration}, error) && writer->finish(error),
+              "negative evidence uses actual original AAC/ASC/timing submitted through the public muxer");
+        AVFormatContext* input = nullptr;
+        check(avformat_open_input(&input, path.string().c_str(), nullptr, nullptr) >= 0 && input,
+              "negative evidence container is independently readable");
+        if (!input) continue;
+        AVPacket* packet = av_packet_alloc();
+        check(packet && av_read_frame(input, packet) >= 0, "negative evidence reads the actual encoded packet");
+        if (packet && packet->size) {
+            if (failure == Case::MissingMp4Duration) packet->duration = 0;  // Explicit public packet-field seam.
+            const auto evidence = recording_test::inspect_audio_packet(*input, *packet);
+            if (failure == Case::Asc512)
+                check(evidence.decoded && evidence.samples == 512 && !evidence.frame_valid(),
+                      "actual 512-sample ASC decoding cannot satisfy the 480-sample proof");
+            else if (failure == Case::Asc512Trimmed)
+                check(!evidence.configuration_valid && !evidence.frame_valid() && !evidence.duration_valid(),
+                      "wrong 512-sample ASC cannot pass when MP4 trims its decoded output to a 10ms duration");
+            else if (failure == Case::CorruptPacket)
+                check(!evidence.decoded && !evidence.duration_valid(),
+                      "corrupt original AAC cannot be excused by a plausible container duration");
+            else if (failure == Case::Mp4Duration || failure == Case::MissingMp4Duration)
+                check(evidence.frame_valid() && !evidence.duration_valid(),
+                      "MP4 rejects wrong or missing packet duration even when actual AAC yields 480 samples");
+            else if (failure == Case::MkvTail)
+                check(evidence.frame_valid() && !recording_test::inspect_audio_tail(*input, 0).valid(10000),
+                      "MKV's actual 20ms container tail cannot satisfy the original 10ms sample boundary");
+            else {
+                const int64_t saved = input->duration;
+                input->duration = AV_NOPTS_VALUE;  // Explicit public parsed-metadata seam.
+                check(!recording_test::inspect_audio_tail(*input, 0).valid(10000),
+                      "a missing MKV Info end cannot be excused by an intact track duration");
+                input->duration = saved;
+                av_dict_set(&input->streams[0]->metadata, "DURATION", nullptr, 0);
+                check(!recording_test::inspect_audio_tail(*input, 0).valid(10000),
+                      "a missing MKV track end cannot be excused by intact Info duration");
+            }
+        }
+        av_packet_free(&packet);
+        avformat_close_input(&input);
+    }
 }
 
 void still_video_and_negative_audio(const Directory& directory) {
@@ -561,6 +637,7 @@ int main() {
     check(Muxer::available(), "libavformat build reports container recording support");
     containers(directory);
     audio_only_containers(directory);
+    audio_evidence_negative_cases(directory);
     container_orientations(directory);
     still_video_and_negative_audio(directory);
     rejected_before_open(directory);

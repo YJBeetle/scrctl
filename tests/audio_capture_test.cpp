@@ -1,6 +1,7 @@
 #include "app/AudioOut.h"
 #include "media/AudioPump.h"
 #include "media/Recorder.h"
+#include "RecordingAudioEvidence.h"
 
 #include <array>
 #include <atomic>
@@ -436,14 +437,25 @@ void slow_audio_cleanup(const Directory& directory) {
         if (packet) while ((status = av_read_frame(input, packet)) >= 0) {
             const auto* stream = input->streams[packet->stream_index];
             const auto pts = av_rescale_q(packet->pts, stream->time_base, AVRational{1, 1000000});
-            const auto duration = av_rescale_q(packet->duration, stream->time_base, AVRational{1, 1000000});
-            check(Bytes(packet->data, packet->data + packet->size) == silence && packet->pts == packet->dts &&
-                  pts == (packets == 0 ? 0 : 1010000) && duration == 10000,
-                  "SR-approved first packet and Final-only tail retain original AAC, PTS/DTS and 10ms duration");
+            const auto evidence = recording_test::inspect_audio_packet(*input, *packet);
+            check(Bytes(packet->data, packet->data + packet->size) == silence,
+                  "SR-approved first packet and Final-only tail retain original AAC bytes");
+            check(packet->pts == packet->dts && pts == (packets == 0 ? 0 : 1010000),
+                  "SR-approved first packet and Final-only tail retain exact PTS/DTS across the gap");
+            check(evidence.frame_valid(), "Final-only tail actually decodes to 480 samples at 48kHz stereo");
+            check(evidence.duration_valid(), "Final-only tail has 10ms duration or MKV's missing field with actual AAC proof");
+            if (Bytes(packet->data, packet->data + packet->size) != silence ||
+                !evidence.frame_valid() || !evidence.duration_valid() || packet->pts != packet->dts ||
+                pts != (packets == 0 ? 0 : 1010000))
+                std::fprintf(stderr, "AUDIO: %s\n", evidence.diagnostic().c_str());
             ++packets; av_packet_unref(packet);
         }
         check(status == AVERROR_EOF && packets == 2,
               "slow or failed stopAll cannot discard the valid tail packet sealed before its RPC");
+        const auto tail = recording_test::inspect_audio_tail(*input, 0);
+        check(tail.valid(1020000), "Final-only audio tail ends at 1020ms after its 1010ms packet PTS");
+        if (!tail.valid(1020000))
+            std::fprintf(stderr, "TAIL: %s\n", tail.diagnostic(1020000).c_str());
         av_packet_free(&packet); avformat_close_input(&input);
     }
 }
