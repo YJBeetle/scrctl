@@ -40,6 +40,7 @@ int main() {
     check(parse({"scrctl"}, defaults) == ParseResult::Run && !defaults.win_x &&
               !defaults.win_y && defaults.scale == 1 && !defaults.scale_given &&
               defaults.audio_buffer_ms == 50 && !defaults.audio_dup &&
+              !defaults.no_audio && !defaults.no_audio_playback &&
               defaults.shortcut_mods == (KMOD_LALT | KMOD_LGUI) &&
               defaults.orientation == -1 && !defaults.display_flip && defaults.record_orientation == 0,
           "default options");
@@ -122,10 +123,44 @@ int main() {
     check(parse({"scrctl", "--audio-dup"}, duplicate_audio) == ParseResult::Run &&
               duplicate_audio.audio_dup && !duplicate_audio.no_audio,
           "audio duplication is an explicit option; default routing remains computer-only");
+    for (const char *path : {"", "capture.hevc", "capture.bin", "capture.MP4.part"}) {
+        Options no_audio_consumer;
+        std::vector<std::string> args{"scrctl", "--no-audio-playback"};
+        if (*path) args.insert(args.end(), {"-r", path});
+        check(parse(std::move(args), no_audio_consumer) == ParseResult::Run &&
+                  no_audio_consumer.no_audio_playback && no_audio_consumer.no_audio,
+              "without playback or a container audio track, capture and routing are disabled");
+    }
+    for (const char *path : {"capture.MkV", "capture.Mp4"}) {
+        Options container_audio;
+        check(parse({"scrctl", "--no-audio-playback", "-r", path}, container_audio) ==
+                  ParseResult::Run && container_audio.no_audio_playback && !container_audio.no_audio &&
+                  !container_audio.audio_dup,
+              "MP4 and MKV keep capture for their audio track without computer playback");
+        Options disabled_container_audio;
+        check(parse({"scrctl", "-r", path, "--no-audio", "--no-audio-playback"},
+                    disabled_container_audio) == ParseResult::Run && disabled_container_audio.no_audio,
+              "an explicit no-audio request still records video only in a container");
+    }
     Options capture_audio;
-    check(parse({"scrctl", "--audio-dup", "--no-audio-playback"}, capture_audio) ==
-              ParseResult::Run && capture_audio.audio_dup && capture_audio.no_audio_playback,
-          "phone playback can be retained while disabling computer playback");
+    check(parse({"scrctl", "--audio-dup", "--no-audio-playback", "-r", "capture.mkv"},
+                capture_audio) == ParseResult::Run && capture_audio.audio_dup &&
+              capture_audio.no_audio_playback && !capture_audio.no_audio,
+          "MKV can retain phone playback while recording audio without computer playback");
+    Options capture_audio_reverse;
+    check(parse({"scrctl", "-r", "capture.mkv", "--no-audio-playback", "--audio-dup"},
+                capture_audio_reverse) == ParseResult::Run && capture_audio_reverse.audio_dup &&
+              capture_audio_reverse.no_audio_playback && !capture_audio_reverse.no_audio,
+          "capture-only audio routing is independent of argument order");
+    for (const auto &args : std::vector<std::vector<std::string>>{
+             {"scrctl", "--audio-dup", "--no-audio-playback"},
+             {"scrctl", "--no-audio-playback", "--audio-dup"},
+             {"scrctl", "-r", "capture.hevc", "--audio-dup", "--no-audio-playback"},
+             {"scrctl", "--no-audio-playback", "--audio-dup", "-r", "capture.hevc"}}) {
+        Options disabled_duplicate_audio;
+        check(parse(args, disabled_duplicate_audio) == ParseResult::Error,
+              "audio duplication is rejected after capture is disabled, in either argument order");
+    }
     Options pair;
     check(parse({"scrctl", "--pair", "-s", "device"}, pair) == ParseResult::Run &&
               pair.pair && !pair.repair_pairing && pair.serial == "device",
@@ -164,7 +199,8 @@ int main() {
           "screenshot container recording is rejected before connecting to a device");
     Options mp4;
     check(parse({"scrctl", "-r", "capture.Mp4", "--audio-dup", "--no-audio-playback"}, mp4) ==
-              ParseResult::Run && mp4.record == "capture.Mp4" && mp4.audio_dup && mp4.no_audio_playback,
+              ParseResult::Run && mp4.record == "capture.Mp4" && mp4.audio_dup && mp4.no_audio_playback &&
+              !mp4.no_audio,
           "MP4 recording preserves the selected audio route and capture-only request");
     Options invalid_mp4;
     check(parse({"scrctl", "-r", "capture.mp4", "--video-source=screenshot"}, invalid_mp4) ==

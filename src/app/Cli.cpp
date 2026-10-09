@@ -79,7 +79,8 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.add_flag("--audio-dup", o.audio_dup,
                  SCRCTL_N_("Keep audio playing on the phone while forwarding it to the computer"))
         ->excludes("--no-audio");
-    app.add_flag("--no-audio-playback", o.no_audio_playback, SCRCTL_N_("Receive and decode audio without local playback"));
+    app.add_flag("--no-audio-playback", o.no_audio_playback,
+                 SCRCTL_N_("Disable computer audio playback; capture audio only when recording to MP4 or MKV"));
     app.add_flag("--no-window", o.no_window, SCRCTL_N_("Run without a window"));
     app.add_flag("--hw-decode", o.hw_decode, SCRCTL_N_("Use platform hardware decoder; default: software"));
     app.add_flag("--debug-input", o.debug_input, SCRCTL_N_("Print input coordinates"));
@@ -141,6 +142,12 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     try {
         app.parse(argc, argv);
         if (!language.select()) return ParseResult::Error;
+        // 没有本机播放或容器音轨消费者时，跳过音频采集和设备路由请求。
+        if (o.no_audio_playback && !record_container_format(o.record)) o.no_audio = true;
+        if (o.audio_dup && o.no_audio) {
+            throw CLI::ValidationError("--audio-dup", SCRCTL_TR(
+                "Audio capture is disabled; --audio-dup requires playback or MP4/MKV recording"));
+        }
         if (o.video_source == "display") o.video_source = "stream";
         if (record_container_format(o.record) && o.video_source == "screenshot") {
             throw CLI::ValidationError("--record", SCRCTL_TR(

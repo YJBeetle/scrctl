@@ -84,7 +84,7 @@ struct Options {
     bool disable_screensaver = false; ///< --disable-screensaver
     int time_limit = 0;               ///< --time-limit=秒，到点正常退出（会停流）
     bool show_version = false;        ///< --version
-    /// --no-audio-playback 继续接收和解码音频，禁用本机播放。
+    /// --no-audio-playback 禁用本机播放；仅容器录制需要音轨时保留采集。
     bool no_audio_playback = false;
     /// --audio-buffer 指定首次预缓冲和目标缓冲水位，单位毫秒，默认 50。
     int audio_buffer_ms = 50;

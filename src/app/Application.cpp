@@ -90,7 +90,8 @@ int run(int argc, char **argv) {
         return 0;
     }
     // 本机播放后端已不可用时，在音频起流前停住，避免压制手机却没有电脑声音。
-    // --no-audio-playback 是显式采集请求，不需要本机音频后端，仍采用用户所选路由。
+    // 关闭本机播放时，CLI 只在有容器音轨录制消费者时保留音频采集；
+    // 这种录制不需要本机音频后端，仍采用用户所选路由。
     std::string audio_init_error;
     const bool want_audio = runtime.prepare_audio(
         o.path.empty() && !o.no_audio && o.video_source != "screenshot",
