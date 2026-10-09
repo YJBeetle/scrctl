@@ -32,6 +32,25 @@ struct Crop {
     bool input_valid = true;
 };
 
+/// 画面在绘制面物理像素中的半开矩形；显示和窗口触摸共用这一布局。
+struct ContentRect {
+    int x = 0, y = 0, w = 0, h = 0;
+};
+
+/// 将裁剪并旋转后的内容等比放入绘制面，缩放尺寸向下取整，留边居中。
+/// 显式目的矩形交给 SDL 缩放纹理，不启用会截断鼠标坐标的 logical size。
+inline bool content_rect(int view_w, int view_h, int output_w, int output_h, ContentRect &rect) {
+    if (view_w <= 0 || view_h <= 0 || output_w <= 0 || output_h <= 0) return false;
+    int width = output_w, height = output_h;
+    if (int64_t(output_w) * view_h <= int64_t(output_h) * view_w) {
+        height = static_cast<int>(std::max<int64_t>(1, int64_t(output_w) * view_h / view_w));
+    } else {
+        width = static_cast<int>(std::max<int64_t>(1, int64_t(output_h) * view_w / view_h));
+    }
+    rect = {(output_w - width) / 2, (output_h - height) / 2, width, height};
+    return true;
+}
+
 /// 构造会话裁剪框。display_w/display_h 是设备整屏尺寸；--crop 仅指定
 /// 显示哪一部分，不能改变触摸归一化分母，否则裁剪后坐标会按比例偏移。
 inline Crop make_crop(bool crop_given, int x, int y, int w, int h, int coded_w, int coded_h,
@@ -105,7 +124,7 @@ inline Crop make_frame_crop(bool crop_given, int x, int y, int w, int h, int cod
 }
 
 /// 将旋转后的视口逻辑像素转换为设备整屏归一化坐标：
-/// 1. lx/ly 是 SDL logical size 空间坐标，不重复换算窗口点数或输出像素。
+/// 1. lx/ly 是应用内容视口坐标；窗口事件先由 Presenter 去掉物理绘制面的留边。
 /// 2. 90/270 度时视口宽高交换，用 c.h/c.w 归一化。
 /// 3. 先逆窗口旋转，再逆裁剪区域内的水平翻转，加源像素裁剪偏移，
 ///    最后逆截图已经应用的旋转；不能把翻转直接施加到设备整屏坐标上。
@@ -149,7 +168,7 @@ inline void display_fraction_from_logical(double lx, double ly, const Crop &c, d
     viewport_fraction_to_panel(lx, ly, c, 0, fx, fy);
 }
 
-/// 视口尺寸（窗口与 logical size 要用它，旋转 90/270 时宽高对调）。
+/// 裁剪并旋转后的内容视口尺寸；90/270 度时宽高对调。
 inline void viewport_size(const Crop &c, int degrees, int &width, int &height) {
     if (degrees == 90 || degrees == 270) {
         width = c.h;
@@ -158,6 +177,62 @@ inline void viewport_size(const Crop &c, int degrees, int &width, int &height) {
         width = c.w;
         height = c.h;
     }
+}
+
+/// 将内容像素尺寸换成当前显示器的窗口点数；不按屏幕大小缩小。
+/// SDL2 的点数只能取整数，例如 2x 显示器上的 1125 像素只能取 562 或 563 点。
+/// 这里取最近的点数，恰好半点时向上取整；只有可表示的两维才同时发布。
+inline bool pixel_perfect_window(int view_w, int view_h, int points_w, int points_h,
+                                 int drawable_w, int drawable_h, int &win_w, int &win_h) {
+    if (view_w <= 0 || view_h <= 0 || points_w <= 0 || points_h <= 0 ||
+        drawable_w <= 0 || drawable_h <= 0) return false;
+    const int64_t width = std::max<int64_t>(1,
+        (int64_t(view_w) * points_w + drawable_w / 2) / drawable_w);
+    const int64_t height = std::max<int64_t>(1,
+        (int64_t(view_h) * points_h + drawable_h / 2) / drawable_h);
+    if (width > std::numeric_limits<int>::max() || height > std::numeric_limits<int>::max()) {
+        return false;
+    }
+    win_w = static_cast<int>(width);
+    win_h = static_cast<int>(height);
+    return true;
+}
+
+/// 保留当前窗口的一维，缩小另一维以去掉留边。比例依据绘制面像素，
+/// 因而横纵 DPI 换算不同也能保持内容比例；结果按窗口整数点向下取整。
+/// 已落入一窗口点的取整范围时不再缩小，避免高 DPI 下重复执行逐次缩小。
+inline bool window_without_borders(int view_w, int view_h, int points_w, int points_h,
+                                   int drawable_w, int drawable_h, int &win_w, int &win_h) {
+    if (view_w <= 0 || view_h <= 0 || points_w <= 0 || points_h <= 0 ||
+        drawable_w <= 0 || drawable_h <= 0) return false;
+    int width = points_w, height = points_h;
+    const int64_t width_at_height = int64_t(drawable_h) * view_w / view_h;
+    const int64_t height_at_width = int64_t(drawable_w) * view_h / view_w;
+    // 一窗口点可对应多个物理像素，各轴独立向上取整这一步长。
+    // G 的最近点数和 W 的向下取整都可能留不到一窗口点的比例误差；
+    // 下一次不能改另一轴来补它，否则宽高会交替越来越小。
+    const int64_t pixel_step_w = (int64_t(drawable_w) + points_w - 1) / points_w;
+    const int64_t pixel_step_h = (int64_t(drawable_h) + points_h - 1) / points_h;
+    const int64_t width_error = std::abs(width_at_height - drawable_w);
+    const int64_t height_error = std::abs(height_at_width - drawable_h);
+    if (width_error >= pixel_step_w && height_error >= pixel_step_h) {
+        // 三个 int 的乘积可能超过 int64_t；浮点运算只用于这个有界缩小比例，
+        // 结果限制在原来的一维内，不把浮点值直接转成越界整数。
+        if (int64_t(drawable_w) * view_h > int64_t(drawable_h) * view_w) {
+            const long double fitted = static_cast<long double>(points_w) * drawable_h *
+                                       view_w / drawable_w / view_h;
+            width = static_cast<int>(std::clamp(std::floor(fitted), 1.L,
+                                                static_cast<long double>(points_w)));
+        } else {
+            const long double fitted = static_cast<long double>(points_h) * drawable_w *
+                                       view_h / drawable_h / view_w;
+            height = static_cast<int>(std::clamp(std::floor(fitted), 1.L,
+                                                 static_cast<long double>(points_h)));
+        }
+    }
+    win_w = width;
+    win_h = height;
+    return true;
 }
 
 /// 计算窗口点数；view_w/h 必须使用裁剪并旋转后的视口尺寸。

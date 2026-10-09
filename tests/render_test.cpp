@@ -318,15 +318,10 @@ void cropped_flip_pixels() {
 
 /// 等比留边那两条边的颜色，以及"回读到底覆盖了整块输出没有"。
 ///
-/// 两条各自独立、都栽过的判据：
-///   * `SDL_RenderClear` 清的是**当前视口**，而设了 logical size 之后视口就是等比
-///     缩放后那块内容区——两条边在视口外面，清不到。所以清之前要把 logical size
-///     摘掉、清完再挂回来。
-///   * `SDL_RenderReadPixels` 的矩形在挂着 logical size 时是按**逻辑**坐标解释的，
-///     传整块输出的尺寸读回来的是一个偏移过的局部（内容区之外的坐标直接失败）。
-///     读之前同样要摘掉。
-/// 这两条都要用"窗口比例 != 画面比例"的场景才看得见，而默认窗口是按画面比例算的，
-/// 所以产品自检里必须显式造一个不等的。
+/// SDL_RenderClear 会清除整个目标面，留边也应具有指定背景色。
+/// 回读时则要使用完整输出面的坐标：logical size 对应的 viewport 会影响
+/// SDL_RenderReadPixels 的矩形，不能把物理输出宽高当作该 viewport 内的矩形。
+/// 窗口与画面比例不同时，这两项才能同时覆盖真实留边和完整输出回读。
 bool letterbox_and_readback() {
     static constexpr int kOutW = 800, kOutH = 400;
     SDL_Window *window = SDL_CreateWindow("letterbox", 0, 0, kOutW, kOutH, SDL_WINDOW_RESIZABLE);
@@ -1011,15 +1006,17 @@ struct KeyboardFixture {
     Reports reports;
     std::vector<Touch> touches;
 
-    explicit KeyboardFixture(const char *title) {
+    explicit KeyboardFixture(const char *title, int width = 64, int height = 96,
+                             int degrees = 0, Uint16 shortcut_mods = KMOD_LALT | KMOD_LGUI) {
         const Palette colors{kTopLeft, kTopRight, kBottomRight, kBottomLeft};
         frame = colored_frame(64, 96, crop, colors, 0);
         scrctl::app::WindowSpec spec;
         spec.title = title;
-        spec.want_w = crop.w;
-        spec.want_h = crop.h;
+        spec.want_w = width;
+        spec.want_h = height;
         spec.want_readback = true;
-        const bool opened = presenter.open(64, 96, crop, 0, 1, false, spec);
+        spec.shortcut_mods = shortcut_mods;
+        const bool opened = presenter.open(64, 96, crop, degrees, 1, false, spec);
         check(opened, "为物理键盘回归创建实际 Presenter");
         if (opened) window_id = window_id_from_events(title);
     }
@@ -1054,7 +1051,7 @@ struct KeyboardFixture {
         check(SDL_PushEvent(&event) == 1, "将键盘生命周期窗口事件送入实际 SDL 队列");
     }
     void window(Uint8 state) { window(state, window_id); }
-    void mouse(Uint32 type, int x, int y) {
+    void mouse(Uint32 type, int x, int y, Uint8 clicks = 1, Uint32 which = 0, Uint32 id = 0) {
         SDL_Event event{};
         event.type = type;
         if (type == SDL_MOUSEMOTION) {
@@ -1062,10 +1059,12 @@ struct KeyboardFixture {
             event.motion.state = SDL_BUTTON_LMASK;
             event.motion.x = x; event.motion.y = y;
         } else {
-            event.button.windowID = window_id;
+            event.button.windowID = id ? id : window_id;
             event.button.button = SDL_BUTTON_LEFT;
             event.button.state = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
             event.button.x = x; event.button.y = y;
+            event.button.clicks = clicks;
+            event.button.which = which;
         }
         check(SDL_PushEvent(&event) == 1, "向键盘生命周期窗口送入触摸事件");
     }
@@ -1379,6 +1378,407 @@ void presenter_clipboard_request_context() {
           "无按住输入的显式退出清理也使异步作业失效");
 }
 
+void window_action_geometry() {
+    using scrctl::app::content_rect;
+    scrctl::app::ContentRect content;
+    check(content_rect(64, 96, 160, 160, content) && content.x == 27 && content.y == 0 &&
+              content.w == 106 && content.h == 160,
+          "显式内容矩形与真实左右留边的像素边界一致");
+    check(content_rect(96, 64, 160, 160, content) && content.x == 0 && content.y == 27 &&
+              content.w == 160 && content.h == 106,
+          "旋转后的内容矩形正确居中上下留边");
+    check(content_rect(64, 96, 320, 320, content) && content.x == 53 && content.y == 0 &&
+              content.w == 213 && content.h == 320,
+          "2x 绘制面使用自身像素布局，不把点数当作物理像素");
+    check(content_rect(64, 96, 128, 192, content) && content.x == 0 && content.y == 0 &&
+              content.w == 128 && content.h == 192,
+          "像素 1:1 的绘制面铺满全部源内容");
+    check(content_rect(1, std::numeric_limits<int>::max(), 1, 1, content) &&
+              content.x == 0 && content.y == 0 && content.w == 1 && content.h == 1,
+          "极小绘制面及极端源比例仍使用有界的一像素内容矩形");
+    content = {7, 8, 9, 10};
+    check(!content_rect(64, 96, 0, 160, content) && content.x == 7 && content.y == 8 &&
+              content.w == 9 && content.h == 10,
+          "无绘制面时拒绝布局，不发布部分或陈旧矩形");
+    using scrctl::app::pixel_perfect_window;
+    using scrctl::app::window_without_borders;
+    int w = 0, h = 0;
+    check(pixel_perfect_window(64, 96, 160, 160, 160, 160, w, h) && w == 64 && h == 96,
+          "G 在 1x 绘制面恢复内容像素尺寸");
+    check(pixel_perfect_window(1125, 2436, 400, 800, 800, 1600, w, h) && w == 563 && h == 1218,
+          "G 在 2x 绘制面按最近整数点换算，奇数像素的半点向上取整");
+    check(pixel_perfect_window(96, 64, 400, 400, 600, 600, w, h) && w == 64 && h == 43,
+          "G 接受非整数 DPI 比例，不按可用显示区缩小");
+    check(pixel_perfect_window(96, 64, 400, 400, 800, 400, w, h) && w == 48 && h == 64,
+          "G 的横纵点数分别使用真实绘制面比例");
+    check(pixel_perfect_window(1, 1, 1, 1, 4, 4, w, h) && w == 1 && h == 1,
+          "G 的最小窗口为一整数点");
+    const int max = std::numeric_limits<int>::max();
+    w = 7; h = 9;
+    check(!pixel_perfect_window(max, max, max, max, 1, 1, w, h) && w == 7 && h == 9,
+          "G 拒绝不能表示的点数，且不发布部分尺寸");
+    check(!pixel_perfect_window(0, 96, 160, 160, 160, 160, w, h) && w == 7 && h == 9,
+          "G 拒绝无效内容尺寸");
+    check(window_without_borders(64, 96, 160, 160, 160, 160, w, h) && w == 106 && h == 160,
+          "W 的宽留边保持高度，宽度按比例向下取整");
+    check(window_without_borders(96, 64, 160, 160, 160, 160, w, h) && w == 160 && h == 106,
+          "W 的高留边保持宽度，内容旋转后仍取正确轴");
+    check(window_without_borders(64, 96, 160, 160, 320, 320, w, h) && w == 106 && h == 160,
+          "W 在 2x DPI 下保持窗口点数中的一维");
+    check(window_without_borders(64, 96, 160, 160, 320, 160, w, h) && w == 53 && h == 160,
+          "W 按绘制面比例处理横纵 DPI 不同的情况");
+    check(window_without_borders(64, 96, 106, 160, 106, 160, w, h) && w == 106 && h == 160,
+          "W 对像素取整后已合比例的尺寸幂等，不逐次缩小");
+    for (const bool swapped : {false, true}) {
+        const int source_w = swapped ? 2436 : 1125, source_h = swapped ? 1125 : 2436;
+        const int points_w = swapped ? 1218 : 563, points_h = swapped ? 563 : 1218;
+        int current_w = points_w, current_h = points_h;
+        for (int repeat = 0; repeat < 4; ++repeat) {
+            check(window_without_borders(source_w, source_h, current_w, current_h,
+                                          current_w * 2, current_h * 2, w, h) &&
+                      w == points_w && h == points_h,
+                  "2x 奇数源的 G 窗口连续 W 不交替缩小宽高，旋转后同样幂等");
+            current_w = w; current_h = h;
+        }
+    }
+    struct DpiCase { int view_w, view_h, num_w, num_h, denominator, expected_w; };
+    for (const auto &dpi : {DpiCase{1125, 2436, 2, 2, 1, 110},
+                            DpiCase{64, 96, 3, 3, 2, 160},
+                            DpiCase{1125, 2436, 2, 3, 1, 166}}) {
+        // 第一轮实际移除宽留边，之后使用已发布点数重新计算绘制面尺寸。
+        int current_w = 240, current_h = 240;
+        for (int repeat = 0; repeat < 4; ++repeat) {
+            check(window_without_borders(dpi.view_w, dpi.view_h, current_w, current_h,
+                                          current_w * dpi.num_w / dpi.denominator,
+                                          current_h * dpi.num_h / dpi.denominator, w, h) &&
+                      w == dpi.expected_w && h == 240,
+                  "W 一次去边后按真实 2x、1.5x 或非等轴 DPI 连续执行仍幂等");
+            current_w = w; current_h = h;
+        }
+    }
+    check(window_without_borders(64, 96, 106, 160, 212, 320, w, h) && w == 106 && h == 160,
+          "2x 的 W 已取整窗口继续 W 不累积小于一点的像素误差");
+    check(window_without_borders(64, 96, 108, 160, 216, 320, w, h) && w == 106 && h == 160,
+          "2x 仍有超过一窗口点的实际宽留边时 W 继续缩小");
+    check(window_without_borders(96, 64, 160, 108, 320, 216, w, h) && w == 160 && h == 106,
+          "2x 仍有超过一窗口点的实际高留边时 W 继续缩小");
+    check(window_without_borders(max, 1, max, max, max, max, w, h) && w == max && h == 1,
+          "W 的极端比例计算不溢出且不扩大原尺寸");
+    w = 7; h = 9;
+    check(!window_without_borders(64, 96, 160, 160, 0, 160, w, h) && w == 7 && h == 9,
+          "W 拒绝无效绘制面尺寸且保持原输出参数");
+}
+
+void presenter_window_actions() {
+    KeyboardFixture f("Presenter window actions", 160, 160);
+    if (!f.window_id) return;
+    SDL_Window *window = SDL_GetWindowFromID(f.window_id);
+    SDL_Renderer *renderer = SDL_GetRenderer(window);
+    check(window && renderer, "从真实窗口取得 SDL 尺寸及像素输出接口");
+    if (!window || !renderer) return;
+    check(f.presenter.draw(f.frame) && !f.pump(), "建立窗口动作的实际渲染和输入上下文");
+    const auto size_is = [&](int width, int height) {
+        int actual_w = 0, actual_h = 0;
+        SDL_GetWindowSize(window, &actual_w, &actual_h);
+        if (actual_w != width || actual_h != height) {
+            int drawable_w = 0, drawable_h = 0;
+            SDL_GetRendererOutputSize(renderer, &drawable_w, &drawable_h);
+            std::printf("     window %dx%d, drawable %dx%d, expected %dx%d\n",
+                        actual_w, actual_h, drawable_w, drawable_h, width, height);
+        }
+        return actual_w == width && actual_h == height;
+    };
+    const auto reset_square = [&] {
+        SDL_SetWindowSize(window, 160, 160);
+        SDL_SetWindowPosition(window, 40, 60);
+        check(!f.pump() && f.presenter.draw(f.frame), "恢复方形留边窗口并刷新真实 SDL 渲染器");
+        f.reports.clear(); f.touches.clear();
+    };
+    const auto shortcut = [&](SDL_Scancode code, Uint16 mods = KMOD_LALT) {
+        f.key(SDL_KEYDOWN, code, mods);
+        f.key(SDL_KEYUP, code, KMOD_NONE);
+        return f.pump();
+    };
+    reset_square();
+    int old_x = 0, old_y = 0;
+    SDL_GetWindowPosition(window, &old_x, &old_y);
+    const auto generation = f.presenter.input_generation();
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+    f.mouse(SDL_MOUSEBUTTONDOWN, 80, 80);
+    f.mouse(SDL_MOUSEMOTION, 90, 90);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_G, KMOD_LALT);
+    check(!f.pump() && size_is(64, 96), "MOD+G 通过实际 SDL 窗口恢复 64x96 点");
+    check(f.presenter.input_generation() == generation + 1,
+          "一次尺寸动作使已请求粘贴的代次失效一次");
+    f.expect({{4}, {}}, "G 在尺寸变化前释放已有设备键，不注入本地 G");
+    check(f.touches.size() == 2 && f.touches.front().down && !f.touches.back().down &&
+              f.touches.front().x == f.touches.back().x && f.touches.front().y == f.touches.back().y,
+          "G 释放最后已交付触点，丢弃同轮未交付移动，不在尾部重新按下");
+    int x = 0, y = 0;
+    SDL_GetWindowPosition(window, &x, &y);
+    check(x == old_x && y == old_y, "G 只改变尺寸，不主动移动窗口");
+    check(f.presenter.draw(f.frame), "G 后绘制整幅内容");
+    int ow = 0, oh = 0;
+    check(SDL_GetRendererOutputSize(renderer, &ow, &oh) == 0 && ow == 64 && oh == 96,
+          "1x SDL 绘制面实际恢复内容像素宽高");
+    std::vector<Uint32> pixels(64 * 96);
+    SDL_RenderSetLogicalSize(renderer, 0, 0);
+    const bool read = SDL_RenderReadPixels(renderer, nullptr, SDL_PIXELFORMAT_ARGB8888,
+                                           pixels.data(), 64 * int(sizeof(Uint32))) == 0;
+    check(read && close(at(pixels.data(), 64, 6, 6), kTopLeft) &&
+              close(at(pixels.data(), 64, 57, 89), kBottomRight),
+          "G 的真实像素回读包含源图两端角块，不截掉内容或残留大面积留边");
+
+    // 尺寸动作保留本地 DOWN 归属；测试非 repeat 重复事件，不只依赖 SDL repeat 标志。
+    SDL_SetWindowSize(window, 160, 160);
+    check(!f.pump(), "处理动作之后的宿主窗口尺寸变化");
+    const auto repeated_generation = f.presenter.input_generation();
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_G, KMOD_LALT, 1);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_G, KMOD_LALT, 0);
+    check(!f.pump() && size_is(160, 160) &&
+              f.presenter.input_generation() == repeated_generation,
+          "G 的 repeat 及非 repeat 重复 DOWN 均不再调整尺寸");
+    f.key(SDL_KEYUP, SDL_SCANCODE_A);
+    f.key(SDL_KEYUP, SDL_SCANCODE_G);
+    check(!f.pump(), "真实 UP 清掉先前设备键和本地尺寸动作的归属");
+    f.expect({}, "尺寸动作后的旧设备键 UP 不产生多余空报告");
+
+    reset_square();
+    SDL_GetWindowPosition(window, &old_x, &old_y);
+    check(!shortcut(SDL_SCANCODE_W) && size_is(106, 160),
+          "MOD+W 保持高度，实际窗口宽度缩成 106 点");
+    SDL_GetWindowPosition(window, &x, &y);
+    check(x == old_x + 27 && y == old_y, "W 缩掉留边后维持原窗口内容中心");
+    check(!shortcut(SDL_SCANCODE_W) && size_is(106, 160), "再次 W 不因取整继续缩小窗口");
+    f.expect({}, "W 全程不进入设备键盘报告");
+
+    reset_square();
+    const auto unchanged_generation = f.presenter.input_generation();
+    check(!shortcut(SDL_SCANCODE_G, KMOD_LALT | KMOD_LSHIFT) &&
+              !shortcut(SDL_SCANCODE_W, KMOD_LALT | KMOD_LSHIFT) && size_is(160, 160) &&
+              f.presenter.input_generation() == unchanged_generation,
+          "MOD+Shift+G/W 按官方语义不执行尺寸动作");
+    f.key_for(SDL_KEYDOWN, SDL_SCANCODE_G, KMOD_LALT, 0, f.window_id + 1);
+    f.key_for(SDL_KEYDOWN, SDL_SCANCODE_W, KMOD_LALT, 0, 0);
+    check(!f.pump() && size_is(160, 160), "其它窗口或无 windowID 的尺寸快捷键不改变本窗口");
+    f.expect({}, "带 Shift 和外部窗口的快捷键不泄漏键盘输入");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_G);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_W);
+    f.key(SDL_KEYUP, SDL_SCANCODE_G);
+    f.key(SDL_KEYUP, SDL_SCANCODE_W);
+    check(!f.pump() && size_is(160, 160), "普通 G/W 输入不改变窗口尺寸");
+    f.expect({{10}, {10, 26}, {26}, {}}, "普通 G/W 仍保留完整设备键盘状态");
+
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_X, KMOD_LALT);
+    check(!f.pump(), "登记仍按住的另一未分配本地组合键");
+    check(!shortcut(SDL_SCANCODE_G), "另一本地键按住时执行 G");
+    f.key(SDL_KEYUP, SDL_SCANCODE_LALT);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_X);
+    f.key(SDL_KEYUP, SDL_SCANCODE_X);
+    check(!f.pump(), "尺寸动作之后 MOD 先抬起，再收到另一按住本地键的重复 DOWN");
+    f.expect({}, "G 也保留其它本地键的归属，不在 MOD 松开后转给设备");
+
+    reset_square();
+    f.mouse(SDL_MOUSEBUTTONDOWN, 80, 80, 2);
+    f.mouse(SDL_MOUSEBUTTONUP, 80, 80, 2);
+    check(!f.pump() && size_is(160, 160) && f.touches.size() == 2 &&
+              f.touches.front().down && !f.touches.back().down,
+          "内容区域双击保持正常触摸，不触发去留边动作");
+    f.touches.clear();
+    const auto border_generation = f.presenter.input_generation();
+    f.mouse(SDL_MOUSEBUTTONDOWN, 0, 80, 1);
+    f.mouse(SDL_MOUSEBUTTONUP, 0, 80, 1);
+    f.mouse(SDL_MOUSEBUTTONDOWN, 0, 80, 2);
+    f.mouse(SDL_MOUSEBUTTONUP, 0, 80, 2);
+    check(!f.pump() && size_is(106, 160) && f.touches.empty(),
+          "双击真实宽留边等同 W，第一击及第二击均不发送手机触摸");
+    check(f.presenter.input_generation() == border_generation + 1,
+          "留边双击只执行一次动作并使旧粘贴失效");
+
+    reset_square();
+    f.mouse(SDL_MOUSEBUTTONDOWN, 80, 80);
+    f.mouse(SDL_MOUSEMOTION, 90, 90);
+    f.mouse(SDL_MOUSEBUTTONUP, 0, 80);
+    check(!f.pump() && f.touches.size() == 3 && !f.touches.back().down &&
+              f.touches[1].x == f.touches.back().x && f.touches[1].y == f.touches.back().y,
+          "已有拖动在留边区域抬起时仍释放最后有效触点");
+    f.touches.clear();
+    f.mouse(SDL_MOUSEBUTTONDOWN, 80, 80);
+    f.mouse(SDL_MOUSEMOTION, 90, 90);
+    f.mouse(SDL_MOUSEMOTION, 0, 80);
+    check(!f.pump() && f.touches.size() == 2 && !f.touches.back().down &&
+              f.touches.front().x == f.touches.back().x && f.touches.front().y == f.touches.back().y,
+          "拖动进入留边立即释放已交付触点并丢弃未交付移动");
+    f.touches.clear();
+    f.mouse(SDL_MOUSEBUTTONDOWN, 0, 80);
+    f.mouse(SDL_MOUSEBUTTONUP, 0, 80);
+    f.mouse(SDL_MOUSEBUTTONDOWN, 159, 80);
+    f.mouse(SDL_MOUSEBUTTONUP, 159, 80);
+    check(!f.pump() && f.touches.empty(), "左右留边单击均不夹到设备边缘发送触摸");
+
+    f.mouse(SDL_MOUSEBUTTONDOWN, 26, 80);
+    f.mouse(SDL_MOUSEBUTTONUP, 26, 80);
+    f.mouse(SDL_MOUSEBUTTONDOWN, 133, 80);
+    f.mouse(SDL_MOUSEBUTTONUP, 133, 80);
+    check(!f.pump() && f.touches.empty(),
+          "紧邻内容的左右留边像素不因 SDL 整数截断变成有效触摸");
+    f.touches.clear();
+    f.mouse(SDL_MOUSEBUTTONDOWN, 27, 80);
+    f.mouse(SDL_MOUSEBUTTONUP, 27, 80);
+    check(!f.pump() && f.touches.size() == 2 && f.touches.front().down &&
+              !f.touches.back().down && f.touches.front().x == 0,
+          "与留边相邻的真实内容首列仍可触摸，不粗略拒绝逻辑坐标零");
+    f.touches.clear();
+    f.mouse(SDL_MOUSEBUTTONDOWN, 26, 80, 1);
+    f.mouse(SDL_MOUSEBUTTONUP, 26, 80, 1);
+    f.mouse(SDL_MOUSEBUTTONDOWN, 26, 80, 2);
+    f.mouse(SDL_MOUSEBUTTONUP, 26, 80, 2);
+    check(!f.pump() && f.touches.empty() && size_is(106, 160),
+          "紧邻内容的留边双击仍去边，包含第一击且不发手机触摸");
+    reset_square();
+
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+    f.mouse(SDL_MOUSEBUTTONDOWN, 80, 80);
+    f.mouse(SDL_MOUSEMOTION, 90, 90);
+    f.mouse(SDL_MOUSEBUTTONDOWN, 0, 80, 2);
+    check(!f.pump() && size_is(106, 160) && f.touches.size() == 2 &&
+              f.touches.front().down && !f.touches.back().down,
+          "留边双击也释放已有拖动，并丢弃同轮待发移动");
+    f.expect({{4}, {}}, "留边双击在调整窗口前释放设备按键");
+    f.key(SDL_KEYUP, SDL_SCANCODE_A);
+    check(!f.pump(), "留边动作后消费旧按键的 UP");
+
+    KeyboardFixture horizontal("Presenter horizontal borders", 160, 160, 90);
+    if (horizontal.window_id) {
+        check(horizontal.presenter.draw(horizontal.frame) && !horizontal.pump(),
+              "建立上下留边的实际渲染窗口");
+        horizontal.mouse(SDL_MOUSEBUTTONDOWN, 80, 0);
+        horizontal.mouse(SDL_MOUSEBUTTONUP, 80, 0);
+        horizontal.mouse(SDL_MOUSEBUTTONDOWN, 80, 159);
+        horizontal.mouse(SDL_MOUSEBUTTONUP, 80, 159);
+        check(!horizontal.pump() && horizontal.touches.empty(), "上下留边单击不向设备发送触摸");
+        horizontal.mouse(SDL_MOUSEBUTTONDOWN, 80, 0, 2);
+        horizontal.mouse(SDL_MOUSEBUTTONUP, 80, 0, 2);
+        check(!horizontal.pump() && horizontal.touches.empty(), "双击上留边只执行窗口动作");
+        SDL_GetWindowSize(SDL_GetWindowFromID(horizontal.window_id), &ow, &oh);
+        check(ow == 160 && oh == 106, "上下留边双击保持宽度，缩小高度");
+    }
+
+    reset_square();
+    f.mouse(SDL_MOUSEBUTTONDOWN, 0, 80, 2, SDL_TOUCH_MOUSEID);
+    f.mouse(SDL_MOUSEBUTTONUP, 0, 80, 2, SDL_TOUCH_MOUSEID);
+    f.mouse(SDL_MOUSEBUTTONDOWN, 0, 80, 2, 0, f.window_id + 1);
+    check(!f.pump() && size_is(160, 160) && f.touches.empty(),
+          "触摸模拟鼠标及其它窗口的留边双击不调整本窗口或注入触摸");
+    f.mouse(SDL_MOUSEBUTTONDOWN, 0, 80, 2);
+    f.mouse(SDL_MOUSEBUTTONUP, 0, 80, 2);
+    check(!f.presenter.pump({}, f.on_keyboard()) && size_is(106, 160),
+          "没有设备触摸回调的文件窗口也可双击留边去边");
+
+    // 用真实窗口身份的公开事件驱动应用状态，dummy 不支持 native min flag
+    // 时也能覆盖最小化暂停显示、继续消费有效源帧和恢复后绘制的正式路径。
+    f.window(SDL_WINDOWEVENT_MINIMIZED);
+    check(!f.pump() && f.presenter.draw(f.frame),
+          "最小化继续消费有效帧，不将暂不可显示误报成退出错误");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+    f.key(SDL_KEYUP, SDL_SCANCODE_A);
+    check(!f.pump(), "最小化后继续处理事件，不要求存在绘制面");
+    f.expect({}, "最小化时暂停设备输入");
+    f.window(SDL_WINDOWEVENT_RESTORED);
+    f.window(SDL_WINDOWEVENT_FOCUS_GAINED);
+    check(!f.pump() && f.presenter.draw(f.frame), "恢复后的下一有效帧重新绘制");
+
+    SDL_SetWindowSize(window, 240, 240);
+    f.touches.clear();
+    f.mouse(SDL_MOUSEBUTTONDOWN, 39, 120);
+    f.mouse(SDL_MOUSEBUTTONUP, 39, 120);
+    f.mouse(SDL_MOUSEBUTTONDOWN, 200, 120);
+    f.mouse(SDL_MOUSEBUTTONUP, 200, 120);
+    check(!f.pump() && f.touches.empty(),
+          "窗口放大尚未绘制新帧时，输入已按新绘制面拒绝两侧紧邻留边");
+    f.mouse(SDL_MOUSEBUTTONDOWN, 40, 120);
+    f.mouse(SDL_MOUSEBUTTONUP, 40, 120);
+    f.mouse(SDL_MOUSEBUTTONDOWN, 120, 120);
+    f.mouse(SDL_MOUSEBUTTONUP, 120, 120);
+    check(!f.pump() && f.touches.size() == 4 && f.touches[0].x == 0 &&
+              f.touches[0].y == .5 && f.touches[2].x == .5 && f.touches[2].y == .5,
+          "窗口放大尚未绘制新帧时，内容首列和中心仍映射到正确设备位置");
+    check(!f.pump() && f.presenter.draw(f.frame), "软件窗口放大后的第一帧使用新绘制面");
+    SDL_Rect full_viewport{};
+    SDL_RenderGetViewport(renderer, &full_viewport);
+    SDL_GetRendererOutputSize(renderer, &ow, &oh);
+    if (ow != 240 || oh != 240 || full_viewport.w != ow || full_viewport.h != oh) {
+        std::printf("     grown output %dx%d, viewport %d,%d %dx%d\n", ow, oh,
+                    full_viewport.x, full_viewport.y, full_viewport.w, full_viewport.h);
+    }
+    check(ow == 240 && oh == 240 && full_viewport.x == 0 && full_viewport.y == 0 &&
+              full_viewport.w == ow && full_viewport.h == oh,
+          "软件绘制面放大后保持完整 output viewport，不残留旧的小裁剪区");
+    std::vector<Uint32> grown(240 * 240);
+    const bool grown_read = SDL_RenderReadPixels(renderer, nullptr, SDL_PIXELFORMAT_ARGB8888,
+                                                  grown.data(), 240 * int(sizeof(Uint32))) == 0;
+    check(grown_read && close(at(grown.data(), 240, 185, 225), kBottomRight),
+          "窗口放大后第一帧的远侧角块仍有真实像素，不被旧 surface 裁掉");
+
+    reset_square();
+    check(SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP) == 0,
+          "用实际 SDL API 切入全屏状态");
+    check(!f.pump(), "消费全屏窗口事件");
+    SDL_GetWindowSize(window, &ow, &oh);
+    const auto full_generation = f.presenter.input_generation();
+    check(!shortcut(SDL_SCANCODE_G) && !shortcut(SDL_SCANCODE_W) && size_is(ow, oh) &&
+              f.presenter.input_generation() == full_generation,
+          "全屏模式的 G/W 不改变窗口尺寸或输入代次");
+    check(SDL_SetWindowFullscreen(window, 0) == 0 && !f.pump(), "恢复窗口模式");
+    reset_square();
+    for (const Uint32 flag : {Uint32(SDL_WINDOW_MAXIMIZED), Uint32(SDL_WINDOW_MINIMIZED)}) {
+        if (flag == SDL_WINDOW_MAXIMIZED) SDL_MaximizeWindow(window);
+        else SDL_MinimizeWindow(window);
+        if ((SDL_GetWindowFlags(window) & flag) == 0) {
+            // dummy 不实现最大化/最小化；不伪造 flag 或把无效状态当作已验证。
+            std::printf("  SKIP 当前 SDL 驱动不支持窗口状态 %u\n", unsigned(flag));
+            continue;
+        }
+        check(true, "实际 SDL 窗口进入最大化或最小化状态");
+        check(!f.pump(), "消费最大化或最小化窗口事件");
+        // 单独打开输入门控，让拒绝依据来自窗口 flag，避免最小化分支只测到失焦。
+        f.window(SDL_WINDOWEVENT_FOCUS_GAINED);
+        check(!f.pump(), "单独开启输入门控以检查窗口状态限制");
+        SDL_GetWindowSize(window, &ow, &oh);
+        const auto state_generation = f.presenter.input_generation();
+        check(!shortcut(SDL_SCANCODE_G) && !shortcut(SDL_SCANCODE_W) && size_is(ow, oh) &&
+                  f.presenter.input_generation() == state_generation,
+              "最大化或最小化模式的 G/W 不执行尺寸或输入清理动作");
+        SDL_RestoreWindow(window);
+        f.window(SDL_WINDOWEVENT_FOCUS_GAINED);
+        check(!f.pump(), "恢复正常窗口和输入状态");
+    }
+
+    KeyboardFixture rotated("Presenter rotated pixel size", 160, 160, 90);
+    check(rotated.window_id && rotated.presenter.draw(rotated.frame) && !rotated.pump(),
+          "建立旋转后的真实窗口");
+    if (rotated.window_id) {
+        rotated.key(SDL_KEYDOWN, SDL_SCANCODE_G, KMOD_LALT);
+        rotated.key(SDL_KEYUP, SDL_SCANCODE_G);
+        check(!rotated.pump(), "旋转窗口执行像素尺寸动作");
+        SDL_GetWindowSize(SDL_GetWindowFromID(rotated.window_id), &ow, &oh);
+        check(ow == 96 && oh == 64, "G 采用旋转后内容尺寸，不使用编码帧原来的宽高");
+    }
+    KeyboardFixture configured("Presenter configured size shortcuts", 160, 160, 0, KMOD_RCTRL);
+    if (configured.window_id) {
+        configured.key(SDL_KEYDOWN, SDL_SCANCODE_G, KMOD_LALT);
+        configured.key(SDL_KEYUP, SDL_SCANCODE_G);
+        check(!configured.pump(), "默认修饰键不能触发自定义 G 快捷键");
+        SDL_GetWindowSize(SDL_GetWindowFromID(configured.window_id), &ow, &oh);
+        check(ow == 160 && oh == 160, "自定义 shortcut-mod 替换默认尺寸动作修饰键");
+        configured.key(SDL_KEYDOWN, SDL_SCANCODE_G, KMOD_RCTRL);
+        configured.key(SDL_KEYUP, SDL_SCANCODE_G);
+        check(!configured.pump(), "自定义修饰键触发 G 快捷键");
+        SDL_GetWindowSize(SDL_GetWindowFromID(configured.window_id), &ow, &oh);
+        check(ow == 64 && oh == 96, "自定义 MOD+G 按同一像素规则调整尺寸");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -1433,6 +1833,8 @@ int main() {
     presenter_physical_keyboard_events();
     presenter_keyboard_quit_and_close();
     presenter_clipboard_request_context();
+    window_action_geometry();
+    presenter_window_actions();
 
     SDL_Quit();
     if (failures != 0) {

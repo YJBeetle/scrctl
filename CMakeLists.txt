@@ -32,38 +32,41 @@ option(SCRCTL_BUILD_TESTS "构建无头自检" ON)
 option(SCRCTL_FETCH_SDL2 "用 FetchContent 拉取 SDL2，而不是找系统安装" OFF)
 
 # ---------------------------------------------------------------- SDL2 ------
+# SDL_RenderWindowToLogical 的浮点坐标转换需要 2.0.18。
 # 默认查找系统 SDL2 包；指定 SCRCTL_FETCH_SDL2 时改为下载固定版本源码。
 # 未找到系统包且未启用下载时，配置失败并给出安装方式。
+add_library(Scrctl_SDL INTERFACE)
 if(SCRCTL_FETCH_SDL2)
     include(FetchContent)
     FetchContent_Declare(sdl2
             GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-            GIT_TAG v2.32.72
+            GIT_TAG release-2.32.10
             GIT_SHALLOW TRUE)
     set(SDL_SHARED ON CACHE BOOL "" FORCE)
     set(SDL_STATIC OFF CACHE BOOL "" FORCE)
     set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(sdl2)
-    add_library(Scrctl::SDL2 ALIAS SDL2::SDL2)
+    target_link_libraries(Scrctl_SDL INTERFACE SDL2::SDL2)
 else()
-    find_package(SDL2 QUIET CONFIG)
+    find_package(SDL2 2.0.18 QUIET CONFIG)
     if(NOT TARGET SDL2::SDL2)
-        find_package(SDL2 QUIET MODULE)
+        find_package(SDL2 2.0.18 QUIET MODULE)
         if(SDL2_FOUND)
-            add_library(Scrctl_SDL INTERFACE)
             target_include_directories(Scrctl_SDL INTERFACE "${SDL2_INCLUDE_DIRS}")
             target_link_libraries(Scrctl_SDL INTERFACE "${SDL2_LIBRARIES}")
-            add_library(Scrctl::SDL2 ALIAS Scrctl_SDL)
         else()
             message(FATAL_ERROR
-                    "找不到 SDL2。装一个（macOS: brew install sdl2；"
+                    "找不到 SDL2 2.0.18 或以上版本。请安装开发包（macOS: brew install sdl2；"
                     "Debian/Ubuntu: apt install libsdl2-dev），"
                     "或配置时加 -DSCRCTL_FETCH_SDL2=ON 从源码拉取。")
         endif()
     else()
-        add_library(Scrctl::SDL2 ALIAS SDL2::SDL2)
+        target_link_libraries(Scrctl_SDL INTERFACE SDL2::SDL2)
     endif()
 endif()
+# 上游源码的 SDL2::SDL2 本身是 ALIAS；接口目标也兼容安装包和 MODULE 查找，
+# 避免再为 ALIAS 创建 ALIAS，同时保留上游传递的编译选项与链接依赖。
+add_library(Scrctl::SDL2 ALIAS Scrctl_SDL)
 
 # ------------------------------------------------------- Apple frameworks ---
 # Apple 媒体框架通过 C API 调用，解码器使用 .cpp，无需 Objective-C++ 或 ARC。

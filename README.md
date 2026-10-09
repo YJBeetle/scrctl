@@ -88,6 +88,8 @@ scrctl 是独立产品，也是设备协议的验证项目。MaaFramework 后续
 | 设备触摸 | 鼠标左键点击、拖动 |
 | 设备键盘 | 普通按键按下 / 松开；字母、数字、标点及常用编辑键 |
 | 粘贴电脑剪贴板 | MOD+V，支持中文、emoji 和换行 |
+| 恢复原尺寸 | MOD+G |
+| 去掉画面留边 | MOD+W，或双击画面外的留边 |
 
 MOD 默认是左 Alt 或左 Super（Windows 键 / Mac Command），可以通过
 `--shortcut-mod=rctrl` 等配置。普通 Q 和 Esc 不退出。窗口转发物理按键，使用手机
@@ -193,6 +195,8 @@ Linux/glibc 需要至少安装一套中文或英文 UTF-8 locale 才能加载 ge
 `msgcmp` / `msgfmt`，会发现源消息未同步、缺失译文或 printf 占位符错误；离线测试也会执行。
 
 ## 构建
+
+需要 SDL2 2.0.18 或以上版本，用于保留鼠标坐标的浮点精度。
 
 ```bash
 brew install sdl2 openssl ffmpeg gettext  # ffmpeg 提供软件解码，gettext 提供翻译支持

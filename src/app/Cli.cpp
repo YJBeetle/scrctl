@@ -21,6 +21,7 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         "Quit: MOD+Q. Fullscreen: MOD+F or F11. MOD defaults to left Alt or left Super; "
         "change it with --shortcut-mod.\n"
         "Paste computer clipboard: MOD+V (Unicode supported).\n"
+        "Actual window size: MOD+G. Remove image margins: MOD+W or double-click an empty margin.\n"
         "Audio is forwarded to the computer by default; --audio-dup keeps phone playback. "
         "Switching routes may pause the phone's player; resume it if needed.\n"
         "The device chooses encoding dimensions, bitrate and frame rate. Display crop and "

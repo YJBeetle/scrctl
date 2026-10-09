@@ -77,12 +77,9 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
     if (SDL_GetRendererInfo(renderer_, &info) == 0) {
         std::printf(SCRCTL_TR("Render driver: %s\n"), info.name);
     }
-    // 设置 logical size 后由 SDL 处理 Retina 比例和窗口缩放；否则以窗口点数
-    // 绘制到高 DPI 像素面，会只覆盖部分区域。
-    //
-    // logical size 使用旋转后的视口尺寸（90/270 度交换宽高），鼠标事件也进入
-    // 同一逻辑空间，确保触摸逆变换使用正确的尺寸。
-    if (SDL_RenderSetLogicalSize(renderer_, view_w_, view_h_) != 0) {
+    // 不启用 SDL 的 logical size，保留队列中原始窗口点坐标。
+    // 显示使用完整绘制面中的显式内容矩形，输入通过同一矩形去掉留边。
+    if (SDL_RenderSetLogicalSize(renderer_, 0, 0) != 0 || !prepare_output()) {
         std::fprintf(stderr, SCRCTL_TR("Failed to configure viewport: %s\n"), SDL_GetError());
         return false;
     }
@@ -160,13 +157,25 @@ bool Presenter::draw(const scrctl::Frame &f, const Crop &crop, const char *readb
     src_ = crop;
     int view_w = 0, view_h = 0;
     viewport_size(src_, degrees_, view_w, view_h);
-    if (view_w != view_w_ || view_h != view_h_) {
-        if (SDL_RenderSetLogicalSize(renderer_, view_w, view_h) != 0) {
-            std::fprintf(stderr, SCRCTL_TR("Failed to configure viewport: %s\n"), SDL_GetError());
-            return false;
-        }
-        view_w_ = view_w;
-        view_h_ = view_h;
+    view_w_ = view_w;
+    view_h_ = view_h;
+    if ((minimized_ || (SDL_GetWindowFlags(window_) & SDL_WINDOW_MINIMIZED)) &&
+        readback_path == nullptr) return true;
+    int output_w = 0, output_h = 0;
+    if (SDL_GetRendererOutputSize(renderer_, &output_w, &output_h) != 0) {
+        std::fprintf(stderr, SCRCTL_TR("Failed to query drawable dimensions: %s\n"), SDL_GetError());
+        return false;
+    }
+    if ((output_w <= 0 || output_h <= 0) && readback_path == nullptr) return true;
+    ContentRect content;
+    if (!prepare_output() || SDL_GetRendererOutputSize(renderer_, &output_w, &output_h) != 0) {
+        std::fprintf(stderr, SCRCTL_TR("Failed to configure viewport: %s\n"), SDL_GetError());
+        return false;
+    }
+    if ((output_w <= 0 || output_h <= 0) && readback_path == nullptr) return true;
+    if (!content_rect(view_w_, view_h_, output_w, output_h, content)) {
+        std::fprintf(stderr, SCRCTL_TR("Failed to query drawable dimensions: %s\n"), SDL_GetError());
+        return false;
     }
     // SDL_RenderClear 清除整个目标面，包括等比缩放后的留边区域。
     if (SDL_SetRenderDrawColor(renderer_, bg_[0], bg_[1], bg_[2], 255) != 0 ||
@@ -178,9 +187,8 @@ bool Presenter::draw(const scrctl::Frame &f, const Crop &crop, const char *readb
         std::fprintf(stderr, SCRCTL_TR("Failed to upload texture: %s\n"), SDL_GetError());
         return false;
     }
-    // 渲染使用逻辑坐标，由 SDL 处理 Retina 缩放和留边。旋转由 draw_rotated
-    // 完成，该函数同时用于离线回读测试。
-    if (!scrctl::app::draw_rotated(renderer_, texture_, src_, degrees_, horizontal_flip_)) {
+    // 目的矩形使用绘制面像素；SDL 完成纹理缩放、翻转和旋转。
+    if (!scrctl::app::draw_rotated(renderer_, texture_, src_, degrees_, horizontal_flip_, &content)) {
         std::fprintf(stderr, SCRCTL_TR("Failed to render frame: %s\n"), SDL_GetError());
         return false;
     }
@@ -194,7 +202,8 @@ bool Presenter::draw(const scrctl::Frame &f, const Crop &crop, const char *readb
 
 bool Presenter::readback(const std::string &path) {
     int out_w = 0, out_h = 0;
-    if (SDL_GetRendererOutputSize(renderer_, &out_w, &out_h) != 0 || out_w <= 0 || out_h <= 0) {
+    if (!prepare_output() || SDL_GetRendererOutputSize(renderer_, &out_w, &out_h) != 0 ||
+        out_w <= 0 || out_h <= 0) {
         std::fprintf(stderr, SCRCTL_TR("Failed to query drawable dimensions: %s\n"), SDL_GetError());
         return false;
     }
@@ -208,9 +217,8 @@ bool Presenter::readback(const std::string &path) {
         SDL_FreeSurface(s);
         return false;
     }
-    // 回读前暂时移除 logical size，使用完整输出面的像素坐标。保留逻辑尺寸
-    // 时，SDL 会把读区按内容视口转换，窗口有留边时会读到偏移的局部区域。
-    if (SDL_RenderSetLogicalSize(renderer_, 0, 0) != 0) {
+    // 回读始终使用完整绘制面，不启用自动转换鼠标事件的 logical size。
+    if (!prepare_output()) {
         std::fprintf(stderr, SCRCTL_TR("Failed to configure viewport: %s\n"), SDL_GetError());
         SDL_UnlockSurface(s);
         SDL_FreeSurface(s);
@@ -221,15 +229,9 @@ bool Presenter::readback(const std::string &path) {
     const int rc =
         SDL_RenderReadPixels(renderer_, &full, SDL_PIXELFORMAT_ARGB8888, s->pixels, s->pitch);
     const std::string read_error = rc != 0 ? SDL_GetError() : "";
-    const int restore = SDL_RenderSetLogicalSize(renderer_, view_w_, view_h_);
     SDL_UnlockSurface(s);
     if (rc != 0) {
         std::fprintf(stderr, SCRCTL_TR("Readback failed: %s\n"), read_error.c_str());
-        SDL_FreeSurface(s);
-        return false;
-    }
-    if (restore != 0) {
-        std::fprintf(stderr, SCRCTL_TR("Failed to configure viewport: %s\n"), SDL_GetError());
         SDL_FreeSurface(s);
         return false;
     }
@@ -284,6 +286,10 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
             if (window_id == 0 || e.window.windowID != window_id) break;
             if (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
                 input_active_ = true;
+                if (!(SDL_GetWindowFlags(window_) & SDL_WINDOW_MINIMIZED)) minimized_ = false;
+            } else if (e.window.event == SDL_WINDOWEVENT_RESTORED ||
+                       e.window.event == SDL_WINDOWEVENT_MAXIMIZED) {
+                minimized_ = false;
             } else if (e.window.event == SDL_WINDOWEVENT_CLOSE) {
                 quit = true;
             } else if (e.window.event == SDL_WINDOWEVENT_FOCUS_LOST ||
@@ -293,6 +299,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                 // 可能在抬起之后再次发送 down，或让抬起跳到未发送的位置。
                 pending_move = false;
                 input_active_ = false;
+                if (e.window.event == SDL_WINDOWEVENT_MINIMIZED) minimized_ = true;
                 release_input(on_touch, on_keyboard);
             }
             break;
@@ -323,6 +330,11 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
             } else if ((shortcut && e.key.keysym.sym == SDLK_f && !(mods & KMOD_SHIFT)) ||
                        fullscreen_key) {
                 toggle_fullscreen();
+            } else if (shortcut && !(mods & KMOD_SHIFT) &&
+                       (e.key.keysym.sym == SDLK_g || e.key.keysym.sym == SDLK_w)) {
+                if (resize_window(e.key.keysym.sym == SDLK_g, on_touch, on_keyboard)) {
+                    pending_move = false;
+                }
             }
             break;
         }
@@ -340,7 +352,18 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
             break;
         case SDL_MOUSEBUTTONDOWN:
             if (input_active_ && window_id != 0 && e.button.windowID == window_id &&
-                e.button.button == SDL_BUTTON_LEFT && on_touch) {
+                e.button.button == SDL_BUTTON_LEFT) {
+                // 用原始窗口点换算绘制面，按显示共用的矩形判断留边。
+                // 第一击也不注入触摸，双击只调整本地窗口；文件回放没有触摸
+                // 回调时仍可使用此动作。触摸模拟鼠标不触发双击窗口动作。
+                if (!is_content_point(e.button.x, e.button.y)) {
+                    if (e.button.clicks == 2 && e.button.which != SDL_TOUCH_MOUSEID &&
+                        resize_window(false, on_touch, on_keyboard)) {
+                        pending_move = false;
+                    }
+                    break;
+                }
+                if (!on_touch) break;
                 if (!to_display(e.button.x, e.button.y, px, py)) {
                     break;
                 }
@@ -411,6 +434,87 @@ void Presenter::toggle_fullscreen() {
     }
 }
 
+bool Presenter::is_content_point(int x, int y) const {
+    int content_x = 0, content_y = 0;
+    return to_content(x, y, content_x, content_y);
+}
+
+bool Presenter::prepare_output() const {
+    // 软件 renderer 在窗口 resize 后可暂时返回旧 surface 尺寸。
+    // 排入完整 viewport 并 flush，让 SDL 激活新绘制面，再重设完整 viewport。
+    // 第一次命令可能带旧尺寸；放大窗口时不能让它裁掉新面远侧的像素。
+    return renderer_ && SDL_RenderSetScale(renderer_, 1, 1) == 0 &&
+           SDL_RenderSetViewport(renderer_, nullptr) == 0 && SDL_RenderFlush(renderer_) == 0 &&
+           SDL_RenderSetViewport(renderer_, nullptr) == 0;
+}
+
+bool Presenter::output_content_rect(ContentRect &rect) const {
+    if (!window_ || !renderer_ || minimized_ ||
+        (SDL_GetWindowFlags(window_) & SDL_WINDOW_MINIMIZED)) return false;
+    int width = 0, height = 0;
+    return prepare_output() && SDL_GetRendererOutputSize(renderer_, &width, &height) == 0 &&
+           content_rect(view_w_, view_h_, width, height, rect);
+}
+
+bool Presenter::to_content(int raw_x, int raw_y, int &x, int &y) const {
+    ContentRect content;
+    if (!output_content_rect(content)) return false;
+    float drawable_x = 0, drawable_y = 0;
+    // logical size=0、scale=1、完整 viewport：此 API 只做窗口点到绘制面像素
+    // 的 DPI 换算。不预先乘 DPI，也不读取当前鼠标位置猜队列中的旧事件。
+    SDL_RenderWindowToLogical(renderer_, raw_x, raw_y, &drawable_x, &drawable_y);
+    if (!std::isfinite(drawable_x) || !std::isfinite(drawable_y) ||
+        drawable_x < content.x || drawable_y < content.y ||
+        drawable_x >= int64_t(content.x) + content.w ||
+        drawable_y >= int64_t(content.y) + content.h) return false;
+    // 留边判断先于整数截断。实际内容第一列可以是 0；负半点不能混入这一列。
+    x = static_cast<int>((double(drawable_x) - content.x) * view_w_ / content.w);
+    y = static_cast<int>((double(drawable_y) - content.y) * view_h_ / content.h);
+    return true;
+}
+
+bool Presenter::resize_window(bool pixel_perfect,
+                              const std::function<void(double, double, bool)> &on_touch,
+                              const KeyboardHandler &on_keyboard) {
+    if (!window_ || !renderer_ || minimized_ ||
+        (SDL_GetWindowFlags(window_) &
+         (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MAXIMIZED | SDL_WINDOW_MINIMIZED))) return false;
+    if (!prepare_output()) return false;
+    int points_w = 0, points_h = 0, drawable_w = 0, drawable_h = 0;
+    SDL_GetWindowSize(window_, &points_w, &points_h);
+    if (SDL_GetRendererOutputSize(renderer_, &drawable_w, &drawable_h) != 0) return false;
+    int width = 0, height = 0;
+    const bool valid = pixel_perfect
+        ? pixel_perfect_window(view_w_, view_h_, points_w, points_h,
+                               drawable_w, drawable_h, width, height)
+        : window_without_borders(view_w_, view_h_, points_w, points_h,
+                                  drawable_w, drawable_h, width, height);
+    if (!valid) return false;
+
+    ++input_generation_;
+    release_touch(on_touch);
+    for (const auto &report : keyboard_.release_device_keys()) {
+        if (on_keyboard) on_keyboard(report);
+    }
+    release_pending_ = false;
+    if (width == points_w && height == points_h) return true;
+
+    int x = 0, y = 0;
+    if (!pixel_perfect) SDL_GetWindowPosition(window_, &x, &y);
+    SDL_SetWindowSize(window_, width, height);
+    SDL_GetWindowSize(window_, &win_w_, &win_h_);
+    if (!pixel_perfect) {
+        // 去留边后维持原内容中心；像素 1:1 动作只调整尺寸，不移动窗口。
+        const auto centered = [](int position, int previous, int current) {
+            return static_cast<int>(std::clamp(int64_t(position) + (int64_t(previous) - current) / 2,
+                int64_t(std::numeric_limits<int>::min()), int64_t(std::numeric_limits<int>::max())));
+        };
+        SDL_SetWindowPosition(window_, centered(x, points_w, win_w_),
+                               centered(y, points_h, win_h_));
+    }
+    return true;
+}
+
 void Presenter::release_touch(const std::function<void(double, double, bool)> &on_touch) {
     if (dragging_ && on_touch) {
         on_touch(last_touch_x_, last_touch_y_, false);
@@ -446,7 +550,9 @@ Presenter::~Presenter() {
 }
 
 bool Presenter::to_display(int raw_x, int raw_y, double &fx, double &fy) const {
-    return scrctl::app::viewport_fraction_to_panel(raw_x, raw_y, src_, degrees_, fx, fy,
+    int content_x = 0, content_y = 0;
+    if (!to_content(raw_x, raw_y, content_x, content_y)) return false;
+    return scrctl::app::viewport_fraction_to_panel(content_x, content_y, src_, degrees_, fx, fy,
                                                   horizontal_flip_);
 }
 

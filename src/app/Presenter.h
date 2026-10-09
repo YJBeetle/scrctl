@@ -38,9 +38,10 @@ class Presenter {
     bool open(int frame_w, int frame_h, const Crop &crop, int degrees, double scale,
               bool scale_given, const WindowSpec &spec);
 
-    /// 返回 true 表示已完成绘制；指定回读路径时，也要求图像保存成功。
+    /// 返回 true 表示已消费有效帧；最小化或暂时没有绘制面时跳过显示。
+    /// 指定回读路径时仍要求图像保存成功，不能把跳过当作已经保存。
     bool draw(const scrctl::Frame &f, const char *readback_path = nullptr);
-    /// 画面来源或尺寸改变时更新裁剪、逻辑视口和纹理，保留窗口位置及拖动状态。
+    /// 画面来源或尺寸改变时更新裁剪、内容视口和纹理，保留窗口位置及拖动状态。
     bool draw(const scrctl::Frame &f, const Crop &crop, const char *readback_path = nullptr);
 
     /// 将窗口实际显示内容回读保存，用于检查裁剪、缩放和纹理尺寸。
@@ -72,15 +73,25 @@ class Presenter {
     ~Presenter();
 
   private:
-    /// 将 SDL 鼠标逻辑坐标转换为设备整屏的 0..1 坐标。
-    /// SDL_RenderSetLogicalSize 会把鼠标事件映射到逻辑空间。例如窗口为 457 点、
-    /// 绘制面 914 像素时，事件右下角仍接近逻辑尺寸 1125x2436。
+    /// 将 SDL 鼠标的窗口点坐标转换为设备整屏的 0..1 坐标。
+    /// renderer 固定 logical size=0、scale=1 和完整绘制面视口。
+    /// SDL_RenderWindowToLogical 先负责点到物理像素的 DPI 换算，再按与绘制
+    /// 共用的内容矩形去掉留边、换算内容坐标。先用浮点判断留边，最后截整数，
+    /// 避免不足一个逻辑单位的负坐标被 SDL 截成 0 后误发到设备边缘。
     /// 先逆窗口旋转和裁剪区域的水平翻转，加源像素裁剪偏移，
     /// 再逆截图自身的旋转，得到设备面板坐标。
-    /// 不能再次换算点数与像素；截图的方向依据不完整时返回 false。
+    /// 截图的方向依据不完整时返回 false。
     bool to_display(int raw_x, int raw_y, double &fx, double &fy) const;
+    bool to_content(int raw_x, int raw_y, int &x, int &y) const;
+    bool output_content_rect(ContentRect &rect) const;
+    bool prepare_output() const;
     bool ensure_texture(int width, int height);
     void toggle_fullscreen();
+    bool is_content_point(int x, int y) const;
+    /// 返回 true 表示已接受窗口尺寸动作；全屏、最大化、最小化时不执行。
+    bool resize_window(bool pixel_perfect,
+                       const std::function<void(double, double, bool)> &on_touch,
+                       const KeyboardHandler &on_keyboard);
 
     uint8_t bg_[3] = {0, 0, 0};
     SDL_Window *window_ = nullptr;
@@ -98,6 +109,8 @@ class Presenter {
     static constexpr int win_h_fallback = 1 << 20;
     /// 失焦、隐藏或最小化后暂停输入，直到本窗口重新获得焦点。
     bool input_active_ = true;
+    /// 以本窗口的 MINIMIZED/RESTORED 事件补充 SDL flag，允许事件处理与绘制分开。
+    bool minimized_ = false;
     bool dragging_ = false;
     /// 源坐标依据改变时，下一轮 pump 统一释放触摸和键盘一次。
     bool release_pending_ = false;
