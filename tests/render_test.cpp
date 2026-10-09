@@ -1360,9 +1360,10 @@ void presenter_display_rotation() {
                 retained.key(SDL_KEYUP, SDL_SCANCODE_RIGHT);
                 retained.key(SDL_KEYDOWN, SDL_SCANCODE_B);
                 SDL_version linked{}; SDL_GetVersion(&linked);
-                // 已复现的 sdl2-compat 2.32.74 合成 TEXTINPUT 转换返回 NULL，
+                // 已复现的 sdl2-compat 2.32.72/74 合成 TEXTINPUT 转换返回 NULL，
                 // PushEvent 随后在 SDL3 内崩溃；不能把危险注入用作本进程能力探测。
-                const bool text_push_supported = !(linked.major == 2 && linked.minor == 32 && linked.patch == 74);
+                const bool text_push_supported = !(linked.major == 2 && linked.minor == 32 &&
+                                                    (linked.patch == 72 || linked.patch == 74));
                 if (text_push_supported) {
                     SDL_Event text{}; text.type = SDL_TEXTINPUT; text.text.windowID = retained.window_id;
                     std::strcpy(text.text.text, "kept"); check(SDL_PushEvent(&text) == 1, "旋转后排入本窗口TEXT");
