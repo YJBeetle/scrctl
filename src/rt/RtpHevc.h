@@ -91,6 +91,9 @@ public:
     /// 按模 2^16 顺序跟踪的视频包最高序号，尚未收到视频包时为 0。
     /// 迟到包不使其回退；此值为 16 位序号，不包含回绕次数。
     [[nodiscard]] uint16_t last_sequence() const { return seq_.high(); }
+    /// 给 RTCP RR 的扩展最高序号，包含本会话的序号回绕次数。
+    /// reset() 只丢未完成 FU，因此保留此值；新会话应使用新的拆包器。
+    [[nodiscard]] uint32_t extended_sequence() const { return seq_.extended_high(); }
     /// 是否有还没收完的分片。
     [[nodiscard]] bool mid_fragment() const { return !partial_.bytes.empty(); }
     [[nodiscard]] uint32_t fragment_timestamp() const { return partial_.timestamp; }

@@ -49,6 +49,9 @@ RtpSeq::Verdict RtpSeq::observe(const uint16_t seq) {
         remember_holes(static_cast<uint16_t>(high_ + 1), forward - 1);
         detected_ += forward - 1;
     }
+    if (seq < high_) {
+        cycles_ += uint32_t{1} << 16;
+    }
     high_ = seq;
     prune();
     return forward > 1 ? Verdict::kGap : Verdict::kInOrder;

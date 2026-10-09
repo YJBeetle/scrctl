@@ -708,7 +708,7 @@ void FramePump::loop() {
             next_rtcp_ms_ += kRtcpPeriodMs;
             const auto rr = scrctl::rt::build_rr(session_->started().remote_ssrc,
                                                  *media_source,
-                                                 depacketizer ? depacketizer->last_sequence() : 0);
+                                                 depacketizer ? depacketizer->extended_sequence() : 0);
             std::string serr;
             const bool ok = session_->send_rtp(rr, session_->started().sender_port, serr);
             uint64_t failed_after = 0;

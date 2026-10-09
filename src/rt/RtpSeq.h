@@ -29,6 +29,7 @@ public:
     void reset() {
         have_ = false;
         high_ = 0;
+        cycles_ = 0;
         pending_.clear();
         detected_ = 0;
         filled_ = 0;
@@ -36,6 +37,11 @@ public:
 
     /// 按模 2^16 顺序跟踪的最高序号，迟到包不使其回退；不包含回绕次数。
     [[nodiscard]] uint16_t high() const { return high_; }
+
+    /// RTCP RR 使用的 32 位扩展最高序号：低 16 位是 high，高 16 位是回绕次数。
+    /// 仅接受向前进展时累计，迟到及重复不改变；新会话 reset 后重新计数。
+    /// 与 RFC 3550 §6.4.1 的线上字段相同，超过 32 位时按无符号模数回绕。
+    [[nodiscard]] uint32_t extended_high() const { return cycles_ + high_; }
 
     /// 累计检测的缺口数减去窗口内迟到补齐数，包含已过重排窗口的缺口。
     /// kGap 是事件判定，一次事件可能跨越多个序号；gaps_detected() 是缺口序号总数。
@@ -54,6 +60,8 @@ private:
 
     bool have_ = false;
     uint16_t high_ = 0;
+    /// 已完成序号周期数左移 16 位，仅在向前包的数值跨过 65535 时更新。
+    uint32_t cycles_ = 0;
     std::vector<uint16_t> pending_;
     uint64_t detected_ = 0;
     uint64_t filled_ = 0;

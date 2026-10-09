@@ -469,7 +469,7 @@ void AudioPump::loop() {
         if (media_source && session_->started().has_remote_ssrc && now >= next_rtcp_ms) {
             next_rtcp_ms = now + kRtcpPeriodMs;
             const auto rr = scrctl::rt::build_rr(session_->started().remote_ssrc,
-                                                 *media_source, seq.high());
+                                                 *media_source, seq.extended_high());
             std::string serr;
             const bool ok = session_->send_rtp(rr, session_->started().sender_port, serr);
             uint64_t failed_after = 0;

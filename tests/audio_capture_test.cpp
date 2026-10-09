@@ -279,8 +279,8 @@ void successful_capture(const Directory& directory, bool source_known, bool dupl
         if (!script.sent.empty()) {
             const auto& [rr, port] = script.sent.front();
             check(rr.size() == 32 && rr[1] == 201 && port == 24680 && get32(rr, 4) == 123 &&
-                  get32(rr, 8) == 0 && get32(rr, 16) == 1,
-                  "capture-only RR preserves negotiated sender, legal source zero, latest sequence and port");
+                  get32(rr, 8) == 0 && get32(rr, 16) == 65537,
+                  "capture-only RR preserves negotiated identities and port with the extended wrap sequence");
         }
     }
     pump->stop();

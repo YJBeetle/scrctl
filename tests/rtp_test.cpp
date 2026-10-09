@@ -937,7 +937,7 @@ void test_sequence_reordering() {
     // 三个量要分开看，它们各自回答一个问题：
     //   gaps_detected()  往前跳过几个号（1 个：101）——只增
     //   lost()           现在确实没到的有几个（0 个：101 后来到了）
-    //   high()           RR 要报的水位
+    //   extended_high()  RR 要报的含回绕水位；high() 保留原 16 位序号
     check(gaps == 1 && late == 1, "四个包一个没丢：只有一处缺口事件、一次迟到");
     check(seq.gaps_detected() == 1, "缺口按号数累计一次，不因为 103 又跳一格而记两笔");
     check(seq.lost() == 0, "补齐之后真正没到的包数是 0");
@@ -1005,10 +1005,67 @@ void test_sequence_reordering() {
     check(d.stats().seq_gaps == 1 && d.stats().seq_lost == 0,
           "拆包器：一次缺口，补齐之后真丢 0 个");
     check(d.stats().reordered == 1, "迟到单独计一位 reordered");
-    check(d.last_sequence() == 103, "RR 报最高水位（报 101 会让设备以为我们落后一个包）");
+    check(d.last_sequence() == 103 && d.extended_sequence() == 103,
+          "未回绕时原始与扩展最高序号相同，迟到不让水位回退");
     d.push(packet(105, 1000, false, single(1, {0xA4})), out, err);
     check(d.stats().seq_gaps == 2 && d.stats().seq_lost == 1,
           "接着真丢一个 104：seq_lost 从 0 变 1，说明它是当前欠账而不是历史累计");
+}
+
+void test_extended_sequence() {
+    std::printf("\n== RTCP 扩展最高序号 ==\n");
+    RtpSeq seq;
+    check(seq.high() == 0 && seq.extended_high() == 0, "尚未收到媒体时两个序号为零");
+    check(seq.observe(65535) == RtpSeq::Verdict::kFirst && seq.extended_high() == 65535,
+          "首包建立随机初始水位，不假定此前已经回绕");
+    check(seq.observe(0) == RtpSeq::Verdict::kInOrder && seq.extended_high() == 65536,
+          "跨过 65535 时扩展序号增加一个周期");
+    check(seq.observe(1) == RtpSeq::Verdict::kInOrder && seq.high() == 1 && seq.extended_high() == 65537,
+          "65535 到 0 到 1 得到扩展水位 65537，原 16 位接口仍返回 1");
+    const uint16_t late_values[] = {65535, 0, 1};
+    for (const uint16_t late : late_values)
+        check(seq.observe(late) == RtpSeq::Verdict::kLate && seq.extended_high() == 65537 && seq.high() == 1,
+              "旧周期迟到、同周期迟到与重复均不推进或回退扩展水位");
+    check(seq.observe(32769) == RtpSeq::Verdict::kLate && seq.extended_high() == 65537,
+          "原半周期边界仍拒绝有歧义的进展，不增加回绕次数");
+
+    RtpSeq gap;
+    gap.observe(65534);
+    check(gap.observe(1) == RtpSeq::Verdict::kGap && gap.extended_high() == 65537 && gap.lost() == 2,
+          "缺口跨回绕时仍正确记两个丢包并推进扩展水位");
+    check(gap.observe(65535) == RtpSeq::Verdict::kLate && gap.lost() == 1 && gap.extended_high() == 65537,
+          "旧周期的迟到包可补齐缺口，但不增加或减少回绕周期");
+    check(gap.observe(0) == RtpSeq::Verdict::kLate && gap.lost() == 0 && gap.extended_high() == 65537,
+          "新周期的迟到包补齐另一缺口，扩展水位保持不变");
+
+    RtpSeq multiple;
+    multiple.observe(65534);
+    bool in_order = true;
+    for (uint32_t i = 1; i <= 131077; ++i)
+        in_order = (multiple.observe(static_cast<uint16_t>(65534u + i)) == RtpSeq::Verdict::kInOrder) && in_order;
+    check(in_order && multiple.high() == 3 && multiple.extended_high() == 196611 && multiple.lost() == 0,
+          "连续收包跨三个边界仍累计正确，不增加额外丢包");
+    multiple.reset();
+    check(multiple.extended_high() == 0 && multiple.high() == 0 && multiple.lost() == 0,
+          "reset 同时清空周期、原始序号和既有丢包统计");
+    check(multiple.observe(5000) == RtpSeq::Verdict::kFirst && multiple.extended_high() == 5000,
+          "新会话从其首包重新计数，不继承旧周期");
+
+    HevcRtpDepacketizer video;
+    std::string error; std::vector<uint8_t> out;
+    const uint16_t video_sequences[] = {65535, 0, 1, 0, 65535, 1, 2};
+    for (const uint16_t arrival : video_sequences)
+        video.push(packet(arrival, 1000, false, single(1, {0xA4})), out, error);
+    check(video.last_sequence() == 2 && video.extended_sequence() == 65538 &&
+          video.stats().seq_gaps == 0 && video.stats().seq_lost == 0 && video.stats().reordered == 3,
+          "真实 HEVC 拆包器暴露扩展水位，重复和迟到统计不变");
+    const auto rr = scrctl::rt::build_rr(0x11223344, 0x55667788, video.extended_sequence());
+    check(rr.size() == 32 && rr[16] == 0 && rr[17] == 1 && rr[18] == 0 && rr[19] == 2,
+          "真实视频 RR 的线上偏移 16 包含完整的周期和最高序号");
+    video.reset();
+    check(video.extended_sequence() == 65538, "只丢未完成分片不重置当前会话的 RR 序号周期");
+    HevcRtpDepacketizer new_session;
+    check(new_session.extended_sequence() == 0, "会话重建使用的新拆包器不继承旧 RR 周期");
 }
 
 }  // namespace
@@ -1031,6 +1088,7 @@ int main() {
     test_rtcp_shapes();
     test_sender_reports();
     test_sequence_reordering();
+    test_extended_sequence();
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;
 }
