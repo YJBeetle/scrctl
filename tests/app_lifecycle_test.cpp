@@ -6,6 +6,7 @@
 #include "i18n/Translation.h"
 
 #include <SDL.h>
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -175,6 +176,7 @@ struct PlaybackState {
     bool active = false;
     bool padding_only = false;
     bool rotation = false;
+    bool flip_shortcuts = false;
     int base_degrees = 0;
     bool flip = false;
     bool watching = false;
@@ -187,7 +189,7 @@ struct PlaybackState {
 constexpr std::array<uint32_t, 4> quadrant_colors{
     0xffff0000u, 0xff00ff00u, 0xff0000ffu, 0xffffff00u};
 
-void queue_rotation(SDL_Keycode key, SDL_Scancode scancode) {
+void queue_rotation(SDL_Keycode key, SDL_Scancode scancode, bool shift = false) {
     SDL_Event event{};
     event.type = SDL_WINDOWEVENT;
     event.window.windowID = playback.window_id.load();
@@ -204,8 +206,11 @@ void queue_rotation(SDL_Keycode key, SDL_Scancode scancode) {
         check(SDL_PushEvent(&event) == 1, "actual playback queues a complete MOD-arrow key sequence");
     };
     send_key(SDL_KEYDOWN, SDLK_LALT, SDL_SCANCODE_LALT, KMOD_LALT);
-    send_key(SDL_KEYDOWN, key, scancode, KMOD_LALT);
-    send_key(SDL_KEYUP, key, scancode, KMOD_LALT);
+    const auto modifiers = static_cast<Uint16>(KMOD_LALT | (shift ? KMOD_LSHIFT : 0));
+    if (shift) send_key(SDL_KEYDOWN, SDLK_LSHIFT, SDL_SCANCODE_LSHIFT, modifiers);
+    send_key(SDL_KEYDOWN, key, scancode, modifiers);
+    send_key(SDL_KEYUP, key, scancode, modifiers);
+    if (shift) send_key(SDL_KEYUP, SDLK_LSHIFT, SDL_SCANCODE_LSHIFT, KMOD_LALT);
     send_key(SDL_KEYUP, SDLK_LALT, SDL_SCANCODE_LALT, KMOD_NONE);
 }
 
@@ -229,11 +234,32 @@ void check_playback_rotation(int index) {
     constexpr std::array<std::array<int, 4>, 4> corner_order{{
         {{0, 1, 2, 3}}, {{2, 0, 3, 1}}, {{3, 2, 1, 0}}, {{1, 3, 0, 2}}
     }};
-    const int degrees = (playback.base_degrees + (index <= 6 ? 90 : 0)) % 360;
+    int degrees = (playback.base_degrees + (index <= 6 ? 90 : 0)) % 360;
+    bool flip = playback.flip;
+    if (playback.flip_shortcuts) {
+        // 先水平镜像，再右转，最后垂直镜像；独立列出每个实际呈现阶段。
+        degrees = index == 3 ? (360 - playback.base_degrees) % 360 :
+                  index <= 6 ? (450 - playback.base_degrees) % 360 :
+                               (90 + playback.base_degrees) % 360;
+        flip = playback.flip != (index <= 6);
+    }
+    // 读回上一帧的内容区域；镜像保留用户窗口形状，横屏内容可能有上下留边。
+    // 使用夹具明确的来源尺寸和期望方向，避免把留边当作四角色块。
+    const bool landscape_source = index >= 6;
+    const int source_width = landscape_source ? 96 : 64;
+    const int source_height = landscape_source ? 64 : 96;
+    const int view_width = degrees % 180 ? source_height : source_width;
+    const int view_height = degrees % 180 ? source_width : source_height;
+    const double scale = std::min(static_cast<double>(width) / view_width,
+                                  static_cast<double>(height) / view_height);
+    const double content_width = view_width * scale;
+    const double content_height = view_height * scale;
     for (int corner = 0; corner < 4; ++corner) {
-        const int px = (corner % 2 ? 3 : 1) * width / 4;
-        const int py = (corner / 2 ? 3 : 1) * height / 4;
-        const int source_corner = corner_order[degrees / 90][corner] ^ (playback.flip ? 1 : 0);
+        const int px = static_cast<int>((width - content_width) / 2 +
+                                        (corner % 2 ? 3 : 1) * content_width / 4);
+        const int py = static_cast<int>((height - content_height) / 2 +
+                                        (corner / 2 ? 3 : 1) * content_height / 4);
+        const int source_corner = corner_order[degrees / 90][corner] ^ (flip ? 1 : 0);
         check(pixels[static_cast<std::size_t>(py) * width + px] == quadrant_colors[source_corner],
               "Application retains the shortcut direction, CLI flip and source geometry in real pixels");
     }
@@ -269,11 +295,18 @@ class ControlledPlaybackDecoder final : public scrctl::Decoder {
                 playback.renderer = SDL_GetRenderer(playback.window);
                 SDL_SetWindowSize(playback.window, 96, 144);
                 SDL_SetWindowPosition(playback.window, 100, 120);
-                if (playback.rotation) queue_rotation(SDLK_RIGHT, SDL_SCANCODE_RIGHT);
+                if (playback.rotation) {
+                    if (playback.flip_shortcuts) queue_rotation(SDLK_LEFT, SDL_SCANCODE_LEFT, true);
+                    else queue_rotation(SDLK_RIGHT, SDL_SCANCODE_RIGHT);
+                }
             }
         } else if (playback.rotation && index <= 8) {
             check_playback_rotation(index);
-            if (index == 6) queue_rotation(SDLK_LEFT, SDL_SCANCODE_LEFT);
+            if (playback.flip_shortcuts && index == 3) queue_rotation(SDLK_RIGHT, SDL_SCANCODE_RIGHT);
+            if (index == 6) {
+                if (playback.flip_shortcuts) queue_rotation(SDLK_DOWN, SDL_SCANCODE_DOWN, true);
+                else queue_rotation(SDLK_LEFT, SDL_SCANCODE_LEFT);
+            }
         } else if (index <= 4) {
             SDL_Window *window = SDL_GetWindowFromID(playback.window_id.load());
             check(window && window == playback.window &&
@@ -341,12 +374,13 @@ void playback_window_lifecycle(const std::filesystem::path &path, bool padding_o
     playback.active = false;
 }
 
-void playback_rotation_lifecycle(const std::filesystem::path &path) {
+void playback_rotation_lifecycle(const std::filesystem::path &path, bool flip_shortcuts = false) {
     for (int base : {0, 90, 180, 270}) {
         write_playback_fixture(path, 8);
         playback.active = true;
         playback.padding_only = false;
         playback.rotation = true;
+        playback.flip_shortcuts = flip_shortcuts;
         playback.base_degrees = base;
         playback.flip = base == 90 || base == 270;
         playback.decoded = 0;
@@ -361,11 +395,12 @@ void playback_rotation_lifecycle(const std::filesystem::path &path) {
                  (playback.flip ? "flip" : "") + std::to_string(base))
         };
         check(run(std::move(args)) == 0 && playback.decoded == 8,
-              "actual Application counts only eight decoded frames, including two static shortcut redraws");
+              "actual Application counts only eight decoded frames despite static display shortcuts");
         check(SDL_WasInit(0) == 0 && !playback.watching,
               "display shortcut playback releases its window, observer and SDL runtime");
         playback.active = false;
         playback.rotation = false;
+        playback.flip_shortcuts = false;
     }
 }
 } // namespace
@@ -572,6 +607,7 @@ int main() {
     playback_window_lifecycle(path, false);
     playback_window_lifecycle(path, true);
     playback_rotation_lifecycle(path);
+    playback_rotation_lifecycle(path, true);
     caller_signal = 0;
     std::raise(SIGTERM);
     check(caller_signal == SIGTERM, "application restores caller signal handler");

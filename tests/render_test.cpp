@@ -1199,9 +1199,9 @@ void presenter_display_rotation() {
     f.key_for(SDL_KEYDOWN, SDL_SCANCODE_RIGHT, KMOD_LALT, 0, f.window_id + 1000);
     f.key_for(SDL_KEYUP, SDL_SCANCODE_RIGHT, KMOD_NONE, 0, f.window_id + 1000);
     check(!f.pump() && f.presenter.display_degrees(0) == 180 &&
-              f.presenter.input_generation() == unchanged,
-          "Shift翻转组合和其他窗口箭头不能误触发旋转");
-    f.expect({}, "未分配的本地Shift组合也不泄漏设备键");
+              f.presenter.input_generation() == unchanged + 1,
+          "Shift水平翻转释放旧布局而不追加旋转，其他窗口箭头不能误触发");
+    f.expect({}, "本地Shift翻转组合也不泄漏设备键");
     f.window(SDL_WINDOWEVENT_FOCUS_LOST); f.key(SDL_KEYDOWN, SDL_SCANCODE_RIGHT, KMOD_LALT);
     check(!f.pump() && f.presenter.display_degrees(0) == 180, "失焦后不执行旋转");
     f.window(SDL_WINDOWEVENT_FOCUS_GAINED); check(!f.pump(), "恢复旋转窗口焦点");
@@ -1211,7 +1211,7 @@ void presenter_display_rotation() {
     f.key(SDL_KEYDOWN, SDL_SCANCODE_LEFT, KMOD_LALT | KMOD_RCTRL);
     f.key(SDL_KEYUP, SDL_SCANCODE_LEFT);
     check(!f.pump() && f.presenter.display_degrees(0) == 90,
-          "选定MOD加额外Ctrl仍按scrcpy规则旋转，Shift是独立禁用条件");
+          "选定MOD加额外Ctrl仍按scrcpy规则旋转，无Shift时不执行镜像");
     f.expect({}, "本地旋转清理伴随的设备修饰键");
 
     auto *window = SDL_GetWindowFromID(f.window_id);
@@ -1251,6 +1251,9 @@ void presenter_display_rotation() {
             if (mixed.presenter.is_fullscreen()) {
                 mixed.key(SDL_KEYDOWN, SDL_SCANCODE_RIGHT, KMOD_LALT);
                 check(!mixed.pump(), "本地旋转保存Local归属并建立延后尺寸");
+                mixed.key(SDL_KEYDOWN, SDL_SCANCODE_UP, KMOD_LALT | KMOD_LSHIFT);
+                mixed.key(SDL_KEYUP, SDL_SCANCODE_UP);
+                check(!mixed.pump(), "延后尺寸中的V镜像复用Local清理且不替换来源优先级");
                 mixed.key(SDL_KEYDOWN, SDL_SCANCODE_A); check(!mixed.pump(), "来源变化之前已有设备A");
                 auto changed = mixed.crop; changed.pixel_degrees = 90;
                 check(mixed.presenter.draw(mixed.frame, changed), "全屏内合法新Frame改变源坐标依据");
@@ -1409,6 +1412,309 @@ void presenter_display_rotation() {
     f.key(SDL_KEYDOWN, SDL_SCANCODE_RIGHT, KMOD_LALT); f.key(SDL_KEYUP, SDL_SCANCODE_RIGHT);
     SDL_Event quit{}; quit.type = SDL_QUIT; check(SDL_PushEvent(&quit) == 1, "旋转后排入真实QUIT");
     check(f.pump() && !f.presenter.render_failed(), "仅过滤旧pointer，保留QUIT以正常退出");
+}
+
+void presenter_display_flips() {
+    const Palette colors{kTopLeft, kTopRight, kBottomRight, kBottomLeft};
+    // 固定源角块表；H/V 的判据只交换当前显示左右/上下，不抄生产degree组合。
+    constexpr int initial_order[2][4][4] = {
+        {{0,1,2,3}, {3,0,1,2}, {2,3,0,1}, {1,2,3,0}},
+        {{1,0,3,2}, {2,1,0,3}, {3,2,1,0}, {0,3,2,1}}
+    };
+    constexpr int mirror_corner[2][4] = {{1,0,3,2}, {3,2,1,0}};
+    const auto corners = [&](KeyboardFixture &f, const std::array<int,4> &order) {
+        auto *renderer = SDL_GetRenderer(SDL_GetWindowFromID(f.window_id));
+        int w = 0, h = 0;
+        const bool output = renderer && SDL_GetRendererOutputSize(renderer, &w, &h) == 0 &&
+                            w > 0 && h > 0 && w <= 1024 && h <= 1024;
+        check(output, "本机翻转使用实际有界SDL绘制面，不构造替代Frame");
+        if (!output) return;
+        std::vector<Uint32> pixels(static_cast<std::size_t>(w) * h);
+        const SDL_Rect full{0,0,w,h};
+        const bool read = SDL_RenderReadPixels(renderer, &full, SDL_PIXELFORMAT_ARGB8888,
+                                               pixels.data(), w * 4) == 0;
+        check(read, "翻转后直接回读已上传纹理，无新的draw或Frame");
+        if (!read) return;
+        const Point points[] = {{w/8,h/8}, {w-w/8,h/8}, {w-w/8,h-h/8}, {w/8,h-h/8}};
+        for (unsigned i = 0; i < 4; ++i) {
+            check(close(at(pixels.data(), w, points[i].x, points[i].y), colors[order[i]]),
+                  "回读四角符合当前显示轴的独立水平/垂直镜像判据");
+        }
+    };
+    for (const bool cli_flip : {false,true}) for (const int base : {0,90,180,270})
+        for (const bool vertical : {false,true}) {
+            const bool swapped = base == 90 || base == 270;
+            KeyboardFixture f("Presenter horizontal and vertical flip pixels",
+                              swapped ? 126 : 82, swapped ? 82 : 126, base,
+                              KMOD_LALT | KMOD_LGUI, false, cli_flip);
+            if (!f.window_id) continue;
+            auto *window = SDL_GetWindowFromID(f.window_id);
+            auto *renderer = SDL_GetRenderer(window);
+            // 源像素是96x128，截图已转90度，因此真实设备面板是128x96。
+            f.crop = {7,9,41,63,128,96}; f.crop.pixel_degrees = 90;
+            f.frame = colored_frame(96,128,f.crop,colors,12);
+            check(f.presenter.update_content(f.crop, base, f.on_touch(), f.on_keyboard()),
+                  "建立奇数偏心裁剪、CLI方向和截图pixel方向的翻转依据");
+            SDL_SetWindowSize(window, swapped ? 126 : 82, swapped ? 82 : 126);
+            SDL_SetWindowPosition(window, 70,90);
+            check(!f.pump() && f.presenter.draw(f.frame,f.crop) && !f.pump(),
+                  "翻转回读前仅上传一次带行填充的合法源Frame");
+            f.reports.clear(); f.touches.clear();
+            const auto generation = f.presenter.input_generation();
+            const auto first = vertical ? SDL_SCANCODE_UP : SDL_SCANCODE_LEFT;
+            const auto second = vertical ? SDL_SCANCODE_DOWN : SDL_SCANCODE_RIGHT;
+            f.key(SDL_KEYDOWN, first, KMOD_LALT | KMOD_LSHIFT); f.key(SDL_KEYUP, first);
+            const int wanted_degrees = ((vertical ? 180 : 0) - base + 360) % 360;
+            check(!f.pump() && f.presenter.display_degrees(base) == wanted_degrees &&
+                      f.presenter.input_generation() == generation + 1 && !f.presenter.render_failed(),
+                  "H/V在当前显示轴镜像，0/180同尺寸也真实清理并立即重绘一次");
+            int w = 0, h = 0, x = 0, y = 0;
+            SDL_GetWindowSize(window,&w,&h); SDL_GetWindowPosition(window,&x,&y);
+            check(w == (swapped ? 126 : 82) && h == (swapped ? 82 : 126) &&
+                      x == 70 && y == 90 && SDL_GetRenderer(window) == renderer,
+                  "水平/垂直镜像均保留窗口尺寸、用户尺度、位置和renderer身份");
+            std::array<int,4> wanted{};
+            for (unsigned i = 0; i < 4; ++i)
+                wanted[i] = initial_order[cli_flip ? 1 : 0][base/90][mirror_corner[vertical ? 1 : 0][i]];
+            corners(f,wanted);
+            const Point points[] = {{w/8,h/8}, {w-w/8,h/8}, {w-w/8,h-h/8}, {w/8,h-h/8}};
+            for (unsigned i = 0; i < 4; ++i) {
+                f.mouse(SDL_MOUSEBUTTONDOWN,points[i].x,points[i].y);
+                f.mouse(SDL_MOUSEBUTTONUP,points[i].x,points[i].y);
+                check(!f.pump() && f.touches.size() == 2 && !f.touches.back().down,
+                      "翻转四角点击经过实际SDL queue和Presenter设备回调");
+                const bool left = wanted[i] == 0 || wanted[i] == 3, top = wanted[i] < 2;
+                const double ix = (f.crop.x + (left ? f.crop.w/8 : f.crop.w-f.crop.w/8))/96.0;
+                const double iy = (f.crop.y + (top ? f.crop.h/8 : f.crop.h-f.crop.h/8))/128.0;
+                check(f.touches.size() == 2 && std::abs(f.touches[0].x-iy) < 0.025 &&
+                          std::abs(f.touches[0].y-(1-ix)) < 0.025,
+                      "触点还原回读原角块，保留偏心crop并逆截图已应用的90度方向");
+                f.touches.clear();
+            }
+            f.key(SDL_KEYDOWN, second, KMOD_LGUI | KMOD_RSHIFT); f.key(SDL_KEYUP,second);
+            check(!f.pump() && f.presenter.display_degrees(base) == base &&
+                      f.presenter.input_generation() == generation + 2,
+                  "左右H以及上下V分别等价，连续两次镜像回到原CLI/来源方向");
+            std::array<int,4> original{};
+            std::copy_n(initial_order[cli_flip ? 1 : 0][base/90],4,original.begin());
+            corners(f,original);
+            f.expect({}, "H/V及真实UP始终归本地，不向设备注入箭头或Shift");
+        }
+    {
+        KeyboardFixture f("Presenter flip and source base composition",96,64,90,
+                          KMOD_LALT | KMOD_LGUI,false,true);
+        if (f.window_id) {
+            check(f.presenter.draw(f.frame) && !f.pump(), "建立90度CLI镜像基准的合法纹理");
+            f.key(SDL_KEYDOWN,SDL_SCANCODE_LEFT,KMOD_LALT | KMOD_LSHIFT);
+            f.key(SDL_KEYUP,SDL_SCANCODE_LEFT);
+            check(!f.pump() && f.presenter.display_degrees(90) == 270 &&
+                      f.presenter.display_degrees(180) == 180 &&
+                      f.presenter.display_degrees(-270) == 270,
+                  "H撤销原源flip并反转后续基准，公开方向查询规范化负值");
+            check(f.presenter.update_content(f.crop,f.presenter.display_degrees(180),f.on_touch(),f.on_keyboard()) &&
+                      f.presenter.draw(f.frame) && !f.pump(),
+                  "来源/显式方向改为180后，新Frame继续使用持久本机镜像偏移");
+            corners(f,{2,3,0,1});
+            f.key(SDL_KEYDOWN,SDL_SCANCODE_UP,KMOD_LALT | KMOD_LSHIFT); f.key(SDL_KEYUP,SDL_SCANCODE_UP);
+            check(!f.pump() && f.presenter.display_degrees(180) == 0 &&
+                      f.presenter.display_degrees(90) == 270,
+                  "先H后V组合成180度本机旋转，后续基准重新同向相加");
+            corners(f,{1,0,3,2});
+        }
+        KeyboardFixture order("Presenter rotate mirror noncommuting");
+        if (order.window_id) {
+            check(order.presenter.draw(order.frame) && !order.pump(), "建立旋转镜像不交换的真实纹理");
+            for (const Uint16 mods : {Uint16(KMOD_LALT),Uint16(KMOD_LALT | KMOD_LSHIFT),Uint16(KMOD_LALT)}) {
+                order.key(SDL_KEYDOWN,SDL_SCANCODE_RIGHT,mods); order.key(SDL_KEYUP,SDL_SCANCODE_RIGHT);
+                check(!order.pump(), "实际Right→H→Right组合经过同一事件循环");
+            }
+            check(order.presenter.display_degrees(0) == 0 && order.presenter.display_degrees(90) == 270,
+                  "Right→H→Right等价当前水平镜像，不错误累加180度");
+            corners(order,{1,0,3,2});
+        }
+    }
+    for (const bool vertical : {false,true}) {
+        KeyboardFixture f("Presenter flip keyboard and pointer ownership",64,96,vertical ? 180 : 0);
+        if (!f.window_id) continue;
+        auto *window = SDL_GetWindowFromID(f.window_id);
+        check(f.presenter.draw(f.frame) && !f.pump(), "建立同尺寸H/V触点与键盘清理的真实纹理");
+        const auto arrow = vertical ? SDL_SCANCODE_UP : SDL_SCANCODE_RIGHT;
+        f.key(SDL_KEYDOWN,SDL_SCANCODE_A);
+        f.key(SDL_KEYDOWN,SDL_SCANCODE_LSHIFT,KMOD_LSHIFT);
+        f.mouse(SDL_MOUSEBUTTONDOWN,16,24); check(!f.pump(), "翻转前已交付设备A、Shift和旧触点");
+        const auto generation = f.presenter.input_generation();
+        f.mouse(SDL_MOUSEMOTION,48,72); // 尚未交付的合并移动不能影响旧UP。
+        f.key(SDL_KEYDOWN,arrow,KMOD_LALT | KMOD_LSHIFT);
+        f.mouse(SDL_MOUSEBUTTONDOWN,20,30); f.mouse(SDL_MOUSEMOTION,30,40); f.mouse(SDL_MOUSEBUTTONUP,30,40);
+        f.key(SDL_KEYUP,SDL_SCANCODE_LALT);
+        f.key(SDL_KEYDOWN,arrow,KMOD_NONE,1); f.key(SDL_KEYDOWN,arrow);
+        f.key(SDL_KEYUP,arrow); f.key(SDL_KEYUP,SDL_SCANCODE_LSHIFT); f.key(SDL_KEYUP,SDL_SCANCODE_A);
+        f.key(SDL_KEYDOWN,SDL_SCANCODE_B); f.key(SDL_KEYUP,SDL_SCANCODE_B);
+        check(!f.pump() && f.presenter.input_generation() == generation+1 && f.touches.size() == 2 &&
+                  f.touches[0].down && !f.touches[1].down &&
+                  f.touches[0].x == f.touches[1].x && f.touches[0].y == f.touches[1].y,
+              "同view镜像抬起最后已交付点，清pending_move和own pointer，Local保留到真实UP");
+        f.expect({{4},{4,225},{},{5},{}}, "镜像释放真实设备Shift/A，重复本地箭头不泄漏且后续键完整处理");
+        const auto held = f.presenter.display_degrees(0);
+        f.key(SDL_KEYDOWN,arrow); check(!f.pump(), "普通箭头在翻转后仍交给设备");
+        f.key(SDL_KEYDOWN,arrow,KMOD_LALT | KMOD_LSHIFT,1);
+        f.key(SDL_KEYDOWN,arrow,KMOD_LALT | KMOD_LSHIFT);
+        check(!f.pump() && f.presenter.display_degrees(0) == held &&
+                  f.presenter.input_generation() == generation+1,
+              "先归设备的箭头后来加入MOD/Shift或重复DOWN不能抢作mirror");
+        f.key(SDL_KEYUP,arrow); check(!f.pump(), "设备箭头实际UP释放一次");
+        f.expect({{static_cast<uint16_t>(arrow)},{}}, "普通上下/左右箭头保持实际HID生命周期");
+        f.key_for(SDL_KEYDOWN,arrow,KMOD_LALT | KMOD_LSHIFT,0,f.window_id+1000);
+        f.key_for(SDL_KEYUP,arrow,KMOD_NONE,0,f.window_id+1000);
+        f.window(SDL_WINDOWEVENT_FOCUS_LOST); f.key(SDL_KEYDOWN,arrow,KMOD_LALT | KMOD_LSHIFT);
+        check(!f.pump() && f.presenter.display_degrees(0) == held, "其他窗口及失焦输入不执行mirror");
+        f.window(SDL_WINDOWEVENT_FOCUS_GAINED); check(!f.pump(), "恢复mirror输入焦点");
+        SDL_SetWindowSize(window,160,160); check(!f.pump(), "用户将镜像窗口调为留边尺寸");
+        f.mouse(SDL_MOUSEBUTTONDOWN,0,80); f.mouse(SDL_MOUSEBUTTONUP,0,80);
+        f.touches.clear(); check(!f.pump() && f.touches.empty(), "H/V后留边仍拒绝触摸，不夹到面板边缘");
+    }
+    {
+        KeyboardFixture f("Presenter pending mirror local UP");
+        if (f.window_id) {
+            auto *window = SDL_GetWindowFromID(f.window_id);
+            check(f.presenter.draw(f.frame) && !f.pump(), "建立特殊模式mirror的合法静止纹理");
+            SDL_SetWindowSize(window,128,192); check(!f.pump(), "设置特殊模式前的实际二倍用户尺度");
+            check(SDL_SetWindowFullscreen(window,SDL_WINDOW_FULLSCREEN_DESKTOP) == 0 && f.presenter.is_fullscreen(),
+                  "mirror恢复判据使用实际全屏flag");
+            if (f.presenter.is_fullscreen()) {
+                const auto generation = f.presenter.input_generation();
+                f.key(SDL_KEYDOWN,SDL_SCANCODE_RIGHT,KMOD_LALT); f.key(SDL_KEYUP,SDL_SCANCODE_RIGHT);
+                check(!f.pump(), "全屏Right建立延后尺寸基准");
+                f.key(SDL_KEYDOWN,SDL_SCANCODE_RIGHT,KMOD_LALT | KMOD_LSHIFT);
+                check(!f.pump() && f.presenter.display_degrees(0) == 270, "全屏H保留最终镜像和Local DOWN");
+                check(SDL_SetWindowFullscreen(window,0) == 0, "mirror恢复前实际退出全屏");
+                f.window(SDL_WINDOWEVENT_RESTORED); f.key(SDL_KEYUP,SDL_SCANCODE_RIGHT);
+                check(!f.pump() && f.presenter.input_generation() == generation+3,
+                      "恢复仅适配最终一次布局并保留mirror Local UP");
+                int w = 0,h = 0; SDL_GetWindowSize(window,&w,&h);
+                check(w == 192 && h == 128, "mirror不重置首个pending基准，恢复正确最终二倍尺寸");
+                corners(f,{0,3,2,1});
+                f.key(SDL_KEYDOWN,SDL_SCANCODE_RIGHT,KMOD_LALT | KMOD_LSHIFT); f.key(SDL_KEYUP,SDL_SCANCODE_RIGHT);
+                check(!f.pump() && f.presenter.display_degrees(0) == 90,
+                      "恢复保留真实UP后同一镜像键新DOWN继续生效");
+            }
+        }
+        KeyboardFixture stale("Presenter stale mirror validity",64,64);
+        if (stale.window_id) {
+            auto *window = SDL_GetWindowFromID(stale.window_id);
+            auto *renderer = SDL_GetRenderer(window);
+            stale.crop = {0,0,64,64,80,80}; stale.frame = colored_frame(80,80,stale.crop,colors,0);
+            check(stale.presenter.update_content(stale.crop,0,stale.on_touch(),stale.on_keyboard()) &&
+                      stale.presenter.draw(stale.frame,stale.crop) && !stale.pump(),
+                  "建立镜像之前同纹理尺寸的有效来源");
+            stale.window(SDL_WINDOWEVENT_MINIMIZED); check(!stale.pump(), "最小化暂停mirror纹理上传");
+            stale.crop = {8,8,64,64,80,80}; stale.crop.pixel_degrees = 180;
+            const Palette changed{kBottomRight,kTopLeft,kBottomLeft,kTopRight};
+            stale.frame = colored_frame(80,80,stale.crop,changed,0);
+            check(stale.presenter.draw(stale.frame,stale.crop), "最小化同size新crop/pixel变化不能沿用旧上传有效性");
+            stale.window(SDL_WINDOWEVENT_RESTORED); stale.window(SDL_WINDOWEVENT_FOCUS_GAINED);
+            SDL_SetWindowSize(window,64,64); check(!stale.pump(), "来源清理后保持方形绘制面检测stale重绘");
+            SDL_SetRenderDrawColor(renderer,233,5,9,255); SDL_RenderClear(renderer); SDL_RenderPresent(renderer);
+            for (const SDL_Scancode key : {SDL_SCANCODE_LEFT,SDL_SCANCODE_DOWN}) {
+                stale.key(SDL_KEYDOWN,key,KMOD_LALT | KMOD_LSHIFT); stale.key(SDL_KEYUP,key);
+                check(!stale.pump() && !stale.presenter.render_failed(), "失效旧纹理无新Frame仍可提交H/V状态");
+                std::vector<Uint32> pixels(64*64); const SDL_Rect full{0,0,64,64};
+                check(SDL_RenderReadPixels(renderer,&full,SDL_PIXELFORMAT_ARGB8888,pixels.data(),64*4) == 0 &&
+                          std::all_of(pixels.begin(),pixels.end(),[](Uint32 pixel){return pixel == 0xffe90509;}),
+                      "镜像不把旧texture按新crop/pixel依据重绘，独立marker保持完整");
+            }
+            check(stale.presenter.draw(stale.frame,stale.crop) && !stale.pump(), "新的合法上传恢复H+V即时重绘能力");
+            corners(stale,{3,1,2,0});
+        }
+        KeyboardFixture blank("Presenter unuploaded mirror validity");
+        if (blank.window_id) {
+            auto *renderer = SDL_GetRenderer(SDL_GetWindowFromID(blank.window_id));
+            SDL_SetRenderDrawColor(renderer,233,5,9,255); SDL_RenderClear(renderer); SDL_RenderPresent(renderer);
+            for (const SDL_Scancode key : {SDL_SCANCODE_LEFT,SDL_SCANCODE_UP}) {
+                blank.key(SDL_KEYDOWN,key,KMOD_LALT | KMOD_LSHIFT); blank.key(SDL_KEYUP,key);
+                check(!blank.pump() && !blank.presenter.render_failed(), "未上传纹理仅保存H/V，不读取未初始化像素");
+            }
+            std::vector<Uint32> pixels(64*96); const SDL_Rect full{0,0,64,96};
+            check(SDL_RenderReadPixels(renderer,&full,SDL_PIXELFORMAT_ARGB8888,pixels.data(),64*4) == 0 &&
+                      std::all_of(pixels.begin(),pixels.end(),[](Uint32 pixel){return pixel == 0xffe90509;}),
+                  "无合法上传时H/V均不覆盖独立绘制面marker");
+            check(blank.presenter.draw(blank.frame) && !blank.pump(), "首个合法Frame沿用H+V用户状态");
+            corners(blank,{2,3,0,1});
+        }
+        KeyboardFixture background("Presenter background H and V disabled",100,80,0,KMOD_LALT,true);
+        if (background.window_id) {
+            const auto generation = background.presenter.input_generation();
+            for (const SDL_Scancode key : {SDL_SCANCODE_LEFT,SDL_SCANCODE_RIGHT,SDL_SCANCODE_UP,SDL_SCANCODE_DOWN}) {
+                background.key(SDL_KEYDOWN,key,KMOD_LALT | KMOD_LSHIFT); background.key(SDL_KEYUP,key);
+                check(!background.pump() && background.presenter.display_degrees(0) == 0 &&
+                          background.presenter.input_generation() == generation,
+                      "无视频背景禁用四个mirror快捷键，不制造视频或几何状态");
+            }
+            background.expect({}, "背景mirror箭头仍归本地，不泄漏设备输入");
+        }
+    }
+    {
+        KeyboardFixture configured("Presenter configured mirror",64,96,0,KMOD_RCTRL);
+        if (configured.window_id) {
+            check(configured.presenter.draw(configured.frame) && !configured.pump(), "建立自定义MOD镜像的真实纹理");
+            configured.key(SDL_KEYDOWN,SDL_SCANCODE_RIGHT,KMOD_RCTRL | KMOD_LSHIFT);
+            configured.key(SDL_KEYUP,SDL_SCANCODE_RIGHT);
+            check(!configured.presenter.pump({}) && configured.presenter.display_degrees(90) == 270,
+                  "自定义右Ctrl镜像生效，无设备回调的文件窗口仍可本机变换");
+            corners(configured,{1,0,3,2});
+        }
+        KeyboardFixture altgr("Presenter AltGr shifted arrows");
+        if (altgr.window_id) {
+            const auto generation = altgr.presenter.input_generation();
+            altgr.key(SDL_KEYDOWN,SDL_SCANCODE_RIGHT,KMOD_RALT | KMOD_LSHIFT);
+            altgr.key(SDL_KEYUP,SDL_SCANCODE_RIGHT);
+            check(!altgr.pump() && altgr.presenter.input_generation() == generation,
+                  "默认右Alt+Shift+箭头保留设备输入，不误当成显示mirror");
+            altgr.expect({{225,230},{79,225,230},{}}, "AltGr和Shift按实际设备修饰键集合完整释放");
+        }
+        KeyboardFixture retained("Presenter mirror queue retention");
+        if (retained.window_id) {
+            std::unique_ptr<SDL_Window,decltype(&SDL_DestroyWindow)> foreign(
+                SDL_CreateWindow("Mirror foreign queue",0,0,32,32,SDL_WINDOW_HIDDEN),SDL_DestroyWindow);
+            check(foreign != nullptr, "镜像队列判据建立实际其他窗口");
+            if (foreign) {
+                const Uint32 other = SDL_GetWindowID(foreign.get());
+                check(retained.presenter.draw(retained.frame) && !retained.pump(), "建立mirror队列保留的真实纹理");
+                retained.key(SDL_KEYDOWN,SDL_SCANCODE_A); check(!retained.pump(), "mirror过滤前已有设备键");
+                retained.reports.clear(); SDL_FlushEvents(SDL_FIRSTEVENT,SDL_LASTEVENT);
+                retained.key(SDL_KEYDOWN,SDL_SCANCODE_DOWN,KMOD_LALT | KMOD_LSHIFT);
+                retained.mouse(SDL_MOUSEBUTTONDOWN,20,30); retained.key(SDL_KEYUP,SDL_SCANCODE_DOWN);
+                retained.key(SDL_KEYDOWN,SDL_SCANCODE_B);
+                retained.key(SDL_KEYDOWN,SDL_SCANCODE_C); retained.key(SDL_KEYUP,SDL_SCANCODE_C);
+                retained.key_for(SDL_KEYDOWN,SDL_SCANCODE_X,KMOD_NONE,0,other);
+                retained.mouse(SDL_MOUSEBUTTONDOWN,4,5,1,0,other);
+                retained.window(SDL_WINDOWEVENT_EXPOSED); retained.window(SDL_WINDOWEVENT_FOCUS_LOST,other);
+                SDL_Event quit{}; quit.type = SDL_QUIT; check(SDL_PushEvent(&quit) == 1, "mirror队列判据保留实际QUIT");
+                bool kept_key = false, kept_window = false, kept_other_key = false;
+                bool kept_other_pointer = false, kept_quit = false, kept_own_pointer = false;
+                const auto keyboard = [&](const KeyboardFixture::Report &report) {
+                    retained.reports.push_back(report);
+                    if (report != KeyboardFixture::Report{5}) return;
+                    std::array<SDL_Event,32> queue{};
+                    const int count = SDL_PeepEvents(queue.data(),int(queue.size()),SDL_PEEKEVENT,SDL_FIRSTEVENT,SDL_LASTEVENT);
+                    for (int i = 0; i < count; ++i) {
+                        const auto &event = queue[static_cast<std::size_t>(i)];
+                        kept_key |= event.type == SDL_KEYDOWN && event.key.windowID == retained.window_id;
+                        kept_window |= event.type == SDL_WINDOWEVENT && event.window.windowID == retained.window_id;
+                        kept_other_key |= event.type == SDL_KEYDOWN && event.key.windowID == other;
+                        kept_other_pointer |= event.type == SDL_MOUSEBUTTONDOWN && event.button.windowID == other;
+                        kept_own_pointer |= event.type == SDL_MOUSEBUTTONDOWN && event.button.windowID == retained.window_id;
+                        kept_quit |= event.type == SDL_QUIT;
+                    }
+                };
+                check(retained.presenter.pump(retained.on_touch(),keyboard) && kept_key && kept_window &&
+                          kept_other_key && kept_other_pointer && kept_quit && !kept_own_pointer,
+                      "镜像只删本窗口旧pointer，真实queue的KEY/WINDOW/QUIT及other输入继续存在");
+                check(retained.touches.empty(), "mirror旧坐标和其他窗口pointer不制造本窗口触摸");
+                retained.expect({{},{5},{5,6},{5},{}}, "mirror保留后续设备键事件，正常QUIT仅释放实际新集合");
+            }
+        }
+    }
 }
 
 void presenter_background_windows() {
@@ -2554,6 +2860,7 @@ int main() {
     presenter_source_queue_changes();
     presenter_window_actions();
     presenter_display_rotation();
+    presenter_display_flips();
     presenter_background_windows();
     presenter_background_input();
 

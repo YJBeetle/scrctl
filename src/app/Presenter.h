@@ -74,7 +74,7 @@ class Presenter {
     [[nodiscard]] bool ready_for_paste() const;
     /// 查询 SDL 的实际全屏状态，不缓存用户的窗口模式选择。
     [[nodiscard]] bool is_fullscreen() const;
-    /// 将来源或显式方向与用户的本机旋转组合；偏移保持到窗口关闭，不改录制方向。
+    /// 将来源或显式方向与用户的本机旋转/镜像组合；保持到窗口关闭，不改录制方向。
     [[nodiscard]] int display_degrees(int base_degrees) const;
     /// pump 即时重绘失败时锁存，调用方应按渲染错误收尾，而非正常窗口退出。
     [[nodiscard]] bool render_failed() const { return render_failed_; }
@@ -112,6 +112,9 @@ class Presenter {
     void discard_queued_pointer();
     void release_layout_input(const std::function<void(double, double, bool)> &on_touch,
                               const KeyboardHandler &on_keyboard);
+    void flip_display(bool vertical,
+                      const std::function<void(double, double, bool)> &on_touch,
+                      const KeyboardHandler &on_keyboard);
     bool update_layout(const Crop &crop, int degrees, bool local,
                        const std::function<void(double, double, bool)> &on_touch,
                        const KeyboardHandler &on_keyboard);
@@ -133,6 +136,8 @@ class Presenter {
     /// 窗口对源像素施加的顺时针角度，以及视口尺寸（90/270 时宽高对调）。
     int degrees_ = 0;
     int rotation_offset_ = 0;
+    /// 本机镜像位于来源方向之后，因此镜像时后续来源角度也需要取反。
+    bool display_flip_offset_ = false;
     bool horizontal_flip_ = false;
     int view_w_ = 0, view_h_ = 0;
     int win_w_ = 0, win_h_ = 0;

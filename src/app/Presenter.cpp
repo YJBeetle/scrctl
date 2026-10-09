@@ -400,6 +400,16 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                 repaint_background = !video_playback_;
                 if (apply_pending_resize(on_touch, on_keyboard)) pending_move = false;
                 if (render_failed_) quit = true;
+            } else if (shortcut && (mods & KMOD_SHIFT) && video_playback_ &&
+                       (e.key.keysym.sym == SDLK_LEFT || e.key.keysym.sym == SDLK_RIGHT ||
+                        e.key.keysym.sym == SDLK_UP || e.key.keysym.sym == SDLK_DOWN)) {
+                const bool vertical = e.key.keysym.sym == SDLK_UP || e.key.keysym.sym == SDLK_DOWN;
+                flip_display(vertical, on_touch, on_keyboard);
+                pending_move = false;
+                if (!draw_uploaded()) {
+                    render_failed_ = true;
+                    quit = true;
+                }
             } else if (shortcut && !(mods & KMOD_SHIFT) &&
                        video_playback_ &&
                        (e.key.keysym.sym == SDLK_LEFT || e.key.keysym.sym == SDLK_RIGHT)) {
@@ -517,7 +527,8 @@ bool Presenter::is_fullscreen() const {
 }
 
 int Presenter::display_degrees(int base_degrees) const {
-    return (base_degrees % 360 + rotation_offset_ + 360) % 360;
+    const int base = base_degrees % 360;
+    return ((display_flip_offset_ ? -base : base) + rotation_offset_ + 360) % 360;
 }
 
 bool Presenter::is_windowed() const {
@@ -571,6 +582,20 @@ void Presenter::release_layout_input(const std::function<void(double, double, bo
     }
     release_pending_ = false;
     discard_queued_pointer();
+}
+
+void Presenter::flip_display(bool vertical,
+                             const std::function<void(double, double, bool)> &on_touch,
+                             const KeyboardHandler &on_keyboard) {
+    // 当前显示轴上的 H/V 作用在已有旋转之后：H*R(d)=R(-d)*H，V=R(180)*H。
+    // 视口尺寸不变；0/180 度也必须清理旧坐标，不能被同布局 early return 吞掉。
+    release_layout_input(on_touch, on_keyboard);
+    const int step = vertical ? 180 : 0;
+    degrees_ = (step - degrees_ + 360) % 360;
+    rotation_offset_ = (step - rotation_offset_ + 360) % 360;
+    display_flip_offset_ = !display_flip_offset_;
+    horizontal_flip_ = !horizontal_flip_;
+    if (resize_pending_) resize_preserve_local_ = true;
 }
 
 bool Presenter::resize_for_content(int old_w, int old_h, int new_w, int new_h) {

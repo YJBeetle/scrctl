@@ -23,6 +23,7 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         "Paste computer clipboard: MOD+V (Unicode supported).\n"
         "Actual window size: MOD+G. Remove image margins: MOD+W or double-click an empty margin.\n"
         "Rotate display left/right: MOD+Left/Right (recordings unchanged).\n"
+        "Mirror display horizontally: MOD+Shift+Left/Right. Mirror vertically: MOD+Shift+Up/Down.\n"
         "Audio is forwarded to the computer by default; --audio-dup keeps phone playback. "
         "Switching routes may pause the phone's player; resume it if needed.\n"
         "The device chooses encoding dimensions, bitrate and frame rate. Display crop and "
