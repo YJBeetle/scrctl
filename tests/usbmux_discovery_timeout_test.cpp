@@ -272,8 +272,28 @@ int main() {
         {
             Server server(silence, false);
             const auto result = enumerate(server);
+            std::printf("closed_endpoint: status=%d error=\"%s\" error_bytes=%zu elapsed_ms=%lld request_received=%d records=%zu\n",
+                        int(result.status), result.error.c_str(), result.error.size(),
+                        static_cast<long long>(result.elapsed.count()), int(server.valid_request.load()), result.records.size());
+            // Windows 的非阻塞 loopback 拒绝可能晚于预算；SO_ERROR 先到为 unavailable，
+            // 绝对 deadline 先到为 timed_out。两者都必须保留各自的错误语义和耗时上限。
+            const bool refused = result.status == UsbmuxDiscoveryStatus::unavailable && !result.error.empty();
+            const bool expired = result.status == UsbmuxDiscoveryStatus::timed_out && result.error.empty() &&
+                                 result.elapsed >= 900ms;
+            check(refused || expired, "closed endpoint reports connection refusal or deadline expiry");
+            check(result.records.empty() && !server.valid_request, "closed endpoint returns no devices or accepted request");
+            check(result.elapsed < 1400ms, "closed endpoint remains within the absolute 1s budget plus scheduling tolerance");
+        }
+        {
+            Server server([](Server &s) { s.peer.close(); });
+            const auto result = enumerate(server);
+            std::printf("peer_eof: status=%d error=\"%s\" error_bytes=%zu elapsed_ms=%lld request_received=%d records=%zu\n",
+                        int(result.status), result.error.c_str(), result.error.size(),
+                        static_cast<long long>(result.elapsed.count()), int(server.valid_request.load()), result.records.size());
+            check(server.valid_request, "EOF peer received an actual ListDevices request before closing");
             check(result.status == UsbmuxDiscoveryStatus::unavailable && !result.error.empty() &&
-                  result.records.empty() && result.elapsed < 1400ms, "connection failure is bounded and reported");
+                  result.records.empty(), "connected peer EOF reports an unavailable source with an error");
+            check(result.elapsed < 1400ms, "connected peer EOF is bounded by the discovery budget");
         }
         {
             Server server([](Server &s) {
