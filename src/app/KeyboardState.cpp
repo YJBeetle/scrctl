@@ -177,4 +177,12 @@ KeyboardState::Reports KeyboardState::release_all() {
     return had_device_keys ? Reports{Report{}} : Reports{};
 }
 
+KeyboardState::Reports KeyboardState::release_device_keys() {
+    const bool had_device_keys = !held().empty();
+    for (auto &owner : owners_)
+        if (owner == Owner::Device) owner = Owner::None;
+    held_.fill(false);
+    return had_device_keys ? Reports{Report{}} : Reports{};
+}
+
 } // namespace scrctl::app

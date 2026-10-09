@@ -278,6 +278,44 @@ void pressed_owner_query() {
     }
 }
 
+void geometry_release_keeps_local_ownership() {
+    for (const auto mod : {std::pair{SDL_SCANCODE_LALT, uint16_t(KMOD_LALT)},
+                           std::pair{SDL_SCANCODE_LGUI, uint16_t(KMOD_LGUI)}}) {
+        KeyboardState state;
+        expect(state.key_down(SDL_SCANCODE_A, KMOD_RSHIFT, false), {{229}, {4, 229}},
+               "hold a device key and inferred modifier before resizing");
+        expect(state.key_down(mod.first, mod.second, false), {}, "hold local MOD");
+        expect(state.key_down(SDL_SCANCODE_G, mod.second, false, true), {}, "own local G");
+        expect(state.key_down(SDL_SCANCODE_W, mod.second, false, true), {}, "own another local key");
+        expect(state.release_device_keys(), {{}}, "resize releases device state once");
+        check(state.held().empty() && !state.is_pressed(SDL_SCANCODE_A) &&
+                  !state.is_pressed(SDL_SCANCODE_RSHIFT), "resize clears device owners and usages");
+        check(state.is_pressed(mod.first) && state.is_pressed(SDL_SCANCODE_G) &&
+                  state.is_pressed(SDL_SCANCODE_W), "resize preserves every held local owner");
+        expect(state.release_device_keys(), {}, "repeated geometry release sends no empty report");
+        expect(state.key_up(SDL_SCANCODE_A, KMOD_RSHIFT), {}, "old device up cannot revive Shift");
+        expect(state.key_up(mod.first, KMOD_NONE), {}, "MOD can release before local keys");
+        expect(state.key_down(SDL_SCANCODE_G, KMOD_NONE, false), {}, "duplicate local G stays local after MOD up");
+        expect(state.key_down(SDL_SCANCODE_W, KMOD_NONE, true), {}, "local repeat stays local");
+        expect(state.key_up(SDL_SCANCODE_W, KMOD_RCTRL), {}, "local W up cannot inject snapshot Control");
+        expect(state.key_up(SDL_SCANCODE_G, KMOD_NONE), {}, "real G up clears local ownership");
+        expect(state.key_down(SDL_SCANCODE_G, KMOD_NONE, false), {{10}}, "fresh G forwards after real up");
+        expect(state.release_all(), {{}}, "normal cleanup still clears all state");
+    }
+
+    KeyboardState local_modifier(0);
+    expect(local_modifier.key_down(SDL_SCANCODE_LSHIFT, KMOD_LSHIFT, false, true), {},
+           "caller can own an otherwise device modifier");
+    expect(local_modifier.release_device_keys(), {}, "local-only release produces no device report");
+    expect(local_modifier.key_down(SDL_SCANCODE_A, KMOD_LSHIFT, false), {{4}},
+           "preserved local modifier stays excluded from a new device key snapshot");
+    expect(local_modifier.key_up(SDL_SCANCODE_LSHIFT, KMOD_NONE), {}, "local modifier up preserves A");
+    expect(local_modifier.release_device_keys(), {{}}, "release A alone");
+    expect(local_modifier.key_down(SDL_SCANCODE_F, KMOD_NONE, false, true), {}, "hold local F");
+    expect(local_modifier.release_all(), {}, "focus cleanup also clears local-only ownership");
+    check(!local_modifier.is_pressed(SDL_SCANCODE_F), "release_all remains distinct from geometry release");
+}
+
 } // namespace
 
 int main() {
@@ -290,6 +328,7 @@ int main() {
     whitelist_and_lock_bits();
     bitmap_has_no_six_key_limit();
     pressed_owner_query();
+    geometry_release_keeps_local_ownership();
     std::printf("keyboard_state: %d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }
