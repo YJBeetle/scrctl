@@ -11,6 +11,7 @@ extern "C" {
 
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 namespace scrctl {
 namespace {
