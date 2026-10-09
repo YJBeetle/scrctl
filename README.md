@@ -17,7 +17,7 @@ MP4 / MKV（HEVC 和 AAC-ELD）及裸 Annex-B HEVC。
 | 平台 | 当前范围 |
 | --- | --- |
 | macOS | 有真机连接、镜像、输入和音频记录；本轮验证结果见重构记录 |
-| Linux | Debian ARM64 的构建、离线回归及 Wi-Fi 无窗口起流 / 软件解码短测已通过；USB、DDI 初始安装、窗口输入和音频仍待真机验证 |
+| Linux | Debian ARM64 的构建、离线回归及 Wi-Fi 软件解码、Wayland 窗口、竖横屏鼠标落点、缩放和音频路由短测已通过；USB 发生端点 STALL，尚未通过；DDI 初始安装、日常键盘与物理断线仍待验证 |
 | Windows | ARM64 构建与离线测试、USB / Wi-Fi 镜像、截图切换及竖横屏鼠标触摸已验证；FFmpeg 真实音乐解码与短时 USB 播放已通过，持续连接与初始配对准备待验证，见 [安装说明](docs/WINDOWS.md) |
 
 音频在 macOS 使用 AudioToolbox，Windows / Linux 使用 FFmpeg 的原生 AAC-ELD
@@ -50,8 +50,10 @@ MP4 / MKV（HEVC 和 AAC-ELD）及裸 Annex-B HEVC。
 停止音频重试。具体回收时刻尚未在所有设备上验证。
 
 默认路由已在 macOS、iPhone14,4 / iOS 27 的 USB 与 Wi-Fi 音乐播放中验证：电脑有声、
-手机无声，结束后手动继续可恢复手机播放。该路由的 Windows、Linux 和旧系统
-行为尚未验收；音频转发已开始不代表播放器在切换期间从未暂停。
+手机无声，结束后手动继续可恢复手机播放。Debian ARM64 的 Wi-Fi / PulseAudio
+短测也确认默认路由、`--no-audio` 和退出后手机声音恢复；`--audio-dup` 已确认电脑
+播放正常。Windows 和旧系统的默认路由尚未验收；音频转发已开始不代表播放器
+在切换期间从未暂停。
 
 启用 FFmpeg 的构建使用 libswresample 平滑补偿音频时钟差异，macOS 的 AudioToolbox
 解码也共用这层补偿。`--audio-buffer` 默认 50 ms，目标保持固定；网络或调度抖动
