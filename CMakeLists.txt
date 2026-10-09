@@ -479,6 +479,11 @@ if(SCRCTL_BUILD_TESTS)
     add_test(NAME discovery COMMAND discovery_test)
     set_tests_properties(discovery PROPERTIES TIMEOUT 15)
 
+    scrctl_add_test_executable(usbmux_discovery_timeout_test tests/usbmux_discovery_timeout_test.cpp)
+    target_link_libraries(usbmux_discovery_timeout_test PRIVATE scrctl_core)
+    add_test(NAME usbmux_discovery_timeout COMMAND usbmux_discovery_timeout_test)
+    set_tests_properties(usbmux_discovery_timeout PROPERTIES TIMEOUT 20)
+
     scrctl_add_test_executable(device_selection_test tests/device_selection_test.cpp)
     target_link_libraries(device_selection_test PRIVATE scrctl_app)
     add_test(NAME device_selection COMMAND device_selection_test)

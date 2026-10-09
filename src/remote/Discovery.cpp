@@ -1,7 +1,7 @@
 #include "remote/Discovery.h"
 
 #include "i18n/Translation.h"
-#include "remote/Device.h"
+#include "transport/Usbmux.h"
 #include "wifi/DiscoveryIdentity.h"
 #include "wifi/Mdns.h"
 #include "wifi/PairRecord.h"
@@ -212,7 +212,8 @@ DiscoveryResult discover_devices(const DiscoveryOptions &options) {
         result.cancelled = true;
         return result;
     }
-    if (options.timeout.count() < 0 || options.timeout > std::chrono::seconds(60)) {
+    if (options.timeout.count() < 0 || options.timeout > std::chrono::seconds(60) ||
+        options.usb_timeout.count() < 0 || options.usb_timeout > std::chrono::seconds(60)) {
         warn(result.warnings, SCRCTL_TR("Device discovery timeout must be between 0 and 60000 ms"));
         return result;
     }
@@ -222,13 +223,23 @@ DiscoveryResult discover_devices(const DiscoveryOptions &options) {
     std::vector<wifi::PairRecord> pair_records;
     if (options.include_usb) {
         std::string error;
+        auto status = transport::UsbmuxDiscoveryStatus::unavailable;
         try {
-            usb_records = Device::list(error);
-            result.usb_available = error.empty();
+            status = transport::Usbmux::list_devices_for_discovery(
+                usb_records, options.usb_timeout, stop_requested, error);
         } catch (const std::exception &) {
-            error = "unavailable";
+            usb_records.clear();
         }
-        if (!error.empty()) warn(result.warnings, SCRCTL_TR("USB device enumeration is unavailable"));
+        // 取消是用户结束本次快照，不作为 USB 来源失败继续扫描。
+        result.usb_available = status == transport::UsbmuxDiscoveryStatus::complete;
+        if (status == transport::UsbmuxDiscoveryStatus::cancelled || stop_requested()) {
+            result.cancelled = true;
+            // 完整 USB 回复若已到达，保留它；取消时仍不读配对文件或启动 mDNS。
+            result.devices = detail::merge_discovery(usb_records, {}, {}).devices;
+            return result;
+        }
+        if (!result.usb_available)
+            warn(result.warnings, SCRCTL_TR("USB device enumeration is unavailable"));
     }
     if (stop_requested()) result.cancelled = true;
     if (options.include_wifi && options.timeout.count() > 0 && !result.cancelled) {

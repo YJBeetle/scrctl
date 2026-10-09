@@ -51,6 +51,8 @@ struct DiscoveryOptions {
     std::string pairing_directory;  ///< 空值使用默认记录目录，不创建目录。
     bool include_usb = true;
     bool include_wifi = true;
+    /// 独立于无线扫描的 usbmux 枚举预算（0..60 秒），涵盖连接及整个请求/回复。
+    std::chrono::milliseconds usb_timeout{1000};
 };
 
 struct DiscoveryResult {
@@ -63,7 +65,7 @@ struct DiscoveryResult {
 
 /// 返回本次枚举的快照，不执行配对、认证、连接设备服务或启动媒体会话。
 /// timeout 是无线扫描时间（0..60 秒）；零值跳过无线扫描及配对文件读取，
-/// USB 枚举仍由 include_usb 控制，并沿用 Device::list 的行为。
+/// USB 枚举仍由 include_usb 控制，使用独立的 usb_timeout 绝对预算。
 /// 预取消时不访问任何来源；扫描中取消保留已收集的结果。
 DiscoveryResult discover_devices(const DiscoveryOptions &options = {});
 
