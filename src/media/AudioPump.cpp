@@ -38,6 +38,10 @@ constexpr int kMaxTargetBacklogMs = 1000;
 /// 400 ms 查询阈值用于缩短这种中断；对照见 docs/coredevice.md §17.2。
 constexpr uint64_t kQuietProbeMs = 400;
 
+/// 两次 PCM 入环之间，空缓冲已播放一秒静音，旧水位和补偿不再描述当前时间线。
+/// 以消费端缺少 PCM 的帧数判断，RTCP 活性不能掩盖播放器的长暂停。
+constexpr uint64_t kClockPauseSeconds = 1;
+
 uint64_t now_ms() {
     using clock = std::chrono::steady_clock;
     return static_cast<uint64_t>(
@@ -277,6 +281,24 @@ void AudioPump::stop() {
 }
 
 void AudioPump::push(const std::vector<int16_t> &pcm) {
+    if (regulator_ != nullptr) {
+        bool paused;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            paused = read_started_ && used_ == 0 &&
+                     clock_silence_pending_ >= static_cast<uint64_t>(options_.sample_rate) *
+                                               kClockPauseSeconds;
+            if (paused) {
+                // 累计欠载由 AudioOut 保留；仅清掉跨暂停的时钟估计修正。
+                clock_silence_pending_ = 0;
+                clock_discard_pending_ = 0;
+            }
+        }
+        if (paused) {
+            // 仍由生产线程操作 swr，并在转换恢复首包前撤销旧补偿。
+            regulator_->reset();
+        }
+    }
     std::vector<int16_t> adjusted;
     std::string clock_error;
     const bool regulated = regulator_ != nullptr && regulator_->process(pcm, adjusted, clock_error);

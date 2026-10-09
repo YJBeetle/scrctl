@@ -522,6 +522,13 @@ if(SCRCTL_BUILD_TESTS)
         target_link_libraries(audio_regulator_test PRIVATE scrctl_core)
         add_test(NAME audio_regulator COMMAND audio_regulator_test)
 
+        # 真实 PCM 缓冲/消费与 libswresample；只替换设备会话、解码和声卡边界。
+        scrctl_add_test_executable(audio_pause_recovery_test tests/audio_pause_recovery_test.cpp
+            src/media/AudioPump.cpp src/app/AudioOut.cpp)
+        target_link_libraries(audio_pause_recovery_test PRIVATE scrctl_core Scrctl::SDL2)
+        add_test(NAME audio_pause_recovery COMMAND audio_pause_recovery_test)
+        set_tests_properties(audio_pause_recovery PROPERTIES TIMEOUT 15)
+
         scrctl_add_test_executable(audio_decoder_test tests/audio_decoder_test.cpp)
         target_link_libraries(audio_decoder_test PRIVATE scrctl_core)
         add_test(NAME audio_decoder COMMAND audio_decoder_test)
