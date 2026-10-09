@@ -21,6 +21,7 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         "Quit: MOD+Q. Fullscreen: MOD+F or F11. MOD defaults to left Alt or left Super; "
         "change it with --shortcut-mod.\n"
         "Paste computer clipboard: MOD+V (Unicode supported).\n"
+        "Home: MOD+H or middle mouse button. Volume: MOD+Up/Down. Lock button: MOD+P.\n"
         "Actual window size: MOD+G. Remove image margins: MOD+W or double-click an empty margin.\n"
         "Rotate display left/right: MOD+Left/Right (recordings unchanged).\n"
         "Mirror display horizontally: MOD+Shift+Left/Right. Mirror vertically: MOD+Shift+Up/Down.\n"

@@ -539,6 +539,33 @@ int main() {
         err.clear();
         check(!source.type_text("", 0, err) && err == first_error,
               "empty text preserves a latched input failure");
+        err.clear();
+        check(!source.button_state(scrctl::hid::button::kUsagePageConsumer,
+                                   scrctl::hid::button::kHome, true, err) && err == first_error,
+              "hardware button DOWN shares the first keyboard failure without opening another service");
+        err = "previous error";
+        check(source.button_state(scrctl::hid::button::kUsagePageConsumer,
+                                  scrctl::hid::button::kHome, false, err) && err.empty(),
+              "unheld button cleanup stays harmless after the shared input failure");
+    }
+
+    {
+        scrctl::app::LiveSource source;
+        std::string err = "previous error";
+        check(source.button_state(scrctl::hid::button::kUsagePageConsumer,
+                                  scrctl::hid::button::kVolumeUp, false, err) && err.empty(),
+              "unheld hardware button UP requires no device session");
+        check(!source.button_state(scrctl::hid::button::kUsagePageConsumer,
+                                   scrctl::hid::button::kVolumeUp, true, err) && !err.empty(),
+              "hardware button DOWN before session start fails safely");
+        const auto first_error = err;
+        err.clear();
+        check(!source.keyboard_state({scrctl::hid::key::kA}, err) && err == first_error,
+              "keyboard input preserves the first hardware button failure");
+        err.clear();
+        check(!source.button(scrctl::hid::button::kUsagePageConsumer,
+                             scrctl::hid::button::kHome, err) && err == first_error,
+              "diagnostic button pulse cannot bypass the shared failure state");
     }
 
     {

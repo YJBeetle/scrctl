@@ -188,6 +188,10 @@ public:
     static std::unique_ptr<Buttons> open(scrctl::remote::Device &device, std::string &err,
                                          bool verbose = false);
 
+    /// 单独发送 DOWN；重复调用仍发送，由调用方安排最终 UP。
+    /// 失败也可能已经部分送达，调用方应使用同一连接尽力释放。
+    bool down(uint16_t usage_page, uint16_t usage_code, std::string &err);
+
     /// 依次发送 DOWN 和 UP，hold_ms > 0 时在两条消息间等待。
     /// state 1=按下、2=抬起、3=取消；本函数仅使用 DOWN/UP。
     /// 返回值表示发送结果，不确认设备动作；中途失败不自动补发 UP。

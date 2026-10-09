@@ -260,16 +260,20 @@ bool Buttons::send(uint64_t state, uint16_t usage_page, uint16_t usage_code, std
     return conn_->send_only(request(kButtonFeature, "IndigoButtonEvent", std::move(payload)), err);
 }
 
+bool Buttons::down(uint16_t usage_page, uint16_t usage_code, std::string &err) {
+    return send(kButtonStateDown, usage_page, usage_code, err);
+}
+
 bool Buttons::press(uint16_t usage_page, uint16_t usage_code, int hold_ms, std::string &err) {
     // 按下和抬起各发送一条消息，不等待设备确认，间隔由调用方传入。
     // 已有设备测试中，小于 30 ms 的间隔偶有不响应；这里不设默认值或下限。
-    if (!send(kButtonStateDown, usage_page, usage_code, err)) {
+    if (!down(usage_page, usage_code, err)) {
         return false;
     }
     if (hold_ms > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(hold_ms));
     }
-    return send(kButtonStateUp, usage_page, usage_code, err);
+    return release(usage_page, usage_code, err);
 }
 
 bool Buttons::release(uint16_t usage_page, uint16_t usage_code, std::string &err) {

@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cstdio>
 #include <thread>
+#include <utility>
 
 namespace scrctl::app {
 
@@ -20,6 +21,7 @@ LiveSource::~LiveSource() {
 }
 
 bool LiveSource::finish_recording(std::string &err) {
+    release_hid();
     audio_out_.close();
     if (audio_ != nullptr) {
         audio_->stop_receiving();
@@ -442,32 +444,68 @@ bool LiveSource::ensure_hid(std::string &err) {
     return true;
 }
 
-void LiveSource::release_hid() {
-    if (hid_ == nullptr) return;
-    std::string cleanup_error;
-    if (touch_down_) {
-        touch_down_ = false;
-        if (!hid_->touch(scrctl::hid::kSurfaceMainTouchscreen, touch_x_, touch_y_, false,
-                         cleanup_error)) {
-            std::fprintf(stderr, SCRCTL_TR("Failed to release device touch: %s\n"),
-                         cleanup_error.c_str());
+bool LiveSource::ensure_buttons(std::string &err) {
+    if (hid_unavailable_) {
+        err = hid_error_;
+        return false;
+    }
+    if (device_ == nullptr) {
+        err = SCRCTL_TR("Device input is unavailable before a session is started");
+        fail_hid(err);
+        return false;
+    }
+    if (buttons_ == nullptr) {
+        buttons_ = scrctl::hid::Buttons::open(*device_, err);
+        if (buttons_ == nullptr) {
+            fail_hid(err);
+            return false;
         }
     }
-    if (keyboard_down_) {
-        keyboard_down_ = false;
+    return true;
+}
+
+void LiveSource::release_hid() {
+    std::string cleanup_error;
+    const bool release_touch = std::exchange(touch_down_, false);
+    const bool release_keyboard = std::exchange(keyboard_down_, false);
+    auto release_buttons = std::move(buttons_down_);
+    buttons_down_.clear();
+    const auto failed_release = [&](const char *message) {
+        std::fprintf(stderr, message, cleanup_error.c_str());
+        if (!hid_unavailable_) {
+            hid_error_ = cleanup_error;
+            hid_unavailable_ = true;
+        }
+    };
+    if (hid_ != nullptr && release_touch) {
+        if (!hid_->touch(scrctl::hid::kSurfaceMainTouchscreen, touch_x_, touch_y_, false,
+                         cleanup_error)) {
+            failed_release(SCRCTL_TR("Failed to release device touch: %s\n"));
+        }
+    }
+    if (hid_ != nullptr && release_keyboard) {
         if (!hid_->send_report(scrctl::hid::kSurfaceKeyboard, scrctl::hid::keyboard_report({}),
                                cleanup_error)) {
-            std::fprintf(stderr, SCRCTL_TR("Failed to release device keys: %s\n"),
-                         cleanup_error.c_str());
+            failed_release(SCRCTL_TR("Failed to release device keys: %s\n"));
+        }
+    }
+    if (buttons_ != nullptr) {
+        for (const auto &[page, code] : release_buttons) {
+            if (!buttons_->release(page, code, cleanup_error)) {
+                failed_release(SCRCTL_TR("Failed to release device button: %s\n"));
+            }
         }
     }
 }
 
 void LiveSource::fail_hid(const std::string &reason) {
-    // 前一报告可能已留下接触或修饰键。使用同一连接尽力松开一次，保留原错；
+    // 前一报告可能已留下接触、修饰键或 Consumer 按钮。使用各自原连接
+    // 尽力松开一次，保留首错；
     // 松开报告仍无法确认设备收到。之后所有输入共享失败状态，不自动重连。
-    hid_error_ = reason;
-    hid_unavailable_ = true;
+    if (!hid_unavailable_) {
+        hid_error_ = reason;
+        hid_unavailable_ = true;
+    }
     release_hid();
 }
 
@@ -533,14 +571,41 @@ bool LiveSource::type_text(const std::string &text, int hold_ms, std::string &er
     return true;
 }
 
-bool LiveSource::button(uint16_t usage_page, uint16_t usage_code, std::string &err) {
-    if (buttons_ == nullptr) {
-        buttons_ = scrctl::hid::Buttons::open(*device_, err);
-        if (buttons_ == nullptr) {
+bool LiveSource::button_state(uint16_t usage_page, uint16_t usage_code, bool down,
+                              std::string &err) {
+    const auto button = std::pair{usage_page, usage_code};
+    auto held = std::find(buttons_down_.begin(), buttons_down_.end(), button);
+    if (!down && held == buttons_down_.end()) {
+        err.clear();
+        return true;
+    }
+    if (down) {
+        if (!ensure_buttons(err)) return false;
+        if (held == buttons_down_.end()) buttons_down_.push_back(button);
+        // 重复音量 DOWN 仍转发；清理只需对该 page/code 发一次 UP。
+        if (pump_ != nullptr) pump_->wake();
+        if (!buttons_->down(usage_page, usage_code, err)) {
+            fail_hid(err);
+            err = hid_error_;
             return false;
         }
+    } else {
+        // 已知按住的 UP 不受新 DOWN 的失败门控影响，保留最后一次释放机会。
+        if (!buttons_->release(usage_page, usage_code, err)) {
+            fail_hid(err);
+            err = hid_error_;
+            return false;
+        }
+        buttons_down_.erase(held);
     }
-    return buttons_->press(usage_page, usage_code, 90, err);
+    err.clear();
+    return true;
+}
+
+bool LiveSource::button(uint16_t usage_page, uint16_t usage_code, std::string &err) {
+    if (!button_state(usage_page, usage_code, true, err)) return false;
+    std::this_thread::sleep_for(std::chrono::milliseconds(90));
+    return button_state(usage_page, usage_code, false, err);
 }
 
 FrameGeometry LiveSource::sample_geometry(bool screenshot) const {

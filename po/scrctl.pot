@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-09 23:31+0800\n"
+"POT-Creation-Date: 2026-10-10 00:19+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -29,7 +29,7 @@ msgstr ""
 msgid "SDL initialization failed: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:87 src/app/Application.cpp:455
+#: src/app/Application.cpp:87 src/app/Application.cpp:472
 #, c-format
 msgid "Received exit signal; closing device session\n"
 msgstr ""
@@ -128,94 +128,94 @@ msgstr ""
 msgid "Input injection failed (further attempts disabled): %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:354
+#: src/app/Application.cpp:371
 msgid "Release the held keys or mouse button before pasting"
 msgstr ""
 
-#: src/app/Application.cpp:358
+#: src/app/Application.cpp:375
 msgid "Clipboard paste is already in progress"
 msgstr ""
 
-#: src/app/Application.cpp:365
+#: src/app/Application.cpp:382
 #, c-format
 msgid "Failed to read computer clipboard: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:371
+#: src/app/Application.cpp:388
 msgid "Clipboard text exceeds the 1 MiB paste limit"
 msgstr ""
 
-#: src/app/Application.cpp:379
+#: src/app/Application.cpp:396
 msgid "Could not start clipboard paste"
 msgstr ""
 
-#: src/app/Application.cpp:389
+#: src/app/Application.cpp:406
 msgid "Clipboard paste timed out"
 msgstr ""
 
-#: src/app/Application.cpp:397
+#: src/app/Application.cpp:414
 #, c-format
 msgid "Clipboard paste failed: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:398
+#: src/app/Application.cpp:415
 msgid "No diagnostic available"
 msgstr ""
 
-#: src/app/Application.cpp:451
+#: src/app/Application.cpp:468
 #, c-format
 msgid "Reached --time-limit %d seconds\n"
 msgstr ""
 
-#: src/app/Application.cpp:466
+#: src/app/Application.cpp:483
 #, c-format
 msgid ""
 "  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
 msgstr ""
 
-#: src/app/Application.cpp:491 src/app/Application.cpp:559
+#: src/app/Application.cpp:508 src/app/Application.cpp:576
 #, c-format
 msgid "Reached --exit-after %d\n"
 msgstr ""
 
-#: src/app/Application.cpp:509
+#: src/app/Application.cpp:526
 #, c-format
 msgid ""
 "Mouse input is unavailable: screenshot orientation or display dimensions are "
 "unknown or inconsistent\n"
 msgstr ""
 
-#: src/app/Application.cpp:535
+#: src/app/Application.cpp:552
 #, c-format
 msgid "Render content changed to %dx%d; rotation %d degrees clockwise\n"
 msgstr ""
 
-#: src/app/Application.cpp:574
+#: src/app/Application.cpp:591
 #, c-format
 msgid "Window readback was not reached (requested frame %d, rendered %d)\n"
 msgstr ""
 
-#: src/app/Application.cpp:580
+#: src/app/Application.cpp:597
 #, c-format
 msgid "Finished: audio recording finalized\n"
 msgstr ""
 
-#: src/app/Application.cpp:582
+#: src/app/Application.cpp:599
 #, c-format
 msgid "Finished: device session closed\n"
 msgstr ""
 
-#: src/app/Application.cpp:585
+#: src/app/Application.cpp:602
 #, c-format
 msgid "Finished: encoded video recording finalized\n"
 msgstr ""
 
-#: src/app/Application.cpp:587
+#: src/app/Application.cpp:604
 #, c-format
 msgid "Finished: processed %d frames\n"
 msgstr ""
 
-#: src/app/AudioOut.cpp:11 src/app/LiveSource.cpp:405
+#: src/app/AudioOut.cpp:11 src/app/LiveSource.cpp:407
 msgid "Audio playback is unavailable because PCM decoding is disabled"
 msgstr ""
 
@@ -245,6 +245,8 @@ msgid ""
 "Quit: MOD+Q. Fullscreen: MOD+F or F11. MOD defaults to left Alt or left "
 "Super; change it with --shortcut-mod.\n"
 "Paste computer clipboard: MOD+V (Unicode supported).\n"
+"Home: MOD+H or middle mouse button. Volume: MOD+Up/Down. Lock button: "
+"MOD+P.\n"
 "Actual window size: MOD+G. Remove image margins: MOD+W or double-click an "
 "empty margin.\n"
 "Rotate display left/right: MOD+Left/Right (recordings unchanged).\n"
@@ -261,7 +263,7 @@ msgid ""
 "device."
 msgstr ""
 
-#: src/app/Cli.cpp:33 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
+#: src/app/Cli.cpp:34 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
 #: tools/audio_decode_probe.cpp:193 tools/audio_pump_probe.cpp:85
 #: tools/feature_probe.cpp:61 tools/hid_probe.cpp:184
 #: tools/screenshot_probe.cpp:52 tools/stall_probe.cpp:59
@@ -269,322 +271,322 @@ msgstr ""
 msgid "Show help"
 msgstr ""
 
-#: src/app/Cli.cpp:34
+#: src/app/Cli.cpp:35
 msgid "Play an Annex-B HEVC file"
 msgstr ""
 
-#: src/app/Cli.cpp:35 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
+#: src/app/Cli.cpp:36 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
 msgid "Device UDID"
 msgstr ""
 
-#: src/app/Cli.cpp:36
+#: src/app/Cli.cpp:37
 msgid "LAN address, or auto to discover a paired wireless device"
 msgstr ""
 
-#: src/app/Cli.cpp:38
+#: src/app/Cli.cpp:39
 msgid "RemotePairing port for a manual LAN address; default: 49152"
 msgstr ""
 
-#: src/app/Cli.cpp:41
+#: src/app/Cli.cpp:42
 msgid "Create or verify a remote pairing record over USB, then exit"
 msgstr ""
 
-#: src/app/Cli.cpp:44
+#: src/app/Cli.cpp:45
 msgid ""
 "Allow replacing an incomplete or rejected pairing record; requires --pair"
 msgstr ""
 
-#: src/app/Cli.cpp:47
+#: src/app/Cli.cpp:48
 msgid ""
 "Record selected video/audio tracks to .mp4 or .mkv; other extensions save "
 "raw HEVC without audio"
 msgstr ""
 
-#: src/app/Cli.cpp:49
+#: src/app/Cli.cpp:50
 msgid ""
 "Launch bundle ID; ? matches name prefix, + terminates the previous instance"
 msgstr ""
 
-#: src/app/Cli.cpp:50
+#: src/app/Cli.cpp:51
 msgid "Window title"
 msgstr ""
 
-#: src/app/Cli.cpp:51
+#: src/app/Cli.cpp:52
 msgid "SDL render driver, e.g. metal / software"
 msgstr ""
 
-#: src/app/Cli.cpp:53
+#: src/app/Cli.cpp:54
 msgid ""
 "display for live video (default), screenshot for polling; stream is an alias "
 "for display"
 msgstr ""
 
-#: src/app/Cli.cpp:55
+#: src/app/Cli.cpp:56
 msgid "Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"
 msgstr ""
 
-#: src/app/Cli.cpp:62
+#: src/app/Cli.cpp:63
 msgid "Inject home/lock/volup/voldn/mute"
 msgstr ""
 
-#: src/app/Cli.cpp:64
+#: src/app/Cli.cpp:65
 msgid "Inject ASCII text (device text field must have focus)"
 msgstr ""
 
-#: src/app/Cli.cpp:65
+#: src/app/Cli.cpp:66
 msgid "Force alternating video fallback and recovery at T1,T2,... seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:66
+#: src/app/Cli.cpp:67
 msgid "Write device clipboard and exit (supports Unicode)"
 msgstr ""
 
-#: src/app/Cli.cpp:68
+#: src/app/Cli.cpp:69
 msgid "List USB and RemotePairing devices; wireless scan defaults to 3 seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:70
+#: src/app/Cli.cpp:71
 msgid ""
 "Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"
 msgstr ""
 
-#: src/app/Cli.cpp:72
+#: src/app/Cli.cpp:73
 msgid "Disable input control"
 msgstr ""
 
-#: src/app/Cli.cpp:75
+#: src/app/Cli.cpp:76
 msgid "List device apps"
 msgstr ""
 
-#: src/app/Cli.cpp:76
+#: src/app/Cli.cpp:77
 msgid "Show version"
 msgstr ""
 
-#: src/app/Cli.cpp:77
+#: src/app/Cli.cpp:78
 msgid "Desktop fullscreen"
 msgstr ""
 
-#: src/app/Cli.cpp:78
+#: src/app/Cli.cpp:79
 msgid "Keep window on top"
 msgstr ""
 
-#: src/app/Cli.cpp:79
+#: src/app/Cli.cpp:80
 msgid "Borderless window"
 msgstr ""
 
-#: src/app/Cli.cpp:80
+#: src/app/Cli.cpp:81
 msgid "Prevent local screen sleep while running"
 msgstr ""
 
-#: src/app/Cli.cpp:81
+#: src/app/Cli.cpp:82
 msgid "Do not start audio stream"
 msgstr ""
 
-#: src/app/Cli.cpp:83
+#: src/app/Cli.cpp:84
 msgid "Keep audio playing on the phone while forwarding it to the computer"
 msgstr ""
 
-#: src/app/Cli.cpp:86
+#: src/app/Cli.cpp:87
 msgid ""
 "Disable computer audio playback; capture audio only when recording to MP4 or "
 "MKV"
 msgstr ""
 
-#: src/app/Cli.cpp:87
+#: src/app/Cli.cpp:88
 msgid "Do not start video stream"
 msgstr ""
 
-#: src/app/Cli.cpp:89
+#: src/app/Cli.cpp:90
 msgid "Disable video display; keep encoded video when recording"
 msgstr ""
 
-#: src/app/Cli.cpp:92
+#: src/app/Cli.cpp:93
 msgid ""
 "Disable computer video and audio playback; keep selected recording tracks"
 msgstr ""
 
-#: src/app/Cli.cpp:93
+#: src/app/Cli.cpp:94
 msgid "Run without a window"
 msgstr ""
 
-#: src/app/Cli.cpp:94
+#: src/app/Cli.cpp:95
 msgid "Use platform hardware decoder; default: software"
 msgstr ""
 
-#: src/app/Cli.cpp:95
+#: src/app/Cli.cpp:96
 msgid "Print input coordinates"
 msgstr ""
 
-#: src/app/Cli.cpp:96
+#: src/app/Cli.cpp:97
 msgid "Add tunnel diagnostics to --stats"
 msgstr ""
 
-#: src/app/Cli.cpp:97
+#: src/app/Cli.cpp:98
 msgid "Print statistics every second"
 msgstr ""
 
-#: src/app/Cli.cpp:98
+#: src/app/Cli.cpp:99
 msgid "Read device clipboard; with --copy, read back after writing"
 msgstr ""
 
-#: src/app/Cli.cpp:101
+#: src/app/Cli.cpp:102
 msgid "Window horizontal position; integer or auto (default)"
 msgstr ""
 
-#: src/app/Cli.cpp:103
+#: src/app/Cli.cpp:104
 msgid "Window vertical position; integer or auto (default)"
 msgstr ""
 
-#: src/app/Cli.cpp:105
+#: src/app/Cli.cpp:106
 msgid ""
 "Shortcut modifiers, separated by commas: lctrl, rctrl, lalt, ralt, lsuper, "
 "rsuper; default: lalt,lsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:106
+#: src/app/Cli.cpp:107
 msgid "Window width; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:107
+#: src/app/Cli.cpp:108
 msgid "Window height; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:108
+#: src/app/Cli.cpp:109
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:110
+#: src/app/Cli.cpp:111
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr ""
 
-#: src/app/Cli.cpp:112
+#: src/app/Cli.cpp:113
 msgid "Exit after N frames; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:114
+#: src/app/Cli.cpp:115
 msgid "Finite positive scale; default: fit screen"
 msgstr ""
 
-#: src/app/Cli.cpp:132
+#: src/app/Cli.cpp:133
 msgid ""
 "Display and recording orientation: 0/90/180/270 or flip0/flip90/flip180/"
 "flip270; recording cannot flip; auto changes display only"
 msgstr ""
 
-#: src/app/Cli.cpp:136
+#: src/app/Cli.cpp:137
 msgid ""
 "Display orientation: auto, 0/90/180/270 or flip0/flip90/flip180/flip270; "
 "flip horizontally before clockwise rotation"
 msgstr ""
 
-#: src/app/Cli.cpp:140
+#: src/app/Cli.cpp:141
 msgid ""
 "Clockwise MP4/MKV recording rotation: 0/90/180/270; default: 0; display is "
 "unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:143
+#: src/app/Cli.cpp:144
 msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:145
+#: src/app/Cli.cpp:146
 msgid "Background color: RGB or RRGGBB, with optional #"
 msgstr ""
 
-#: src/app/Cli.cpp:146
+#: src/app/Cli.cpp:147
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr ""
 
-#: src/app/Cli.cpp:160
+#: src/app/Cli.cpp:161
 msgid ""
 "Audio capture is disabled; --audio-dup requires playback or MP4/MKV recording"
 msgstr ""
 
-#: src/app/Cli.cpp:166
+#: src/app/Cli.cpp:167
 msgid ""
 "File playback requires video; incompatible with video playback disable "
 "options"
 msgstr ""
 
-#: src/app/Cli.cpp:174
+#: src/app/Cli.cpp:175
 msgid "Audio-only recording requires MP4 or MKV; raw HEVC cannot contain audio"
 msgstr ""
 
-#: src/app/Cli.cpp:177
+#: src/app/Cli.cpp:178
 msgid "Recording requires at least one enabled audio or video track"
 msgstr ""
 
-#: src/app/Cli.cpp:180 src/app/LiveSource.cpp:91
+#: src/app/Cli.cpp:181 src/app/LiveSource.cpp:93
 msgid "Recording orientation requires a video track"
 msgstr ""
 
-#: src/app/Cli.cpp:185
+#: src/app/Cli.cpp:186
 msgid ""
 "Frame counting, hardware decoding, fallback tests and screenshots require "
 "video capture"
 msgstr ""
 
-#: src/app/Cli.cpp:189 src/app/LiveSource.cpp:113
+#: src/app/Cli.cpp:190 src/app/LiveSource.cpp:115
 msgid ""
 "Container recording requires live video; screenshot polling cannot be "
 "recorded"
 msgstr ""
 
-#: src/app/Cli.cpp:193
+#: src/app/Cli.cpp:194
 msgid ""
 "Recording does not support flipping; use --display-orientation for display-"
 "only flipping or reset --record-orientation to a rotation"
 msgstr ""
 
-#: src/app/Cli.cpp:197 src/app/LiveSource.cpp:123
+#: src/app/Cli.cpp:198 src/app/LiveSource.cpp:125
 msgid ""
 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate "
 "only the display"
 msgstr ""
 
-#: src/app/Cli.cpp:200
+#: src/app/Cli.cpp:201
 msgid "Use a manual LAN address; auto uses discovered SRV ports"
 msgstr ""
 
-#: src/app/Cli.cpp:211
+#: src/app/Cli.cpp:212
 msgid "Expected an integer or auto"
 msgstr ""
 
-#: src/app/Cli.cpp:231
+#: src/app/Cli.cpp:232
 msgid ""
 "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:242
+#: src/app/Cli.cpp:243
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr ""
 
-#: src/app/Cli.cpp:249
+#: src/app/Cli.cpp:250
 msgid "Requires a finite positive number"
 msgstr ""
 
-#: src/app/Cli.cpp:264
+#: src/app/Cli.cpp:265
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr ""
 
-#: src/app/Cli.cpp:273
+#: src/app/Cli.cpp:274
 msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
 msgstr ""
 
-#: src/app/Cli.cpp:287
+#: src/app/Cli.cpp:288
 msgid "Frame number must be a positive integer"
 msgstr ""
 
-#: src/app/Cli.cpp:292
+#: src/app/Cli.cpp:293
 msgid "Requires a window; incompatible with --no-window"
 msgstr ""
 
-#: src/app/Cli.cpp:295
+#: src/app/Cli.cpp:296
 msgid "Window readback requires video playback"
 msgstr ""
 
-#: src/app/Cli.cpp:303
+#: src/app/Cli.cpp:304
 msgid "Nothing to do: enable media, recording or device control"
 msgstr ""
 
@@ -801,256 +803,261 @@ msgstr ""
 msgid "Source ended"
 msgstr ""
 
-#: src/app/LiveSource.cpp:40 src/app/LiveSource.cpp:626
+#: src/app/LiveSource.cpp:42 src/app/LiveSource.cpp:691
 #: src/media/FramePump.cpp:193
 #, c-format
 msgid "Recording failed: %s. The file may be incomplete.\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:71
+#: src/app/LiveSource.cpp:73
 msgid "Device startup cancelled"
 msgstr ""
 
-#: src/app/LiveSource.cpp:83
+#: src/app/LiveSource.cpp:85
 msgid "Audio-only recording requires MP4 or MKV"
 msgstr ""
 
-#: src/app/LiveSource.cpp:87
+#: src/app/LiveSource.cpp:89
 msgid "Audio-only recording requires audio capture"
 msgstr ""
 
-#: src/app/LiveSource.cpp:96 src/media/FramePump.cpp:111
+#: src/app/LiveSource.cpp:98 src/media/FramePump.cpp:111
 msgid "Video capture without decoding requires a recording consumer"
 msgstr ""
 
-#: src/app/LiveSource.cpp:100
+#: src/app/LiveSource.cpp:102
 msgid "Video capture without decoding requires a live video stream"
 msgstr ""
 
-#: src/app/LiveSource.cpp:104
+#: src/app/LiveSource.cpp:106
 msgid "Hardware decoding and fallback tests require video decoding"
 msgstr ""
 
-#: src/app/LiveSource.cpp:109 src/media/AudioPump.cpp:100
+#: src/app/LiveSource.cpp:111 src/media/AudioPump.cpp:100
 msgid ""
 "Audio capture without PCM decoding requires a container recording with an "
 "audio track"
 msgstr ""
 
-#: src/app/LiveSource.cpp:117
+#: src/app/LiveSource.cpp:119
 msgid "Container recording is unavailable in this build (libavformat required)"
 msgstr ""
 
-#: src/app/LiveSource.cpp:129
+#: src/app/LiveSource.cpp:131
 msgid "Invalid --test-degrade: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:189
+#: src/app/LiveSource.cpp:191
 #, c-format
 msgid "Failed to query display dimensions: %s (using model crop table)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:190
+#: src/app/LiveSource.cpp:192
 msgid "Update contains no usable dimensions"
 msgstr ""
 
-#: src/app/LiveSource.cpp:203
+#: src/app/LiveSource.cpp:205
 #, c-format
 msgid ""
 "Failed to subscribe to display changes: %s (automatic rotation unavailable)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:237 src/app/LiveSource.cpp:589
+#: src/app/LiveSource.cpp:239 src/app/LiveSource.cpp:654
 msgid "Live video unavailable; recording stopped"
 msgstr ""
 
-#: src/app/LiveSource.cpp:242
+#: src/app/LiveSource.cpp:244
 #, c-format
 msgid "Media stream unavailable: %s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:245
+#: src/app/LiveSource.cpp:247
 #, c-format
 msgid ""
 "Using screenshot polling; refresh rate depends on capture time. Input "
 "control remains available\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:249
+#: src/app/LiveSource.cpp:251
 msgid "Failed to start screenshot polling: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:264
+#: src/app/LiveSource.cpp:266
 msgid "No first screenshot within 5 seconds"
 msgstr ""
 
-#: src/app/LiveSource.cpp:272
+#: src/app/LiveSource.cpp:274
 msgid "No first decoded frame within 5 seconds"
 msgstr ""
 
-#: src/app/LiveSource.cpp:277
+#: src/app/LiveSource.cpp:279
 msgid "No valid recording IDR within 5 seconds"
 msgstr ""
 
-#: src/app/LiveSource.cpp:289
+#: src/app/LiveSource.cpp:291
 msgid "Video became unavailable before recording startup completed"
 msgstr ""
 
-#: src/app/LiveSource.cpp:299
+#: src/app/LiveSource.cpp:301
 #, c-format
 msgid "Screenshot mirroring started: %s / iOS %s, %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:303
+#: src/app/LiveSource.cpp:305
 #, c-format
 msgid ""
 "Video stream started: %s / iOS %s, receive port=%u PT=%u, first frame %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:308
+#: src/app/LiveSource.cpp:310
 #, c-format
 msgid ""
 "Encoded video capture started: %s / iOS %s, receive port=%u PT=%u, checked "
 "dimensions %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:317
+#: src/app/LiveSource.cpp:319
 #, c-format
 msgid ""
 "Display geometry: visible area %dx%d (displayId=%llu %s), UI rotation %d "
 "degrees clockwise, stream %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:324
+#: src/app/LiveSource.cpp:326
 #, c-format
 msgid "Screenshot mode cannot record Annex-B; ignoring --record\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:326 src/app/LiveSource.cpp:381
+#: src/app/LiveSource.cpp:328 src/app/LiveSource.cpp:383
 #, c-format
 msgid "Recording to %s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:334
+#: src/app/LiveSource.cpp:336
 #, c-format
 msgid "Screenshot mode does not start audio\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:350
+#: src/app/LiveSource.cpp:352
 #, c-format
 msgid ""
 "Forwarding audio to the computer. Switching routes may pause the phone's "
 "player; resume playback on the phone if needed.\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:370
+#: src/app/LiveSource.cpp:372
 #, c-format
 msgid "Failed to start audio: %s (video continues)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:375
+#: src/app/LiveSource.cpp:377
 #, c-format
 msgid "Audio stream started: receive port=%u PT=%u backend=%s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:378
+#: src/app/LiveSource.cpp:380
 msgid "Audio routing: phone and computer (--audio-dup)"
 msgstr ""
 
-#: src/app/LiveSource.cpp:379
+#: src/app/LiveSource.cpp:381
 msgid "Audio routing: computer; phone playback is suppressed"
-msgstr ""
-
-#: src/app/LiveSource.cpp:389
-#, c-format
-msgid "--test-degrade: from now,"
 msgstr ""
 
 #: src/app/LiveSource.cpp:391
 #, c-format
+msgid "--test-degrade: from now,"
+msgstr ""
+
+#: src/app/LiveSource.cpp:393
+#, c-format
 msgid " at %.1f seconds: %s"
 msgstr ""
 
-#: src/app/LiveSource.cpp:392
+#: src/app/LiveSource.cpp:394
 msgid "force fallback"
 msgstr ""
 
-#: src/app/LiveSource.cpp:392
+#: src/app/LiveSource.cpp:394
 msgid "release override"
 msgstr ""
 
-#: src/app/LiveSource.cpp:394
+#: src/app/LiveSource.cpp:396
 #, c-format
 msgid " (test mode)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:401
+#: src/app/LiveSource.cpp:403
 msgid ""
 "No playable audio stream (disabled, failed to start, or unsupported build)"
 msgstr ""
 
-#: src/app/LiveSource.cpp:419
+#: src/app/LiveSource.cpp:421
 msgid "Audio capture stopped before recording finished"
 msgstr ""
 
-#: src/app/LiveSource.cpp:430
+#: src/app/LiveSource.cpp:432 src/app/LiveSource.cpp:453
 msgid "Device input is unavailable before a session is started"
 msgstr ""
 
-#: src/app/LiveSource.cpp:440
+#: src/app/LiveSource.cpp:442
 #, c-format
 msgid "Device input connection established\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:452
+#: src/app/LiveSource.cpp:483
 #, c-format
 msgid "Failed to release device touch: %s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:460
+#: src/app/LiveSource.cpp:489
 #, c-format
 msgid "Failed to release device keys: %s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:593
+#: src/app/LiveSource.cpp:495
+#, c-format
+msgid "Failed to release device button: %s\n"
+msgstr ""
+
+#: src/app/LiveSource.cpp:658
 #, c-format
 msgid ""
 "Live video unavailable; using screenshot polling while retrying video in the "
 "background\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:596
+#: src/app/LiveSource.cpp:661
 #, c-format
 msgid "Failed to switch to screenshots: %s (retry in %llu seconds)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:602
+#: src/app/LiveSource.cpp:667
 #, c-format
 msgid "Live video recovered; switched back to video stream\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:623 src/media/FramePump.cpp:192
+#: src/app/LiveSource.cpp:688 src/media/FramePump.cpp:192
 #, c-format
 msgid "Recording failed: %s. Mirroring continues; the file is incomplete.\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:667
+#: src/app/LiveSource.cpp:732
 msgid "Encoded video capture stopped: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:670
+#: src/app/LiveSource.cpp:735
 msgid "Audio recording stopped: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:674
+#: src/app/LiveSource.cpp:739
 msgid "Audio stopped: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:678
+#: src/app/LiveSource.cpp:743
 msgid "); closing session"
 msgstr ""
 
-#: src/app/LiveSource.cpp:678
+#: src/app/LiveSource.cpp:743
 msgid "Device connection lost ("
 msgstr ""
 
@@ -1164,144 +1171,144 @@ msgstr ""
 msgid "inactive"
 msgstr ""
 
-#: src/app/Presenter.cpp:38
+#: src/app/Presenter.cpp:39
 #, c-format
 msgid ""
 "Window dimensions are too large; reduce --scale or the requested window "
 "size\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:42
+#: src/app/Presenter.cpp:43
 #, c-format
 msgid "Screen %dx%d points; window scaled to %dx%d (override with --scale)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:55
+#: src/app/Presenter.cpp:56
 #, c-format
 msgid ""
 "Window %dx%d points / drawable %dx%d pixels / viewport %dx%d (source %dx%d, "
 "crop %dx%d+%d+%d, clockwise rotation %d degrees)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:60
+#: src/app/Presenter.cpp:61
 #, c-format
 msgid "Display is horizontally flipped before rotation\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:75
+#: src/app/Presenter.cpp:76
 #, c-format
 msgid "Background window %dx%d points / drawable %dx%d pixels\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:96
+#: src/app/Presenter.cpp:97
 #, c-format
 msgid "Failed to create window: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:110
+#: src/app/Presenter.cpp:111
 #, c-format
 msgid "Failed to create renderer: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:115
+#: src/app/Presenter.cpp:116
 #, c-format
 msgid "Render driver: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:120 src/app/Presenter.cpp:131
-#: src/app/Presenter.cpp:230 src/app/Presenter.cpp:277
+#: src/app/Presenter.cpp:121 src/app/Presenter.cpp:132
+#: src/app/Presenter.cpp:231 src/app/Presenter.cpp:278
 #, c-format
 msgid "Failed to configure viewport: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:137
+#: src/app/Presenter.cpp:138
 #, c-format
 msgid "Failed to render background: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:155
+#: src/app/Presenter.cpp:156
 #, c-format
 msgid "Failed to create texture: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:175 src/app/Presenter.cpp:183
+#: src/app/Presenter.cpp:176 src/app/Presenter.cpp:184
 #, c-format
 msgid "Cannot render frame: invalid dimensions or pixel buffer\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:209 src/app/Presenter.cpp:235
-#: src/app/Presenter.cpp:262
+#: src/app/Presenter.cpp:210 src/app/Presenter.cpp:236
+#: src/app/Presenter.cpp:263
 #, c-format
 msgid "Failed to query drawable dimensions: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:214
+#: src/app/Presenter.cpp:215
 #, c-format
 msgid "Failed to upload texture: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:241 src/app/Presenter.cpp:246
+#: src/app/Presenter.cpp:242 src/app/Presenter.cpp:247
 #, c-format
 msgid "Failed to render frame: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:267
+#: src/app/Presenter.cpp:268
 #, c-format
 msgid "Failed to create readback buffer: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:271
+#: src/app/Presenter.cpp:272
 #, c-format
 msgid "Failed to lock readback buffer: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:289
+#: src/app/Presenter.cpp:290
 #, c-format
 msgid "Readback failed: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:296
+#: src/app/Presenter.cpp:297
 #, c-format
 msgid "Failed to save image: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:299
+#: src/app/Presenter.cpp:300
 #, c-format
 msgid "Window readback saved to %s (%dx%d pixels)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:309
+#: src/app/Presenter.cpp:310
 #, c-format
 msgid ""
 "[input] %s raw(%d,%d) viewport %d x%d (rotation %d degrees, horizontal flip: "
 "%s) / window %d x%d / drawable %d x%d -> (%.3f, %.3f)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:312 tools/feature_probe.cpp:26
+#: src/app/Presenter.cpp:313 tools/feature_probe.cpp:26
 #: tools/feature_probe.cpp:27 tools/rr_keepalive_probe.cpp:249
 #: tools/rr_keepalive_probe.cpp:307
 msgid "no"
 msgstr ""
 
-#: src/app/Presenter.cpp:312 tools/feature_probe.cpp:26
+#: src/app/Presenter.cpp:313 tools/feature_probe.cpp:26
 #: tools/feature_probe.cpp:27 tools/rr_keepalive_probe.cpp:249
 #: tools/rr_keepalive_probe.cpp:307
 msgid "yes"
 msgstr ""
 
-#: src/app/Presenter.cpp:467
+#: src/app/Presenter.cpp:520
 msgid "down"
 msgstr ""
 
-#: src/app/Presenter.cpp:481
+#: src/app/Presenter.cpp:534
 msgid "move"
 msgstr ""
 
-#: src/app/Presenter.cpp:611
+#: src/app/Presenter.cpp:685
 msgid "Cannot resize window for new content; keeping previous dimensions"
 msgstr ""
 
-#: src/app/Presenter.cpp:690
+#: src/app/Presenter.cpp:767
 #, c-format
 msgid "Failed to change fullscreen mode: %s\n"
 msgstr ""

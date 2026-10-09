@@ -1084,6 +1084,364 @@ struct KeyboardFixture {
     }
 };
 
+struct ButtonFixture : KeyboardFixture {
+    struct Button {
+        uint16_t page, usage;
+        bool down;
+        bool operator==(const Button &) const = default;
+    };
+    using KeyboardFixture::KeyboardFixture;
+    std::vector<Button> buttons;
+    uint16_t fail_down = 0, fail_up = 0;
+
+    auto on_button() {
+        return [this](uint16_t page, uint16_t usage, bool down) {
+            buttons.push_back({page, usage, down});
+            return usage != (down ? fail_down : fail_up);
+        };
+    }
+    bool pump() { return presenter.pump(on_touch(), on_keyboard(), {}, on_button()); }
+    void release() { presenter.release_input(on_touch(), on_keyboard(), on_button()); }
+    void middle(Uint32 type, Uint32 id = 0) {
+        SDL_Event event{};
+        event.type = type;
+        event.button.windowID = id ? id : window_id;
+        event.button.button = SDL_BUTTON_MIDDLE;
+        event.button.state = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
+        event.button.x = 500; event.button.y = 600; // 中键 HOME 不依赖视频坐标或留边。
+        check(SDL_PushEvent(&event) == 1, "将中键按钮事件送入实际 SDL 队列");
+    }
+    void expect_buttons(const std::vector<Button> &expected, const char *message) {
+        check(buttons == expected, message);
+        if (buttons != expected) {
+            for (const auto &button : buttons)
+                std::printf("     Consumer %u:%u %s\n", button.page, button.usage,
+                            button.down ? "DOWN" : "UP");
+        }
+        buttons.clear();
+    }
+};
+
+void presenter_device_buttons() {
+    std::printf("== 主窗口 Consumer 按钮真实 DOWN/UP ==\n");
+    constexpr uint16_t page = 0x0C, home = 0x40, lock = 0x30, volup = 0xE9, voldown = 0xEA;
+    struct Binding { SDL_Scancode key; uint16_t usage; };
+    constexpr Binding bindings[] = {{SDL_SCANCODE_H, home}, {SDL_SCANCODE_P, lock},
+                                    {SDL_SCANCODE_UP, volup}, {SDL_SCANCODE_DOWN, voldown}};
+    for (const Uint16 mod : {Uint16{KMOD_LALT}, Uint16{KMOD_LGUI}, Uint16{KMOD_RCTRL}}) {
+        ButtonFixture f("Presenter Consumer key mapping", 64, 96, 0,
+                        mod == KMOD_RCTRL ? KMOD_RCTRL : Uint16{KMOD_LALT | KMOD_LGUI});
+        if (!f.window_id) continue;
+        for (const auto &binding : bindings) {
+            f.key(SDL_KEYDOWN, binding.key, mod);
+            check(!f.pump() && !f.presenter.ready_for_paste(),
+                  "首次 MOD 按钮 DOWN 保持按住并阻止粘贴，不在同一事件伪造 UP");
+            f.expect_buttons({{page, binding.usage, true}}, "四种映射及默认/自定义 MOD 交付 Consumer DOWN");
+            f.expect({}, "Consumer 快捷键由 KeyboardState Local 消费，不产生设备 keyboard 报告");
+            f.key(SDL_KEYDOWN, binding.key, mod, 1);
+            f.key(SDL_KEYDOWN, binding.key, mod, 1);
+            f.key(SDL_KEYDOWN, binding.key, KMOD_NONE); // 未标 repeat 的重复 DOWN 也不能偷归属。
+            check(!f.pump(), "重复事件不退出窗口");
+            const bool volume = binding.usage == volup || binding.usage == voldown;
+            f.expect_buttons(volume ? std::vector<ButtonFixture::Button>{{page, binding.usage, true},
+                                                                         {page, binding.usage, true}}
+                                    : std::vector<ButtonFixture::Button>{},
+                             "只有已交付音量键转发 repeat DOWN，HOME/P 与重复非repeat DOWN 不重按");
+            f.key(SDL_KEYDOWN, binding.key, KMOD_NONE, 1);
+            f.key(SDL_KEYDOWN, binding.key, Uint16(mod | KMOD_LSHIFT), 1);
+            f.key(SDL_KEYUP, mod == KMOD_RCTRL ? SDL_SCANCODE_RCTRL :
+                                mod == KMOD_LGUI ? SDL_SCANCODE_LGUI : SDL_SCANCODE_LALT);
+            f.key(SDL_KEYUP, binding.key, KMOD_RSHIFT);
+            check(!f.pump() && f.presenter.ready_for_paste(), "MOD 先松、Shift 变化后实际 UP 仍结束按钮");
+            f.expect_buttons({{page, binding.usage, false}}, "抬起依据原 DOWN 映射，只交付一次对应 UP");
+            f.expect({}, "Consumer 的陈旧 UP 修饰快照不引入 Shift 或普通主键");
+            f.release(); f.expect_buttons({}, "正常 UP 之后显式完整清理不重复释放 Consumer");
+        }
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_H); f.key(SDL_KEYUP, SDL_SCANCODE_H);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_P); f.key(SDL_KEYUP, SDL_SCANCODE_P);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_UP); f.key(SDL_KEYUP, SDL_SCANCODE_UP);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_DOWN); f.key(SDL_KEYUP, SDL_SCANCODE_DOWN);
+        check(!f.pump(), "普通 H/P/方向键保留原使用路径");
+        f.expect({{11}, {}, {19}, {}, {82}, {}, {81}, {}}, "非快捷键仍交付完整物理 keyboard DOWN/UP");
+        f.expect_buttons({}, "普通键不调用 Consumer handler");
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_UP);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_UP, mod, 1);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_UP, mod);
+        f.key(SDL_KEYUP, SDL_SCANCODE_UP);
+        f.pump(); f.expect({{82}, {}}, "后按 MOD 或 duplicate/repeat 不能抢原 Device 箭头归属");
+        f.expect_buttons({}, "原 Device owner 不因后来 MOD 产生音量动作");
+        for (const auto key : {SDL_SCANCODE_R, SDL_SCANCODE_O, SDL_SCANCODE_B,
+                               SDL_SCANCODE_S, SDL_SCANCODE_M, SDL_SCANCODE_N}) {
+            f.key(SDL_KEYDOWN, key, mod); f.key(SDL_KEYUP, key);
+        }
+        f.pump(); f.expect_buttons({}, "未实现的 Android 专用快捷键和设备转屏不伪映射");
+        f.expect({}, "未分配 MOD 组合仍按现有 Local 规则消费");
+    }
+
+    {
+        ButtonFixture f("Presenter Consumer HOME shared sources", 160, 112, 0, KMOD_RCTRL, true);
+        if (f.window_id) {
+            f.middle(SDL_MOUSEBUTTONDOWN); f.middle(SDL_MOUSEBUTTONDOWN);
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_H, KMOD_RCTRL);
+            f.pump(); f.expect_buttons({{page, home, true}}, "背景窗口中键和键盘共持 HOME 只交付首 DOWN");
+            check(!f.presenter.ready_for_paste() && f.touches.empty(), "中键 HOME 不制造触点并阻止粘贴");
+            f.key(SDL_KEYUP, SDL_SCANCODE_H); f.pump();
+            f.expect_buttons({}, "键盘先松但中键仍持有 HOME，不提前释放设备");
+            f.middle(SDL_MOUSEBUTTONUP); f.pump();
+            f.expect_buttons({{page, home, false}}, "最后中键 UP 释放共享 HOME");
+            check(f.presenter.ready_for_paste(), "共享 HOME 全部抬起后恢复粘贴条件");
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_H, KMOD_RCTRL); f.middle(SDL_MOUSEBUTTONDOWN);
+            f.middle(SDL_MOUSEBUTTONUP); f.pump();
+            f.expect_buttons({{page, home, true}}, "反向来源顺序下中键早松不会提前释放键盘 HOME");
+            f.key(SDL_KEYUP, SDL_SCANCODE_H); f.key(SDL_KEYDOWN, SDL_SCANCODE_UP, KMOD_RCTRL);
+            f.key(SDL_KEYUP, SDL_SCANCODE_UP); f.pump();
+            f.expect_buttons({{page, home, false}, {page, volup, true}, {page, volup, false}},
+                             "背景支持实际 HOME UP 和完整音量事件，不依赖 Frame");
+            f.expect({}, "背景 Consumer 不进入物理 keyboard");
+        }
+    }
+
+    {
+        ButtonFixture f("Presenter Consumer foreign and inactive");
+        if (f.window_id) {
+            std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> foreign(
+                SDL_CreateWindow("Foreign Consumer window", SDL_WINDOWPOS_UNDEFINED,
+                    SDL_WINDOWPOS_UNDEFINED, 24, 24, SDL_WINDOW_HIDDEN), SDL_DestroyWindow);
+            check(foreign != nullptr, "为 Consumer 身份过滤创建另一真实窗口");
+            if (foreign) {
+                const auto other = SDL_GetWindowID(foreign.get()); SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+                f.key(SDL_KEYDOWN, SDL_SCANCODE_H, KMOD_LALT); f.pump(); f.buttons.clear();
+                f.key_for(SDL_KEYUP, SDL_SCANCODE_H, 0, 0, other);
+                f.key_for(SDL_KEYDOWN, SDL_SCANCODE_UP, KMOD_LALT, 0, other);
+                f.middle(SDL_MOUSEBUTTONDOWN, other); f.window(SDL_WINDOWEVENT_FOCUS_LOST, other);
+                f.pump(); f.expect_buttons({}, "foreign 按钮、HOME UP、失焦都不修改本窗口已交付状态");
+                f.key(SDL_KEYUP, SDL_SCANCODE_H); f.pump();
+                f.expect_buttons({{page, home, false}}, "本窗口实际 UP 才释放原 HOME");
+            }
+            for (const Uint8 event : {SDL_WINDOWEVENT_FOCUS_LOST, SDL_WINDOWEVENT_HIDDEN,
+                                      SDL_WINDOWEVENT_MINIMIZED}) {
+                f.key(SDL_KEYDOWN, SDL_SCANCODE_P, KMOD_LALT); f.middle(SDL_MOUSEBUTTONDOWN);
+                f.key(SDL_KEYDOWN, SDL_SCANCODE_A); f.mouse(SDL_MOUSEBUTTONDOWN, 16, 24); f.pump();
+                f.buttons.clear(); f.reports.clear(); f.touches.clear();
+                f.mouse(SDL_MOUSEMOTION, 32, 48); f.window(event);
+                f.key(SDL_KEYDOWN, SDL_SCANCODE_UP, KMOD_LALT); f.middle(SDL_MOUSEBUTTONDOWN);
+                f.pump(); f.expect_buttons({{page, lock, false}, {page, home, false}},
+                                          "失焦/隐藏/最小化完整释放 Consumer，尾部事件不再按下");
+                f.expect({{}}, "Consumer 完整清理仍释放原 keyboard 一次");
+                check(f.touches.size() == 1 && !f.touches[0].down && f.touches[0].x == 0.25 &&
+                      f.touches[0].y == 0.25, "Consumer 清理仍以最后交付位置释放触摸，不发送 pending_move");
+                f.window(event); f.release(); f.pump(); f.expect_buttons({}, "失活及重复完整清理不重复 Consumer UP");
+                f.window(SDL_WINDOWEVENT_FOCUS_GAINED); f.key(SDL_KEYUP, SDL_SCANCODE_P, KMOD_RSHIFT);
+                f.middle(SDL_MOUSEBUTTONUP); f.key(SDL_KEYDOWN, SDL_SCANCODE_P); f.key(SDL_KEYUP, SDL_SCANCODE_P);
+                f.pump(); f.expect_buttons({}, "失活完整清除 Consumer 所有权，恢复的普通 P 不冒充快捷键");
+                f.expect({{19}, {}}, "完整清理后普通 P 可重新成为 Device owner");
+            }
+        }
+    }
+
+    {
+        ButtonFixture f("Presenter Consumer local layout cleanup");
+        if (f.window_id) {
+            check(f.presenter.draw(f.frame), "为 Consumer 局部布局回归上传合法固定 Frame 一次");
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_UP, KMOD_LALT); f.middle(SDL_MOUSEBUTTONDOWN);
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_A); f.mouse(SDL_MOUSEBUTTONDOWN, 16, 24); f.pump();
+            f.buttons.clear(); f.reports.clear(); f.touches.clear();
+            std::vector<int> cleanup_order;
+            const auto buttons = [&](uint16_t p, uint16_t u, bool down) {
+                if (!down) cleanup_order.push_back(u); return f.on_button()(p, u, down);
+            };
+            const auto touch = [&](double x, double y, bool down) {
+                if (!down) cleanup_order.push_back(-1); f.on_touch()(x, y, down);
+            };
+            const auto keys = [&](const ButtonFixture::Report &report) {
+                if (report.empty()) cleanup_order.push_back(-2); f.on_keyboard()(report);
+            };
+            f.mouse(SDL_MOUSEMOTION, 32, 48);
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_RIGHT, KMOD_LALT);
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_UP, KMOD_LALT, 1);
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_UP); // local owned-but-up 必须保留到真实 UP。
+            f.middle(SDL_MOUSEBUTTONUP); // 不能被局部 old-pointer purge 删除。
+            f.key(SDL_KEYUP, SDL_SCANCODE_UP, KMOD_RSHIFT); f.key(SDL_KEYUP, SDL_SCANCODE_RIGHT);
+            check(!f.presenter.pump(touch, keys, {}, buttons), "局部旋转清理按钮后仍沿同一 pump 完成 queued UP");
+            f.expect_buttons({{page, volup, false}, {page, home, false}}, "本地旋转只释放实际按住按钮一次，repeat不重按");
+            check(cleanup_order == std::vector<int>{volup, home, -1, -2},
+                  "局部布局先松 Consumer，再松最后触点和物理 keyboard");
+            f.expect({{}}, "Consumer Local 保留规则不破坏已有 keyboard 空报告");
+            check(f.touches.size() == 1 && !f.touches[0].down && f.touches[0].x == 0.25 &&
+                  f.touches[0].y == 0.25 && f.presenter.ready_for_paste(),
+                  "queued 中键实际 UP 结束归属，旧触点移动丢弃且恢复粘贴条件");
+            auto *window = SDL_GetWindowFromID(f.window_id);
+            int w = 0, h = 0; if (window) SDL_GetWindowSize(window, &w, &h);
+            check(w == 96 && h == 64 && f.presenter.display_degrees(0) == 90,
+                  "按钮清理不阻止真实窗口即时适配已上传 Frame 的旋转");
+            auto *renderer = window ? SDL_GetRenderer(window) : nullptr;
+            int ow = 0, oh = 0;
+            bool pixels_ok = renderer && SDL_GetRendererOutputSize(renderer, &ow, &oh) == 0 &&
+                             ow == 96 && oh == 64;
+            if (pixels_ok) {
+                std::vector<Uint32> pixels(static_cast<size_t>(ow) * oh);
+                pixels_ok = SDL_RenderReadPixels(renderer, nullptr, SDL_PIXELFORMAT_ARGB8888,
+                                                 pixels.data(), ow * 4) == 0 &&
+                            close(at(pixels.data(), ow, 90, 6), kTopLeft) &&
+                            close(at(pixels.data(), ow, 6, 6), kBottomLeft);
+            }
+            check(pixels_ok, "同一次按钮清理的本地旋转无新 Frame，真实软件回读显示原纹理新四角位置");
+            for (const auto key : {SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT,
+                                   SDL_SCANCODE_UP, SDL_SCANCODE_DOWN}) {
+                f.key(SDL_KEYDOWN, SDL_SCANCODE_P, KMOD_LALT); f.pump(); f.buttons.clear();
+                f.key(SDL_KEYDOWN, key, KMOD_LALT | KMOD_LSHIFT); f.key(SDL_KEYUP, key);
+                f.key(SDL_KEYUP, SDL_SCANCODE_P); f.pump();
+                f.expect_buttons({{page, lock, false}}, "Shift 四箭头优先本地镜像并释放原 Consumer，不触发音量");
+            }
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_H, KMOD_LALT); f.pump(); f.buttons.clear();
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_G, KMOD_LALT); f.key(SDL_KEYUP, SDL_SCANCODE_G);
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_H, KMOD_NONE); f.key(SDL_KEYUP, SDL_SCANCODE_H); f.pump();
+            f.expect_buttons({{page, home, false}}, "本地 G 尺寸动作释放 HOME 且保留 Local 至实际 UP");
+            f.expect({}, "局部镜像/尺寸清理后重复普通 H/P 不泄漏为 Device 按键");
+        }
+    }
+
+    {
+        ButtonFixture f("Presenter Consumer fullscreen input cleanup");
+        if (f.window_id) {
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_F); f.key(SDL_KEYUP, SDL_SCANCODE_F); f.pump();
+            check(!f.presenter.is_fullscreen(), "有 Consumer handler 时普通 F 仍不执行窗口动作");
+            f.expect({{9}, {}}, "普通 F 仍交付原物理 keyboard DOWN/UP");
+            f.expect_buttons({}, "普通 F 不制造 Consumer 事件");
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_H, KMOD_LALT); f.middle(SDL_MOUSEBUTTONDOWN);
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_UP, KMOD_LALT);
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_A); f.mouse(SDL_MOUSEBUTTONDOWN, 16, 24); f.pump();
+            f.buttons.clear(); f.reports.clear(); f.touches.clear();
+            f.mouse(SDL_MOUSEMOTION, 32, 48);
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_F11); f.middle(SDL_MOUSEBUTTONUP);
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_F11, KMOD_NONE, 1); f.key(SDL_KEYUP, SDL_SCANCODE_F11);
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_UP, KMOD_LALT, 1); f.pump();
+            check(f.presenter.is_fullscreen(), "F11 本地布局释放不吞快捷键，也不会repeat切回");
+            f.expect_buttons({{page, volup, false}, {page, home, false}},
+                             "全屏切换前释放共享 Consumer 一次，queued 中键 UP 不丢且音量repeat不重按");
+            f.expect({{}}, "全屏布局切换前完整释放原 Device keyboard");
+            check(f.touches.size() == 1 && !f.touches[0].down && f.touches[0].x == 0.25 &&
+                  f.touches[0].y == 0.25, "全屏切换丢 pending_move 并释放最后实际触点");
+            check(!f.presenter.ready_for_paste(), "局部全屏清理仍保留键盘 Consumer Local 直到实际 UP");
+            f.key(SDL_KEYUP, SDL_SCANCODE_UP); f.key(SDL_KEYUP, SDL_SCANCODE_H);
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_F, KMOD_LALT); f.key(SDL_KEYUP, SDL_SCANCODE_F);
+            f.pump(); f.expect_buttons({}, "MOD+F 恢复普通窗口不重复 Consumer UP");
+            check(!f.presenter.is_fullscreen() && f.presenter.ready_for_paste(),
+                  "MOD+F 与 F11 共用本地布局清理且实际UP后恢复粘贴条件");
+        }
+    }
+
+    {
+        ButtonFixture f("Presenter Consumer source and pending layout");
+        if (f.window_id) {
+            check(f.presenter.draw(f.frame), "来源清理前上传实际 Frame");
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_UP, KMOD_LALT); f.middle(SDL_MOUSEBUTTONDOWN); f.pump();
+            f.buttons.clear();
+            f.key(SDL_KEYUP, SDL_SCANCODE_UP); f.middle(SDL_MOUSEBUTTONUP);
+            check(f.presenter.update_content(f.crop, 180, f.on_touch(), f.on_keyboard(), f.on_button()),
+                  "update_content 可接同一 Consumer handler 并在来源变化前同步清理");
+            f.pump(); f.expect_buttons({{page, volup, false}, {page, home, false}},
+                                      "来源完整清理与已排队旧 UP 幂等，不需要再等 pump 才释放");
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_H); f.key(SDL_KEYUP, SDL_SCANCODE_H); f.pump();
+            f.expect({{11}, {}}, "来源清理完整丢弃 Local，后续普通 H 可重新交付");
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_DOWN, KMOD_LALT); f.pump(); f.buttons.clear();
+            auto changed = f.crop; changed.pixel_degrees = 180;
+            check(f.presenter.draw(f.frame, changed), "Frame 的同尺寸方向依据变化标记完整输入释放");
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_P, KMOD_LALT); f.pump();
+            f.expect_buttons({{page, voldown, false}}, "pending source cleanup 松原 Consumer 并过滤本窗口旧键事件");
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_F11); f.key(SDL_KEYUP, SDL_SCANCODE_F11); f.pump();
+            check(f.presenter.is_fullscreen(), "延后布局 Consumer 回归进入真实全屏");
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_UP, KMOD_LALT); f.pump(); f.buttons.clear();
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_RIGHT, KMOD_LALT); f.key(SDL_KEYUP, SDL_SCANCODE_RIGHT); f.pump();
+            f.expect_buttons({{page, volup, false}}, "全屏中旋转先释放按钮，延后适配不保留设备 DOWN");
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_F11); f.key(SDL_KEYUP, SDL_SCANCODE_F11);
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_UP, KMOD_LALT, 1); f.key(SDL_KEYUP, SDL_SCANCODE_UP); f.pump();
+            f.expect_buttons({}, "恢复窗口的最终一次延后适配不重复 UP，owned-but-up repeat仍不激活");
+            check(!f.presenter.is_fullscreen() && f.presenter.ready_for_paste(), "延后布局结束后输入归属和粘贴可恢复");
+        }
+    }
+
+    {
+        ButtonFixture f("Presenter Consumer local release failure");
+        if (f.window_id) {
+            check(f.presenter.draw(f.frame), "局部释放失败前上传合法 Frame");
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_H, KMOD_LALT);
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_DOWN, KMOD_LALT);
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_A); f.pump(); f.buttons.clear(); f.reports.clear();
+            f.fail_up = home;
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_RIGHT, KMOD_LALT | KMOD_LSHIFT);
+            check(!f.pump() && !f.presenter.render_failed() && f.presenter.ready_for_paste(),
+                  "局部布局中的 Consumer UP 失败转完整归属清理，不留下永久粘贴阻断");
+            f.expect_buttons({{page, home, false}, {page, voldown, false}},
+                             "一个布局 UP 失败仍尝试其它 Consumer UP，无递归重复发送");
+            f.expect({{}}, "局部释放失败也完整清理原 Device keyboard");
+            f.release(); f.key(SDL_KEYUP, SDL_SCANCODE_H); f.key(SDL_KEYUP, SDL_SCANCODE_DOWN);
+            f.key(SDL_KEYUP, SDL_SCANCODE_RIGHT); f.middle(SDL_MOUSEBUTTONDOWN); f.pump();
+            f.expect_buttons({}, "局部发送失败锁存后完整收尾和新中键都不再次发送按钮");
+        }
+    }
+
+    for (int failure = 0; failure < 3; ++failure) {
+        ButtonFixture f("Presenter Consumer delivery failure");
+        if (!f.window_id) continue;
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_H, KMOD_LALT); f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+        f.mouse(SDL_MOUSEBUTTONDOWN, 16, 24); f.pump();
+        f.buttons.clear(); f.reports.clear(); f.touches.clear();
+        if (failure == 0) f.fail_down = volup;
+        else if (failure == 1) f.fail_up = home;
+        if (failure == 1) f.key(SDL_KEYUP, SDL_SCANCODE_H);
+        else {
+            f.key(SDL_KEYDOWN, SDL_SCANCODE_UP, KMOD_LALT);
+            if (failure == 2) {
+                f.pump(); f.buttons.clear(); f.fail_down = volup;
+                f.key(SDL_KEYDOWN, SDL_SCANCODE_UP, KMOD_LALT, 1);
+            }
+        }
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_P, KMOD_LALT); f.middle(SDL_MOUSEBUTTONDOWN);
+        check(!f.pump() && !f.presenter.render_failed(), "Consumer 发送失败清理输入但不冒充渲染或窗口退出失败");
+        f.expect_buttons(failure == 1 ? std::vector<ButtonFixture::Button>{{page, home, false}}
+            : std::vector<ButtonFixture::Button>{{page, volup, true}, {page, home, false},
+                                                 {page, volup, false}},
+            "DOWN/UP/repeat失败记录已尝试状态，尽力释放其它按钮，尾部不再重新 DOWN");
+        f.expect({{}}, "Consumer 失败同步清理仍按住的物理 keyboard");
+        check(f.touches.size() == 1 && !f.touches[0].down, "Consumer 失败同步松开已交付触点");
+        f.release(); f.release(); f.key(SDL_KEYUP, SDL_SCANCODE_UP); f.key(SDL_KEYUP, SDL_SCANCODE_H); f.pump();
+        f.expect_buttons({}, "失败锁存与重复释放不重复 Consumer UP，也不重新打开发送通路");
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_DOWN, KMOD_LALT); f.key(SDL_KEYUP, SDL_SCANCODE_DOWN); f.pump();
+        f.expect_buttons({}, "首次失败之后新 Consumer 快捷键仍被本地消费而不尝试发送");
+    }
+
+    for (int exit = 0; exit < 3; ++exit) {
+        ButtonFixture f("Presenter Consumer quit cleanup");
+        if (!f.window_id) continue;
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_H, KMOD_LALT); f.middle(SDL_MOUSEBUTTONDOWN);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_DOWN, KMOD_LALT); f.pump(); f.buttons.clear();
+        if (exit == 0) f.window(SDL_WINDOWEVENT_CLOSE);
+        else if (exit == 1) {
+            SDL_Event event{}; event.type = SDL_QUIT;
+            check(SDL_PushEvent(&event) == 1, "将真实 QUIT 事件送入 Consumer 回归队列");
+        } else f.key(SDL_KEYDOWN, SDL_SCANCODE_Q, KMOD_LALT);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_P, KMOD_LALT);
+        check(f.pump() && !f.presenter.ready_for_paste(), "CLOSE/QUIT/MOD+Q 都清理共享按钮，不处理退出后尾部");
+        f.expect_buttons({{page, voldown, false}, {page, home, false}}, "退出按唯一 Consumer 状态只发送最后一次 UP");
+        f.release(); f.expect_buttons({}, "退出之后应用显式收尾不重复 Button UP");
+    }
+
+    {
+        ButtonFixture f("Presenter Consumer disabled callback");
+        if (f.window_id) {
+            for (const auto &binding : bindings) {
+                f.key(SDL_KEYDOWN, binding.key, KMOD_LALT); f.key(SDL_KEYUP, binding.key);
+            }
+            f.middle(SDL_MOUSEBUTTONDOWN); f.middle(SDL_MOUSEBUTTONUP);
+            check(!f.presenter.pump(f.on_touch(), f.on_keyboard()) && f.presenter.ready_for_paste(),
+                  "旧 pump 调用/空 Consumer handler 不记录 Consumer 状态或阻止后续粘贴");
+            f.expect_buttons({}, "空 handler 的文件/no-control 前端边界不制造 Consumer 回调");
+            f.expect({}, "空 handler 不把 MOD 组合意外当成普通设备文字");
+        }
+    }
+}
+
 
 void presenter_display_rotation() {
     const Palette colors{kTopLeft, kTopRight, kBottomRight, kBottomLeft};
@@ -2863,6 +3221,7 @@ int main() {
     presenter_display_flips();
     presenter_background_windows();
     presenter_background_input();
+    presenter_device_buttons();
 
     SDL_Quit();
     if (failures != 0) {

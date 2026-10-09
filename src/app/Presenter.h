@@ -28,6 +28,8 @@ class Presenter {
   public:
     using KeyboardHandler = std::function<void(const KeyboardState::Report &)>;
     using PasteHandler = std::function<void()>;
+    /// Consumer 按钮的真实 DOWN/UP；false 表示发送失败，窗口会尽力释放其它输入。
+    using ButtonHandler = std::function<bool(uint16_t, uint16_t, bool)>;
 
     /// 等比缩放时留边区域的背景色，在 open() 前设置；首帧前的 clear 也使用它。
     void set_background(uint8_t r, uint8_t g, uint8_t b);
@@ -46,7 +48,8 @@ class Presenter {
     /// 更新前释放旧输入并丢弃本窗口已排队的输入，使旧粘贴代次失效。
     bool update_content(const Crop &crop, int degrees,
                         const std::function<void(double, double, bool)> &on_touch,
-                        const KeyboardHandler &on_keyboard = {});
+                        const KeyboardHandler &on_keyboard = {},
+                        const ButtonHandler &on_button = {});
 
     /// 返回 true 表示已消费有效帧；最小化或暂时没有绘制面时跳过显示。
     /// 指定回读路径时仍要求图像保存成功，不能把跳过当作已经保存。
@@ -68,7 +71,8 @@ class Presenter {
 
     /// 物理键盘报告保留全部按住的 usages；不将 SDL_TEXTINPUT 重复注入成文字。
     bool pump(const std::function<void(double, double, bool)> &on_touch,
-              const KeyboardHandler &on_keyboard = {}, const PasteHandler &on_paste = {});
+              const KeyboardHandler &on_keyboard = {}, const PasteHandler &on_paste = {},
+              const ButtonHandler &on_button = {});
     /// 异步粘贴完成时必须再次检查焦点、按住状态和代次；释放输入使旧代次失效。
     [[nodiscard]] uint64_t input_generation() const { return input_generation_; }
     [[nodiscard]] bool ready_for_paste() const;
@@ -80,9 +84,10 @@ class Presenter {
     [[nodiscard]] bool render_failed() const { return render_failed_; }
     /// 在内容改变、退出或坐标依据失效时，释放最后一个有效的设备触摸点。
     void release_touch(const std::function<void(double, double, bool)> &on_touch);
-    /// 在内容改变或退出前清理两种输入；键盘存在按住状态时发送一次空报告。
+    /// 在内容改变或退出前先释放 Consumer，再清触摸和键盘；重复调用不重复发送 UP。
     void release_input(const std::function<void(double, double, bool)> &on_touch,
-                       const KeyboardHandler &on_keyboard = {});
+                       const KeyboardHandler &on_keyboard = {},
+                       const ButtonHandler &on_button = {});
 
     ~Presenter();
 
@@ -107,22 +112,36 @@ class Presenter {
     bool is_windowed() const;
     bool resize_for_content(int old_w, int old_h, int new_w, int new_h);
     bool apply_pending_resize(const std::function<void(double, double, bool)> &on_touch,
-                              const KeyboardHandler &on_keyboard);
+                              const KeyboardHandler &on_keyboard,
+                              const ButtonHandler &on_button);
     void discard_queued_input();
     void discard_queued_pointer();
     void release_layout_input(const std::function<void(double, double, bool)> &on_touch,
-                              const KeyboardHandler &on_keyboard);
+                              const KeyboardHandler &on_keyboard,
+                              const ButtonHandler &on_button);
     void flip_display(bool vertical,
                       const std::function<void(double, double, bool)> &on_touch,
-                      const KeyboardHandler &on_keyboard);
+                      const KeyboardHandler &on_keyboard,
+                      const ButtonHandler &on_button);
     bool update_layout(const Crop &crop, int degrees, bool local,
                        const std::function<void(double, double, bool)> &on_touch,
-                       const KeyboardHandler &on_keyboard);
+                       const KeyboardHandler &on_keyboard,
+                       const ButtonHandler &on_button);
     bool is_content_point(int x, int y) const;
     /// 返回 true 表示已接受窗口尺寸动作；全屏、最大化、最小化时不执行。
     bool resize_window(bool pixel_perfect,
                        const std::function<void(double, double, bool)> &on_touch,
-                       const KeyboardHandler &on_keyboard);
+                       const KeyboardHandler &on_keyboard,
+                       const ButtonHandler &on_button);
+
+    struct ButtonKey {
+        uint16_t usage = 0; // 非零表示本次 DOWN 已由本地消费，直到真实 UP 或完整清理。
+        bool down = false; // 包含发送失败前已尝试的 DOWN，供尽力补发 UP。
+    };
+    bool button_down(uint16_t usage) const;
+    bool press_button(ButtonKey &key, uint16_t usage, const ButtonHandler &on_button);
+    bool release_button(ButtonKey &key, const ButtonHandler &on_button);
+    bool release_buttons(const ButtonHandler &on_button, bool preserve_local);
 
     uint8_t bg_[3] = {0, 0, 0};
     SDL_Window *window_ = nullptr;
@@ -160,6 +179,9 @@ class Presenter {
     bool debug_input_ = false;
     uint16_t shortcut_mods_ = KMOD_LALT | KMOD_LGUI;
     KeyboardState keyboard_;
+    std::array<ButtonKey, SDL_NUM_SCANCODES> button_keys_{};
+    ButtonKey middle_home_{};
+    bool button_failed_ = false;
     uint64_t input_generation_ = 0;
 };
 

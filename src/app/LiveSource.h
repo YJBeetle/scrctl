@@ -14,6 +14,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace scrctl::app {
@@ -91,6 +92,11 @@ class LiveSource final : public FrameSource {
     /// 注入 ASCII 文本，复用触摸服务的 HID 连接。
     bool type_text(const std::string &text, int hold_ms, std::string &err);
 
+    /// 转发 Consumer 按钮 DOWN/UP，indigo 独立连接，与触摸/键盘共享首错门控。
+    /// 每次 DOWN 都发送，按 page/code 仅保存一份待释放状态；失败也可能部分送达。
+    /// 未按住的 UP 成功且不建立连接，失败清理已完成后的 UP 也不重复发送/报错。
+    bool button_state(uint16_t usage_page, uint16_t usage_code, bool down, std::string &err);
+
     /// 按硬件键，首次使用时连接 indigo。可与 --verify 组合，在注入后回读画面
     /// 验证短时效果，例如音量 HUD。
     bool button(uint16_t usage_page, uint16_t usage_code, std::string &err);
@@ -104,6 +110,7 @@ class LiveSource final : public FrameSource {
     void update_picture_source();
     FrameGeometry sample_geometry(bool screenshot) const;
     bool ensure_hid(std::string &err);
+    bool ensure_buttons(std::string &err);
     void fail_hid(const std::string &reason);
     /// 只使用已经存在的连接尽力松开输入，不为清理建立新连接。
     void release_hid();
@@ -138,6 +145,7 @@ class LiveSource final : public FrameSource {
     std::string hid_error_;
     bool touch_down_ = false;
     bool keyboard_down_ = false;
+    std::vector<std::pair<uint16_t, uint16_t>> buttons_down_;
     double touch_x_ = 0, touch_y_ = 0;
     uint64_t serial_ = 0;
     bool recording_error_reported_ = false;

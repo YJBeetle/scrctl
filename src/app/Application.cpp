@@ -326,7 +326,7 @@ int run(int argc, char **argv) {
         }
     };
 
-    /// 触摸和键盘共享控制门控及首次失败，停止发送后只输出一次错误。
+    /// 触摸、键盘和硬件按钮共享控制门控及首次失败，只输出一次主错误。
     std::string control_err;
     bool control_warned = false;
     const auto input_failed = [&] {
@@ -347,6 +347,23 @@ int run(int argc, char **argv) {
         if (!control_enabled || live == nullptr || control_warned) return;
         if (!live->keyboard_state(usages, control_err)) input_failed();
     };
+    Presenter::ButtonHandler on_button;
+    if (control_enabled && live != nullptr) {
+        on_button = [&](uint16_t page, uint16_t code, bool down) {
+            if (down && control_warned) return false;
+            // UP 仍交给来源清理已尝试的 DOWN；来源不为清理打开新连接。
+            // 清理错误不能覆盖已保存的首次控制错误或再次打印同一提示。
+            std::string button_error;
+            if (!live->button_state(page, code, down, button_error)) {
+                if (!control_warned) {
+                    control_err = std::move(button_error);
+                    input_failed();
+                }
+                return false;
+            }
+            return true;
+        };
+    }
     const auto on_paste = [&] {
         synchronize_input();
         if (!paste_job || control_warned || !presenter || runtime.stop_requested()) return;
@@ -423,7 +440,7 @@ int run(int argc, char **argv) {
     };
     const auto pump_window = [&] {
         if (presenter) {
-            quit = presenter->pump(on_touch, on_keyboard, on_paste);
+            quit = presenter->pump(on_touch, on_keyboard, on_paste, on_button);
             // 静止画面的本地重绘也可能失败；与新帧绘制失败一样返回错误，
             // 仍经统一退出流程取消粘贴并收尾录制，不能视为用户正常关闭。
             if (presenter->render_failed()) {
@@ -527,7 +544,7 @@ int run(int argc, char **argv) {
             }
             seen_generation = presenter->input_generation();
         } else if (content_changed) {
-            if (!presenter->update_content(crop, degrees, on_touch, on_keyboard)) {
+            if (!presenter->update_content(crop, degrees, on_touch, on_keyboard, on_button)) {
                 return finish_exit(1);
             }
             seen_generation = presenter->input_generation();
@@ -541,7 +558,7 @@ int run(int argc, char **argv) {
 
         const bool do_verify = o.verify_at > 0 && rendered + 1 == o.verify_at;
         if (!presenter->draw(f, crop, do_verify ? o.verify_path.c_str() : nullptr)) {
-            presenter->release_input(on_touch, on_keyboard);
+            presenter->release_input(on_touch, on_keyboard, on_button);
             return finish_exit(1);
         }
         ++rendered;
@@ -563,7 +580,7 @@ int run(int argc, char **argv) {
     }
 
     if (presenter != nullptr) {
-        presenter->release_input(on_touch, on_keyboard);
+        presenter->release_input(on_touch, on_keyboard, on_button);
     }
     exit_code = finish_exit(exit_code);
     if (exit_code != 0) {

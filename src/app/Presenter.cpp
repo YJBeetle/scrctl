@@ -2,6 +2,7 @@
 #include "app/Presenter.h"
 
 #include "app/RenderPanel.h"
+#include "hid/Hid.h"
 #include <algorithm>
 #include <cstdio>
 #include <limits>
@@ -313,10 +314,11 @@ void Presenter::report_input(int raw_x, int raw_y, double fx, double fy, const c
 }
 
 bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
-                     const KeyboardHandler &on_keyboard, const PasteHandler &on_paste) {
-    apply_pending_resize(on_touch, on_keyboard);
+                     const KeyboardHandler &on_keyboard, const PasteHandler &on_paste,
+                     const ButtonHandler &on_button) {
+    apply_pending_resize(on_touch, on_keyboard, on_button);
     if (release_pending_) {
-        release_input(on_touch, on_keyboard);
+        release_input(on_touch, on_keyboard, on_button);
         discard_queued_input();
     } else if (!src_.input_valid) {
         // 触摸坐标未知不影响物理按键。仅触摸依赖有效面板坐标，键盘可继续保持。
@@ -330,6 +332,11 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
     bool pending_move = false;
     double px = 0, py = 0;
     const Uint32 window_id = window_ != nullptr ? SDL_GetWindowID(window_) : 0;
+    const auto button_failed = [&] {
+        // DOWN 可能只送达一部分；先尽力松开所有尝试过的 Consumer，再清其它输入。
+        pending_move = false;
+        release_input(on_touch, on_keyboard, on_button);
+    };
     while (SDL_PollEvent(&e)) {
         // 退出决定之后仍排空事件队列，但不再处理键盘、焦点恢复或鼠标尾部。
         // 等待合并的移动也留给退出收尾丢弃，不在退出时补发新的按下。
@@ -358,9 +365,9 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                 pending_move = false;
                 input_active_ = false;
                 if (e.window.event == SDL_WINDOWEVENT_MINIMIZED) minimized_ = true;
-                release_input(on_touch, on_keyboard);
+                release_input(on_touch, on_keyboard, on_button);
             }
-            if (apply_pending_resize(on_touch, on_keyboard)) pending_move = false;
+            if (apply_pending_resize(on_touch, on_keyboard, on_button)) pending_move = false;
             if (render_failed_) quit = true;
             if (!video_playback_ && (e.window.event == SDL_WINDOWEVENT_EXPOSED ||
                 e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
@@ -387,6 +394,20 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                                                         shortcut || local_f11)) {
                 if (on_keyboard) on_keyboard(report);
             }
+            const int key_index = static_cast<int>(scancode);
+            auto *button_key = key_index > 0 && key_index < SDL_NUM_SCANCODES
+                ? &button_keys_[static_cast<size_t>(key_index)] : nullptr;
+            // 只有已交付的音量键可重复 DOWN；后按 MOD 不能抢走原来的设备归属，
+            // 本地几何清理已经发 UP 的键也不能由 repeat 再次按下。
+            if (e.key.repeat && shortcut && !(mods & KMOD_SHIFT) && !button_failed_ &&
+                on_button && button_key && button_key->down &&
+                (button_key->usage == hid::button::kVolumeUp ||
+                 button_key->usage == hid::button::kVolumeDown)) {
+                if (!on_button(hid::button::kUsagePageConsumer, button_key->usage, true)) {
+                    button_failed_ = true;
+                    button_failed();
+                }
+            }
             // 所有权在首次 DOWN 确定。已转给设备的 F 不能因后来按下 MOD、
             // 或一个重复 DOWN 改成全屏动作；不支持的 scancode 也不触发本地动作。
             if (!fresh || !keyboard_.is_pressed(scancode)) break;
@@ -396,15 +417,17 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                 if (on_paste) on_paste();
             } else if ((shortcut && e.key.keysym.sym == SDLK_f && !(mods & KMOD_SHIFT)) ||
                        fullscreen_key) {
+                release_layout_input(on_touch, on_keyboard, on_button);
+                pending_move = false;
                 toggle_fullscreen();
                 repaint_background = !video_playback_;
-                if (apply_pending_resize(on_touch, on_keyboard)) pending_move = false;
+                if (apply_pending_resize(on_touch, on_keyboard, on_button)) pending_move = false;
                 if (render_failed_) quit = true;
             } else if (shortcut && (mods & KMOD_SHIFT) && video_playback_ &&
                        (e.key.keysym.sym == SDLK_LEFT || e.key.keysym.sym == SDLK_RIGHT ||
                         e.key.keysym.sym == SDLK_UP || e.key.keysym.sym == SDLK_DOWN)) {
                 const bool vertical = e.key.keysym.sym == SDLK_UP || e.key.keysym.sym == SDLK_DOWN;
-                flip_display(vertical, on_touch, on_keyboard);
+                flip_display(vertical, on_touch, on_keyboard, on_button);
                 pending_move = false;
                 if (!draw_uploaded()) {
                     render_failed_ = true;
@@ -415,7 +438,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                        (e.key.keysym.sym == SDLK_LEFT || e.key.keysym.sym == SDLK_RIGHT)) {
                 const int step = e.key.keysym.sym == SDLK_RIGHT ? 90 : 270;
                 const int degrees = (degrees_ + step) % 360;
-                if (update_layout(src_, degrees, true, on_touch, on_keyboard)) {
+                if (update_layout(src_, degrees, true, on_touch, on_keyboard, on_button)) {
                     rotation_offset_ = (rotation_offset_ + step) % 360;
                     pending_move = false;
                     if (!draw_uploaded()) {
@@ -425,25 +448,55 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                 }
             } else if (shortcut && !(mods & KMOD_SHIFT) &&
                        (e.key.keysym.sym == SDLK_g || e.key.keysym.sym == SDLK_w)) {
-                if (resize_window(e.key.keysym.sym == SDLK_g, on_touch, on_keyboard)) {
+                if (resize_window(e.key.keysym.sym == SDLK_g, on_touch, on_keyboard, on_button)) {
                     pending_move = false;
                 }
+            } else if (shortcut && !(mods & KMOD_SHIFT) && on_button &&
+                       !button_failed_ && button_key) {
+                uint16_t usage = 0;
+                switch (e.key.keysym.sym) {
+                case SDLK_h: usage = hid::button::kHome; break;
+                case SDLK_p: usage = hid::button::kLock; break;
+                case SDLK_UP: usage = hid::button::kVolumeUp; break;
+                case SDLK_DOWN: usage = hid::button::kVolumeDown; break;
+                default: break;
+                }
+                if (usage && !press_button(*button_key, usage, on_button)) button_failed();
             }
             break;
         }
-        case SDL_KEYUP:
-            if (input_active_ && window_id != 0 && e.key.windowID == window_id) {
+        case SDL_KEYUP: {
+            if (window_id == 0 || e.key.windowID != window_id) break;
+            const int key_index = static_cast<int>(e.key.keysym.scancode);
+            auto *button_key = key_index > 0 && key_index < SDL_NUM_SCANCODES
+                ? &button_keys_[static_cast<size_t>(key_index)] : nullptr;
+            const bool owned_button = button_key && button_key->usage != 0;
+            bool button_ok = true;
+            if (owned_button) {
+                // 用原 DOWN 的映射释放；MOD 早松、Shift 改变不改变真实 UP 的目标。
+                button_ok = release_button(*button_key, on_button);
+                *button_key = {};
+            }
+            if (input_active_ || owned_button) {
                 for (const auto &report : keyboard_.key_up(e.key.keysym.scancode,
                                                           e.key.keysym.mod)) {
                     if (on_keyboard) on_keyboard(report);
                 }
             }
+            if (!button_ok) button_failed();
             break;
+        }
         case SDL_TEXTINPUT:
             // 当前使用 physical 模式。文字输入和 IME 不与物理键报告混合注入，
             // 也不改变宿主机的全局 text-input 开关。
             break;
         case SDL_MOUSEBUTTONDOWN:
+            if (input_active_ && window_id != 0 && e.button.windowID == window_id &&
+                e.button.button == SDL_BUTTON_MIDDLE && on_button && !button_failed_ &&
+                middle_home_.usage == 0) {
+                if (!press_button(middle_home_, hid::button::kHome, on_button)) button_failed();
+                break;
+            }
             if (video_playback_ && input_active_ && window_id != 0 && e.button.windowID == window_id &&
                 e.button.button == SDL_BUTTON_LEFT) {
                 // 用原始窗口点换算绘制面，按显示共用的矩形判断留边。
@@ -451,7 +504,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                 // 回调时仍可使用此动作。触摸模拟鼠标不触发双击窗口动作。
                 if (!is_content_point(e.button.x, e.button.y)) {
                     if (e.button.clicks == 2 && e.button.which != SDL_TOUCH_MOUSEID &&
-                        resize_window(false, on_touch, on_keyboard)) {
+                        resize_window(false, on_touch, on_keyboard, on_button)) {
                         pending_move = false;
                     }
                     break;
@@ -484,6 +537,13 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
             }
             break;
         case SDL_MOUSEBUTTONUP:
+            if (window_id != 0 && e.button.windowID == window_id &&
+                e.button.button == SDL_BUTTON_MIDDLE && middle_home_.usage != 0) {
+                const bool ok = release_button(middle_home_, on_button);
+                middle_home_ = {};
+                if (!ok) button_failed();
+                break;
+            }
             if (video_playback_ && input_active_ && window_id != 0 && e.button.windowID == window_id &&
                 e.button.button == SDL_BUTTON_LEFT && dragging_ && on_touch) {
                 if (pending_move) {
@@ -503,7 +563,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
             break;
         }
     }
-    if (!quit && apply_pending_resize(on_touch, on_keyboard)) pending_move = false;
+    if (!quit && apply_pending_resize(on_touch, on_keyboard, on_button)) pending_move = false;
     if (render_failed_) quit = true;
     if (!quit && repaint_background && !draw_background()) {
         render_failed_ = true;
@@ -512,7 +572,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
     if (quit) {
         input_active_ = false;
         pending_move = false;
-        release_input(on_touch, on_keyboard);
+        release_input(on_touch, on_keyboard, on_button);
     } else if (pending_move && on_touch) {
         pending_move = false;
         last_touch_x_ = px;
@@ -559,9 +619,14 @@ void Presenter::discard_queued_input() {
 
 void Presenter::discard_queued_pointer() {
     if (!window_) return;
-    Uint32 own_id = SDL_GetWindowID(window_);
+    struct PointerFilter { Uint32 id; bool keep_middle_up; };
+    PointerFilter filter{SDL_GetWindowID(window_), middle_home_.usage != 0};
     SDL_FilterEvents([](void *userdata, SDL_Event *event) {
-        const Uint32 id = *static_cast<Uint32 *>(userdata);
+        const auto &filter = *static_cast<const PointerFilter *>(userdata);
+        // 中键 HOME 没有旧坐标；局部布局已经交付 UP，但其实际抬起仍结束本地归属。
+        if (filter.keep_middle_up && event->type == SDL_MOUSEBUTTONUP &&
+            event->button.windowID == filter.id && event->button.button == SDL_BUTTON_MIDDLE)
+            return 1;
         Uint32 event_id = 0;
         switch (event->type) {
         case SDL_MOUSEMOTION: event_id = event->motion.windowID; break;
@@ -569,15 +634,23 @@ void Presenter::discard_queued_pointer() {
         case SDL_MOUSEWHEEL: event_id = event->wheel.windowID; break;
         default: return 1;
         }
-        return event_id == id ? 0 : 1;
-    }, &own_id);
+        return event_id == filter.id ? 0 : 1;
+    }, &filter);
 }
 
 void Presenter::release_layout_input(const std::function<void(double, double, bool)> &on_touch,
-                                     const KeyboardHandler &on_keyboard) {
+                                     const KeyboardHandler &on_keyboard,
+                                     const ButtonHandler &on_button) {
     ++input_generation_;
+    const bool buttons_ok = release_buttons(on_button, true);
     release_touch(on_touch);
-    for (const auto &report : keyboard_.release_device_keys()) {
+    // 失败的输入通路不能保留待结束的本地按钮归属；其它 UP 已在上面尽力发送。
+    if (!buttons_ok) {
+        button_keys_.fill({});
+        middle_home_ = {};
+    }
+    for (const auto &report : buttons_ok ? keyboard_.release_device_keys()
+                                       : keyboard_.release_all()) {
         if (on_keyboard) on_keyboard(report);
     }
     release_pending_ = false;
@@ -586,10 +659,11 @@ void Presenter::release_layout_input(const std::function<void(double, double, bo
 
 void Presenter::flip_display(bool vertical,
                              const std::function<void(double, double, bool)> &on_touch,
-                             const KeyboardHandler &on_keyboard) {
+                             const KeyboardHandler &on_keyboard,
+                             const ButtonHandler &on_button) {
     // 当前显示轴上的 H/V 作用在已有旋转之后：H*R(d)=R(-d)*H，V=R(180)*H。
     // 视口尺寸不变；0/180 度也必须清理旧坐标，不能被同布局 early return 吞掉。
-    release_layout_input(on_touch, on_keyboard);
+    release_layout_input(on_touch, on_keyboard, on_button);
     const int step = vertical ? 180 : 0;
     degrees_ = (step - degrees_ + 360) % 360;
     rotation_offset_ = (step - rotation_offset_ + 360) % 360;
@@ -623,13 +697,15 @@ bool Presenter::resize_for_content(int old_w, int old_h, int new_w, int new_h) {
 
 bool Presenter::update_content(const Crop &crop, int degrees,
                                const std::function<void(double, double, bool)> &on_touch,
-                               const KeyboardHandler &on_keyboard) {
-    return update_layout(crop, degrees, false, on_touch, on_keyboard);
+                               const KeyboardHandler &on_keyboard,
+                               const ButtonHandler &on_button) {
+    return update_layout(crop, degrees, false, on_touch, on_keyboard, on_button);
 }
 
 bool Presenter::update_layout(const Crop &crop, int degrees, bool local,
                               const std::function<void(double, double, bool)> &on_touch,
-                              const KeyboardHandler &on_keyboard) {
+                              const KeyboardHandler &on_keyboard,
+                              const ButtonHandler &on_button) {
     if (!video_playback_) return false;
     int width = 0, height = 0;
     viewport_size(crop, degrees, width, height);
@@ -643,9 +719,9 @@ bool Presenter::update_layout(const Crop &crop, int degrees, bool local,
         texture_uploaded_ = false;
     }
     if (degrees == degrees_ && width == view_w_ && height == view_h_) return true;
-    if (local) release_layout_input(on_touch, on_keyboard);
+    if (local) release_layout_input(on_touch, on_keyboard, on_button);
     else {
-        release_input(on_touch, on_keyboard);
+        release_input(on_touch, on_keyboard, on_button);
         discard_queued_input();
     }
     if (width != view_w_ || height != view_h_) {
@@ -669,12 +745,13 @@ bool Presenter::update_layout(const Crop &crop, int degrees, bool local,
 }
 
 bool Presenter::apply_pending_resize(const std::function<void(double, double, bool)> &on_touch,
-                                     const KeyboardHandler &on_keyboard) {
+                                     const KeyboardHandler &on_keyboard,
+                                     const ButtonHandler &on_button) {
     if (!resize_pending_ || !is_windowed()) return false;
     const bool repaint = resize_preserve_local_ && texture_uploaded_;
-    if (resize_preserve_local_ && !release_pending_) release_layout_input(on_touch, on_keyboard);
+    if (resize_preserve_local_ && !release_pending_) release_layout_input(on_touch, on_keyboard, on_button);
     else {
-        release_input(on_touch, on_keyboard);
+        release_input(on_touch, on_keyboard, on_button);
         discard_queued_input();
     }
     resize_for_content(windowed_content_w_, windowed_content_h_, view_w_, view_h_);
@@ -732,7 +809,8 @@ bool Presenter::to_content(int raw_x, int raw_y, int &x, int &y) const {
 
 bool Presenter::resize_window(bool pixel_perfect,
                               const std::function<void(double, double, bool)> &on_touch,
-                              const KeyboardHandler &on_keyboard) {
+                              const KeyboardHandler &on_keyboard,
+                              const ButtonHandler &on_button) {
     if (!video_playback_ || !window_ || !renderer_ || minimized_ ||
         (SDL_GetWindowFlags(window_) &
          (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MAXIMIZED | SDL_WINDOW_MINIMIZED))) return false;
@@ -748,7 +826,7 @@ bool Presenter::resize_window(bool pixel_perfect,
                                   drawable_w, drawable_h, width, height);
     if (!valid) return false;
 
-    release_layout_input(on_touch, on_keyboard);
+    release_layout_input(on_touch, on_keyboard, on_button);
     if (width == points_w && height == points_h) return true;
 
     int x = 0, y = 0;
@@ -775,8 +853,10 @@ void Presenter::release_touch(const std::function<void(double, double, bool)> &o
 }
 
 void Presenter::release_input(const std::function<void(double, double, bool)> &on_touch,
-                              const KeyboardHandler &on_keyboard) {
+                              const KeyboardHandler &on_keyboard,
+                              const ButtonHandler &on_button) {
     ++input_generation_;
+    release_buttons(on_button, false);
     release_touch(on_touch);
     for (const auto &report : keyboard_.release_all()) {
         if (on_keyboard) on_keyboard(report);
@@ -786,7 +866,49 @@ void Presenter::release_input(const std::function<void(double, double, bool)> &o
 
 bool Presenter::ready_for_paste() const {
     return window_ != nullptr && input_active_ && !release_pending_ && !dragging_ &&
-           keyboard_.held().empty();
+           keyboard_.held().empty() && middle_home_.usage == 0 &&
+           std::none_of(button_keys_.begin(), button_keys_.end(),
+                        [](const ButtonKey &key) { return key.usage != 0; });
+}
+
+bool Presenter::button_down(uint16_t usage) const {
+    return (middle_home_.down && middle_home_.usage == usage) ||
+        std::any_of(button_keys_.begin(), button_keys_.end(), [usage](const ButtonKey &key) {
+            return key.down && key.usage == usage;
+        });
+}
+
+bool Presenter::press_button(ButtonKey &key, uint16_t usage, const ButtonHandler &on_button) {
+    const bool already_down = button_down(usage);
+    // 先记录尝试，失败时同样尽力 UP。HOME 键和中键共持时只交付首 DOWN/末 UP。
+    key = {usage, true};
+    if (!already_down && !on_button(hid::button::kUsagePageConsumer, usage, true)) {
+        button_failed_ = true;
+        return false;
+    }
+    return true;
+}
+
+bool Presenter::release_button(ButtonKey &key, const ButtonHandler &on_button) {
+    if (!key.down) return true;
+    key.down = false;
+    if (!button_down(key.usage) && on_button &&
+        !on_button(hid::button::kUsagePageConsumer, key.usage, false)) {
+        button_failed_ = true;
+        return false;
+    }
+    return true;
+}
+
+bool Presenter::release_buttons(const ButtonHandler &on_button, bool preserve_local) {
+    bool ok = true;
+    for (auto &key : button_keys_) {
+        if (!release_button(key, on_button)) ok = false;
+        if (!preserve_local) key = {};
+    }
+    if (!release_button(middle_home_, on_button)) ok = false;
+    if (!preserve_local) middle_home_ = {};
+    return ok;
 }
 
 Presenter::~Presenter() {

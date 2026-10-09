@@ -394,6 +394,11 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(hid_test PRIVATE scrctl_core)
     add_test(NAME hid COMMAND hid_test)
 
+    scrctl_add_test_executable(live_hid_test tests/live_hid_test.cpp)
+    target_link_libraries(live_hid_test PRIVATE scrctl_app)
+    add_test(NAME live_hid COMMAND live_hid_test)
+    set_tests_properties(live_hid PROPERTIES TIMEOUT 10)
+
     scrctl_add_test_executable(viewgeom_test tests/viewgeom_test.cpp)
     target_link_libraries(viewgeom_test PRIVATE scrctl_core)
     add_test(NAME viewgeom COMMAND viewgeom_test)
