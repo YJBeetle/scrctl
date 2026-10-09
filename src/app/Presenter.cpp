@@ -259,8 +259,10 @@ void Presenter::report_input(int raw_x, int raw_y, double fx, double fy, const c
 
 bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                      const KeyboardHandler &on_keyboard, const PasteHandler &on_paste) {
+    apply_pending_resize(on_touch, on_keyboard);
     if (release_pending_) {
         release_input(on_touch, on_keyboard);
+        discard_queued_input();
     } else if (!src_.input_valid) {
         // 触摸坐标未知不影响物理按键。仅触摸依赖有效面板坐标，键盘可继续保持。
         release_touch(on_touch);
@@ -302,6 +304,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                 if (e.window.event == SDL_WINDOWEVENT_MINIMIZED) minimized_ = true;
                 release_input(on_touch, on_keyboard);
             }
+            if (apply_pending_resize(on_touch, on_keyboard)) pending_move = false;
             break;
         case SDL_KEYDOWN: {
             if (!input_active_ || window_id == 0 || e.key.windowID != window_id) break;
@@ -330,6 +333,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
             } else if ((shortcut && e.key.keysym.sym == SDLK_f && !(mods & KMOD_SHIFT)) ||
                        fullscreen_key) {
                 toggle_fullscreen();
+                if (apply_pending_resize(on_touch, on_keyboard)) pending_move = false;
             } else if (shortcut && !(mods & KMOD_SHIFT) &&
                        (e.key.keysym.sym == SDLK_g || e.key.keysym.sym == SDLK_w)) {
                 if (resize_window(e.key.keysym.sym == SDLK_g, on_touch, on_keyboard)) {
@@ -410,6 +414,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
             break;
         }
     }
+    if (!quit && apply_pending_resize(on_touch, on_keyboard)) pending_move = false;
     if (quit) {
         input_active_ = false;
         pending_move = false;
@@ -425,6 +430,94 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
 
 bool Presenter::is_fullscreen() const {
     return window_ != nullptr && (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
+}
+
+bool Presenter::is_windowed() const {
+    return window_ != nullptr && !minimized_ &&
+           !(SDL_GetWindowFlags(window_) &
+             (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MAXIMIZED | SDL_WINDOW_MINIMIZED));
+}
+
+void Presenter::discard_queued_input() {
+    if (window_ == nullptr) return;
+    Uint32 own_id = SDL_GetWindowID(window_);
+    // 只过滤当前队列，不安装全局 filter；窗口状态、退出和其他窗口事件保持原样。
+    SDL_FilterEvents([](void *userdata, SDL_Event *event) {
+        const Uint32 id = *static_cast<Uint32 *>(userdata);
+        Uint32 event_id = 0;
+        switch (event->type) {
+        case SDL_KEYDOWN: case SDL_KEYUP: event_id = event->key.windowID; break;
+        case SDL_TEXTINPUT: event_id = event->text.windowID; break;
+        case SDL_TEXTEDITING: event_id = event->edit.windowID; break;
+        case SDL_MOUSEMOTION: event_id = event->motion.windowID; break;
+        case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP: event_id = event->button.windowID; break;
+        case SDL_MOUSEWHEEL: event_id = event->wheel.windowID; break;
+        default: return 1;
+        }
+        return event_id == id ? 0 : 1;
+    }, &own_id);
+}
+
+bool Presenter::resize_for_content(int old_w, int old_h, int new_w, int new_h) {
+    int width = 0, height = 0;
+    SDL_GetWindowSize(window_, &width, &height);
+    SDL_Rect usable{};
+    const int display = SDL_GetWindowDisplayIndex(window_);
+    if (display >= 0 && SDL_GetDisplayUsableBounds(display, &usable) != 0) usable = {};
+    int wanted_w = width, wanted_h = height;
+    if (!window_for_content(old_w, old_h, new_w, new_h, width, height, usable.w, usable.h,
+                            wanted_w, wanted_h)) {
+        std::fprintf(stderr, "%s\n", SCRCTL_TR(
+            "Cannot resize window for new content; keeping previous dimensions"));
+        return false;
+    }
+    if (width != wanted_w || height != wanted_h) {
+        int x = 0, y = 0;
+        SDL_GetWindowPosition(window_, &x, &y);
+        SDL_SetWindowSize(window_, wanted_w, wanted_h);
+        SDL_SetWindowPosition(window_, x, y);
+    }
+    SDL_GetWindowSize(window_, &win_w_, &win_h_);
+    return true;
+}
+
+bool Presenter::update_content(const Crop &crop, int degrees,
+                               const std::function<void(double, double, bool)> &on_touch,
+                               const KeyboardHandler &on_keyboard) {
+    int width = 0, height = 0;
+    viewport_size(crop, degrees, width, height);
+    if (window_ == nullptr || crop.w <= 0 || crop.h <= 0 ||
+        (degrees != 0 && degrees != 90 && degrees != 180 && degrees != 270)) return false;
+    if (degrees == degrees_ && width == view_w_ && height == view_h_) return true;
+    release_input(on_touch, on_keyboard);
+    discard_queued_input();
+    if (width != view_w_ || height != view_h_) {
+        if (is_windowed()) {
+            const int old_w = resize_pending_ ? windowed_content_w_ : view_w_;
+            const int old_h = resize_pending_ ? windowed_content_h_ : view_h_;
+            resize_for_content(old_w, old_h, width, height);
+            resize_pending_ = false;
+        } else if (!resize_pending_) {
+            windowed_content_w_ = view_w_;
+            windowed_content_h_ = view_h_;
+            resize_pending_ = true;
+        }
+    }
+    degrees_ = degrees;
+    src_ = crop;
+    view_w_ = width;
+    view_h_ = height;
+    return true;
+}
+
+bool Presenter::apply_pending_resize(const std::function<void(double, double, bool)> &on_touch,
+                                     const KeyboardHandler &on_keyboard) {
+    if (!resize_pending_ || !is_windowed()) return false;
+    release_input(on_touch, on_keyboard);
+    discard_queued_input();
+    resize_for_content(windowed_content_w_, windowed_content_h_, view_w_, view_h_);
+    resize_pending_ = false;
+    return true;
 }
 
 void Presenter::toggle_fullscreen() {

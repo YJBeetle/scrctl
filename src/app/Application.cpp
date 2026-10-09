@@ -268,11 +268,9 @@ int run(int argc, char **argv) {
 
     int rendered = 0;
     std::unique_ptr<Presenter> presenter;
-    // 记录当前窗口朝向；-1 表示尚未创建窗口，首帧需要创建 Presenter。
+    // 只在首帧创建窗口；之后复用窗口和渲染器，按有效内容尺寸更新布局。
     int applied_degrees = -1;
-    // 首次创建窗口不输出旋转提示。
-    bool first_window = true;
-    bool window_fullscreen = o.fullscreen;
+    int applied_view_w = 0, applied_view_h = 0;
     bool input_geometry_warned = false;
     const Uint64 start = SDL_GetTicks64();
     Uint64 last_stats_at = SDL_GetTicks64();
@@ -426,9 +424,8 @@ int run(int argc, char **argv) {
             continue;
         }
 
-        // 朝向改变时重建 Presenter。SDL dummy 驱动下，单独改变窗口和 logical
-        // size 不会同步更新绘制面，可能使画面缩到一角；重建可统一窗口与渲染尺寸。
-        // 此操作只发生在旋转时，可能短暂闪烁。
+        // 有效内容包括裁剪后的宽高和窗口旋转；编码填充变化只更新纹理。
+        // 启动窗口参数只在首次 open 时生效，转屏继续沿用用户实际窗口布局。
         const auto geometry = source->frame_geometry();
         const int degrees = o.orientation >= 0 ? o.orientation :
             (geometry.screenshot ? 0 : geometry.panel_degrees.value_or(0));
@@ -438,14 +435,14 @@ int run(int argc, char **argv) {
                 "Mouse input is unavailable: screenshot orientation or display dimensions are unknown or inconsistent\n"));
         }
         input_geometry_warned = !crop.input_valid;
-        if (degrees != applied_degrees) {
+        int view_w = 0, view_h = 0;
+        viewport_size(crop, degrees, view_w, view_h);
+        const bool content_changed = degrees != applied_degrees ||
+                                     view_w != applied_view_w || view_h != applied_view_h;
+        if (content_changed) {
             cancel_paste();
-            applied_degrees = degrees;
-            if (presenter != nullptr) {
-                window_fullscreen = presenter->is_fullscreen();
-                presenter->release_input(on_touch, on_keyboard);
-            }
-            presenter.reset();
+        }
+        if (presenter == nullptr) {
             presenter = std::make_unique<Presenter>();
             presenter->set_debug_input(o.debug_input);
             WindowSpec spec;
@@ -456,7 +453,7 @@ int run(int argc, char **argv) {
             spec.y = o.win_y.value_or(SDL_WINDOWPOS_CENTERED);
             spec.always_on_top = o.always_on_top;
             spec.borderless = o.borderless;
-            spec.fullscreen = window_fullscreen;
+            spec.fullscreen = o.fullscreen;
             spec.want_readback = o.verify_at > 0;
             spec.shortcut_mods = o.shortcut_mods;
             spec.horizontal_flip = o.display_flip;
@@ -467,12 +464,18 @@ int run(int argc, char **argv) {
                 return finish_exit(1);
             }
             seen_generation = presenter->input_generation();
-            if (first_window) {
-                first_window = false;
-            } else {
-                std::printf(SCRCTL_TR("Render rotation changed to %d degrees clockwise; window recreated\n"), degrees);
+        } else if (content_changed) {
+            if (!presenter->update_content(crop, degrees, on_touch, on_keyboard)) {
+                return finish_exit(1);
             }
+            seen_generation = presenter->input_generation();
+            std::printf(SCRCTL_TR(
+                "Render content changed to %dx%d; rotation %d degrees clockwise\n"),
+                view_w, view_h, degrees);
         }
+        applied_degrees = degrees;
+        applied_view_w = view_w;
+        applied_view_h = view_h;
 
         const bool do_verify = o.verify_at > 0 && rendered + 1 == o.verify_at;
         if (!presenter->draw(f, crop, do_verify ? o.verify_path.c_str() : nullptr)) {

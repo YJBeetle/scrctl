@@ -119,10 +119,8 @@ bool close(Rgb a, Rgb b) {
 
 /// 一档一次性的窗口 + 渲染器。
 ///
-/// 为什么每档新建、又为什么上 RAII：想改成 `SDL_SetWindowSize` 复用，实测 dummy 驱动下
-/// 绘制面并不跟着变（视口 40x60 仍报 60x60），于是回读读到的是留边后的局部，四个角
-/// 全对不上——症状和"旋转方向搞反"一模一样，很难查。而手写 destroy 的出口有五个，
-/// 漏掉一个就是下一档读到上一档的残留。
+/// 每档创建独立绘制面，使旋转公式的测试不依赖其它档的 renderer 状态。
+/// 窗口复用和尺寸变化由下面的 Presenter 测试另行覆盖。
 struct Canvas {
     SDL_Window *window = nullptr;
     SDL_Renderer *renderer = nullptr;
@@ -601,6 +599,7 @@ void presenter_releases_touch_when_geometry_changes() {
     check(callbacks.size() == 3, "重复 pump 或 release_touch 不重复抬起");
 
     check(presenter.draw(frame, crop), "恢复已知方向的几何帧");
+    check(!presenter.pump(on_touch), "恢复几何先清除旧坐标的输入队列");
     push_mouse(SDL_MOUSEBUTTONDOWN, 4, 48);
     presenter.pump(on_touch);
     check(callbacks.size() == 4, "几何恢复后可重新按下");
@@ -629,6 +628,7 @@ void presenter_releases_touch_when_geometry_changes() {
     check_touch(6, false, 1.0 - 18.0 / 80, 1.0 - 32.0 / 120,
                 "尺寸改变后的抬起不使用新的归一化分母");
     check(presenter.draw(frame, rotated), "恢复旋转后的面板尺寸");
+    check(!presenter.pump(on_touch), "恢复面板尺寸先完成旧输入清理");
     push_mouse(SDL_MOUSEBUTTONDOWN, 8, 12);
     presenter.pump(on_touch);
     check_touch(7, true, 1.0 - 18.0 / 80, 1.0 - 32.0 / 120,
@@ -1469,6 +1469,248 @@ void window_action_geometry() {
           "W 拒绝无效绘制面尺寸且保持原输出参数");
 }
 
+void content_change_geometry() {
+    using scrctl::app::window_for_content;
+    int w = 0, h = 0;
+    // 点数分别来自 2x 奇数源、1.5x 源和已去留边的整数窗口。
+    struct Case { int cw, ch, ww, wh; };
+    for (const auto &c : {Case{1125, 2436, 563, 1218}, Case{64, 96, 43, 64},
+                          Case{64, 96, 106, 160}}) {
+        int old_w = c.cw, old_h = c.ch, current_w = c.ww, current_h = c.wh;
+        for (int i = 0; i < 12; ++i) {
+            const bool swapped = (i % 2) == 0;
+            check(window_for_content(old_w, old_h, old_h, old_w, current_w, current_h,
+                                      0, 0, w, h) &&
+                      w == (swapped ? c.wh : c.ww) && h == (swapped ? c.ww : c.wh),
+                  "奇数 2x、1.5x 及去边窗口连续横竖切换不累积缩小");
+            std::swap(old_w, old_h);
+            current_w = w; current_h = h;
+        }
+    }
+    check(window_for_content(64, 96, 96, 64, 160, 160, 0, 0, w, h) &&
+              w == 160 && h == 106,
+          "有明显留边的方形窗口转屏时按当前显示尺度去边");
+    for (int i = 0; i < 8; ++i) {
+        const int old_w = i % 2 == 0 ? 96 : 64, old_h = i % 2 == 0 ? 64 : 96;
+        check(window_for_content(old_w, old_h, old_h, old_w, w, h, 0, 0, w, h) &&
+                  w == (i % 2 == 0 ? 106 : 160) && h == (i % 2 == 0 ? 160 : 106),
+              "首次去边之后重复转屏保持已发布的整点尺寸");
+    }
+    check(window_for_content(64, 96, 96, 144, 43, 64, 0, 0, w, h) &&
+              w == 65 && h == 96 &&
+              window_for_content(96, 144, 64, 96, w, h, 0, 0, w, h) && w == 43 && h == 64,
+          "内容非轴交换的等比例变化使用有界四舍五入，1.5x 点数往返稳定");
+    check(window_for_content(64, 96, 96, 64, 160, 240, 200, 120, w, h) &&
+              w == 180 && h == 120,
+          "内容变化后的窗口在可用区内按新比例适配");
+    check(window_for_content(64, 96, 64, 96, 160, 240, 20, 20, w, h) &&
+              w == 160 && h == 240,
+          "仅旋转 180 度而有效尺寸相同时不改变用户窗口大小");
+    w = 7; h = 9;
+    check(!window_for_content(0, 96, 96, 64, 160, 240, 0, 0, w, h) && w == 7 && h == 9,
+          "内容适配拒绝无效参数且不发布部分尺寸");
+    const int max = std::numeric_limits<int>::max();
+    check(!window_for_content(1, 1, max, max, max, max, 0, 0, w, h) && w == 7 && h == 9,
+          "内容适配的整数乘除不会溢出，无法表示时保留输出");
+}
+
+void presenter_content_updates() {
+    KeyboardFixture f("Presenter in-place content update", 80, 120);
+    if (!f.window_id) return;
+    SDL_Window *window = SDL_GetWindowFromID(f.window_id);
+    SDL_Renderer *renderer = SDL_GetRenderer(window);
+    check(window && renderer, "内容更新取得原 SDL 窗口和渲染器");
+    if (!window || !renderer) return;
+    SDL_SetWindowSize(window, 96, 144);
+    SDL_SetWindowPosition(window, 100, 120);
+    check(!f.pump() && f.presenter.draw(f.frame), "建立用户调整后的窗口大小与位置");
+    const auto size_is = [&](int w, int h) {
+        int actual_w = 0, actual_h = 0;
+        SDL_GetWindowSize(window, &actual_w, &actual_h);
+        return actual_w == w && actual_h == h;
+    };
+    const auto identity_is = [&] {
+        int x = 0, y = 0;
+        SDL_GetWindowPosition(window, &x, &y);
+        return SDL_GetWindowFromID(f.window_id) == window &&
+               SDL_GetRenderer(window) == renderer && x == 100 && y == 120;
+    };
+    const auto update = [&](const scrctl::app::Crop &crop, int degrees) {
+        return f.presenter.update_content(crop, degrees, f.on_touch(), f.on_keyboard());
+    };
+    const auto path = std::filesystem::temp_directory_path() /
+        ("scrctl-content-update-" + std::to_string(
+             std::chrono::steady_clock::now().time_since_epoch().count()) + ".bmp");
+    const Palette colors{kTopLeft, kTopRight, kBottomRight, kBottomLeft};
+    for (const int degrees : {90, 180, 270, 0}) {
+        const int w = degrees == 90 || degrees == 270 ? 144 : 96;
+        const int h = degrees == 90 || degrees == 270 ? 96 : 144;
+        check(update(f.crop, degrees) && identity_is() && size_is(w, h),
+              "转屏复用原窗口和 renderer，保留用户位置及相对显示尺度");
+        check(f.presenter.draw(f.frame, path.string().c_str()),
+              "同一 renderer 转屏后实际绘制并保存完整回读");
+        Palette expected{};
+        for (int i = 0; i < 4; ++i) {
+            const int source = (i - degrees / 90 + 4) % 4;
+            expected[static_cast<std::size_t>(i)] = colors[static_cast<std::size_t>(source)];
+        }
+        check_presenter_readback(path.string(), expected, w, h, "原地转屏");
+        check(!f.pump(), "转屏后的 SDL 尺寸事件不关闭窗口");
+    }
+    auto generation = f.presenter.input_generation();
+    check(update(f.crop, 180) && size_is(96, 144) && identity_is() &&
+              f.presenter.input_generation() == generation + 1,
+          "180 度同尺寸更新仅改变显示与输入方向，不重设窗口大小");
+    check(f.presenter.draw(f.frame) && !f.pump(), "同尺寸方向更新后绘制和事件继续有效");
+    generation = f.presenter.input_generation();
+    const auto padded = colored_frame(80, 112, f.crop, colors, 12);
+    check(update(f.crop, 180) && f.presenter.input_generation() == generation &&
+              f.presenter.draw(padded, f.crop) && size_is(96, 144) && identity_is(),
+          "只有编码填充和纹理尺寸变化时不触发窗口布局动作");
+    check(!f.pump(), "处理编码尺寸变化的旧输入失效");
+    check(update(f.crop, 0) && f.presenter.draw(f.frame) && !f.pump(),
+          "恢复竖屏输入依据");
+    f.reports.clear(); f.touches.clear();
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+    f.mouse(SDL_MOUSEBUTTONDOWN, 24, 36);
+    check(!f.pump() && f.touches.size() == 1 && f.touches.front().down,
+          "更新前有真实已交付设备按键和触摸");
+    f.mouse(SDL_MOUSEMOTION, 72, 108);
+    f.mouse(SDL_MOUSEBUTTONDOWN, 48, 48);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_V, KMOD_LALT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_A);
+    generation = f.presenter.input_generation();
+    check(update(f.crop, 90) && f.presenter.input_generation() == generation + 1,
+          "真实几何更新使旧粘贴代次失效一次");
+    f.expect({{4}, {}}, "几何更新只释放一次已按住设备键");
+    check(f.touches.size() == 2 && !f.touches.back().down &&
+              f.touches.front().x == f.touches.back().x &&
+              f.touches.front().y == f.touches.back().y,
+          "几何更新释放最后已交付位置，不使用尚在队列中的移动");
+    int pasted = 0;
+    check(!f.presenter.pump(f.on_touch(), f.on_keyboard(), [&] { ++pasted; }) &&
+              pasted == 0 && f.touches.size() == 2 && f.reports.empty(),
+          "旧 MOUSEBUTTONDOWN、MOD+V 与 UP 不按新几何注入或重启粘贴");
+    check(f.presenter.draw(f.frame), "新方向可在同一 renderer 正常绘制");
+    f.mouse(SDL_MOUSEBUTTONDOWN, 108, 24);
+    f.mouse(SDL_MOUSEBUTTONUP, 108, 24);
+    check(!f.pump() && f.touches.size() == 4 &&
+              std::abs(f.touches[2].x - 0.25) < 0.02 &&
+              std::abs(f.touches[2].y - 0.25) < 0.02,
+          "更新后的新鼠标事件按新方向映射到同一设备位置");
+
+    check(update(f.crop, 0) && f.presenter.draw(f.frame) && !f.pump(),
+          "准备最小化事件期间的延后内容适配");
+    f.window(SDL_WINDOWEVENT_MINIMIZED);
+    check(!f.pump(), "真实 SDL 最小化事件暂停输入");
+    generation = f.presenter.input_generation();
+    check(update(f.crop, 90) && update(f.crop, 180) && update(f.crop, 270) &&
+              size_is(96, 144) && identity_is(),
+          "特殊模式多次更新只记第一次内容基准，不更改当前窗口模式与大小");
+    f.touches.clear(); f.reports.clear();
+    f.window(SDL_WINDOWEVENT_RESTORED);
+    f.window(SDL_WINDOWEVENT_FOCUS_GAINED);
+    f.mouse(SDL_MOUSEBUTTONDOWN, 40, 40);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_V, KMOD_LALT);
+    check(!f.presenter.pump(f.on_touch(), f.on_keyboard(), [&] { ++pasted; }) &&
+              size_is(144, 96) && identity_is() &&
+              f.presenter.input_generation() == generation + 4 &&
+              f.touches.empty() && f.reports.empty() && pasted == 0,
+          "恢复事件先按最终内容一次适配再清旧点击与粘贴，不泄漏到下一事件");
+    generation = f.presenter.input_generation();
+    check(!f.pump() && f.presenter.input_generation() == generation,
+          "恢复后延后动作已消费，不反复调整大小或失效粘贴");
+
+    // 使用后端真实 fullscreen flags；不靠合成 WINDOWEVENT 冒充模式已切换。
+    SDL_SetWindowSize(window, 96, 144);
+    check(update(f.crop, 0) && !f.pump(), "恢复全屏测试的普通内容基准");
+    SDL_SetWindowSize(window, 96, 144);
+    check(SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP) == 0 &&
+              f.presenter.is_fullscreen(), "后端实际进入全屏模式");
+    if (f.presenter.is_fullscreen()) {
+        check(update(f.crop, 90) && update(f.crop, 180) && update(f.crop, 270) &&
+                  f.presenter.is_fullscreen() && SDL_GetWindowFromID(f.window_id) == window &&
+                  SDL_GetRenderer(window) == renderer,
+              "全屏期间内容更新保留同一窗口与后端全屏状态");
+        check(SDL_SetWindowFullscreen(window, 0) == 0 && !f.pump() && size_is(144, 96),
+              "退出全屏后按最初普通内容基准和最终方向一次适配");
+    }
+
+    std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> foreign(
+        SDL_CreateWindow("Content update foreign", 0, 0, 32, 32, SDL_WINDOW_HIDDEN),
+        SDL_DestroyWindow);
+    check(foreign != nullptr, "创建另一窗口检查过滤范围");
+    if (foreign) {
+        SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+        const Uint32 foreign_id = SDL_GetWindowID(foreign.get());
+        f.key_for(SDL_KEYDOWN, SDL_SCANCODE_A, KMOD_NONE, 0, foreign_id);
+        f.window(SDL_WINDOWEVENT_FOCUS_LOST, foreign_id);
+        f.window(SDL_WINDOWEVENT_FOCUS_GAINED);
+        SDL_Event quit{};
+        quit.type = SDL_QUIT;
+        check(SDL_PushEvent(&quit) == 1 && update(f.crop, 0),
+              "内容更新前排入其它窗口输入、本窗口生命周期与全局退出");
+        std::array<SDL_Event, 16> queued{};
+        const int count = SDL_PeepEvents(queued.data(), static_cast<int>(queued.size()),
+                                         SDL_PEEKEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT);
+        bool key = false, other_window = false, own_window = false, has_quit = false;
+        for (int i = 0; i < count; ++i) {
+            const auto &event = queued[static_cast<std::size_t>(i)];
+            key |= event.type == SDL_KEYDOWN && event.key.windowID == foreign_id;
+            other_window |= event.type == SDL_WINDOWEVENT && event.window.windowID == foreign_id;
+            own_window |= event.type == SDL_WINDOWEVENT && event.window.windowID == f.window_id;
+            has_quit |= event.type == SDL_QUIT;
+        }
+        check(key && other_window && own_window && has_quit,
+              "临时过滤仅丢本窗口旧输入，保留其它窗口、WINDOWEVENT 和 QUIT");
+        check(f.pump(), "保留的全局 QUIT 仍正常退出");
+    }
+    std::filesystem::remove(path);
+}
+
+void presenter_source_queue_changes() {
+    KeyboardFixture f("Presenter same-viewport source queue");
+    if (!f.window_id) return;
+    const Palette colors{kTopLeft, kTopRight, kBottomRight, kBottomLeft};
+    SDL_Window *window = SDL_GetWindowFromID(f.window_id);
+    const auto size_is = [&] {
+        int w = 0, h = 0;
+        SDL_GetWindowSize(window, &w, &h);
+        return w == 64 && h == 96 && SDL_GetWindowFromID(f.window_id) == window;
+    };
+    for (int change = 0; change < 4; ++change) {
+        auto crop = f.crop;
+        auto frame = colored_frame(80, 112, crop, colors, 0);
+        check(f.presenter.draw(frame, crop) && !f.pump(), "建立同视口来源队列检查的已知输入依据");
+        f.reports.clear(); f.touches.clear();
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+        f.mouse(SDL_MOUSEBUTTONDOWN, 16, 24);
+        check(!f.pump(), "来源几何变化之前已有设备按住状态");
+        f.mouse(SDL_MOUSEMOTION, 48, 72);
+        f.mouse(SDL_MOUSEBUTTONDOWN, 32, 48);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_V, KMOD_LALT);
+        switch (change) {
+        case 0: crop.x = 2; crop.y = 2; break;
+        case 1: crop.pixel_degrees = 180; break;
+        case 2: crop.display_w *= 2; crop.display_h *= 2; break;
+        default: crop.input_valid = false; break;
+        }
+        frame = colored_frame(80, 112, crop, colors, 0);
+        const auto generation = f.presenter.input_generation();
+        check(f.presenter.update_content(crop, 0, f.on_touch(), f.on_keyboard()) &&
+                  f.presenter.draw(frame, crop) && size_is(),
+              "同视口 crop、像素方向、分母或有效性改变仅更新来源，不改变布局");
+        int pasted = 0;
+        check(!f.presenter.pump(f.on_touch(), f.on_keyboard(), [&] { ++pasted; }) &&
+                  f.presenter.input_generation() == generation + 1 && pasted == 0 &&
+                  f.touches.size() == 2 && f.touches.front().down && !f.touches.back().down &&
+                  f.touches.front().x == f.touches.back().x &&
+                  f.touches.front().y == f.touches.back().y,
+              "draw 的来源失效在处理旧点击或 MOD+V 前先释放一次并过滤队列");
+        f.expect({{4}, {}}, "来源失效清理设备键一次，不把旧粘贴 V 发到设备");
+    }
+}
+
 void presenter_window_actions() {
     KeyboardFixture f("Presenter window actions", 160, 160);
     if (!f.window_id) return;
@@ -1834,6 +2076,9 @@ int main() {
     presenter_keyboard_quit_and_close();
     presenter_clipboard_request_context();
     window_action_geometry();
+    content_change_geometry();
+    presenter_content_updates();
+    presenter_source_queue_changes();
     presenter_window_actions();
 
     SDL_Quit();

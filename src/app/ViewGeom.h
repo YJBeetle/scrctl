@@ -235,6 +235,44 @@ inline bool window_without_borders(int view_w, int view_h, int points_w, int poi
     return true;
 }
 
+/// 内容改变时保留当前窗口相对旧内容的显示尺度，再去除留边。
+/// 输入输出均为窗口点数；可用区限制只在内容尺寸改变时生效，不重复乘启动 scale。
+/// 无法用正 int 表示时返回 false，保留调用者现有尺寸。
+inline bool window_for_content(int old_w, int old_h, int new_w, int new_h,
+                                int points_w, int points_h, int available_w, int available_h,
+                                int &win_w, int &win_h) {
+    if (old_w <= 0 || old_h <= 0 || new_w <= 0 || new_h <= 0 ||
+        points_w <= 0 || points_h <= 0) return false;
+    if (old_w == new_w && old_h == new_h) {
+        win_w = points_w;
+        win_h = points_h;
+        return true;
+    }
+    // 横竖互换直接交换点数；每次重新 floor 会让奇数源的窗口不断变小。
+    const bool swapped = old_w == new_h && old_h == new_w;
+    const int64_t scaled_w = swapped ? points_h : std::max<int64_t>(1,
+        (int64_t(points_w) * new_w + old_w / 2) / old_w);
+    const int64_t scaled_h = swapped ? points_w : std::max<int64_t>(1,
+        (int64_t(points_h) * new_h + old_h / 2) / old_h);
+    if (scaled_w > std::numeric_limits<int>::max() ||
+        scaled_h > std::numeric_limits<int>::max()) return false;
+    const int candidate_w = static_cast<int>(available_w > 0
+        ? std::min(scaled_w, int64_t(available_w)) : scaled_w);
+    const int candidate_h = static_cast<int>(available_h > 0
+        ? std::min(scaled_h, int64_t(available_h)) : scaled_h);
+    // G 最近点数及 W 向下取整都可能残留不到一窗口点的比例偏差。
+    // 在不超过一点的量化范围内保留当前尺寸；使用整数交叉乘积，不累积浮点误差。
+    const int64_t difference = std::abs(int64_t(candidate_w) * new_h -
+                                        int64_t(candidate_h) * new_w);
+    if (difference <= new_w || difference <= new_h) {
+        win_w = candidate_w;
+        win_h = candidate_h;
+        return true;
+    }
+    return window_without_borders(new_w, new_h, candidate_w, candidate_h,
+                                   candidate_w, candidate_h, win_w, win_h);
+}
+
 /// 计算窗口点数；view_w/h 必须使用裁剪并旋转后的视口尺寸。
 /// 两维均为 0 时按 scale 计算，默认比例再限制到可用屏幕；显式 --scale 不缩小。
 /// 指定一维时保留该维，另一维按视口比例取整；指定两维时保留窗口尺寸，由 SDL 留边。
