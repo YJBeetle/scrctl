@@ -12,6 +12,21 @@ namespace {
 constexpr std::string_view kServiceName = "com.apple.coredevice.pasteboardservice";
 constexpr std::string_view kUti = "public.utf8-plain-text";
 
+bool cancelled(std::stop_token cancel, std::string &err) {
+    if (!cancel.stop_requested()) return false;
+    err = SCRCTL_TR("Clipboard request cancelled");
+    return true;
+}
+
+bool valid_request(std::stop_token cancel, int reply_timeout_ms, std::string &err) {
+    if (cancelled(cancel, err)) return false;
+    if (reply_timeout_ms < 0) {
+        err = SCRCTL_TR("Clipboard reply timeout must not be negative");
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 xpc::Value Pasteboard::build_pull() {
@@ -80,32 +95,45 @@ std::optional<std::string> Pasteboard::find_text(const xpc::Value &reply) {
 }
 
 bool Pasteboard::set_text(Device &device, const std::string &text, std::string &err,
-                          bool verbose) {
-    auto conn = device.connect(kServiceName, err, verbose);
+                          bool verbose, std::stop_token cancel, int reply_timeout_ms) {
+    if (!valid_request(cancel, reply_timeout_ms, err)) return false;
+    auto conn = device.connect(kServiceName, err, verbose, cancel);
+    if (cancelled(cancel, err)) return false;
     if (conn == nullptr) {
         return false;
     }
     xpc::Value reply;
-    if (!conn->call(build_set(text), reply, 20000, err)) {
+    if (!conn->call(build_set(text), reply, reply_timeout_ms, err)) {
+        if (cancelled(cancel, err)) return false;
         err = SCRCTL_TR("SET failed: ") + err;
         return false;
     }
+    if (cancelled(cancel, err)) return false;
     // 检查回复命令。SET_REPLY 本身不证明设备已保存文本，落地验证需另行读回。
     if (reply.at("command").as_string_or("") != "SET_REPLY") {
         err = SCRCTL_TR("SET response is not SET_REPLY: ") + xpc::describe(reply).substr(0, 300);
         return false;
     }
-    return true;
+    return !cancelled(cancel, err);
 }
 
-bool Pasteboard::get_text(Device &device, std::string &out, std::string &err, bool verbose) {
-    auto conn = device.connect(kServiceName, err, verbose);
+bool Pasteboard::get_text(Device &device, std::string &out, std::string &err, bool verbose,
+                          std::stop_token cancel, int reply_timeout_ms) {
+    if (!valid_request(cancel, reply_timeout_ms, err)) return false;
+    auto conn = device.connect(kServiceName, err, verbose, cancel);
+    if (cancelled(cancel, err)) return false;
     if (conn == nullptr) {
         return false;
     }
     xpc::Value reply;
-    if (!conn->call(build_pull(), reply, 20000, err)) {
+    if (!conn->call(build_pull(), reply, reply_timeout_ms, err)) {
+        if (cancelled(cancel, err)) return false;
         err = SCRCTL_TR("PULL failed: ") + err;
+        return false;
+    }
+    if (cancelled(cancel, err)) return false;
+    if (reply.at("command").as_string_or("") != "PULL_REPLY") {
+        err = SCRCTL_TR("PULL response is not PULL_REPLY: ") + xpc::describe(reply).substr(0, 300);
         return false;
     }
     const auto text = find_text(reply);
@@ -115,6 +143,7 @@ bool Pasteboard::get_text(Device &device, std::string &out, std::string &err, bo
         err = SCRCTL_TR("Response has no plain-text representation: ") + xpc::describe(reply).substr(0, 400);
         return false;
     }
+    if (cancelled(cancel, err)) return false;
     out = *text;
     return true;
 }

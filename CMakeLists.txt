@@ -26,6 +26,7 @@ endif()
 include(cmake/Dependencies.cmake)
 include(cmake/Lwip.cmake)
 include(cmake/Translations.cmake)
+include(cmake/Threading.cmake)
 
 option(SCRCTL_BUILD_TESTS "构建无头自检" ON)
 option(SCRCTL_FETCH_SDL2 "用 FetchContent 拉取 SDL2，而不是找系统安装" OFF)
@@ -180,6 +181,7 @@ target_include_directories(scrctl_core PUBLIC src)
 target_link_libraries(scrctl_core PUBLIC ScrctlAppleFrameworks OpenSSL::SSL OpenSSL::Crypto nlohmann_json::nlohmann_json)
 target_link_libraries(scrctl_core PRIVATE pugixml::pugixml scrctl_lwip Scrctl::Mdns)
 target_link_libraries(scrctl_core PRIVATE Intl::Intl)
+target_link_libraries(scrctl_core PUBLIC Scrctl::Threading)
 if(WIN32)
     target_sources(scrctl_core PRIVATE src/wifi/PairRecordWindows.cpp)
     target_link_libraries(scrctl_core PUBLIC ws2_32 PRIVATE advapi32 iphlpapi)
@@ -223,6 +225,7 @@ add_library(scrctl_app STATIC
         src/app/SdlRuntime.cpp
         src/app/Presenter.cpp
         src/app/KeyboardState.cpp
+        src/app/ClipboardPasteJob.cpp
         src/app/AudioOut.cpp
         src/app/FileSource.cpp
         src/app/Cli.cpp
@@ -324,6 +327,13 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(keyboard_state_test PRIVATE Scrctl::SDL2)
     add_test(NAME keyboard_state COMMAND keyboard_state_test)
 
+    scrctl_add_test_executable(clipboard_job_test tests/clipboard_job_test.cpp
+        src/app/ClipboardPasteJob.cpp)
+    target_include_directories(clipboard_job_test PRIVATE src)
+    target_link_libraries(clipboard_job_test PRIVATE Scrctl::Threading)
+    add_test(NAME clipboard_job COMMAND clipboard_job_test)
+    set_tests_properties(clipboard_job PROPERTIES TIMEOUT 15)
+
     scrctl_add_test_executable(app_lifecycle_test tests/app_lifecycle_test.cpp)
     target_link_libraries(app_lifecycle_test PRIVATE scrctl_app)
     add_test(NAME app_lifecycle COMMAND app_lifecycle_test)
@@ -395,6 +405,11 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(net_runtime_test PRIVATE scrctl_core scrctl_lwip)
     add_test(NAME net_runtime COMMAND net_runtime_test)
     set_tests_properties(net_runtime PROPERTIES TIMEOUT 40)
+
+    scrctl_add_test_executable(service_cancellation_test tests/service_cancellation_test.cpp)
+    target_link_libraries(service_cancellation_test PRIVATE scrctl_core scrctl_lwip)
+    add_test(NAME service_cancellation COMMAND service_cancellation_test)
+    set_tests_properties(service_cancellation PROPERTIES TIMEOUT 30)
 
     scrctl_add_test_executable(net_test tests/net_test.cpp)
     target_link_libraries(net_test PRIVATE scrctl_core)

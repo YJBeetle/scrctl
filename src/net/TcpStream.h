@@ -13,6 +13,7 @@ public:
   TcpStream(const TcpStream &) = delete;
   TcpStream &operator=(const TcpStream &) = delete;
   // 提交连接请求后在调用线程等待最多 15 秒；关闭或隧道失败会唤醒等待。
+  // close 在 connect 前执行时也会永久关闭端点，不再创建 PCB。
   bool connect(uint16_t peer_port, std::string &err);
   // 并发发送按整个调用串行化，防止不同消息的字节交错；发送空间等待使用 15 秒截止时间。
   bool send(std::string_view data, std::string &err) override;

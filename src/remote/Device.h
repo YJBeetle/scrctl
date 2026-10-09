@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -74,8 +75,10 @@ public:
     [[nodiscard]] std::string property(std::string_view key) const;
 
     /// 按 RSD 目录建立独立服务连接；返回对象必须先于 Device 销毁。
+    /// cancel 覆盖建连和返回连接的生命期，只关闭该服务的 TCP 端点。
     std::unique_ptr<ServiceConnection> connect(std::string_view service_name, std::string &err,
-                                              bool verbose = false);
+                                              bool verbose = false,
+                                              std::stop_token cancel = {});
 
     /// 使用新服务连接调用一次 CoreDevice feature，返回前释放连接。
     /// timeout_ms 传给 invoke，不包含建立 TCP/RemoteXPC 连接所需的等待。

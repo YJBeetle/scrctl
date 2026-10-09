@@ -301,12 +301,16 @@ std::string Device::property(std::string_view key) const {
 }
 
 std::unique_ptr<ServiceConnection> Device::connect(std::string_view service_name, std::string &err,
-                                                   bool verbose) {
+                                                   bool verbose, std::stop_token cancel) {
+    if (cancel.stop_requested()) {
+        err = SCRCTL_TR("Service connection cancelled");
+        return nullptr;
+    }
     if (!rsd_) {
         err = SCRCTL_TR("Session not established");
         return nullptr;
     }
-    return rsd_->connect_service(service_name, err, verbose);
+    return rsd_->connect_service(service_name, err, verbose, cancel);
 }
 
 CallResult Device::feature_call(std::string_view service_name,

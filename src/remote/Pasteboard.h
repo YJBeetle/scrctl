@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <stop_token>
 #include <string>
 
 #include "xpc/XpcValue.h"
@@ -35,12 +36,15 @@ class Device;
 /// `data` 里的字节是原生 XPC Data，不是 base64。
 class Pasteboard {
 public:
-    /// 每次写入建立独立连接，包含零长度文本。
+    /// 每次写入建立独立连接，包含零长度文本。cancel 中断本次连接和请求，不能
+    /// 撤销设备已接受的 SET；reply_timeout_ms 只限制回复等待，不是操作总时限。
     static bool set_text(Device &device, const std::string &text, std::string &err,
-                         bool verbose = false);
+                         bool verbose = false, std::stop_token cancel = {},
+                         int reply_timeout_ms = 20000);
     /// 读回纯文本，零长度 Data 返回成功；缺少文本表示或请求失败时给出原因。
     static bool get_text(Device &device, std::string &out, std::string &err,
-                         bool verbose = false);
+                         bool verbose = false, std::stop_token cancel = {},
+                         int reply_timeout_ms = 20000);
 
     /// 构造包含 types 和原生 Data 的 SET 消息，供请求与离线形状检查共同使用。
     [[nodiscard]] static xpc::Value build_set(const std::string &text);

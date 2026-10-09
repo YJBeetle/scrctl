@@ -1304,6 +1304,81 @@ void presenter_keyboard_quit_and_close() {
     }
 }
 
+void presenter_clipboard_request_context() {
+    KeyboardFixture f("Presenter explicit paste context");
+    if (!f.window_id) return;
+    unsigned requested = 0, eligible = 0;
+    uint64_t requested_generation = 0;
+    const auto paste = [&] {
+        ++requested;
+        requested_generation = f.presenter.input_generation();
+        if (f.presenter.ready_for_paste()) ++eligible;
+    };
+    const auto pump = [&] { return f.presenter.pump(f.on_touch(), f.on_keyboard(), paste); };
+    check(f.presenter.ready_for_paste(), "新窗口无按住输入，可接受明确粘贴请求");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_V, KMOD_LALT);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_V, KMOD_LALT, 1);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_V, KMOD_LALT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_V);
+    check(!pump() && requested == 1 && eligible == 1, "MOD+V 只在首次按下请求一次粘贴");
+    f.expect({}, "本地 MOD+V 与抬起不先给手机发送普通 V");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_V, KMOD_LALT | KMOD_LSHIFT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_V);
+    check(!pump() && requested == 1, "未提供旧式文字注入，不把 MOD+Shift+V 当成普通粘贴");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_V);
+    f.key(SDL_KEYUP, SDL_SCANCODE_V);
+    check(!pump() && requested == 1, "普通 V 不读取本机剪贴板");
+    f.expect({{25}, {}}, "普通 V 仍按物理键盘报告转发");
+
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_V, KMOD_LALT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_V);
+    check(!pump() && requested == 2 && eligible == 1 && !f.presenter.ready_for_paste(),
+          "有普通键按住时拒绝粘贴，避免完整粘贴报告释放它");
+    f.expect({{4}}, "被拒粘贴不影响已按住的 A");
+    f.key(SDL_KEYUP, SDL_SCANCODE_A);
+    check(!pump() && f.presenter.ready_for_paste(), "A 松开之后恢复粘贴资格");
+    f.expect({{}}, "真实 A 抬起释放设备键");
+
+    f.mouse(SDL_MOUSEBUTTONDOWN, 8, 16);
+    check(!pump() && !f.presenter.ready_for_paste(), "拖动期间不向当前控件注入粘贴");
+    f.mouse(SDL_MOUSEBUTTONUP, 8, 16);
+    check(!pump() && f.presenter.ready_for_paste(), "鼠标抬起恢复粘贴资格");
+    const auto previous = f.presenter.input_generation();
+    f.window(SDL_WINDOWEVENT_FOCUS_LOST);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_V, KMOD_LALT);
+    f.window(SDL_WINDOWEVENT_FOCUS_GAINED);
+    check(!pump() && requested == 2 && f.presenter.input_generation() != previous &&
+              f.presenter.ready_for_paste(),
+          "同轮失焦后恢复也使旧作业代次失效，失焦期间不请求粘贴");
+    f.key_for(SDL_KEYDOWN, SDL_SCANCODE_V, KMOD_LALT, 0, f.window_id + 1);
+    check(!pump() && requested == 2, "外部窗口的 MOD+V 不读取本机剪贴板");
+
+    check(f.presenter.draw(f.frame, f.crop), "以真实渲染建立粘贴坐标上下文");
+    check(!pump(), "消费首次几何更新");
+    const auto geometry_generation = f.presenter.input_generation();
+    auto changed = f.crop;
+    changed.x = 2;
+    changed.w -= 2;
+    check(f.presenter.draw(f.frame, changed) && !f.presenter.ready_for_paste(),
+          "裁剪变更先暂停粘贴，等待统一输入清理");
+    check(!pump() && f.presenter.input_generation() != geometry_generation &&
+              f.presenter.ready_for_paste(),
+          "几何清理更新代次后才能接收新粘贴");
+
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_V, KMOD_LALT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_V);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_Q, KMOD_LALT);
+    check(pump() && requested == 3 && eligible == 2 &&
+              requested_generation != f.presenter.input_generation() &&
+              !f.presenter.ready_for_paste(),
+          "同轮先粘贴再退出，使已请求作业失效且阻止迟到按键");
+    const auto empty = f.presenter.input_generation();
+    f.release();
+    check(f.presenter.input_generation() != empty,
+          "无按住输入的显式退出清理也使异步作业失效");
+}
+
 }  // namespace
 
 int main() {
@@ -1357,6 +1432,7 @@ int main() {
     presenter_shortcuts_preserve_normal_input();
     presenter_physical_keyboard_events();
     presenter_keyboard_quit_and_close();
+    presenter_clipboard_request_context();
 
     SDL_Quit();
     if (failures != 0) {

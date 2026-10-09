@@ -3,19 +3,24 @@
 
 #include <SDL.h>
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
 #include "app/Cli.h"
 #include "app/Commands.h"
+#include "app/ClipboardPasteJob.h"
 #include "app/FileSource.h"
 #include "app/LiveSource.h"
 #include "app/Presenter.h"
 #include "app/RecordFormat.h"
 #include "app/SdlRuntime.h"
 #include "media/StreamSession.h"
+#include "remote/Pasteboard.h"
 
 namespace scrctl::app {
 
@@ -104,6 +109,8 @@ int run(int argc, char **argv) {
         return 0;
     }
     std::unique_ptr<FrameSource> source;
+    // 作业借用 Device；必须先取消并等待，再销毁 source 中的设备与隧道。
+    std::unique_ptr<ClipboardPasteJob> paste_job;
     LiveSource *live = nullptr;
     // 返回值必须在 FILE 刷新、关闭之后确定。析构仍负责兜底，但无法修改已经
     // 求值的 return 0；取消启动时 made 也可能已经拥有视频 worker 和录制文件。
@@ -144,7 +151,10 @@ int run(int argc, char **argv) {
         }
         source = std::move(made);
     }
-    const auto finish_exit = [&](int code) { return finish_source(live, code); };
+    const auto finish_exit = [&](int code) {
+        if (paste_job) paste_job->shutdown();
+        return finish_source(live, code);
+    };
     if (exit_requested()) {
         return finish_exit(0);
     }
@@ -163,6 +173,24 @@ int run(int argc, char **argv) {
     }
 
     const bool control_enabled = live != nullptr && !o.no_control;
+    if (control_enabled && !o.no_window) {
+        paste_job = std::make_unique<ClipboardPasteJob>(
+            [live](const std::string &text, std::stop_token cancel) {
+                ClipboardPasteJob::OperationResult result;
+                std::string readback;
+                if (scrctl::remote::Pasteboard::set_text(live->device(), text, result.error,
+                                                        false, cancel, 5000) &&
+                    !cancel.stop_requested() &&
+                    scrctl::remote::Pasteboard::get_text(live->device(), readback, result.error,
+                                                        false, cancel, 5000)) {
+                    result.success = readback == text;
+                    if (!result.success)
+                        result.error = SCRCTL_TR("Device clipboard text did not match; paste skipped");
+                }
+                result.cancelled = cancel.stop_requested();
+                return result;
+            });
+    }
 
     if (live != nullptr && live->has_audio() && !o.no_audio_playback) {
         std::string aerr;
@@ -249,12 +277,26 @@ int run(int argc, char **argv) {
     Uint64 last_stats_at = SDL_GetTicks64();
     bool quit = false;
     int exit_code = 0;
+    uint64_t input_epoch = 0, seen_generation = 0, next_paste_id = 0;
+    std::optional<std::chrono::steady_clock::time_point> paste_started;
+    const auto cancel_paste = [&] {
+        ++input_epoch;
+        paste_started.reset();
+        if (paste_job) paste_job->cancel();
+    };
+    const auto synchronize_input = [&] {
+        if (presenter && seen_generation != presenter->input_generation()) {
+            seen_generation = presenter->input_generation();
+            cancel_paste();
+        }
+    };
 
     /// 触摸和键盘共享控制门控及首次失败，停止发送后只输出一次错误。
     std::string control_err;
     bool control_warned = false;
     const auto input_failed = [&] {
         control_warned = true;
+        cancel_paste();
         std::fprintf(stderr, SCRCTL_TR("Input injection failed (further attempts disabled): %s\n"),
                      control_err.c_str());
     };
@@ -269,6 +311,64 @@ int run(int argc, char **argv) {
     const auto on_keyboard = [&](const std::vector<uint16_t> &usages) {
         if (!control_enabled || live == nullptr || control_warned) return;
         if (!live->keyboard_state(usages, control_err)) input_failed();
+    };
+    const auto on_paste = [&] {
+        synchronize_input();
+        if (!paste_job || control_warned || !presenter || runtime.stop_requested()) return;
+        if (!presenter->ready_for_paste()) {
+            std::fprintf(stderr, "%s\n", SCRCTL_TR("Release the held keys or mouse button before pasting"));
+            return;
+        }
+        if (paste_job->busy()) {
+            std::fprintf(stderr, "%s\n", SCRCTL_TR("Clipboard paste is already in progress"));
+            return;
+        }
+        // 只有明确 MOD+V 才读取本机剪贴板；不在后台同步或轮询用户文本。
+        if (!SDL_HasClipboardText()) return;
+        const std::unique_ptr<char, decltype(&SDL_free)> text(SDL_GetClipboardText(), SDL_free);
+        if (!text) {
+            std::fprintf(stderr, SCRCTL_TR("Failed to read computer clipboard: %s\n"), SDL_GetError());
+            return;
+        }
+        const auto size = std::strlen(text.get());
+        if (size == 0) return;
+        if (size > ClipboardPasteJob::kMaxTextBytes) {
+            std::fprintf(stderr, "%s\n", SCRCTL_TR("Clipboard text exceeds the 1 MiB paste limit"));
+            return;
+        }
+        const auto started = paste_job->start(++next_paste_id, input_epoch,
+                                              std::string(text.get(), size));
+        if (started == ClipboardPasteJob::StartStatus::Started) {
+            paste_started = std::chrono::steady_clock::now();
+        } else {
+            std::fprintf(stderr, "%s\n", SCRCTL_TR("Could not start clipboard paste"));
+        }
+    };
+    const auto service_paste = [&] {
+        synchronize_input();
+        if (!paste_job) return;
+        if (quit || control_warned || runtime.stop_requested()) cancel_paste();
+        if (paste_started && std::chrono::steady_clock::now() - *paste_started >=
+                                 std::chrono::seconds(5)) {
+            cancel_paste();
+            std::fprintf(stderr, "%s\n", SCRCTL_TR("Clipboard paste timed out"));
+        }
+        const auto result = paste_job->poll();
+        if (!result) return;
+        paste_started.reset();
+        if (result->cancelled || result->id != next_paste_id || result->generation != input_epoch || quit || control_warned ||
+            runtime.stop_requested() || !presenter || !presenter->ready_for_paste()) return;
+        if (!result->success) {
+            std::fprintf(stderr, SCRCTL_TR("Clipboard paste failed: %s\n"),
+                         result->error.empty() ? SCRCTL_TR("No diagnostic available") : result->error.c_str());
+            return;
+        }
+        // 与普通键盘串行发送，先修饰键再主键。每一步失败都经过同一个输入门控。
+        // SET/PULL 一致和本地发送成功不代表目标控件一定接受了文字。
+        constexpr uint16_t paste_key = scrctl::hid::key::kA + ('v' - 'a');
+        on_keyboard({scrctl::hid::key::kGuiLeft});
+        on_keyboard({scrctl::hid::key::kGuiLeft, paste_key});
+        on_keyboard({});
     };
 
     // 复用 Frame 的像素缓冲，避免每帧重新分配并提交约 11 MiB 内存。
@@ -309,8 +409,9 @@ int run(int argc, char **argv) {
             }
             // 等待下一帧时也需要处理窗口事件，避免窗口失去响应。
             if (presenter != nullptr) {
-                quit = presenter->pump(on_touch, on_keyboard);
+                quit = presenter->pump(on_touch, on_keyboard, on_paste);
             }
+            service_paste();
             continue;
         }
 
@@ -337,6 +438,7 @@ int run(int argc, char **argv) {
         }
         input_geometry_warned = !crop.input_valid;
         if (degrees != applied_degrees) {
+            cancel_paste();
             applied_degrees = degrees;
             if (presenter != nullptr) {
                 window_fullscreen = presenter->is_fullscreen();
@@ -363,6 +465,7 @@ int run(int argc, char **argv) {
                                  spec)) {
                 return finish_exit(1);
             }
+            seen_generation = presenter->input_generation();
             if (first_window) {
                 first_window = false;
             } else {
@@ -390,7 +493,8 @@ int run(int argc, char **argv) {
             std::printf(SCRCTL_TR("Reached --exit-after %d\n"), o.exit_after);
             break;
         }
-        quit = presenter->pump(on_touch, on_keyboard);
+        quit = presenter->pump(on_touch, on_keyboard, on_paste);
+        service_paste();
     }
 
     if (presenter != nullptr) {

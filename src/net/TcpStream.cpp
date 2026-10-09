@@ -97,6 +97,12 @@ bool TcpStream::connect(uint16_t port, std::string &err) {
   auto s = impl_;
   err.clear();
   const auto code = LwipRuntime::instance().call([&]() -> err_t {
+    // close 可能先于 connect 的核心任务执行；已关闭端点不能再创建 PCB 或发 SYN。
+    {
+      std::lock_guard lock(s->mutex);
+      if (s->closed)
+        return ERR_CLSD;
+    }
     auto *nic = s->stack.network_interface();
     if (!nic || !port || s->started)
       return ERR_ARG;
@@ -129,7 +135,7 @@ bool TcpStream::connect(uint16_t port, std::string &err) {
   const bool ready = s->cv.wait_for(lock, std::chrono::seconds(15), [&] {
     return s->established || s->closed || !s->failure.empty();
   });
-  if (ready && s->established)
+  if (ready && s->established && !s->closed)
     return true;
   err = s->failure.empty() ? SCRCTL_TR("TCP connect timed out or connection closed") : s->failure;
   // 失败收尾需要进入核心线程，先释放应用状态锁，避免与 fail() 的锁形成等待环。

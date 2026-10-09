@@ -256,7 +256,7 @@ void Presenter::report_input(int raw_x, int raw_y, double fx, double fy, const c
 }
 
 bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
-                     const KeyboardHandler &on_keyboard) {
+                     const KeyboardHandler &on_keyboard, const PasteHandler &on_paste) {
     if (release_pending_) {
         release_input(on_touch, on_keyboard);
     } else if (!src_.input_valid) {
@@ -318,6 +318,8 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
             if (!fresh || !keyboard_.is_pressed(scancode)) break;
             if (shortcut && e.key.keysym.sym == SDLK_q) {
                 quit = true;
+            } else if (shortcut && e.key.keysym.sym == SDLK_v && !(mods & KMOD_SHIFT)) {
+                if (on_paste) on_paste();
             } else if ((shortcut && e.key.keysym.sym == SDLK_f && !(mods & KMOD_SHIFT)) ||
                        fullscreen_key) {
                 toggle_fullscreen();
@@ -418,11 +420,17 @@ void Presenter::release_touch(const std::function<void(double, double, bool)> &o
 
 void Presenter::release_input(const std::function<void(double, double, bool)> &on_touch,
                               const KeyboardHandler &on_keyboard) {
+    ++input_generation_;
     release_touch(on_touch);
     for (const auto &report : keyboard_.release_all()) {
         if (on_keyboard) on_keyboard(report);
     }
     release_pending_ = false;
+}
+
+bool Presenter::ready_for_paste() const {
+    return window_ != nullptr && input_active_ && !release_pending_ && !dragging_ &&
+           keyboard_.held().empty();
 }
 
 Presenter::~Presenter() {

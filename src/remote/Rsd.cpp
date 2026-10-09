@@ -181,63 +181,89 @@ xpc::Value core_device_request(std::string_view feature_identifier,
 
 std::unique_ptr<ServiceConnection> ServiceConnection::open(net::Stack &stack,
                                                            const ServiceInfo &service,
-                                                           std::string &err, bool verbose) {
+                                                           std::string &err, bool verbose,
+                                                           std::stop_token cancel) {
+    if (cancel.stop_requested()) {
+        err = SCRCTL_TR("Service connection cancelled");
+        return nullptr;
+    }
     if (service.port == 0) {
         err = std::string(SCRCTL_TR("Service has no valid TCP port (expected 1..65535): ")) +
               service.name;
         return nullptr;
     }
     auto conn = std::unique_ptr<ServiceConnection>(new ServiceConnection());
+    conn->cancel_ = cancel;
     conn->tcp_ = std::make_unique<net::TcpStream>(stack);
+    conn->cancellation_.emplace(cancel, CloseOnStop{conn->tcp_.get()});
+    if (conn->cancelled(err)) return nullptr;
     if (!conn->tcp_->connect(service.port, err)) {
+        if (conn->cancelled(err)) return nullptr;
         err = SCRCTL_TR("Connect to ") + service.name + SCRCTL_TR(" port ") + std::to_string(service.port) + SCRCTL_TR(" failed: ") + err;
         return nullptr;
     }
+    if (conn->cancelled(err)) return nullptr;
     if (!service.uses_remote_xpc) {
         // 非 RemoteXPC 服务仅建立 TCP，后续协议由 tcp() 的调用方处理。
         return conn;
     }
     auto channel = Channel::open(*conn->tcp_, err, verbose);
+    if (conn->cancelled(err)) return nullptr;
     if (!channel) {
         err = service.name + SCRCTL_TR(" HTTP/2 handshake failed: ") + err;
         return nullptr;
     }
     // 身份申报仅用于 RSD 控制通道；服务连接完成握手后直接发送业务请求。
     conn->channel_ = std::make_unique<Channel>(std::move(*channel));
+    if (conn->cancelled(err)) return nullptr;
     return conn;
+}
+
+bool ServiceConnection::cancelled(std::string &err) const {
+    if (!cancel_.stop_requested()) return false;
+    err = SCRCTL_TR("Service connection cancelled");
+    return true;
 }
 
 bool ServiceConnection::call(const xpc::Value &request, xpc::Value &reply, int timeout_ms,
                              std::string &err) {
+    if (cancelled(err)) return false;
     if (channel_ == nullptr) {
         err = SCRCTL_TR("Service connection is not RemoteXPC");
         return false;
     }
-    return channel_->call(request, reply, timeout_ms, err);
+    const bool ok = channel_->call(request, reply, timeout_ms, err);
+    return cancelled(err) ? false : ok;
 }
 
 bool ServiceConnection::send_only(const xpc::Value &request, std::string &err) {
+    if (cancelled(err)) return false;
     if (channel_ == nullptr) {
         err = SCRCTL_TR("Service connection is not RemoteXPC");
         return false;
     }
-    return channel_->send_request(request, false, err);
+    const bool ok = channel_->send_request(request, false, err);
+    return cancelled(err) ? false : ok;
 }
 
 bool ServiceConnection::service(int timeout_ms, std::string &err) {
+    if (cancelled(err)) return false;
     if (channel_ == nullptr) {
         err = SCRCTL_TR("Service connection is not RemoteXPC");
         return false;
     }
-    return channel_->service(timeout_ms, err);
+    const bool ok = channel_->service(timeout_ms, err);
+    return cancelled(err) ? false : ok;
 }
 
 Channel::Wait ServiceConnection::wait_message(xpc::Value &out, int timeout_ms, std::string &err) {
+    if (cancelled(err)) return Channel::Wait::Broken;
     if (channel_ == nullptr) {
         err = SCRCTL_TR("Service connection is not RemoteXPC");
         return Channel::Wait::Broken;
     }
-    return channel_->wait(out, timeout_ms, err);
+    const auto status = channel_->wait(out, timeout_ms, err);
+    return cancelled(err) ? Channel::Wait::Broken : status;
 }
 
 namespace {
@@ -298,14 +324,17 @@ CallResult ServiceConnection::invoke(std::string_view feature_identifier,
 bool ServiceConnection::subscribe(std::string_view feature_identifier,
                                   std::string_view action_identifier, const xpc::Value &input,
                                   std::string &err) {
+    if (cancelled(err)) return false;
     if (channel_ == nullptr) {
         err = SCRCTL_TR("Streaming feature requires an XPC service connection");
         return false;
     }
     if (!channel_->send_request(
             core_device_request(feature_identifier, action_identifier, input), true, err)) {
+        cancelled(err);
         return false;
     }
+    if (cancelled(err)) return false;
     subscribed_feature_ = std::string(feature_identifier);
     return true;
 }
@@ -318,7 +347,7 @@ ServiceConnection::StreamEvent ServiceConnection::next_batch(std::vector<xpc::Va
         return StreamEvent::Broken;
     }
     xpc::Value reply;
-    const auto w = channel_->wait(reply, timeout_ms, err);
+    const auto w = wait_message(reply, timeout_ms, err);
     if (w == Channel::Wait::Timeout) {
         return StreamEvent::Idle;
     }
@@ -446,13 +475,17 @@ bool Rsd::supports(std::string_view service_name, std::string_view feature) cons
 }
 
 std::unique_ptr<ServiceConnection> Rsd::connect_service(std::string_view name, std::string &err,
-                                                        bool verbose) {
+                                                        bool verbose, std::stop_token cancel) {
+    if (cancel.stop_requested()) {
+        err = SCRCTL_TR("Service connection cancelled");
+        return nullptr;
+    }
     const auto info = service(name);
     if (!info) {
         err = missing_service_message(name, services_);
         return nullptr;
     }
-    return ServiceConnection::open(*stack_, *info, err, verbose);
+    return ServiceConnection::open(*stack_, *info, err, verbose, cancel);
 }
 
 std::string Rsd::missing_service_message(const std::string_view name,

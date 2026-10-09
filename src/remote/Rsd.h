@@ -4,6 +4,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -46,8 +47,10 @@ public:
     ServiceConnection() = default;
 
     /// 端口为 0 时在创建 TCP 连接前返回 nullptr，并在 err 中报告服务名与有效范围。
+    /// cancel 从建连前生效，返回后仍可中断该连接的读写；不能撤销已被设备执行的请求。
     static std::unique_ptr<ServiceConnection> open(net::Stack &stack, const ServiceInfo &service,
-                                                   std::string &err, bool verbose = false);
+                                                   std::string &err, bool verbose = false,
+                                                   std::stop_token cancel = {});
 
     /// 将 input 放入 CoreDevice.input，成功时读取 CoreDevice.output。
     /// 设备错误或缺少预期输出返回 DeviceError，并在 err 中保留诊断。
@@ -100,6 +103,15 @@ private:
     std::unique_ptr<Channel> channel_;
     /// 当前订阅的 feature 名，用于缺少请求上下文的推送错误诊断。
     std::string subscribed_feature_;
+    bool cancelled(std::string &err) const;
+    struct CloseOnStop {
+        net::TcpStream *tcp;
+        void operator()() const { tcp->close(); }
+    };
+    std::stop_token cancel_;
+    /// 回调只能关闭端点，不能访问 Channel。最后声明以先解除注册、等待正在执行的
+    /// 回调结束，再析构其引用的 Channel/TCP；连接本身仍由请求线程独占。
+    std::optional<std::stop_callback<CloseOnStop>> cancellation_;
 };
 
 /// 借用 Stack，持有 RSD 控制通道及首次握手取得的服务目录快照。
@@ -129,7 +141,8 @@ public:
     [[nodiscard]] const xpc::Value *service_entry(std::string_view name) const;
 
     std::unique_ptr<ServiceConnection> connect_service(std::string_view name, std::string &err,
-                                                      bool verbose = false);
+                                                      bool verbose = false,
+                                                      std::stop_token cancel = {});
 
     /// 返回 peer_info.Properties 的借用指针；缺失时为 nullptr，日志脱敏由调用方负责。
     [[nodiscard]] const xpc::Value *properties() const;

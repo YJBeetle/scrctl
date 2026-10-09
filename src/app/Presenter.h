@@ -27,6 +27,7 @@ struct WindowSpec {
 class Presenter {
   public:
     using KeyboardHandler = std::function<void(const KeyboardState::Report &)>;
+    using PasteHandler = std::function<void()>;
 
     /// 等比缩放时留边区域的背景色，在 open() 前设置；首帧前的 clear 也使用它。
     void set_background(uint8_t r, uint8_t g, uint8_t b);
@@ -56,7 +57,10 @@ class Presenter {
 
     /// 物理键盘报告保留全部按住的 usages；不将 SDL_TEXTINPUT 重复注入成文字。
     bool pump(const std::function<void(double, double, bool)> &on_touch,
-              const KeyboardHandler &on_keyboard = {});
+              const KeyboardHandler &on_keyboard = {}, const PasteHandler &on_paste = {});
+    /// 异步粘贴完成时必须再次检查焦点、按住状态和代次；释放输入使旧代次失效。
+    [[nodiscard]] uint64_t input_generation() const { return input_generation_; }
+    [[nodiscard]] bool ready_for_paste() const;
     /// 查询 SDL 的实际状态，设备转屏重建窗口时保留用户选择的全屏模式。
     [[nodiscard]] bool is_fullscreen() const;
     /// 在重建窗口、退出或坐标依据失效时，释放最后一个有效的设备触摸点。
@@ -101,6 +105,7 @@ class Presenter {
     bool debug_input_ = false;
     uint16_t shortcut_mods_ = KMOD_LALT | KMOD_LGUI;
     KeyboardState keyboard_;
+    uint64_t input_generation_ = 0;
 };
 
 } // namespace scrctl::app
