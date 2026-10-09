@@ -68,7 +68,8 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
                    SCRCTL_N_("Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"))
         ->check(CLI::Range(0, 60000))->needs("--list-devices");
     app.add_flag("-n,--no-control", o.no_control, SCRCTL_N_("Disable input control"))
-        ->excludes("--test-touch")->excludes("--test-button")->excludes("--test-type");
+        ->excludes("--test-touch")->excludes("--test-button")->excludes("--test-type")
+        ->excludes("--start-app");
     app.add_flag("--list-apps", o.list_apps, SCRCTL_N_("List device apps"));
     app.add_flag("--version", o.show_version, SCRCTL_N_("Show version"));
     app.add_flag("-f,--fullscreen", o.fullscreen, SCRCTL_N_("Desktop fullscreen"));

@@ -63,7 +63,7 @@ G / W 只改变电脑窗口，不改变手机、采集或录制；全屏、最�
 例如 2× 显示器上的 1125 像素对应 563 点，不能保证每个奇数尺寸严格逐像素一致。
 W 也容许整点取整产生的极小留边，避免反复执行时窗口持续缩小。
 
-`--no-control` 与 `--test-touch`、`--test-button`、`--test-type` 相冲突时在连接设备前
+`--no-control` 与 `--start-app`、`--test-touch`、`--test-button`、`--test-type` 相冲突时在连接设备前
 报错。`--copy` / `--paste` 保留独立命令行为，使用时仍会显式执行剪贴板操作。
 
 依据：[官方快捷键](https://github.com/Genymobile/scrcpy/blob/v5.0/doc/shortcuts.md)、

@@ -291,22 +291,27 @@ int main() {
               ParseResult::Run && readonly_copy.no_control && readonly_copy.copy_text &&
               readonly_copy.copy_text->empty() && readonly_copy.paste,
           "no-control preserves standalone clipboard write and read-back commands");
-    for (const std::vector<std::string> &injection : {
+    for (const std::vector<std::string> &control_command : {
              std::vector<std::string>{"--test-touch", "0,0,1,1"},
              std::vector<std::string>{"--test-button", "home"},
              std::vector<std::string>{"--test-type", "q"},
-             std::vector<std::string>{"--test-type", ""}}) {
-        auto args = injection;
+             std::vector<std::string>{"--test-type", ""},
+             std::vector<std::string>{"--start-app", "com.apple.freeform"}}) {
+        auto args = control_command;
         args.insert(args.begin(), {"scrctl", "--no-control"});
         Options conflict;
         check(parse(args, conflict) == ParseResult::Error,
-              "no-control rejects each explicitly requested input injection");
+              "no-control rejects input injection and device app launch");
         args.erase(args.begin() + 1);
         args.push_back("-n");
         Options reverse_conflict;
         check(parse(args, reverse_conflict) == ParseResult::Error,
               "no-control conflicts are independent of argument order and short alias");
     }
+    Options start_app;
+    check(parse({"scrctl", "--start-app", "com.apple.freeform"}, start_app) == ParseResult::Run &&
+              start_app.start_app == "com.apple.freeform" && !start_app.no_control,
+          "device app launch remains available with control enabled");
     Options input;
     Options discovery;
     check(parse({"scrctl", "--list-devices"}, discovery) == ParseResult::Run &&
