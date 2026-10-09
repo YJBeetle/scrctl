@@ -79,14 +79,14 @@ W 也容许整点取整产生的极小留边，避免反复执行时窗口持续
 
 | 项目 | 当前行为及使用边界 |
 | --- | --- |
-| `--record / -r` | `.mp4` / `.mkv` 保存 HEVC 和 AAC-ELD，`--no-audio` 只录视频；其他扩展名兼容裸 HEVC，建议 `.hevc`。MP4 最后一帧显示 100 ms，参考 scrcpy 的收尾规则 |
+| `--record / -r` | `.mp4` / `.mkv` 保存所选轨道：默认 HEVC 和 AAC-ELD，`--no-audio` 只录视频，`--no-video` 只录音频；其他扩展名兼容裸 HEVC，建议 `.hevc`。MP4 最后视频帧显示 100 ms，参考 scrcpy 的收尾规则 |
 | `--display-orientation` | 只改变本机显示，支持 scrcpy 的四个旋转角度与四个 flip 值；另保留 auto 扩展。flip 先水平翻转，再顺时针旋转，鼠标映射使用相反顺序 |
 | `--orientation` / `--record-orientation` | 数字 `--orientation` 同时设置显示与容器录制方向；`--record-orientation` 只设置录制。按参数顺序覆盖；旧 `--orientation=auto` 仅设置显示 |
 | `--crop` | 裁剪本机显示的源像素；视频和截图各使用自身的像素坐标，不改变设备采集或录制 |
 | `--video-source` | 支持 display 和扩展值 screenshot（截图轮询）；没有 camera 能力 |
 | `--no-window` | 不创建窗口并关闭视频播放；无录制或帧诊断消费者时不采集视频，可继续播放音频。录制时可跳过显示解码；按帧数退出、硬件解码、降级测试、截图及缺少 IDR 检查能力时保留旧解码路径 |
 | 无视频的窗口 | 默认 256×256 点，显式宽高各自覆盖；不允许拖动调整尺寸。键盘、粘贴、全屏和退出沿用普通窗口，坐标触摸与 G/W 视频尺寸动作停用；目前没有应用图标 |
-| 仅录音频 | 尚未实现，`--no-video -r` 在连接前报错；现有 MP4/MKV 仍须包含视频 |
+| 仅录音频 | `--no-video -r audio.mp4` 或 `audio.mkv` 保存一条原 AAC-ELD 音轨；不支持裸 AAC/ADTS。可用 `--no-audio-playback` 关闭电脑播放，音频路由仍由默认行为或 `--audio-dup` 决定 |
 | `--copy / --paste` | 写入 / 读取设备剪贴板后退出，不模拟设备上的粘贴动作 |
 | 窗口标题与比例 | 默认标题为 scrctl，默认背景为黑色；可以自由调整窗口比例 |
 | Wi-Fi | `--list-devices` 用 mDNS 枚举；`--pair` 经 USB 创建/验证记录，`--wifi auto -s <UDID>` 自动选择无线候选；手动地址可用 `--wifi-port` 指定端口。scrctl 承担配对与连接，Android 的对应入口由 ADB 提供 |
@@ -144,7 +144,8 @@ scrctl 的默认路由已在 macOS、iPhone14,4 / iOS 27 的 USB 与 Wi-Fi 音�
    继续验证原生窗口及真机转屏；显示旋转快捷键随后接入。
 6. HOME、音量、锁定等已具备底层能力的快捷键：接入主窗口回调并验证设备效果。
    Android BACK、APP_SWITCH、通知栏等不能直接套在 iOS 上。
-7. 输出控制：明确采集 / 解码 / 播放开关，随后考虑音频单独模式。
+7. 输出控制：采集、解码与播放已分离，音频单独播放、录制及无视频键盘窗口已接入；
+   继续验证更多设备、平台和实际背景窗口输入。
 
 这些是能力待办。离线 SDL 事件与键盘状态测试不能替代 VM、真实键盘、系统快捷键
 拦截或设备目标控件中的输入验证。

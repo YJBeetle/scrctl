@@ -1,7 +1,9 @@
 #include "app/Application.h"
 #include "app/LiveSource.h"
+#include "app/LiveStats.h"
 #include "app/SdlRuntime.h"
 #include "decode/Decoder.h"
+#include "i18n/Translation.h"
 
 #include <SDL.h>
 #include <atomic>
@@ -13,6 +15,12 @@
 #include <memory>
 #include <string>
 #include <vector>
+
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace {
 int failures = 0;
@@ -40,6 +48,123 @@ int run(std::vector<std::string> args) {
         argv.push_back(arg.data());
     }
     return scrctl::app::run(static_cast<int>(argv.size()), argv.data());
+}
+
+std::string stats_output(scrctl::app::LiveStats &stats,
+                         const scrctl::app::LiveStats::Snapshot &snapshot) {
+    std::fflush(stdout);
+    FILE *file = std::tmpfile();
+    check(file != nullptr, "formatter output capture creates its private temporary file");
+    if (file == nullptr) return {};
+#ifdef _WIN32
+    const int output = _fileno(stdout);
+    const int saved = _dup(output);
+    const int redirected = saved < 0 ? -1 : _dup2(_fileno(file), output);
+#else
+    const int output = fileno(stdout);
+    const int saved = dup(output);
+    const int redirected = saved < 0 ? -1 : dup2(fileno(file), output);
+#endif
+    check(saved >= 0 && redirected >= 0, "formatter output capture redirects only this process stdout");
+    if (saved >= 0 && redirected >= 0) {
+        stats.print(snapshot);
+        std::fflush(stdout);
+#ifdef _WIN32
+        check(_dup2(saved, output) >= 0, "formatter output capture restores stdout");
+#else
+        check(dup2(saved, output) >= 0, "formatter output capture restores stdout");
+#endif
+    }
+#ifdef _WIN32
+    if (saved >= 0) _close(saved);
+#else
+    if (saved >= 0) close(saved);
+#endif
+    std::rewind(file);
+    std::string result;
+    char buffer[2048];
+    while (const auto size = std::fread(buffer, 1, sizeof buffer, file)) result.append(buffer, size);
+    std::fclose(file);
+    return result;
+}
+
+void check_audio_rate(const std::string &output, double received) {
+    const auto position = output.find("  Audio: received ");
+    double actual = -1, decoded = -1, delivered = -1;
+    const int fields = position == std::string::npos ? 0 :
+        std::sscanf(output.c_str() + position,
+                    "  Audio: received %lf packets/s, decoded %lf packets/s, delivered %lf frames/s",
+                    &actual, &decoded, &delivered);
+    check(fields == 3 && actual == received && decoded == 0 && delivered == 0,
+          "actual formatter reports the independent audio packet rate with zero PCM decoding or delivery");
+}
+
+void audio_only_stats() {
+    using Stats = scrctl::app::LiveStats;
+    check(scrctl::i18n::initialize("en"), "formatter regression selects English deterministically");
+    Stats stats;
+    stats.audio_started(1000);
+    Stats::Snapshot snapshot;
+    Stats::Tcp tcp;
+    tcp.now_ms = 9000;
+    tcp.recv_bytes = 1024;
+    snapshot.tcp = tcp;
+    Stats::Audio audio;
+    audio.now_ms = 2000;
+    audio.counters.packets = 100;
+    audio.counters.rtcp_sent = 5;
+    audio.counters.rtcp_failed = 1;
+    snapshot.audio = audio;
+    auto output = stats_output(stats, snapshot);
+    check_audio_rate(output, 100);
+    check(output.find("  Tunnel TCP:") != std::string::npos && output.find("  Video:") == std::string::npos,
+          "audio-only snapshot prints its actual tunnel and audio without inventing a video line");
+    check(output.find("RR sent/failed 5/1") != std::string::npos &&
+              output.find("buffered 0 frames, interval 1.0 s") != std::string::npos &&
+              output.find("Audio clock: inactive") != std::string::npos &&
+              output.find("(output=closed)") != std::string::npos,
+          "capture-only statistics retain RR, the real audio interval and zero-buffer inactive playback");
+
+    snapshot.tcp->now_ms = 19000;
+    snapshot.audio->now_ms = 3500;
+    snapshot.audio->counters.packets = 400;
+    snapshot.audio->counters.rtcp_sent = 8;
+    snapshot.audio->counters.rtcp_failed = 2;
+    output = stats_output(stats, snapshot);
+    check_audio_rate(output, 200);
+    check(output.find("RR sent/failed 8/2") != std::string::npos &&
+              output.find("buffered 0 frames, interval 1.5 s") != std::string::npos,
+          "the second audio-only print updates audio counters and its own time baseline, not the TCP window");
+
+    Stats::Video video;
+    video.now_ms = 29000;
+    snapshot.video = video;
+    snapshot.audio->now_ms = 5000;
+    snapshot.audio->counters.packets = 550;
+    output = stats_output(stats, snapshot);
+    check_audio_rate(output, 100);
+    check(output.find("  Video:") != std::string::npos && output.find("  Audio:") != std::string::npos,
+          "ordinary AV statistics still print both existing media branches");
+
+    stats.reset_screenshot(5000);
+    Stats::Screenshot screenshot;
+    screenshot.now_ms = 6000;
+    screenshot.counters.frames = 4;
+    snapshot.screenshot = screenshot;
+    snapshot.audio->now_ms = 6000;
+    snapshot.audio->counters.packets = 650;
+    output = stats_output(stats, snapshot);
+    check(output.find("  Screenshots:") != std::string::npos &&
+              output.find("  Audio:") == std::string::npos && output.find("  Video:") == std::string::npos,
+          "screenshot statistics retain their existing priority over background media");
+    snapshot.screenshot.reset();
+    snapshot.video.reset();
+    snapshot.audio->now_ms = 7000;
+    snapshot.audio->counters.packets = 750;
+    output = stats_output(stats, snapshot);
+    check_audio_rate(output, 100);
+    check(output.find("buffered 0 frames, interval 2.0 s") != std::string::npos,
+          "printing screenshots does not settle or lose the background audio interval");
 }
 
 // 只控制公开解码器工厂，运行真实 Application/FileSource/Presenter/SDL 路径。
@@ -149,6 +274,7 @@ std::unique_ptr<Decoder> create_platform_decoder() {
 } // namespace scrctl
 
 int main() {
+    audio_only_stats();
     const auto previous_int = std::signal(SIGINT, caller_handler);
     const auto previous_term = std::signal(SIGTERM, caller_handler);
     {
@@ -279,12 +405,27 @@ int main() {
         options.serial = "must-not-connect";
         options.wifi = "must-not-resolve";
         options.want_video = false;
-        options.record_path = "must-not-create.mkv";
+        options.record_path = "must-not-create.hevc";
         std::string err;
         check(!source.start(options, err) && !source.has_video() &&
                   !source.video_decoding_enabled() && !source.has_audio() &&
                   !err.empty() && !std::filesystem::exists(options.record_path),
-              "audio-only recording is rejected before connection or file creation");
+              "audio-only raw HEVC is rejected before connection or file creation");
+        options.record_path = "must-not-create.mkv";
+        options.want_audio = false;
+        scrctl::app::LiveSource no_tracks;
+        check(!no_tracks.start(options, err) && !no_tracks.has_video() && !no_tracks.has_audio() &&
+                  err.find("requires audio capture") != std::string::npos &&
+                  !std::filesystem::exists(options.record_path),
+              "audio-only container without audio fails before connecting or creating a file");
+        options.want_audio = true;
+        options.record_orientation = 90;
+        scrctl::app::LiveSource rotated_audio;
+        check(!rotated_audio.start(options, err) &&
+                  err.find("requires a video track") != std::string::npos &&
+                  !std::filesystem::exists(options.record_path),
+              "audio-only recording rejects video rotation before connection or file creation");
+        options.record_orientation = 0;
         options.record_path.clear();
         options.want_audio = false;
         options.should_cancel = [] { return true; };

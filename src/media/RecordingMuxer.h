@@ -34,7 +34,9 @@ public:
         Format format = Format::Mp4;
         /// 相对编码像素的静态顺时针展示角度：0/90/180/270，不旋转或重编码图像。
         int video_orientation = 0;
-        /// 原始参数 NAL，不含起始码。open 重新检查，只接受已确认无重排的配置。
+        bool include_video = true;
+        /// 原始参数 NAL，不含起始码。所选视频只接受已确认无重排的配置。
+        /// 不选视频时参数必须空且方向必须为 0；至少选择视频或 audio 一轨。
         Nal vps, sps, pps;
         std::optional<Audio> audio;
     };

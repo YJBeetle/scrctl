@@ -26,7 +26,7 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         "Switching routes may pause the phone's player; resume it if needed.\n"
         "The device chooses encoding dimensions, bitrate and frame rate. Display crop and "
         "--display-orientation leave recordings unchanged; --orientation rotates display and "
-        "container recordings together. Record to .mp4 or .mkv for HEVC with audio, or .hevc for raw video.\n"
+        "container recordings together. Record selected tracks to .mp4 or .mkv, or use .hevc for raw video.\n"
         "Wireless use requires pairing. --help / --version do not connect to the device."));
     app.set_help_flag("-h,--help", SCRCTL_N_("Show help"));
     app.add_option("--play", o.path, SCRCTL_N_("Play an Annex-B HEVC file"));
@@ -42,7 +42,7 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
                  SCRCTL_N_("Allow replacing an incomplete or rejected pairing record; requires --pair"))
         ->needs("--pair");
     app.add_option("-r,--record", o.record, SCRCTL_N_(
-        "Record to .mp4 or .mkv (HEVC and audio); other extensions save raw HEVC without audio"))
+        "Record selected video/audio tracks to .mp4 or .mkv; other extensions save raw HEVC without audio"))
         ->excludes("--play");
     app.add_option("--start-app", o.start_app, SCRCTL_N_("Launch bundle ID; ? matches name prefix, + terminates the previous instance"));
     app.add_option("--window-title,--title", o.title, SCRCTL_N_("Window title"));
@@ -168,7 +168,15 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
             o.no_video = true;
         }
         if (o.no_video && !o.record.empty()) {
-            throw CLI::ValidationError("--record", SCRCTL_TR("Audio-only recording is not supported yet; omit --no-video or disable recording"));
+            if (!record_container_format(o.record)) {
+                throw CLI::ValidationError("--record", SCRCTL_TR("Audio-only recording requires MP4 or MKV; raw HEVC cannot contain audio"));
+            }
+            if (o.no_audio) {
+                throw CLI::ValidationError("--record", SCRCTL_TR("Recording requires at least one enabled audio or video track"));
+            }
+            if (o.record_orientation != 0 || record_flip) {
+                throw CLI::ValidationError("--record-orientation", SCRCTL_TR("Recording orientation requires a video track"));
+            }
         }
         if (o.no_video && (o.exit_after > 0 || o.hw_decode || !o.test_degrade.empty() ||
                            o.video_source == "screenshot")) {

@@ -47,6 +47,7 @@ struct Script {
     uint32_t local = 0;
     std::atomic<unsigned> factories{0}, regulators{0}, pcm_calls{0}, opens{0}, stops{0}, receivers{0};
     bool stop_before_join = false;
+    int stop_delay_ms = 0;
     bool decoder_available = false;
     void reset() {
         std::lock_guard lock(mutex);
@@ -54,6 +55,7 @@ struct Script {
         local_present = true; end_once = false; send_ok = true; stop_ok = true; local = 0;
         factories = 0; regulators = 0; pcm_calls = 0; opens = 0; stops = 0; receivers = 0;
         stop_before_join = false;
+        stop_delay_ms = 0;
         decoder_available = false;
     }
     void enqueue(Bytes packet) {
@@ -287,13 +289,19 @@ struct Directory {
     Directory() { std::filesystem::create_directory(path); }
     ~Directory() { std::error_code ignored; std::filesystem::remove_all(path, ignored); }
 };
-std::unique_ptr<Recorder> recorder_at(const std::filesystem::path& path, std::size_t budget = 16u * 1024u * 1024u) {
+std::unique_ptr<Recorder> recorder_at(const std::filesystem::path& path,
+                                    std::size_t budget = 16u * 1024u * 1024u,
+                                    bool include_video = true,
+                                    std::chrono::milliseconds clock_wait = 5000ms) {
     Recorder::Options options;
     options.path = path.string(); options.include_audio = true; options.encoded_budget = budget;
+    options.include_video = include_video;
+    options.clock_wait = clock_wait;
     std::string error; auto recorder = Recorder::start(options, error);
     check(recorder != nullptr && error.empty() && recorder->includes_audio(),
-          "actual AV Recorder starts with an immutable audio consumer for capture-only");
-    if (recorder) check(recorder->begin_track(Recorder::Track::Video, video_session, 0), "actual video track is admitted");
+          "actual Recorder starts with an immutable audio consumer for capture-only");
+    if (recorder && include_video)
+        check(recorder->begin_track(Recorder::Track::Video, video_session, 0), "actual video track is admitted");
     return recorder;
 }
 void seed_video(Recorder& recorder) {
@@ -324,12 +332,13 @@ void missing_audio_consumer(const Directory& directory) {
     check(recorder->finish(error) && error.empty() && !recorder->includes_audio(),
           "the unchanged video-only Recorder completes normally and keeps its selection");
 }
-void verify_file(const std::filesystem::path& path) {
+void verify_file(const std::filesystem::path& path, bool include_video = true) {
     AVFormatContext* input = nullptr;
     check(avformat_open_input(&input, path.string().c_str(), nullptr, nullptr) >= 0 && input,
           "capture-only output opens as a real Matroska container");
     if (!input) return;
-    check(input->nb_streams == 2, "capture-only preserves both HEVC and AAC tracks");
+    check(input->nb_streams == (include_video ? 2u : 1u),
+          "capture-only preserves exactly the selected recording tracks");
     AVPacket* packet = av_packet_alloc();
     check(packet != nullptr, "demux packet allocation succeeds");
     unsigned video = 0, audio = 0; int status = AVERROR_EOF;
@@ -345,27 +354,111 @@ void verify_file(const std::filesystem::path& path) {
             ++audio;
         } else {
             Bytes expected{0,0,0,static_cast<uint8_t>(idr.size())}; expected.insert(expected.end(), idr.begin(), idr.end());
-            check(stream->codecpar->codec_id == AV_CODEC_ID_HEVC && bytes == expected,
+            check(include_video && stream->codecpar->codec_id == AV_CODEC_ID_HEVC && bytes == expected,
                   "capture-only audio leaves recorded HEVC bytes unchanged");
             check(pts == static_cast<int64_t>(video) * 100000, "video retains its independent SR-derived 24kHz clock");
             ++video;
         }
         av_packet_unref(packet);
     }
-    check(status == AVERROR_EOF && audio == 3 && video == 3,
+    check(status == AVERROR_EOF && audio == 3 && video == (include_video ? 3u : 0u),
           "late, duplicate and foreign packets do not create extra container samples");
     av_packet_free(&packet); avformat_close_input(&input);
 }
+void slow_audio_cleanup(const Directory& directory) {
+    for (const unsigned scenario : {0u, 1u, 2u}) {
+        const bool prior_recording_error = scenario == 2;
+        const bool stop_ok = scenario == 0;
+        script.reset(); script.stop_ok = stop_ok;
+        script.stop_delay_ms = 600;
+        // 保留真实循环的 50ms poll 边界，为 CI 调度留出余量；设备 RPC 仍
+        // 明显超过缩短后的时钟预算，若 seal 在 RPC 之后，合法尾包会超时。
+        const auto path = directory.path / ("slow-stop-" + std::to_string(scenario) + ".mkv");
+        auto recorder = recorder_at(path, 16u * 1024u * 1024u, false, 250ms);
+        if (!recorder) continue;
+        scrctl::remote::Device device; std::string error;
+        Pump::Options options;
+        options.decode_pcm = false; options.stop_device_on_exit = true; options.recorder = recorder.get();
+        auto pump = Pump::start(device, options, error);
+        check(pump != nullptr, "slow cleanup fixture starts the actual audio-only receive loop");
+        if (!pump) continue;
+        script.enqueue(rtp(20, 0, 0));
+        script.enqueue(sender_report(0, 0, 1000));
+        script.enqueue(sender_report(0, 48000, 1001));
+        // 采样点和编码区间都晚于最后 SR，只能在 Final 有界外推中写入。
+        script.enqueue(rtp(21, 48480, 0));
+        check(wait([&] { const auto s = pump->stats(); return s.packets == 2 && s.other_payload == 2; }),
+              "real audio loop admits a valid tail beyond the last trusted sender report");
+        pump->stop_receiving();
+        pump->stop_receiving();
+        check(script.stops == 0 && script.receivers == 0 && pump->receiver_port() == 49152,
+              "receive stop joins without device RPC and retains the confirmed cleanup handle");
+        const auto sent = script.sent_count();
+        const std::string first_error = "controlled capture first error";
+        if (prior_recording_error) recorder->fail(first_error);
+        const bool recording_ok = recorder->finish(error);
+        check(prior_recording_error ? !recording_ok && error == first_error : recording_ok && error.empty(),
+              "Recorder seals before slow device cleanup, preserving a valid Final tail or its first error");
+        const auto stop_started = std::chrono::steady_clock::now();
+        pump->stop();
+        check(std::chrono::steady_clock::now() - stop_started >= 500ms,
+              "the actual cleanup boundary stays blocked longer than the 250ms recording budget");
+        const auto cleanup_error = pump->terminal_error();
+        check(cleanup_error == (stop_ok ? "" : "controlled stop failure"),
+              "slow stop failure remains a readable cleanup error after recording has finished");
+        const bool overall_ok = recording_ok && cleanup_error.empty();
+        check(overall_ok == (scenario == 0),
+              "cleanup failure cannot be reported as an overall successful exit");
+        if (prior_recording_error)
+            check(recorder->error() == first_error, "slow cleanup never overwrites the Recorder's prior capture error");
+        else
+            check(recorder->error().empty(), "a completed recording remains valid after slow or failed stopAll");
+        check(script.stops == 1 && script.receivers == 0 && !script.stop_before_join &&
+              script.sent_count() == sent && pump->receiver_port() == 0,
+              "slow cleanup sends one stopAll only after producer join and leaves no RR or live session");
+        pump->stop_receiving(); pump->stop(); pump.reset();
+        check(script.stops == 1 && script.sent_count() == sent,
+              "repeated receive stop, cleanup and destruction are idempotent after a slow RPC");
+        check(prior_recording_error ? !recorder->finish(error) && error == first_error :
+                                     recorder->finish(error) && error.empty(),
+              "repeated Recorder finish retains its completed result independently of cleanup status");
+        if (prior_recording_error) continue;
+        AVFormatContext* input = nullptr;
+        check(avformat_open_input(&input, path.string().c_str(), nullptr, nullptr) >= 0 && input,
+              "Final tail output opens as an actual audio-only container after slow cleanup");
+        if (!input) continue;
+        check(input->nb_streams == 1 && input->streams[0]->codecpar->codec_id == AV_CODEC_ID_AAC,
+              "Final tail output has only the selected AAC track");
+        AVPacket* packet = av_packet_alloc();
+        check(packet != nullptr, "Final tail demux packet allocation succeeds");
+        unsigned packets = 0;
+        int status = AVERROR_EOF;
+        if (packet) while ((status = av_read_frame(input, packet)) >= 0) {
+            const auto* stream = input->streams[packet->stream_index];
+            const auto pts = av_rescale_q(packet->pts, stream->time_base, AVRational{1, 1000000});
+            const auto duration = av_rescale_q(packet->duration, stream->time_base, AVRational{1, 1000000});
+            check(Bytes(packet->data, packet->data + packet->size) == silence && packet->pts == packet->dts &&
+                  pts == (packets == 0 ? 0 : 1010000) && duration == 10000,
+                  "SR-approved first packet and Final-only tail retain original AAC, PTS/DTS and 10ms duration");
+            ++packets; av_packet_unref(packet);
+        }
+        check(status == AVERROR_EOF && packets == 2,
+              "slow or failed stopAll cannot discard the valid tail packet sealed before its RPC");
+        av_packet_free(&packet); avformat_close_input(&input);
+    }
+}
 void successful_capture(const Directory& directory, bool source_known, bool duplicate_audio,
-                        bool send_failure = false) {
+                        bool send_failure = false, bool include_video = true) {
     script.reset(); script.local_present = source_known; script.local = source_known ? 0u : 9u;
     script.send_ok = !send_failure;
     const uint32_t source = script.local;
-    const auto path = directory.path / (send_failure ? "rr-failure.mkv" :
+    const auto path = directory.path / (!include_video ? "audio-only.mkv" : send_failure ? "rr-failure.mkv" :
                                       (source_known ? "negotiated-zero.mkv" : "first-media.mkv"));
-    auto recorder = recorder_at(path); if (!recorder) return; seed_video(*recorder);
+    auto recorder = recorder_at(path, 16u * 1024u * 1024u, include_video); if (!recorder) return;
+    if (include_video) seed_video(*recorder);
     scrctl::remote::Device device; std::string error;
     Pump::Options options; options.decode_pcm = false; options.audio_dup = duplicate_audio; options.recorder = recorder.get();
+    options.stop_device_on_exit = !include_video;
     auto pump = Pump::start(device, options, error);
     check(pump != nullptr && error.empty(), "capture-only starts even when the PCM decoder factory is unavailable");
     if (!pump) return;
@@ -408,9 +501,15 @@ void successful_capture(const Directory& directory, bool source_known, bool dupl
             script.starts.front().offer.audio_dup == duplicate_audio && script.starts.front().timeout_seconds == 20,
             "PCM demand does not alter audio route or lease request"); }
     const auto sent = script.sent_count(); std::this_thread::sleep_for(60ms);
-    check(script.sent_count() == sent && script.stops == 0, "stop joins capture worker and stops RR without device stopAll");
-    check(recorder->finish(error) && error.empty(), "capture-only actual AV recording finishes after producer join");
-    verify_file(path);
+    check(script.sent_count() == sent && script.stops == (include_video ? 0u : 1u) && !script.stop_before_join,
+          "stop joins capture worker and stops RR; only sole audio owner sends one stopAll");
+    check(recorder->finish(error) && error.empty(), "capture-only actual recording finishes after producer join");
+    verify_file(path, include_video);
+    if (!include_video) {
+        pump->stop(); pump.reset();
+        check(script.stops == 1 && script.sent_count() == sent,
+              "audio-only capture cleanup and destruction keep stopAll idempotent after Recorder seal");
+    }
 }
 void capture_errors(const Directory& directory) {
     for (const bool budget_failure : {false, true}) {
@@ -513,10 +612,16 @@ bool StreamSession::send_rtp(const Bytes& payload, uint16_t port, std::string& e
     error = script.send_ok ? "" : "controlled send failure"; return script.send_ok;
 }
 bool StreamSession::stop(remote::Device&, std::string& error, bool) const {
-    std::lock_guard lock(script.mutex); ++script.stops;
-    if (script.receivers != 0) script.stop_before_join = true;
-    error = script.stop_ok ? "" : "controlled stop failure";
-    return script.stop_ok;
+    int delay_ms = 0;
+    bool result = false;
+    {
+        std::lock_guard lock(script.mutex); ++script.stops;
+        if (script.receivers != 0) script.stop_before_join = true;
+        delay_ms = script.stop_delay_ms; result = script.stop_ok;
+    }
+    if (delay_ms > 0) std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+    error = result ? "" : "controlled stop failure";
+    return result;
 }
 StreamSession::ServerState StreamSession::probe(remote::Device&, const Bytes&, std::string& error, bool) {
     std::lock_guard lock(script.mutex); error.clear();
@@ -549,6 +654,8 @@ int main() {
     successful_capture(directory, true, false);
     successful_capture(directory, false, true);
     successful_capture(directory, true, true, true);
+    successful_capture(directory, true, false, false, false);
+    slow_audio_cleanup(directory);
     capture_errors(directory);
 #else
     std::printf("SKIP: actual container capture needs libavformat; startup/default PCM gates still ran\n");

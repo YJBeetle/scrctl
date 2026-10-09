@@ -22,28 +22,37 @@ LiveSource::~LiveSource() {
 bool LiveSource::finish_recording(std::string &err) {
     audio_out_.close();
     if (audio_ != nullptr) {
-        audio_->stop();
+        audio_->stop_receiving();
     }
-    if (!want_video_ && audio_ != nullptr) {
-        err = audio_->terminal_error();
-        if (!err.empty()) return false;
-    }
+    // 先关闭本地生产者并结算 Final 尾包，再调用可能较慢的设备 stopAll。
+    // 接收首错可以封闭文件；收尾之后的设备清理错只影响退出码，不污染文件。
+    const std::string receive_error = !want_video_ && audio_ != nullptr
+                                          ? audio_->terminal_error() : std::string{};
     std::string video_error;
     const bool video_ok = pump_ == nullptr || pump_->finish_recording(video_error);
+    std::string recording_error;
+    bool recording_ok = true;
     if (recorder_ != nullptr) {
+        if (!receive_error.empty()) recorder_->fail(receive_error);
         if (finished()) recorder_->fail(end_reason());
-        std::string recording_error;
-        const bool recording_ok = recorder_->finish(recording_error);
+        recording_ok = recorder_->finish(recording_error);
         if (!recording_ok && !recording_error_reported_) {
             std::fprintf(stderr, SCRCTL_TR("Recording failed: %s. The file may be incomplete.\n"),
                          recording_error.c_str());
             recording_error_reported_ = true;
         }
-        err = video_ok ? recording_error : video_error;
-        return video_ok && recording_ok;
     }
-    err = video_error;
-    return video_ok;
+    if (audio_ != nullptr) audio_->stop();
+    const std::string cleanup_error = !want_video_ && audio_ != nullptr
+                                          ? audio_->terminal_error() : std::string{};
+    if (!want_video_ && !recording_ok) {
+        err = recording_error;
+    } else if (!cleanup_error.empty()) {
+        err = cleanup_error;
+    } else {
+        err = video_ok ? recording_error : video_error;
+    }
+    return cleanup_error.empty() && video_ok && recording_ok;
 }
 
 bool LiveSource::start(const Options &config, std::string &err) {
@@ -67,9 +76,21 @@ bool LiveSource::start(const Options &config, std::string &err) {
     if (cancelled()) {
         return false;
     }
+    const auto container_format = record_container_format(record_path);
+    const bool container_recording = container_format.has_value();
     if (!want_video_ && !record_path.empty()) {
-        err = SCRCTL_TR("Recording without video is not supported yet");
-        return false;
+        if (!container_recording) {
+            err = SCRCTL_TR("Audio-only recording requires MP4 or MKV");
+            return false;
+        }
+        if (!want_audio) {
+            err = SCRCTL_TR("Audio-only recording requires audio capture");
+            return false;
+        }
+        if (record_orientation != 0) {
+            err = SCRCTL_TR("Recording orientation requires a video track");
+            return false;
+        }
     }
     if (want_video_ && !decode_video && record_path.empty()) {
         err = SCRCTL_TR("Video capture without decoding requires a recording consumer");
@@ -84,13 +105,11 @@ bool LiveSource::start(const Options &config, std::string &err) {
         return false;
     }
     if (want_video_ && !decode_video && !scrctl::media::recording_idr_checks_available(err)) return false;
-    const auto container_format = record_container_format(record_path);
-    const bool container_recording = container_format.has_value();
     if (want_audio && !decode_audio && !container_recording) {
         err = SCRCTL_TR("Audio capture without PCM decoding requires a container recording with an audio track");
         return false;
     }
-    if (container_recording && video_source == "screenshot") {
+    if (want_video_ && container_recording && video_source == "screenshot") {
         err = SCRCTL_TR("Container recording requires live video; screenshot polling cannot be recorded");
         return false;
     }
@@ -98,7 +117,7 @@ bool LiveSource::start(const Options &config, std::string &err) {
         err = SCRCTL_TR("Container recording is unavailable in this build (libavformat required)");
         return false;
     }
-    if (container_recording && !scrctl::media::RecordingMuxer::validate_video_orientation(
+    if (want_video_ && container_recording && !scrctl::media::RecordingMuxer::validate_video_orientation(
             *container_format, record_orientation, err)) return false;
     if (!container_recording && !record_path.empty() && record_orientation != 0) {
         err = SCRCTL_TR("Recording rotation requires MP4 or MKV; use --display-orientation to rotate only the display");
@@ -118,6 +137,16 @@ bool LiveSource::start(const Options &config, std::string &err) {
         return false;
     }
     device_ = std::make_unique<scrctl::remote::Device>(std::move(*dev));
+
+    if (!want_video_ && container_recording) {
+        scrctl::media::Recorder::Options ro;
+        ro.path = record_path;
+        ro.format = *container_format;
+        ro.include_video = false;
+        ro.include_audio = true;
+        recorder_ = scrctl::media::Recorder::start(ro, err);
+        if (recorder_ == nullptr) return false;
+    }
 
     if (want_video_) {
         // 目录没有 com.apple.coredevice.* 服务时，显示查询、订阅和媒体建立均不可用。
@@ -306,8 +335,8 @@ bool LiveSource::start(const Options &config, std::string &err) {
     }
     if (want_audio && screenshot_.source == nullptr) {
         if (decode_audio && !scrctl::kHaveAudioDecoder) {
-            if (!want_video_) { err = SCRCTL_TR(scrctl::kNoAudioDecoderMessage); return false; }
             if (recorder_ != nullptr) recorder_->fail(SCRCTL_TR(scrctl::kNoAudioDecoderMessage));
+            if (!want_video_) { err = SCRCTL_TR(scrctl::kNoAudioDecoderMessage); return false; }
             std::fprintf(stderr, "%s\n", SCRCTL_TR(scrctl::kNoAudioDecoderMessage));
         } else {
             scrctl::media::AudioPump::Options ao;
@@ -330,11 +359,14 @@ bool LiveSource::start(const Options &config, std::string &err) {
             if (want_video_ && !decode_video) {
                 err = pump_->capture_error();
                 if (!err.empty()) return false;
+            } else if (!want_video_ && recorder_ != nullptr) {
+                err = recorder_->error();
+                if (!err.empty()) return false;
             }
             audio_ = scrctl::media::AudioPump::start(*device_, ao, aerr);
             if (audio_ == nullptr) {
-                if (!want_video_) { err = aerr; return false; }
                 if (recorder_ != nullptr) recorder_->fail(aerr);
+                if (!want_video_) { err = aerr; return false; }
                 std::fprintf(stderr, SCRCTL_TR("Failed to start audio: %s (video continues)\n"), aerr.c_str());
             } else {
                 // 音频统计使用独立时间基线。切到截图期间音频仍在独立线程接收，
@@ -345,6 +377,9 @@ bool LiveSource::start(const Options &config, std::string &err) {
                 std::printf("%s\n", audio_dup
                     ? SCRCTL_TR("Audio routing: phone and computer (--audio-dup)")
                     : SCRCTL_TR("Audio routing: computer; phone playback is suppressed"));
+                if (!want_video_ && container_recording) {
+                    std::printf(SCRCTL_TR("Recording to %s\n"), record_path.c_str());
+                }
             }
         }
     }
@@ -615,6 +650,7 @@ bool LiveSource::next(scrctl::Frame &out, int timeout_ms) {
 
 bool LiveSource::finished() const {
     return !encoded_capture_error().empty() ||
+           (!want_video_ && recorder_ != nullptr && !recorder_->error().empty()) ||
            (!want_video_ && audio_ != nullptr && !audio_->terminal_error().empty()) ||
            (device_ != nullptr && device_->stack() != nullptr &&
             !device_->stack()->pump_error().empty());
@@ -629,6 +665,10 @@ std::string LiveSource::encoded_capture_error() const {
 std::string LiveSource::end_reason() const {
     const auto capture_error = encoded_capture_error();
     if (!capture_error.empty()) return SCRCTL_TR("Encoded video capture stopped: ") + capture_error;
+    if (!want_video_ && recorder_ != nullptr) {
+        auto recording_error = recorder_->error();
+        if (!recording_error.empty()) return SCRCTL_TR("Audio recording stopped: ") + recording_error;
+    }
     if (!want_video_ && audio_ != nullptr) {
         auto audio_error = audio_->terminal_error();
         if (!audio_error.empty()) return SCRCTL_TR("Audio stopped: ") + audio_error;
@@ -661,6 +701,7 @@ void LiveSource::print_stats() {
     if (audio_ != nullptr) {
         LiveStats::Audio audio;
         audio.counters = audio_->stats();
+        audio.now_ms = SDL_GetTicks64();
         audio.delivered = audio_out_.delivered();
         audio.output_open = audio_out_.dev_open();
         if (audio.output_open) {

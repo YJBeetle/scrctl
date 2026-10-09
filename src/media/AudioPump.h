@@ -167,7 +167,13 @@ public:
     /// 不会置错。首错不会被会话清理或后续错误覆盖。
     [[nodiscard]] std::string terminal_error() const;
 
-    /// 停止并 join 工作线程，再释放会话。默认不发送会中断视频的 stopAll；
+    /// 停止并 join 收包线程，不调用设备 stopAll、不释放已确认会话。
+    /// 录制 owner 可在此后先 seal/join Recorder，再由 stop() 做慢速设备清理，
+    /// 避免最后 SR 后可用 Final 外推的尾包在 RPC 等待期间超过时钟等待预算。
+    /// 唯一 owner 串行调用；重复调用无操作，需先关闭借用此对象的声卡回调。
+    void stop_receiving();
+
+    /// 复用 stop_receiving() 后清理设备并释放会话。默认不发送会中断视频的 stopAll；
     /// stop_device_on_exit 的唯一拥有者用当前或最近一次有效会话尽力 stopAll。
     /// 重复调用不重复设备请求；需先关闭借用此对象的声卡回调。
     void stop();
@@ -208,7 +214,7 @@ private:
     /// 仅工作线程访问库状态；消费线程不做重采样。指针在工作线程启动前
     /// 设置，之后保持不变，read() 仅用它判断是否采用软补偿的积压策略。
     std::unique_ptr<AudioRegulator> regulator_;
-    /// 仅工作线程及 join 后的 stop() 访问 session_。对外信息经 live_
+    /// 仅工作线程及 stop_receiving() join 后的 stop() 访问 session_。对外信息经 live_
     /// 快照提供，不能将重建时会被 reset 的指针交给其他线程。
     std::unique_ptr<StreamSession> session_;
     /// 仅唯一音频拥有者保留最近一次确认的会话，使恢复失败后仍可调用已验证

@@ -103,6 +103,10 @@ struct Recorder::Impl {
     explicit Impl(Options value)
         : options(std::move(value)), startup_deadline(Time::now() + options.clock_wait) {}
 
+    bool selected(std::size_t i) const {
+        return i == 0 ? options.include_video : options.include_audio;
+    }
+
     bool failed() const {
         std::lock_guard lock(mutex);
         return !first_error.empty();
@@ -316,7 +320,8 @@ struct Recorder::Impl {
     bool establish_origin(RecordingClock::Mode mode) {
         if (origin) return true;
         std::optional<long double> earliest;
-        for (std::size_t i = 0; i < (options.include_audio ? 2u : 1u); ++i) {
+        for (std::size_t i = 0; i < streams.size(); ++i) {
+            if (!selected(i)) continue;
             const auto& stream = streams[i];
             if (stream.pending.empty()) {
                 if (mode == RecordingClock::Mode::Final) fail(SCRCTL_TR("A selected recording track has no approved media"));
@@ -334,9 +339,12 @@ struct Recorder::Impl {
         output.path = options.path;
         output.format = options.format;
         output.video_orientation = options.video_orientation;
-        output.vps = video_config->vps;
-        output.sps = video_config->sps;
-        output.pps = video_config->pps;
+        output.include_video = options.include_video;
+        if (options.include_video) {
+            output.vps = video_config->vps;
+            output.sps = video_config->sps;
+            output.pps = video_config->pps;
+        }
         if (options.include_audio) output.audio = RecordingMuxer::Audio{};
         std::string error;
         muxer = RecordingMuxer::open(output, error);
@@ -374,7 +382,8 @@ struct Recorder::Impl {
 
     void drive(RecordingClock::Mode mode) {
         if (failed() || !establish_origin(mode)) return;
-        for (std::size_t i = 0; i < (options.include_audio ? 2u : 1u); ++i) {
+        for (std::size_t i = 0; i < streams.size(); ++i) {
+            if (!selected(i)) continue;
             auto& stream = streams[i];
             while (!stream.pending.empty() && !failed()) {
                 auto& packet = stream.pending.front();
@@ -418,13 +427,15 @@ struct Recorder::Impl {
         }
         // 音频可以在静止画面期间独立写入。只有正常 Final 才确定末帧展示规则；
         // 失败时仍由 cleanup 收回尾包预算，不把未完成录制伪装成成功。
-        if (mode == RecordingClock::Mode::Final && video_tail && !failed())
+        if (options.include_video && mode == RecordingClock::Mode::Final && video_tail && !failed())
             (void)write_mp4_tail(mp4_tail_duration_us);
     }
 
     Time::time_point next_deadline() const {
         auto deadline = origin ? Time::time_point::max() : startup_deadline;
-        for (const auto& stream : streams) {
+        for (std::size_t i = 0; i < streams.size(); ++i) {
+            if (!selected(i)) continue;
+            const auto& stream = streams[i];
             if (!stream.pending.empty())
                 deadline = std::min(deadline, stream.pending.front().received + options.clock_wait);
         }
@@ -496,7 +507,8 @@ struct Recorder::Impl {
                 drive(final ? RecordingClock::Mode::Final : RecordingClock::Mode::Running);
                 if (failed()) break;
                 if (final) {
-                    for (std::size_t i = 0; i < (options.include_audio ? 2u : 1u); ++i) {
+                    for (std::size_t i = 0; i < streams.size(); ++i) {
+                        if (!selected(i)) continue;
                         if (!streams[i].wrote_media) fail(SCRCTL_TR("A selected recording track did not produce a completed packet"));
                     }
                     break;
@@ -515,9 +527,18 @@ struct Recorder::Impl {
 
 Recorder::Recorder(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
 
+bool Recorder::includes_video() const { return impl_->options.include_video; }
 bool Recorder::includes_audio() const { return impl_->options.include_audio; }
 
 std::unique_ptr<Recorder> Recorder::start(const Options& options, std::string& error) {
+    if (!options.include_video && !options.include_audio) {
+        error = SCRCTL_TR("Recording requires at least one selected track");
+        return nullptr;
+    }
+    if (!options.include_video && options.video_orientation != 0) {
+        error = SCRCTL_TR("Audio-only recording requires zero video orientation");
+        return nullptr;
+    }
     if (!RecordingMuxer::validate_video_orientation(options.format, options.video_orientation, error))
         return nullptr;
     if (!RecordingMuxer::available()) {
@@ -550,7 +571,7 @@ Recorder::~Recorder() {
 bool Recorder::begin_track(Track track, std::span<const uint8_t> session,
                            std::optional<uint32_t> source) {
     if (!valid_track(track) || session.size() != 16 ||
-        (track == Track::Audio && !impl_->options.include_audio)) {
+        !impl_->selected(index(track))) {
         fail(SCRCTL_TR("Recording track selection or session UUID is invalid")); return false;
     }
     return impl_->admit(0, false, [&](Impl::Event& event) {
@@ -563,6 +584,9 @@ bool Recorder::begin_track(Track track, std::span<const uint8_t> session,
 
 bool Recorder::video(std::span<const uint8_t> session, uint32_t source, int64_t ticks,
                      const std::vector<Nal>& nals, const Nal& vps, const Nal& sps, const Nal& pps) {
+    if (!impl_->options.include_video) {
+        fail(SCRCTL_TR("This recording has no video track")); return false;
+    }
     if (session.size() != 16) { fail(SCRCTL_TR("Recording session UUID is invalid")); return false; }
     std::size_t size = 0;
     for (const auto& nal : nals) {
@@ -622,7 +646,7 @@ bool Recorder::audio(std::span<const uint8_t> session, uint32_t source, uint32_t
 bool Recorder::sender_report(Track track, std::span<const uint8_t> session,
                              const rt::SenderReport& report) {
     if (!valid_track(track) || session.size() != 16 ||
-        (track == Track::Audio && !impl_->options.include_audio)) {
+        !impl_->selected(index(track))) {
         fail(SCRCTL_TR("Recording sender-report track or session is invalid")); return false;
     }
     return impl_->admit(0, false, [&](Impl::Event& event) {

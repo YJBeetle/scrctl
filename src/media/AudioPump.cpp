@@ -248,11 +248,15 @@ void AudioPump::clear_live() {
     live_ = {};
 }
 
-void AudioPump::stop() {
+void AudioPump::stop_receiving() {
     stopping_.store(true);
     if (worker_.joinable()) {
         worker_.join();
     }
+}
+
+void AudioPump::stop() {
+    stop_receiving();
     // 接收线程已退出，外部应先关闭声卡。默认拥有者仍由 FramePump 停设备，
     // 单独音频的唯一拥有者才可使用已确认的会话调用 stopAll。
     if (options_.stop_device_on_exit && !device_stop_attempted_) {

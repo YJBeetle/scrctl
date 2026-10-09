@@ -153,7 +153,8 @@ struct RecordingMuxer::Impl {
             error = SCRCTL_TR("The recording file has already been closed");
             return false;
         }
-        if (stream == nullptr) return fail(SCRCTL_TR("This recording has no audio track"), error);
+        if (stream == nullptr) return fail(is_video ? SCRCTL_TR("This recording has no video track")
+                                                  : SCRCTL_TR("This recording has no audio track"), error);
         if (bytes.empty() || bytes.size() > kMaxRecordingMuxerPacketBytes) {
             return fail(SCRCTL_TR("Recording access unit is empty or exceeds the 16 MiB packet budget"), error);
         }
@@ -296,6 +297,18 @@ bool RecordingMuxer::validate_video_orientation(Format format, int degrees, std:
 }
 
 std::unique_ptr<RecordingMuxer> RecordingMuxer::open(const Options& options, std::string& error) {
+    if (!options.include_video && !options.audio.has_value()) {
+        error = SCRCTL_TR("Recording requires at least one selected track");
+        return nullptr;
+    }
+    if (!options.include_video && options.video_orientation != 0) {
+        error = SCRCTL_TR("Audio-only recording requires zero video orientation");
+        return nullptr;
+    }
+    if (!options.include_video && (!options.vps.empty() || !options.sps.empty() || !options.pps.empty())) {
+        error = SCRCTL_TR("Audio-only recording must not include HEVC parameter sets");
+        return nullptr;
+    }
     if (!validate_video_orientation(options.format, options.video_orientation, error)) return nullptr;
 #ifndef SCRCTL_HAVE_LIBAVFORMAT
     (void)options;
@@ -318,12 +331,14 @@ std::unique_ptr<RecordingMuxer> RecordingMuxer::open(const Options& options, std
         error = SCRCTL_TR("AAC-ELD recording supports only 48 kHz stereo with 480 or 512 samples per packet");
         return nullptr;
     }
-    const auto checked = inspect_recording_video_config(options.vps, options.sps, options.pps);
-    if (!checked.permits_equal_dts_pts()) {
-        error = checked.status == RecordingVideoConfig::Status::Reorder
-            ? SCRCTL_TR("Recording HEVC with frame reordering is not supported")
-            : SCRCTL_TR("Cannot validate the HEVC recording configuration: ") + checked.error;
-        return nullptr;
+    if (options.include_video) {
+        const auto checked = inspect_recording_video_config(options.vps, options.sps, options.pps);
+        if (!checked.permits_equal_dts_pts()) {
+            error = checked.status == RecordingVideoConfig::Status::Reorder
+                ? SCRCTL_TR("Recording HEVC with frame reordering is not supported")
+                : SCRCTL_TR("Cannot validate the HEVC recording configuration: ") + checked.error;
+            return nullptr;
+        }
     }
     auto result = std::unique_ptr<RecordingMuxer>(new RecordingMuxer(std::make_unique<Impl>()));
     auto& impl = *result->impl_;
@@ -341,35 +356,37 @@ std::unique_ptr<RecordingMuxer> RecordingMuxer::open(const Options& options, std
 #endif
     // 静止视频不会阻塞持续音频直到下一幅图像；这里只使用 libavformat 的有界交错。
     impl.context->max_interleave_delta = 100000;
-    impl.video = avformat_new_stream(impl.context, nullptr);
-    if (impl.video == nullptr) {
-        impl.fail(SCRCTL_TR("Cannot allocate the HEVC recording track"), error);
-        return nullptr;
-    }
-    if (!video_parameters(impl.video->codecpar, options, error)) {
-        impl.fail(error, error);
-        return nullptr;
-    }
-    impl.video->codecpar->codec_tag = options.format == Format::Mp4 ? MKTAG('h', 'v', 'c', '1') : 0;
-    impl.video->time_base = AVRational{1, 1000000};
-    impl.video->avg_frame_rate = impl.video->r_frame_rate = AVRational{0, 1};
-    if (options.video_orientation != 0) {
-        // codec 参数复制完成后、写 header 前设置，以免后续参数复制覆盖矩阵。
-        // set 接受顺时针角度；get/ffprobe 的角度按逆时针报告，符号相反。
-#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(60, 30, 100)
-        const auto* side_data = av_packet_side_data_new(&impl.video->codecpar->coded_side_data,
-            &impl.video->codecpar->nb_coded_side_data, AV_PKT_DATA_DISPLAYMATRIX,
-            9 * sizeof(int32_t), 0);
-        uint8_t* matrix = side_data == nullptr ? nullptr : side_data->data;
-#else
-        uint8_t* matrix = av_stream_new_side_data(impl.video, AV_PKT_DATA_DISPLAYMATRIX,
-                                                 9 * sizeof(int32_t));
-#endif
-        if (matrix == nullptr) {
-            impl.fail(SCRCTL_TR("Cannot allocate recording video orientation metadata"), error);
+    if (options.include_video) {
+        impl.video = avformat_new_stream(impl.context, nullptr);
+        if (impl.video == nullptr) {
+            impl.fail(SCRCTL_TR("Cannot allocate the HEVC recording track"), error);
             return nullptr;
         }
-        av_display_rotation_set(reinterpret_cast<int32_t*>(matrix), options.video_orientation);
+        if (!video_parameters(impl.video->codecpar, options, error)) {
+            impl.fail(error, error);
+            return nullptr;
+        }
+        impl.video->codecpar->codec_tag = options.format == Format::Mp4 ? MKTAG('h', 'v', 'c', '1') : 0;
+        impl.video->time_base = AVRational{1, 1000000};
+        impl.video->avg_frame_rate = impl.video->r_frame_rate = AVRational{0, 1};
+        if (options.video_orientation != 0) {
+            // codec 参数复制完成后、写 header 前设置，以免后续参数复制覆盖矩阵。
+            // set 接受顺时针角度；get/ffprobe 的角度按逆时针报告，符号相反。
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(60, 30, 100)
+            const auto* side_data = av_packet_side_data_new(&impl.video->codecpar->coded_side_data,
+                &impl.video->codecpar->nb_coded_side_data, AV_PKT_DATA_DISPLAYMATRIX,
+                9 * sizeof(int32_t), 0);
+            uint8_t* matrix = side_data == nullptr ? nullptr : side_data->data;
+#else
+            uint8_t* matrix = av_stream_new_side_data(impl.video, AV_PKT_DATA_DISPLAYMATRIX,
+                                                     9 * sizeof(int32_t));
+#endif
+            if (matrix == nullptr) {
+                impl.fail(SCRCTL_TR("Cannot allocate recording video orientation metadata"), error);
+                return nullptr;
+            }
+            av_display_rotation_set(reinterpret_cast<int32_t*>(matrix), options.video_orientation);
+        }
     }
     if (options.audio.has_value()) {
         impl.audio = avformat_new_stream(impl.context, nullptr);

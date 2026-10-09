@@ -225,14 +225,13 @@ int run(int argc, char **argv) {
     if (live != nullptr && live->has_audio() && !o.no_audio_playback) {
         std::string aerr;
         if (!live->start_playback(aerr)) {
-            if (!live->has_video()) {
-                std::fprintf(stderr, SCRCTL_TR("Failed to open audio output: %s\n"), aerr.c_str());
-                return finish_exit(1);
-            }
             if (record_container_format(o.record)) {
                 std::fprintf(stderr, SCRCTL_TR(
                     "Failed to open audio output: %s (recording and audio reception continue)\n"),
                     aerr.c_str());
+            } else if (!live->has_video()) {
+                std::fprintf(stderr, SCRCTL_TR("Failed to open audio output: %s\n"), aerr.c_str());
+                return finish_exit(1);
             } else {
                 std::fprintf(stderr, SCRCTL_TR(
                     "Failed to open audio output: %s (audio disabled; video continues). The phone's "
@@ -567,7 +566,11 @@ int run(int argc, char **argv) {
         return 1;
     }
     if (live != nullptr && !live->has_video()) {
-        std::printf(SCRCTL_TR("Finished: device session closed\n"));
+        if (!o.record.empty()) {
+            std::printf(SCRCTL_TR("Finished: audio recording finalized\n"));
+        } else {
+            std::printf(SCRCTL_TR("Finished: device session closed\n"));
+        }
     } else if (live != nullptr && !live->video_decoding_enabled()) {
         std::printf(SCRCTL_TR("Finished: encoded video recording finalized\n"));
     } else {

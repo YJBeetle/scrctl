@@ -43,7 +43,7 @@ class LiveSource final : public FrameSource {
 
     /// 命名选项区分设备连接、视频、音频和各自的解码需求。
     /// 无视频时跳过显示查询/订阅/媒体/截图，仍可保留音频或输入控制连接。
-    /// 首版无视频不支持录制；在连接设备前拒绝非空 record_path。
+    /// 无视频录制仅支持包含音轨的 MP4/MKV；格式、音频需求和视频方向先于连接检查。
     /// should_cancel 在启动步骤间检查；正在执行的底层 RPC 仍受自身超时约束。
     bool start(const Options &options, std::string &err);
 
@@ -55,9 +55,10 @@ class LiveSource final : public FrameSource {
     /// 默认设备音频会话需等待租期；纯音频拥有者使用既有会话尽力 stopAll。
     void abandon_audio();
 
-    /// 退出专用：先关闭声卡，停止并等待两个收包线程，再检查录制文件收尾。
+    /// 退出专用：先关闭声卡并 join 收包线程，seal/join Recorder 后再停止设备音频。
     /// 重复调用保留同一结果；禁止在收包线程仍可投递数据时封闭 Recorder。
-    /// 解码模式下写入失败期间镜像仍继续；仅录制模式遇到首错会结束画面源。
+    /// 解码模式下写入失败期间镜像仍继续；仅编码视频或纯音频录制首错会结束来源。
+    /// 慢速音频 stopAll 不阻塞 Final 尾包结算；设备清理错只影响退出结果，录制首错优先。
     bool finish_recording(std::string &err);
 
     /// 返回最近一次交付帧的面板尺寸、原始方向及截图标志。
@@ -65,7 +66,7 @@ class LiveSource final : public FrameSource {
 
     bool next(scrctl::Frame &out, int timeout_ms) override;
 
-    /// 隧道或纯音频不可重试协商错误结束会话；暂时音频/截图恢复仍按退避重试。
+    /// 隧道、纯音频不可重试协商错误或纯音频录制首错结束会话；暂时恢复仍按退避重试。
     /// 依据 Stack::pump_error() 判断传输失败，不匹配具体错误文本。普通读超时
     /// 不会停止隧道。该会话不负责重新建立已终止的设备连接。
     [[nodiscard]] bool finished() const override;

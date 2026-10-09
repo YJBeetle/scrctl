@@ -56,6 +56,7 @@ void LiveStats::print(const Snapshot &snapshot) {
         return;
     }
     if (!snapshot.video) {
+        if (snapshot.audio) print_audio(*snapshot.audio);
         return;
     }
     const auto &st = snapshot.video->counters;
@@ -136,57 +137,7 @@ void LiveStats::print(const Snapshot &snapshot) {
                 static_cast<unsigned long long>(st.sr_packets),
                 static_cast<unsigned long long>(st.rtcp_sent),
                 static_cast<unsigned long long>(st.pli_sent));
-    if (snapshot.audio) {
-        const auto &audio = *snapshot.audio;
-        const auto &as = audio.counters;
-        // 音频使用独立统计窗口；截图模式期间也在持续收包和解码。
-        // 不能把音频增量除以视频分支的计时窗口。音频无声时仍可收到静音包，
-        // 持续收包率降到零可作为排查连接或会话的线索。
-        const double audio_secs = scrctl::app::settle_window(now, last_audio_ms_);
-        const auto arate = [&](uint64_t now_value, uint64_t before) {
-            return static_cast<double>(now_value - before) / audio_secs;
-        };
-        std::printf(SCRCTL_TR(
-            "  Audio: received %6.0f packets/s, decoded %6.0f packets/s, delivered %6.0f "
-            "frames/s (output=%s)\n"),
-                    arate(as.packets, last_audio_packets_), arate(as.decoded, last_audio_decoded_),
-                    arate(audio.delivered, last_audio_delivered_),
-                    audio.output_open ? audio.output_driver.c_str() : SCRCTL_TR("closed"));
-        std::printf(SCRCTL_TR(
-            "      All sessions: decode failures %llu, lost %llu, late %llu, dropped old "
-            "samples %llu, adjusted samples %llu, silence fill %llu, RR sent/failed "
-            "%llu/%llu, restarts %llu, buffered %zu frames, interval %.1f s\n"),
-                    static_cast<unsigned long long>(as.decode_failed),
-                    static_cast<unsigned long long>(as.seq_lost),
-                    static_cast<unsigned long long>(as.out_of_order),
-                    static_cast<unsigned long long>(as.dropped_stale),
-                    static_cast<unsigned long long>(as.steered),
-                    static_cast<unsigned long long>(audio.silence),
-                    static_cast<unsigned long long>(as.rtcp_sent),
-                    static_cast<unsigned long long>(as.rtcp_failed),
-                    static_cast<unsigned long long>(as.restarts), audio.buffered_frames,
-                    audio_secs);
-        std::printf(SCRCTL_TR(
-            "      Playback totals: startup trim %llu frames, preroll silence %llu frames, "
-            "underrun silence %llu frames in %llu callbacks\n"),
-                    static_cast<unsigned long long>(as.startup_trimmed),
-                    static_cast<unsigned long long>(audio.preroll_silence),
-                    static_cast<unsigned long long>(audio.underrun_silence),
-                    static_cast<unsigned long long>(audio.underrun_callbacks));
-        std::printf(SCRCTL_TR(
-            "      Audio clock: %s, average buffer %.1f ms, compensation %d ppm, "
-            "added/removed %llu/%llu frames, updates %llu, failures %llu\n"),
-                    as.clock.active ? SCRCTL_TR("active") : SCRCTL_TR("inactive"),
-                    audio.sample_rate > 0 ? as.clock.average_frames * 1000.0 / audio.sample_rate : 0.0,
-                    as.clock.compensation_ppm,
-                    static_cast<unsigned long long>(as.clock.added_frames),
-                    static_cast<unsigned long long>(as.clock.removed_frames),
-                    static_cast<unsigned long long>(as.clock.compensation_updates),
-                    static_cast<unsigned long long>(as.clock_failed));
-        last_audio_packets_ = as.packets;
-        last_audio_decoded_ = as.decoded;
-        last_audio_delivered_ = audio.delivered;
-    }
+    if (snapshot.audio) print_audio(*snapshot.audio);
     last_packets_ = st.packets;
     if (st.dev_sent_packets != last_dev_packets_) {
         last_dev_rate_ = dev_rate;
@@ -196,6 +147,57 @@ void LiveStats::print(const Snapshot &snapshot) {
     }
     last_aus_ = st.aus;
     last_decoded_ = st.decoded;
+}
+
+void LiveStats::print_audio(const Audio &audio) {
+    const auto &as = audio.counters;
+    // 音频使用独立统计窗口；截图模式期间也在持续收包和解码。
+    // 不能把音频增量除以视频分支的计时窗口。音频无声时仍可收到静音包，
+    // 持续收包率降到零可作为排查连接或会话的线索。
+    const double audio_secs = scrctl::app::settle_window(audio.now_ms, last_audio_ms_);
+    const auto arate = [&](uint64_t now_value, uint64_t before) {
+        return static_cast<double>(now_value - before) / audio_secs;
+    };
+    std::printf(SCRCTL_TR(
+        "  Audio: received %6.0f packets/s, decoded %6.0f packets/s, delivered %6.0f "
+        "frames/s (output=%s)\n"),
+                arate(as.packets, last_audio_packets_), arate(as.decoded, last_audio_decoded_),
+                arate(audio.delivered, last_audio_delivered_),
+                audio.output_open ? audio.output_driver.c_str() : SCRCTL_TR("closed"));
+    std::printf(SCRCTL_TR(
+        "      All sessions: decode failures %llu, lost %llu, late %llu, dropped old "
+        "samples %llu, adjusted samples %llu, silence fill %llu, RR sent/failed "
+        "%llu/%llu, restarts %llu, buffered %zu frames, interval %.1f s\n"),
+                static_cast<unsigned long long>(as.decode_failed),
+                static_cast<unsigned long long>(as.seq_lost),
+                static_cast<unsigned long long>(as.out_of_order),
+                static_cast<unsigned long long>(as.dropped_stale),
+                static_cast<unsigned long long>(as.steered),
+                static_cast<unsigned long long>(audio.silence),
+                static_cast<unsigned long long>(as.rtcp_sent),
+                static_cast<unsigned long long>(as.rtcp_failed),
+                static_cast<unsigned long long>(as.restarts), audio.buffered_frames,
+                audio_secs);
+    std::printf(SCRCTL_TR(
+        "      Playback totals: startup trim %llu frames, preroll silence %llu frames, "
+        "underrun silence %llu frames in %llu callbacks\n"),
+                static_cast<unsigned long long>(as.startup_trimmed),
+                static_cast<unsigned long long>(audio.preroll_silence),
+                static_cast<unsigned long long>(audio.underrun_silence),
+                static_cast<unsigned long long>(audio.underrun_callbacks));
+    std::printf(SCRCTL_TR(
+        "      Audio clock: %s, average buffer %.1f ms, compensation %d ppm, "
+        "added/removed %llu/%llu frames, updates %llu, failures %llu\n"),
+                as.clock.active ? SCRCTL_TR("active") : SCRCTL_TR("inactive"),
+                audio.sample_rate > 0 ? as.clock.average_frames * 1000.0 / audio.sample_rate : 0.0,
+                as.clock.compensation_ppm,
+                static_cast<unsigned long long>(as.clock.added_frames),
+                static_cast<unsigned long long>(as.clock.removed_frames),
+                static_cast<unsigned long long>(as.clock.compensation_updates),
+                static_cast<unsigned long long>(as.clock_failed));
+    last_audio_packets_ = as.packets;
+    last_audio_decoded_ = as.decoded;
+    last_audio_delivered_ = audio.delivered;
 }
 
 } // namespace scrctl::app

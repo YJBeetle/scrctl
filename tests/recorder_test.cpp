@@ -68,6 +68,28 @@ Recorder::Options options(const std::filesystem::path& path, bool audio = false,
     result.path = path.string(); result.include_audio = audio; result.format = format;
     return result;
 }
+Recorder::Options audio_options(const std::filesystem::path& path,
+                                scrctl::media::RecordingMuxer::Format format =
+                                    scrctl::media::RecordingMuxer::Format::Matroska) {
+    auto result = options(path, true, format);
+    result.include_video = false;
+    return result;
+}
+void selected_tracks_precheck(const Directory& directory) {
+    const auto path = directory.path / "selected-tracks-must-not-truncate";
+    { std::ofstream file(path); file << "keep"; }
+    std::string error;
+    auto config = audio_options(path);
+    config.include_audio = false;
+    check(!Recorder::start(config, error) && error.find("selected track") != std::string::npos,
+          "Recorder rejects an empty track selection before creating a worker");
+    config = audio_options(path);
+    config.video_orientation = 90;
+    check(!Recorder::start(config, error) && error.find("zero video orientation") != std::string::npos,
+          "Recorder rejects video orientation when only audio is selected");
+    std::ifstream file(path); std::string bytes; file >> bytes;
+    check(bytes == "keep", "invalid Recorder track selection preserves an existing output");
+}
 #ifdef SCRCTL_HAVE_LIBAVFORMAT
 scrctl::rt::SenderReport sr(uint32_t source, uint32_t ticks, uint32_t seconds,
                             uint32_t fraction = 0) {
@@ -166,6 +188,130 @@ void verify_audio(const File& file, std::span<const int64_t> pts) {
     for (std::size_t i = 0; i < file.audio.size() && i < pts.size(); ++i) {
         check(near(file.audio[i].pts, pts[i]), "audio preserves its shared-origin SR timing");
         check(file.audio[i].bytes == silence, "AAC-ELD is not resampled or reencoded");
+    }
+}
+
+void audio_only_recording(const Directory& directory) {
+    using Format = scrctl::media::RecordingMuxer::Format;
+    for (const auto format : {Format::Mp4, Format::Matroska}) {
+        const auto path = directory.path / (format == Format::Mp4 ? "audio-only.mp4" : "audio-only.mkv");
+        std::string error;
+        auto recorder = Recorder::start(audio_options(path, format), error);
+        check(recorder != nullptr, "audio-only Recorder creates its worker without video configuration");
+        if (!recorder) continue;
+        check(!recorder->includes_video() && recorder->includes_audio(), "audio-only track selection is immutable and explicit");
+        const auto source = format == Format::Mp4 ? std::optional<uint32_t>{} : std::optional<uint32_t>{0};
+        check(recorder->begin_track(Track::Audio, audio_session, source), "audio-only session begins without a video session");
+        const uint32_t first = 0xffffff00u;
+        report(*recorder, Track::Audio, sr(71, first, 2000));
+        report(*recorder, Track::Audio, sr(0, first, 1000));
+        report(*recorder, Track::Audio, sr(0, first + 48000u, 1001));
+        for (uint32_t i = 0; i < 3; ++i)
+            check(recorder->audio(audio_session, 0, first + i * 480u, silence), "original audio-only packets cross the RTP wrap");
+        check(recorder->finish(error) && error.empty(), "two trusted audio SRs finish a file with no video, dimensions or IDR");
+        check(recorder->finish(error) && error.empty(), "audio-only Recorder finish is idempotent");
+        const auto file = read(path);
+        check(file.tracks == 1 && file.video.empty(), "audio-only Recorder publishes exactly one AAC track");
+        const std::array<int64_t, 3> pts{0, 10000, 20000};
+        verify_audio(file, pts);
+        for (const auto& packet : file.audio)
+            check(packet.dts == packet.pts && near(packet.duration, 10000) && packet.duration > 0,
+                  "audio-only duration follows its 480-sample SR interval, including the final packet");
+    }
+}
+
+void audio_only_failures(const Directory& directory) {
+    std::string error;
+    for (const int reports : {0, 1}) {
+        auto recorder = Recorder::start(audio_options(directory.path / ("audio-missing-sr-" + std::to_string(reports))), error);
+        check(recorder != nullptr, "audio-only missing-SR fixture starts");
+        if (!recorder) continue;
+        check(recorder->begin_track(Track::Audio, audio_session, 0), "audio-only missing-SR session starts");
+        check(recorder->audio(audio_session, 0, 0, silence), "audio-only unapproved packet is admitted");
+        if (reports != 0) report(*recorder, Track::Audio, sr(0, 0, 1000));
+        check(!recorder->finish(error) && !error.empty(), "audio-only finish needs at least two trusted SRs");
+        const auto first = error;
+        check(!recorder->finish(error) && error == first, "missing audio clock cannot become a successful empty file");
+    }
+    {
+        const auto path = directory.path / "audio-timeout-must-not-truncate";
+        { std::ofstream file(path); file << "keep"; }
+        auto config = audio_options(path); config.clock_wait = 40ms;
+        auto recorder = Recorder::start(config, error);
+        check(recorder != nullptr, "audio-only bounded clock-wait fixture starts");
+        if (recorder) {
+            check(recorder->begin_track(Track::Audio, audio_session, 0), "audio-only bounded session starts");
+            check(recorder->audio(audio_session, 0, 0, silence), "audio-only clock wait receives real media");
+            check(wait_for_error(*recorder), "audio-only clock wait times out without a later input");
+            const auto first = recorder->error(); recorder->fail("later error");
+            check(!recorder->finish(error) && error == first, "audio-only timeout keeps the first error while joining");
+        }
+        std::ifstream file(path); std::string bytes; file >> bytes;
+        check(bytes == "keep", "unapproved audio-only clock never opens an existing output");
+    }
+    {
+        auto recorder = Recorder::start(audio_options(directory.path / "audio-no-media"), error);
+        check(recorder != nullptr, "audio-only no-media fixture starts");
+        if (recorder) {
+            check(recorder->begin_track(Track::Audio, audio_session, 0), "empty audio-only session begins");
+            report(*recorder, Track::Audio, sr(0, 0, 1000));
+            report(*recorder, Track::Audio, sr(0, 48000, 1001));
+            check(!recorder->finish(error) && !error.empty(), "trusted reports alone cannot create successful audio-only recording");
+        }
+    }
+    {
+        auto config = audio_options(directory.path / "audio-budget"); config.encoded_budget = silence.size() * 2 - 1;
+        auto recorder = Recorder::start(config, error);
+        check(recorder != nullptr, "audio-only shared encoded-byte budget fixture starts");
+        if (recorder) {
+            check(recorder->begin_track(Track::Audio, audio_session, 0), "audio-only budget session begins");
+            check(!recorder->audio(audio_session, 0, 0, silence), "audio-only admission counts its retained and mux-copy bytes");
+            const auto first = recorder->error(); recorder->fail("later");
+            check(!recorder->finish(error) && error == first && error.find("budget") != std::string::npos,
+                  "audio-only budget failure retains the original first error");
+        }
+    }
+    for (const int misuse : {0, 1, 2}) {
+        auto recorder = Recorder::start(audio_options(directory.path / ("audio-wrong-video-" + std::to_string(misuse))), error);
+        check(recorder != nullptr, "audio-only wrong-video-track fixture starts");
+        if (!recorder) continue;
+        const bool admitted = misuse == 0 ? recorder->begin_track(Track::Video, video_session, 0) :
+                              misuse == 1 ? recorder->video(video_session, 0, 0, {}, {}, {}, {}) :
+                                            recorder->sender_report(Track::Video, video_session, sr(0, 0, 1000));
+        check(!admitted && !recorder->error().empty(), "begin, media and sender-report inputs cannot use an unselected video track");
+        const auto first = recorder->error();
+        check(!recorder->audio(audio_session, 0, 0, silence) && recorder->error() == first,
+              "a wrong-track submission seals audio-only admission before copying later audio");
+        check(!recorder->finish(error) && error == first, "audio-only wrong-track failure is stable through cleanup");
+    }
+    for (const int change : {0, 1, 2}) {
+        auto recorder = Recorder::start(audio_options(directory.path / ("audio-epoch-" + std::to_string(change))), error);
+        check(recorder != nullptr, "audio-only epoch/source/timestamp failure fixture starts");
+        if (!recorder) continue;
+        check(recorder->begin_track(Track::Audio, audio_session, 0), "audio-only source epoch begins");
+        check(recorder->audio(audio_session, 0, 0, silence), "audio-only source is bound before the changed packet");
+        report(*recorder, Track::Audio, sr(0, 0, 1000));
+        report(*recorder, Track::Audio, sr(0, 48000, 1001));
+        const auto& session = change == 0 ? video_session : audio_session;
+        check(recorder->audio(session, change == 1 ? 1u : 0u, change == 2 ? 0u : 480u, silence),
+              "changed audio epoch/source/time is admitted for the real worker validation");
+        check(!recorder->finish(error) && !error.empty(), "audio-only recording refuses epoch changes and nonadvancing media");
+        const auto first = error;
+        check(!recorder->finish(error) && error == first, "audio-only epoch failure does not disappear during repeated finish");
+    }
+    {
+        auto recorder = Recorder::start(audio_options(directory.path / "missing" / "audio.mkv"), error);
+        check(recorder != nullptr, "audio-only file-open failure is deferred until trusted media");
+        if (recorder) {
+            check(recorder->begin_track(Track::Audio, audio_session, 0), "audio-only I/O-failure session begins");
+            check(recorder->audio(audio_session, 0, 0, silence), "audio-only I/O-failure media is admitted");
+            report(*recorder, Track::Audio, sr(0, 0, 1000));
+            report(*recorder, Track::Audio, sr(0, 48000, 1001));
+            check(!recorder->finish(error) && error.find("open the recording file") != std::string::npos,
+                  "the actual audio-only muxer file-open failure reaches Recorder finish");
+            const auto first = error;
+            check(!recorder->finish(error) && error == first, "audio-only I/O first error is preserved after repeat finish");
+        }
     }
 }
 
@@ -582,6 +728,7 @@ void failure_paths(const Directory& directory) {
 int main() {
     Directory directory;
     std::string error;
+    selected_tracks_precheck(directory);
     for (const int degrees : {-90, 45, 360}) {
         auto config = options(directory.path / "invalid-orientation.mp4", false,
                               scrctl::media::RecordingMuxer::Format::Mp4);
@@ -599,9 +746,14 @@ int main() {
         check(!Recorder::start(options(directory.path / "unavailable.mkv"),error),"missing libavformat rejects MKV explicitly");
         check(!error.empty(),"unavailable Recorder provides a reason");
         check(!std::filesystem::exists(directory.path / "unavailable.mkv"),"unavailable Recorder does not create an output file");
+        const auto audio_path = directory.path / "audio-unavailable.mkv";
+        check(!Recorder::start(audio_options(audio_path), error) && !error.empty() && !std::filesystem::exists(audio_path),
+              "audio-only Recorder still requires a muxing library and creates no file without it");
     } else {
 #ifdef SCRCTL_HAVE_LIBAVFORMAT
         common_origin(directory);
+        audio_only_recording(directory);
+        audio_only_failures(directory);
         recorded_orientation(directory);
         wrapping_audio_and_first_idr(directory);
         still_video(directory);

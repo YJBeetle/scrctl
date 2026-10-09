@@ -82,6 +82,37 @@ Muxer::Options options(const std::filesystem::path& file, Muxer::Format format,
     return result;
 }
 
+Muxer::Options audio_options(const std::filesystem::path& file, Muxer::Format format) {
+    Muxer::Options result;
+    result.path = file.string();
+    result.format = format;
+    result.include_video = false;
+    result.audio = Muxer::Audio{};
+    return result;
+}
+
+void selected_tracks_precheck(const Directory& directory) {
+    const auto path = directory.path / "selected-tracks-must-not-truncate";
+    { std::ofstream file(path); file << "keep"; }
+    std::string error;
+    auto config = audio_options(path, Muxer::Format::Mp4);
+    config.audio.reset();
+    check(!Muxer::open(config, error) && error.find("selected track") != std::string::npos,
+          "a muxer with no selected track is rejected before opening the file");
+    config = audio_options(path, Muxer::Format::Mp4);
+    config.video_orientation = 90;
+    check(!Muxer::open(config, error) && error.find("zero video orientation") != std::string::npos,
+          "an audio-only file refuses meaningless video orientation");
+    for (const auto member : {&Muxer::Options::vps, &Muxer::Options::sps, &Muxer::Options::pps}) {
+        config = audio_options(path, Muxer::Format::Mp4);
+        config.*member = Nal{0};
+        check(!Muxer::open(config, error) && error.find("HEVC parameter") != std::string::npos,
+              "an audio-only file refuses each unused HEVC parameter instead of silently ignoring it");
+    }
+    std::ifstream file(path); std::string bytes; file >> bytes;
+    check(bytes == "keep", "invalid track selections never truncate an existing output");
+}
+
 void orientation_precheck(const Directory& directory) {
     std::string error = "old error";
     for (const auto format : {Muxer::Format::Mp4, Muxer::Format::Matroska}) {
@@ -346,6 +377,46 @@ void containers(const Directory& directory) {
     }
 }
 
+void audio_only_containers(const Directory& directory) {
+    int index = 0;
+    for (const auto format : {Muxer::Format::Mp4, Muxer::Format::Matroska}) {
+        const auto path = directory.path / ("audio-only-" + std::to_string(index++));
+        std::string error = "old error";
+        auto writer = Muxer::open(audio_options(path, format), error);
+        check(writer != nullptr && error.empty(), "audio-only container opens without HEVC parameters or an IDR");
+        if (!writer) continue;
+        const std::array<int64_t, 3> pts{0, 10000, 20000};
+        for (const auto timestamp : pts)
+            check(writer->write_audio(silence, {timestamp, timestamp, 10000}, error),
+                  "audio-only muxer writes the original AAC-ELD packet with a positive duration");
+        check(writer->finish(error) && error.empty(), "audio-only header, packets and trailer finish normally");
+        check(writer->finish(error) && error.empty(), "audio-only muxer finish is idempotent");
+        const auto file = read(path);
+        check(file.streams == 1 && file.video.codec == AV_CODEC_ID_NONE && file.video.packets.empty(),
+              "audio-only output has exactly one audio stream and no dummy video stream");
+        check_audio(file.audio, pts, 480);
+        for (const auto& packet : file.audio.packets)
+            check(near(packet.duration, 10000) && packet.duration > 0,
+                  "all audio-only packets retain their 480-sample duration without a video-tail rule");
+
+        writer = Muxer::open(audio_options(directory.path / ("audio-only-misuse-" + std::to_string(index)), format), error);
+        check(writer != nullptr, "audio-only wrong-track fixture opens");
+        if (!writer) continue;
+        check(writer->write_audio(silence, {0, 0, 10000}, error), "an audio-only packet precedes wrong-track misuse");
+        check(!writer->write_video(idr, {10000, 10000, 10000}, true, error) &&
+              error.find("no video track") != std::string::npos, "audio-only output rejects video writes explicitly");
+        const auto first = error;
+        check(!writer->write_audio(silence, {10000, 10000, 10000}, error) && error == first,
+              "later audio cannot replace the wrong-track first error");
+        check(!writer->finish(error) && error == first, "audio-only wrong-track error survives file cleanup");
+        check(!writer->finish(error) && error == first, "audio-only failed finish is idempotent");
+    }
+    std::string error;
+    check(!Muxer::open(audio_options(directory.path / "missing" / "audio.mkv", Muxer::Format::Matroska), error) &&
+          error.find("open the recording file") != std::string::npos,
+          "audio-only container propagates a real local file-open failure");
+}
+
 void still_video_and_negative_audio(const Directory& directory) {
     int index = 0;
     for (const auto format : {Muxer::Format::Mp4, Muxer::Format::Matroska}) {
@@ -485,9 +556,11 @@ void invalid_packets(const Directory& directory) {
 int main() {
     Directory directory;
     orientation_precheck(directory);
+    selected_tracks_precheck(directory);
 #ifdef SCRCTL_HAVE_LIBAVFORMAT
     check(Muxer::available(), "libavformat build reports container recording support");
     containers(directory);
+    audio_only_containers(directory);
     container_orientations(directory);
     still_video_and_negative_audio(directory);
     rejected_before_open(directory);
@@ -503,6 +576,8 @@ int main() {
     check(!Muxer::open(options(path, Muxer::Format::Mp4), error) && !error.empty(),
           "without libavformat open fails clearly");
     check(!std::filesystem::exists(path), "unavailable recording does not create or truncate files");
+    check(!Muxer::open(audio_options(path, Muxer::Format::Matroska), error) && !error.empty() &&
+          !std::filesystem::exists(path), "audio-only muxing also requires libavformat without creating a file");
 #endif
     std::printf("recording_muxer: %d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;

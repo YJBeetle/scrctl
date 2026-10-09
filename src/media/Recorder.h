@@ -26,6 +26,7 @@ public:
         RecordingMuxer::Format format = RecordingMuxer::Format::Matroska;
         /// 静态容器展示方向，顺时针 0/90/180/270；编码字节与采样时钟保持原样。
         int video_orientation = 0;
+        bool include_video = true;
         bool include_audio = false;
         /// ingress、待 SR 包及写入中的原编码共用的预算，保守预留编码复制
         /// 和参数检查的临时空间；不是进程 RSS 或库内部缓存的硬上限。
@@ -35,11 +36,13 @@ public:
         std::chrono::microseconds final_extrapolation{1500000};
     };
 
-    /// 创建 worker；文件在首 IDR 配置和所选轨道的首包时钟批准后才打开。
-    /// 首版支持无重排 HEVC；音频仅 48 kHz/双声道/480-sample AAC-ELD。
+    /// 创建 worker；文件在所选轨道的首包时钟批准后才打开。所选视频还需首 IDR 配置。
+    /// 至少选择一轨；首版视频支持无重排 HEVC，音频仅 48 kHz/双声道/480-sample AAC-ELD。
     /// MP4 用下一批准视频点的 PTS 差作为前包时长，最后包显示 100 ms。
     /// 这个末帧时长是展示规则，不是源端结束时间；MKV 保留未知时长 0。
     [[nodiscard]] static std::unique_ptr<Recorder> start(const Options&, std::string& error);
+    /// 创建时选定的视频消费者；与 includes_audio 一样，收尾期间也保持不变。
+    [[nodiscard]] bool includes_video() const;
     /// 创建时选定的音轨消费者；录制、失败及收尾期间保持不变，不查询 worker 状态。
     [[nodiscard]] bool includes_audio() const;
     ~Recorder();

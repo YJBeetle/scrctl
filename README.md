@@ -122,6 +122,7 @@ scrctl --record capture.mkv                # HEVC 视频和 AAC-ELD 音频
 scrctl --record capture.mp4                # 同样保存音视频，使用 MP4 容器
 scrctl --record capture.mkv --no-audio     # 只录视频，不改变手机音频路由
 scrctl --record capture.mkv --audio-dup --no-audio-playback  # 保留手机声音，电脑只录制
+scrctl --no-video --record audio.mkv --audio-dup --no-audio-playback --no-window  # 只录音频
 scrctl --record capture.hevc              # 原有裸 HEVC 方式，不录音频
 ```
 
@@ -136,7 +137,9 @@ scrctl --record capture.hevc              # 原有裸 HEVC 方式，不录音频
 鼠标坐标触摸和视频尺寸快捷键停用。显式窗口宽高分别覆盖默认值。
 `--no-window` 关闭窗口，也关闭视频播放；不影响有消费者的音频或录制。
 没有音视频、录制、窗口控制或显式启动操作时会报错，不建立空会话。
-`--no-video -r` 暂不支持，音频单独录制仍待实现。
+`--no-video -r audio.mp4` 或 `audio.mkv` 只保存 AAC-ELD 音轨，不采集视频。
+仅录音频不能同时指定 `--no-audio` 或非零录制方向，也不支持裸 HEVC 或 `.aac`。
+`--no-window -r` 仍按默认选择保存音视频；需要仅录音频时请显式使用 `--no-video`。
 
 `--no-window` 配合录制时，有 IDR 语法检查能力的构建会直接保存编码视频，
 不创建显示解码器或 BGRA 帧。完整 IDR 通过参数和切片语法检查后才确认就绪；

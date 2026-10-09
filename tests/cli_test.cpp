@@ -64,6 +64,21 @@ int main() {
         }
     }
     Options control_only;
+    for (const char *path : {"capture.mp4", "capture.MkV"}) {
+        for (const char *playback : {"--no-audio-playback", "--no-playback", "-N"}) {
+            Options audio_recording;
+            check(parse({"scrctl", "--no-video", "-r", path, playback}, audio_recording) ==
+                      ParseResult::Run && audio_recording.no_video && audio_recording.no_video_playback &&
+                      !audio_recording.no_audio && audio_recording.no_audio_playback &&
+                      audio_recording.record_orientation == 0,
+                  "audio-only containers keep original AAC capture when local playback is disabled");
+        }
+        Options playing_recording;
+        check(parse({"scrctl", "--no-video", "-r", path, "--audio-dup"}, playing_recording) ==
+                  ParseResult::Run && !playing_recording.no_audio && !playing_recording.no_audio_playback &&
+                  playing_recording.audio_dup,
+              "audio-only recording can retain computer playback and explicit phone duplication");
+    }
     check(parse({"scrctl", "-N"}, control_only) == ParseResult::Run &&
               control_only.no_video && control_only.no_audio && !control_only.no_window &&
               !control_only.no_control,
@@ -73,7 +88,11 @@ int main() {
              {"scrctl", "-N", "--no-window"},
              {"scrctl", "--no-video", "--no-audio", "--no-control"},
              {"scrctl", "--no-window", "--no-audio"},
-             {"scrctl", "--no-video", "-r", "capture.mkv"},
+             {"scrctl", "--no-video", "-r", "capture.hevc"},
+             {"scrctl", "--no-video", "-r", "capture.aac"},
+             {"scrctl", "--no-video", "--no-audio", "-r", "capture.mkv"},
+             {"scrctl", "--no-video", "--record-orientation", "90", "-r", "capture.mkv"},
+             {"scrctl", "--no-video", "--record-orientation", "flip0", "-r", "capture.mp4"},
              {"scrctl", "--no-video", "--exit-after", "1"},
              {"scrctl", "--no-video", "--hw-decode"},
              {"scrctl", "--no-video", "--test-degrade", "1"},

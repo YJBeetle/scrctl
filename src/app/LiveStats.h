@@ -31,8 +31,8 @@ class LiveStats {
         uint64_t now_ms = 0;
     };
     struct Audio {
-        /// 结算时刻沿用本次视频快照的 now_ms，音频窗口仍独立维护。
         media::AudioPump::Stats counters;
+        uint64_t now_ms = 0;
         /// 同一次采样用于速率和下次基线，避免漏掉两次读取之间的交付。
         uint64_t delivered = 0;
         uint64_t silence = 0;
@@ -56,10 +56,11 @@ class LiveStats {
     void audio_started(uint64_t now_ms);
     /// 每次安装新截图源时重置时间与帧基线，不结算后台视频和音频。
     void reset_screenshot(uint64_t now_ms);
-    /// 先打印隧道；有截图时只打印截图，否则打印视频及其音频。
+    /// 先打印隧道；有截图时只打印截图，否则分别打印已有视频和音频。
     void print(const Snapshot &snapshot);
 
   private:
+    void print_audio(const Audio &audio);
     uint64_t last_packets_ = 0;
     uint64_t last_dev_packets_ = 0;
     uint64_t last_dev_change_ms_ = 0;
