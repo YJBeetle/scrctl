@@ -11,7 +11,9 @@
 //    第一版只按整数取值，于是尺寸全军覆没，而 describe 打出来 1125 与 1125.0 同形。
 // 2. 产品路径不读的字段（bounds / frame / availableModes / physicalSize）在这里留空
 //    数组，它们的作用只是"确实存在但解析器不去碰"。
+#include <cmath>
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -21,8 +23,10 @@
 namespace {
 
 int Failures = 0;
+int Checks = 0;
 
 void check(bool ok, const std::string &what) {
+    ++Checks;
     std::printf("  [%s] %s\n", ok ? "PASS" : "FAIL", what.c_str());
     if (!ok) {
         ++Failures;
@@ -46,6 +50,24 @@ Value ipair(int w, int h) {
     array_push(a, make_int64(w));
     array_push(a, make_uint64(static_cast<uint64_t>(h)));
     return a;
+}
+
+/// 只给公开解析入口构造一条记录；边界测试不访问内部转换函数。
+Value numeric_element(Value id, Value width, Value height) {
+    auto size = make_array();
+    array_push(size, std::move(width));
+    array_push(size, std::move(height));
+    auto current = make_dict();
+    dict_set(current, "size", std::move(size));
+    auto display = make_dict();
+    dict_set(display, "displayId", std::move(id));
+    dict_set(display, "primary", make_bool(true));
+    dict_set(display, "currentMode", std::move(current));
+    auto displays = make_array();
+    array_push(displays, std::move(display));
+    auto element = make_dict();
+    dict_set(element, "displays", std::move(displays));
+    return element;
 }
 
 Value mode(int w, int h, int ui_scale, int refresh) {
@@ -194,10 +216,7 @@ int main() {
         array_push(dbl, make_double(900.0));
         check(one_size(std::move(dbl)), "size 是 Double（实测形状）时解得出 500x900");
 
-        auto both = make_array();
-        array_push(both, make_int64(500));
-        array_push(both, make_uint64(900));
-        check(one_size(std::move(both)), "size 是 int64 / uint64 时也解得出");
+        check(one_size(ipair(500, 900)), "size 是 int64 / uint64 时也解得出");
 
         // 浮点要四舍五入而不是截断：这一路是从 CG 的浮点几何换算来的。
         auto jitter = make_array();
@@ -217,6 +236,121 @@ int main() {
         std::string e3;
         const auto got = parse_display_info(e, e3);
         check(got != std::nullopt && got->find(7) != nullptr, "displayId 是 int64 时也认");
+    }
+
+    std::printf("\n== 数字转换有界且保持最近整点 ==\n");
+    {
+        const auto check_size = [](Value width, Value height, int expected_width,
+                                   int expected_height, const std::string &label) {
+            std::string error;
+            const auto got = parse_display_info(
+                numeric_element(make_uint64(7), std::move(width), std::move(height)), error);
+            const auto *display = got ? got->find(7) : nullptr;
+            check(display != nullptr && got->displays.size() == 1 &&
+                      display->width == expected_width && display->height == expected_height,
+                  label + (display ? " (actual " + std::to_string(display->width) + "x" +
+                                     std::to_string(display->height) + ")" : " (missing display)"));
+        };
+        const auto check_id = [](Value id, uint64_t expected, const std::string &label) {
+            std::string error;
+            const auto got = parse_display_info(
+                numeric_element(std::move(id), make_int64(500), make_int64(900)), error);
+            check(got != std::nullopt && got->displays.size() == 1 &&
+                      got->find(expected) != nullptr, label);
+        };
+        const auto reject_id = [](Value id, const std::string &label) {
+            std::string error;
+            const auto got = parse_display_info(
+                numeric_element(std::move(id), make_int64(500), make_int64(900)), error);
+            check(got == std::nullopt && !error.empty(), label);
+        };
+        constexpr int minimum_int = std::numeric_limits<int>::min();
+        constexpr int maximum_int = std::numeric_limits<int>::max();
+        constexpr int64_t minimum_i64 = std::numeric_limits<int64_t>::min();
+        constexpr int64_t maximum_i64 = std::numeric_limits<int64_t>::max();
+        constexpr uint64_t maximum_u64 = std::numeric_limits<uint64_t>::max();
+        const double upper_i64 = std::ldexp(1.0, std::numeric_limits<int64_t>::digits);
+        const double lower_i64 = static_cast<double>(minimum_i64);
+        const double infinity = std::numeric_limits<double>::infinity();
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+
+        check_size(make_int64(minimum_int), make_uint64(static_cast<uint64_t>(maximum_int)),
+                   minimum_int, maximum_int, "int 两个边界不被缩窄或夹紧（负尺寸仍由上层筛选）");
+        check_size(make_double(static_cast<double>(maximum_int)),
+                   make_double(static_cast<double>(minimum_int)), maximum_int, minimum_int,
+                   "Double 精确 int 上下界保持原值");
+        check_size(make_double(static_cast<double>(maximum_int) + 0.49),
+                   make_double(static_cast<double>(minimum_int) - 0.49), maximum_int, minimum_int,
+                   "Double 靠近 int 边界但最近整点仍在范围内");
+        check_size(make_double(499.5), make_double(900.49), 500, 900,
+                   "正半点远离零，半点以下取最近整点");
+        check_size(make_double(-499.5), make_double(-900.49), -500, -900,
+                   "负半点远离零，负半点以下取最近整点");
+        check_size(make_double(-0.49), make_double(-0.5), 0, -1,
+                   "负零附近维持原来的最近整点语义");
+
+        struct InvalidNumber { const char *name; Value value; };
+        const std::vector<InvalidNumber> invalid_sizes{
+            {"NaN", make_double(nan)},
+            {"+Inf", make_double(infinity)},
+            {"-Inf", make_double(-infinity)},
+            {"+DBL_MAX", make_double(std::numeric_limits<double>::max())},
+            {"-DBL_MAX", make_double(-std::numeric_limits<double>::max())},
+            {"Double 2^63", make_double(upper_i64)},
+            {"Double低于LLONG_MIN", make_double(std::nextafter(lower_i64, -infinity))},
+            {"Double小于2^63但超int", make_double(std::nextafter(upper_i64, 0.0))},
+            {"UInt64 LLONG_MAX+1", make_uint64(static_cast<uint64_t>(maximum_i64) + 1)},
+            {"UInt64最大值", make_uint64(maximum_u64)},
+            {"Int64最大值", make_int64(maximum_i64)},
+            {"Int64最小值", make_int64(minimum_i64)},
+            {"Int64 INT_MAX+1", make_int64(static_cast<int64_t>(maximum_int) + 1)},
+            {"Int64 INT_MIN-1", make_int64(static_cast<int64_t>(minimum_int) - 1)},
+            {"Int64 2^32+500不得绕成500", make_int64((int64_t{1} << 32) + 500)},
+            {"Int64 -2^32+500不得绕成500", make_int64(-(int64_t{1} << 32) + 500)},
+            {"UInt64 INT_MAX+1", make_uint64(static_cast<uint64_t>(maximum_int) + 1)},
+            {"Double INT_MAX+0.5", make_double(static_cast<double>(maximum_int) + 0.5)},
+            {"Double INT_MIN-0.5", make_double(static_cast<double>(minimum_int) - 0.5)},
+        };
+        for (const auto &invalid : invalid_sizes) {
+            check_size(invalid.value, make_int64(900), 0, 0,
+                       std::string(invalid.name) + "：非法宽度整体保留0x0");
+            check_size(make_int64(500), invalid.value, 0, 0,
+                       std::string(invalid.name) + "：非法高度不留下部分宽度");
+        }
+
+        check_id(make_int64(maximum_i64), static_cast<uint64_t>(maximum_i64),
+                 "displayId Int64最大值精确保留");
+        check_id(make_uint64(static_cast<uint64_t>(maximum_i64)),
+                 static_cast<uint64_t>(maximum_i64), "displayId UInt64恰为LLONG_MAX仍接受");
+        // 2^63 下一个 Double 是 2^63-1024，不能把 LLONG_MAX 转 Double 作为闭上界。
+        check_id(make_double(std::nextafter(upper_i64, 0.0)),
+                 static_cast<uint64_t>(maximum_i64) - 1023, "displayId接受2^63之前的可表示Double");
+        check_id(make_double(1.5), 2, "displayId Double正半点保持最近整点");
+        check_id(make_double(-0.49), 0, "displayId Double负零附近仍落到0");
+        reject_id(make_double(nan), "displayId NaN跳过，且不会浮点转整数越界");
+        reject_id(make_double(infinity), "displayId +Inf跳过");
+        reject_id(make_double(-infinity), "displayId -Inf跳过");
+        reject_id(make_double(std::numeric_limits<double>::max()), "displayId DBL_MAX跳过");
+        reject_id(make_double(upper_i64), "displayId Double 2^63排他上界跳过");
+        reject_id(make_double(static_cast<double>(maximum_i64)),
+                  "displayId LLONG_MAX向Double取整后为2^63，不能错误接受");
+        reject_id(make_double(std::nextafter(lower_i64, -infinity)),
+                  "displayId低于LLONG_MIN的Double跳过");
+        reject_id(make_double(lower_i64), "displayId恰为LLONG_MIN安全转换后因负值跳过");
+        reject_id(make_int64(minimum_i64), "displayId Int64最小值因负值跳过");
+        reject_id(make_uint64(static_cast<uint64_t>(maximum_i64) + 1),
+                  "displayId UInt64超LLONG_MAX明确跳过");
+        reject_id(make_uint64(maximum_u64), "displayId UInt64最大值明确跳过");
+        reject_id(make_double(-0.5), "displayId负半点取-1后仍按原规则跳过");
+
+        auto mixed = numeric_element(make_double(nan), make_int64(500), make_int64(900));
+        auto mixed_list = mixed.at("displays");
+        array_push(mixed_list, primary_display());
+        dict_set(mixed, "displays", std::move(mixed_list));
+        std::string mixed_error;
+        const auto mixed_info = parse_display_info(mixed, mixed_error);
+        check(mixed_info && mixed_info->displays.size() == 1 && mixed_info->find(1) != nullptr,
+              "非法数值id仅丢弃自身，不让同推送的合法屏幕失效");
     }
 
     std::printf("\n== 解不开的时候要如实失败 ==\n");
@@ -250,6 +384,6 @@ int main() {
               "缺 currentMode.size -> 解得开但尺寸为 0（上层据此退回旧表）");
     }
 
-    std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
+    std::printf("\n%s (检查 %d 项，失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Checks, Failures);
     return Failures == 0 ? 0 : 1;
 }

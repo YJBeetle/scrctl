@@ -2,7 +2,9 @@
 #include "remote/DisplayInfo.h"
 
 #include <chrono>
+#include <cmath>
 #include <cstdio>
+#include <limits>
 #include <random>
 #include <span>
 #include <thread>
@@ -26,12 +28,27 @@ bool as_int(const xpc::Value *v, long long &out) {
             out = v->int64;
             return true;
         case xpc::Type::UInt64:
+            if (v->uint64 > static_cast<uint64_t>(std::numeric_limits<long long>::max())) {
+                return false;
+            }
             out = static_cast<long long>(v->uint64);
             return true;
-        case xpc::Type::Double:
+        case xpc::Type::Double: {
+            if (!std::isfinite(v->real)) {
+                return false;
+            }
             // Double 按最近整数转换，避免直接截断几何值的小数部分。
-            out = static_cast<long long>(v->real >= 0 ? v->real + 0.5 : v->real - 0.5);
+            const double rounded = std::round(v->real);
+            // LLONG_MAX 转为 Double 会向上取到 2^63，不能拿它作闭区间上界。
+            // 使用精确的 2^digits 排他上界，先检查再转换，避免浮点转整数越界。
+            const double upper = std::ldexp(1.0, std::numeric_limits<long long>::digits);
+            if (rounded < static_cast<double>(std::numeric_limits<long long>::min()) ||
+                rounded >= upper) {
+                return false;
+            }
+            out = static_cast<long long>(rounded);
             return true;
+        }
         default:
             return false;
     }
@@ -56,6 +73,10 @@ bool as_pair(const xpc::Value *v, int &w, int &h) {
     }
     long long a = 0, b = 0;
     if (!as_int(&v->array[0], a) || !as_int(&v->array[1], b)) {
+        return false;
+    }
+    if (a < std::numeric_limits<int>::min() || a > std::numeric_limits<int>::max() ||
+        b < std::numeric_limits<int>::min() || b > std::numeric_limits<int>::max()) {
         return false;
     }
     w = static_cast<int>(a);

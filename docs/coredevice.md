@@ -3768,8 +3768,8 @@ OrientationInfo 的编码字段为：
 | currentDeviceNonFlatOrientation | DeviceOrientation |
 | currentDeviceOrientationLocked | Bool |
 
-外层成功 / 失败回复、当前设备的服务权限和具体状态码尚未实测。请求没有锁定或
-解锁参数，返回 locked Bool 也不能证明 setter 保持或恢复原来的方向锁定。
+查询回复的三个直接字段已按 §33.2 实测；失败回复和 setter 的状态码仍未实测。
+请求没有锁定或解锁参数，返回 locked Bool 也不能证明 setter 保持或恢复原来的方向锁定。
 物理方向、非平放方向和应用 UI 显示方向是不同状态；现有 DisplayInfo 曾出现
 物理 portrait 与 UI rot270 同时成立，不能直接用物理枚举代替窗口显示状态。
 
@@ -3783,12 +3783,12 @@ scrcpy v5 的设备转屏先读当前 rotation 和冻结状态，目标为 `(rot
 CoreDeviceUtilities 为 `b14d16d1e6590b44a79767af67c94a2c581ec8fd809cf49543c9913c779f1b49`。
 解析脚本、字段绑定、短反汇编和复现说明保留在
 `/private/tmp/scrctl-device-orientation-research-20261010/`。研究使用的只读 DDI 挂载
-已撤除；本轮没有发送设备请求，也没有改变手机方向锁定。
+已撤除；最初的静态研究阶段没有发送设备请求或改变手机方向锁定。
 
 ### 33.1 有界只读查询工具
 
 临时工具已使用当前生产库编译，只有 `currentOrientation` 分支，没有 setter、
-订阅或媒体动作；尚未执行有效设备查询。显式 UDID 与传输方式必需，USB 使用
+订阅或媒体动作；编制与离线验证时尚未执行有效设备查询。显式 UDID 与传输方式必需，USB 使用
 `usb_only=true`，Wi-Fi 只接受明确数值地址，不作自动发现或回退。
 服务阶段的截止覆盖建连、握手及一次调用；设备建立本身尚无取消参数，外层
 runner 对整个子进程限时，默认 30 秒，超时后另有最多一秒退出余量。
@@ -3799,3 +3799,25 @@ runner 对整个子进程限时，默认 30 秒，超时后另有最多一秒退
 研究与查询工具的固定证据已长期归档到
 `/Volumes/Data/Workspace/Github/scrctl-fixtures/recording-clock-20261008/device-orientation/`，
 其中 `QUERY_TOOL.md` 记录复现方法与真实阶段边界；归档不是可搬移发布包。
+
+### 33.2 Wi-Fi 只读查询的设备回复
+
+2026-10-10，当前 USB 枚举为空，本次 3 秒 mDNS 扫描匹配到已有配对记录及
+`10.24.24.7:49152`。工具使用该次确认的显式 UDID 和数值地址，日志核对实际
+传输为 WiFi；RSD 的 devicecontrol 服务宣告 RemoteXPC 和方向 feature。
+一次 `currentOrientation` 请求取得直接 XPC dictionary：
+
+| 字段 | 本次值与类型 |
+| --- | --- |
+| currentDeviceOrientationLocked | `false`，Bool |
+| currentDeviceNonFlatOrientation | `portrait`，String |
+| currentDeviceOrientation | `faceUp`，String |
+
+外层没有追加 CoreDevice feature 成功封套。整个子进程在 1.352 秒正常退出；
+只查询当前状态，没有发送方向 setter 或启动媒体。取得回复不证明 setter / rotate、
+锁定 true 初态与锁定恢复、应用 UI 跟随、USB 查询、取消时效或多轮稳定性。
+这里保存的是有截断规则的终端描述，不称完整 wire 字节捕获。
+
+原日志、独立复核及证明范围另存于
+`/Volumes/Data/Workspace/Github/scrctl-fixtures/recording-clock-20261008/device-orientation-wifi-query/`。
+§33.1 的原离线归档保持编制时点记录，不用后续真机结果覆盖它。
