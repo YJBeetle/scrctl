@@ -41,9 +41,72 @@ int main() {
               !defaults.win_y && defaults.scale == 1 && !defaults.scale_given &&
               defaults.audio_buffer_ms == 50 && !defaults.audio_dup &&
               !defaults.no_audio && !defaults.no_audio_playback &&
+              !defaults.no_video && !defaults.no_video_playback && !defaults.no_window &&
               defaults.shortcut_mods == (KMOD_LALT | KMOD_LGUI) &&
               defaults.orientation == -1 && !defaults.display_flip && defaults.record_orientation == 0,
           "default options");
+    for (const char *flag : {"--no-video", "--no-video-playback", "--no-window"}) {
+        Options audio_only;
+        check(parse({"scrctl", flag}, audio_only) == ParseResult::Run &&
+                  audio_only.no_video && audio_only.no_video_playback && !audio_only.no_audio &&
+                  !audio_only.no_audio_playback && audio_only.no_window == (std::string(flag) == "--no-window"),
+              "no video consumer disables video capture and preserves audio playback and window choice");
+    }
+    for (const char *flag : {"--no-video-playback", "--no-playback", "-N", "--no-window"}) {
+        for (const char *path : {"capture.hevc", "capture.mkv"}) {
+            Options recording;
+            const bool all_playback_off = std::string(flag) == "--no-playback" || std::string(flag) == "-N";
+            check(parse({"scrctl", flag, "-r", path}, recording) == ParseResult::Run &&
+                      !recording.no_video && recording.no_video_playback &&
+                      recording.no_audio_playback == all_playback_off &&
+                      recording.no_audio == (all_playback_off && std::string(path) == "capture.hevc"),
+                  "recording preserves selected capture tracks when local playback is disabled");
+        }
+    }
+    Options control_only;
+    check(parse({"scrctl", "-N"}, control_only) == ParseResult::Run &&
+              control_only.no_video && control_only.no_audio && !control_only.no_window &&
+              !control_only.no_control,
+          "no-playback without recording retains the background keyboard window");
+    for (const auto &args : std::vector<std::vector<std::string>>{
+             {"scrctl", "-N", "--no-control"},
+             {"scrctl", "-N", "--no-window"},
+             {"scrctl", "--no-video", "--no-audio", "--no-control"},
+             {"scrctl", "--no-window", "--no-audio"},
+             {"scrctl", "--no-video", "-r", "capture.mkv"},
+             {"scrctl", "--no-video", "--exit-after", "1"},
+             {"scrctl", "--no-video", "--hw-decode"},
+             {"scrctl", "--no-video", "--test-degrade", "1"},
+             {"scrctl", "--no-video", "--video-source", "screenshot"},
+             {"scrctl", "--no-video-playback", "--verify", "1", "frame.bmp"},
+             {"scrctl", "--play", "input.hevc", "--no-video"},
+             {"scrctl", "--play", "input.hevc", "--no-video-playback"},
+             {"scrctl", "--play", "input.hevc", "-N"}}) {
+        Options invalid;
+        check(parse(args, invalid) == ParseResult::Error,
+              "disabled media rejects missing consumers and conflicting video operations before connection");
+    }
+    for (const auto &args : std::vector<std::vector<std::string>>{
+             {"scrctl", "--no-window", "--no-audio", "--exit-after", "3"},
+             {"scrctl", "--no-window", "--no-audio", "--hw-decode"},
+             {"scrctl", "--no-window", "--no-audio", "--test-degrade", "1"},
+             {"scrctl", "--no-window", "--no-audio", "--video-source", "screenshot"},
+             {"scrctl", "--play", "input.hevc", "--no-window", "--exit-after", "3"}}) {
+        Options legacy;
+        check(parse(args, legacy) == ParseResult::Run && !legacy.no_video && legacy.no_video_playback,
+              "headless frame counting and legacy decoder diagnostics remain video consumers");
+    }
+    for (const auto &args : std::vector<std::vector<std::string>>{
+             {"scrctl", "-N", "--no-window", "--start-app", "com.example.app"},
+             {"scrctl", "-N", "--no-window", "--test-type", "abc"},
+             {"scrctl", "-N", "--no-window", "--test-button", "home"},
+             {"scrctl", "-N", "--no-window", "--copy", ""},
+             {"scrctl", "-N", "--no-control", "--list-devices"},
+             {"scrctl", "-N", "--no-control", "--pair"}}) {
+        Options command;
+        check(parse(args, command) == ParseResult::Run && command.no_video && command.no_audio,
+              "explicit startup and standalone commands remain usable without local media");
+    }
     Options orientation_overrides;
     check(parse({"scrctl", "--record-orientation=270", "--orientation=90",
                  "--display-orientation=180"}, orientation_overrides) == ParseResult::Run &&

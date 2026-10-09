@@ -37,6 +37,10 @@ class Presenter {
     /// spec.horizontal_flip 在窗口旋转前作用于裁剪区域，不改变裁剪的源像素位置。
     bool open(int frame_w, int frame_h, const Crop &crop, int degrees, double scale,
               bool scale_given, const WindowSpec &spec);
+    /// 无视频播放的普通背景窗口。默认 256x256 点；显式宽高各自覆盖默认维度，
+    /// 不推导视频比例或应用视频缩放/方向，不创建像素帧或视频纹理。
+    /// 键盘、粘贴、全屏和退出沿用 pump；禁用坐标触摸及视频尺寸动作。
+    bool open_background(const WindowSpec &spec);
     /// 原地更新内容方向和可见尺寸，保留 SDL 窗口身份、用户位置和特殊模式。
     /// 普通窗口按当前显示尺度适配；特殊模式等恢复普通窗口后再适配最终内容。
     /// 更新前释放旧输入并丢弃本窗口已排队的输入，使旧粘贴代次失效。
@@ -79,6 +83,8 @@ class Presenter {
     ~Presenter();
 
   private:
+    bool open_window(const WindowSpec &spec);
+    bool draw_background();
     /// 将 SDL 鼠标的窗口点坐标转换为设备整屏的 0..1 坐标。
     /// renderer 固定 logical size=0、scale=1 和完整绘制面视口。
     /// SDL_RenderWindowToLogical 先负责点到物理像素的 DPI 换算，再按与绘制
@@ -108,6 +114,7 @@ class Presenter {
     SDL_Window *window_ = nullptr;
     SDL_Renderer *renderer_ = nullptr;
     SDL_Texture *texture_ = nullptr;
+    bool video_playback_ = true;
     int texture_w_ = 0, texture_h_ = 0;
     Crop src_{};
     /// 窗口对源像素施加的顺时针角度，以及视口尺寸（90/270 时宽高对调）。

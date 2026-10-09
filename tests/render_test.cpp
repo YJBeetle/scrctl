@@ -1007,17 +1007,19 @@ struct KeyboardFixture {
     std::vector<Touch> touches;
 
     explicit KeyboardFixture(const char *title, int width = 64, int height = 96,
-                             int degrees = 0, Uint16 shortcut_mods = KMOD_LALT | KMOD_LGUI) {
+                             int degrees = 0, Uint16 shortcut_mods = KMOD_LALT | KMOD_LGUI,
+                             bool background = false) {
         const Palette colors{kTopLeft, kTopRight, kBottomRight, kBottomLeft};
-        frame = colored_frame(64, 96, crop, colors, 0);
+        if (!background) frame = colored_frame(64, 96, crop, colors, 0);
         scrctl::app::WindowSpec spec;
         spec.title = title;
         spec.want_w = width;
         spec.want_h = height;
         spec.want_readback = true;
         spec.shortcut_mods = shortcut_mods;
-        const bool opened = presenter.open(64, 96, crop, degrees, 1, false, spec);
-        check(opened, "为物理键盘回归创建实际 Presenter");
+        const bool opened = background ? presenter.open_background(spec)
+                                      : presenter.open(64, 96, crop, degrees, 1, false, spec);
+        check(opened, "为输入回归创建实际 Presenter");
         if (opened) window_id = window_id_from_events(title);
     }
 
@@ -1080,6 +1082,149 @@ struct KeyboardFixture {
         reports.clear();
     }
 };
+
+void presenter_background_windows() {
+    for (const unsigned variant : {0u, 1u, 2u, 3u}) {
+        scrctl::app::Presenter presenter;
+        presenter.set_background(17, 43, 71);
+        scrctl::app::WindowSpec spec;
+        spec.title = "Presenter background dimensions";
+        spec.want_readback = true;
+        if (variant == 1) {
+            spec.want_w = 317; spec.x = 27; spec.y = 49;
+            spec.borderless = true; spec.always_on_top = true;
+        } else if (variant == 2) {
+            spec.want_h = 103;
+        } else if (variant == 3) {
+            spec.want_w = 317; spec.want_h = 103; spec.fullscreen = true;
+        }
+        check(presenter.open_background(spec), "实际背景窗口不需要视频帧即可打开");
+        const auto id = window_id_from_events(spec.title.c_str());
+        auto *window = SDL_GetWindowFromID(id);
+        auto *renderer = window ? SDL_GetRenderer(window) : nullptr;
+        check(window && renderer, "背景窗口使用真实 SDL window/renderer");
+        if (!window || !renderer) continue;
+        int width = 0, height = 0;
+        SDL_GetWindowSize(window, &width, &height);
+        check(spec.fullscreen ? presenter.is_fullscreen()
+                              : (width == (spec.want_w ? spec.want_w : 256) &&
+                                 height == (spec.want_h ? spec.want_h : 256)),
+              "无视频窗口默认各维 256 点，显式单维独立覆盖，全屏标志保留");
+        check(!(SDL_GetWindowFlags(window) & SDL_WINDOW_RESIZABLE),
+              "背景窗口与 scrcpy 无视频模式一致，不设置视频窗口的可缩放标志");
+        if (variant == 1) {
+            int x = 0, y = 0; SDL_GetWindowPosition(window, &x, &y);
+            check(x == spec.x && y == spec.y &&
+                      (SDL_GetWindowFlags(window) & SDL_WINDOW_BORDERLESS) &&
+                      (SDL_GetWindowFlags(window) & SDL_WINDOW_ALWAYS_ON_TOP),
+                  "背景窗口保留显式位置、边框及置顶选择");
+        }
+        const auto color_is = [&](Uint32 expected) {
+            int w = 0, h = 0;
+            if (SDL_GetRendererOutputSize(renderer, &w, &h) != 0 || w <= 0 || h <= 0) return false;
+            std::vector<Uint32> pixels(static_cast<std::size_t>(w) * h);
+            const SDL_Rect full{0, 0, w, h};
+            return SDL_RenderReadPixels(renderer, &full, SDL_PIXELFORMAT_ARGB8888,
+                       pixels.data(), w * static_cast<int>(sizeof(Uint32))) == 0 &&
+                   std::all_of(pixels.begin(), pixels.end(), [expected](Uint32 p) { return p == expected; });
+        };
+        check(color_is(0xff112b47), "open_background 初次呈现完整背景，没有伪像素帧");
+        if (variant != 0) continue;
+        const auto expose = [&](Uint32 window_id) {
+            SDL_Event event{}; event.type = SDL_WINDOWEVENT;
+            event.window.windowID = window_id; event.window.event = SDL_WINDOWEVENT_EXPOSED;
+            check(SDL_PushEvent(&event) == 1, "将暴露事件送入实际 SDL 队列");
+        };
+        check(SDL_SetRenderDrawColor(renderer, 233, 5, 9, 255) == 0 && SDL_RenderClear(renderer) == 0,
+              "改变真实背景绘制面，避免重绘判据依赖初始颜色");
+        SDL_RenderPresent(renderer);
+        expose(id + 1000);
+        check(!presenter.pump({}) && color_is(0xffe90509), "其他窗口暴露事件不重绘本窗口");
+        expose(id);
+        check(!presenter.pump({}) && color_is(0xff112b47), "本窗口暴露事件沿现有 pump 重新呈现背景");
+        SDL_SetWindowSize(window, 291, 117);
+        check(!presenter.pump({}) && color_is(0xff112b47),
+              "实际 SDL 改变窗口尺寸后，全绘制面边缘仍是背景色");
+        int w = 0, h = 0; SDL_GetRendererOutputSize(renderer, &w, &h);
+        check(w == 291 && h == 117, "背景 resize 启用真实新绘制面，不依赖视频 draw");
+        SDL_SetRenderDrawColor(renderer, 233, 5, 9, 255); SDL_RenderClear(renderer);
+        SDL_RenderPresent(renderer);
+        SDL_Event state{}; state.type = SDL_WINDOWEVENT; state.window.windowID = id;
+        state.window.event = SDL_WINDOWEVENT_MINIMIZED;
+        check(SDL_PushEvent(&state) == 1, "向实际队列发送本窗口最小化状态事件");
+        expose(id);
+        check(!presenter.pump({}) && color_is(0xffe90509), "背景最小化状态跳过暴露重绘");
+        state.window.event = SDL_WINDOWEVENT_RESTORED;
+        check(SDL_PushEvent(&state) == 1, "向实际队列发送本窗口恢复状态事件");
+        check(!presenter.pump({}) && color_is(0xff112b47), "背景恢复事件无需视频帧即重新呈现");
+        ReadbackDirectory output;
+        check(output.open(), "创建背景视频操作拒绝的临时目录");
+        const auto path = (output.path / "must-not-save.bmp").string();
+        const scrctl::app::Crop crop{0, 0, 64, 96, 64, 96};
+        const Palette colors{kTopLeft, kTopRight, kBottomRight, kBottomLeft};
+        const auto frame = colored_frame(64, 96, crop, colors, 0);
+        check(!presenter.draw(frame, path.c_str()) && !presenter.readback(path) &&
+                  !presenter.update_content(crop, 90, {}) && !std::filesystem::exists(path) &&
+                  color_is(0xff112b47),
+              "背景窗口拒绝视频上传、方向更新及视频回读，不改变实际输出或创建文件");
+    }
+}
+
+void presenter_background_input() {
+    for (const bool close_window : {false, true}) {
+        KeyboardFixture f("Presenter background input", 160, 112, 0, KMOD_RCTRL, true);
+        if (!f.window_id) continue;
+        f.presenter.set_debug_input(true);
+        check(!f.frame && !f.pump() && f.presenter.ready_for_paste(),
+              "背景窗口未创建 fixture 像素帧，仍可处理输入及显式粘贴");
+        auto *window = SDL_GetWindowFromID(f.window_id);
+        if (!window) continue;
+        const auto size_is = [&](int w, int h) {
+            int width = 0, height = 0; SDL_GetWindowSize(window, &width, &height);
+            return width == w && height == h;
+        };
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_Q);
+        f.key(SDL_KEYUP, SDL_SCANCODE_Q);
+        check(!f.pump(), "无视频窗口的普通 Q 不退出，仍是设备按键");
+        f.expect({{20}, {}}, "无视频普通 Q 通过同一物理键盘状态机完整按下及释放");
+        const auto generation = f.presenter.input_generation();
+        f.mouse(SDL_MOUSEBUTTONDOWN, 20, 30, 2);
+        f.mouse(SDL_MOUSEMOTION, 50, 60);
+        f.mouse(SDL_MOUSEBUTTONUP, 50, 60);
+        for (const auto code : {SDL_SCANCODE_G, SDL_SCANCODE_W}) {
+            f.key(SDL_KEYDOWN, code, KMOD_RCTRL); f.key(SDL_KEYUP, code);
+        }
+        check(!f.pump() && f.touches.empty() && f.reports.empty() && size_is(160, 112) &&
+                  f.presenter.input_generation() == generation,
+              "背景坐标鼠标、双击及 G/W 不制造触摸、几何或视频行为");
+        unsigned pastes = 0;
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_V, KMOD_RCTRL); f.key(SDL_KEYUP, SDL_SCANCODE_V);
+        check(!f.presenter.pump(f.on_touch(), f.on_keyboard(), [&] { ++pastes; }) &&
+                  pastes == 1 && f.reports.empty(),
+              "背景沿现有配置修饰键处理 MOD+V，不注入本地 V");
+        const auto fullscreen = f.presenter.is_fullscreen();
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_F11); f.key(SDL_KEYUP, SDL_SCANCODE_F11);
+        check(!f.pump() && f.presenter.is_fullscreen() != fullscreen && f.reports.empty(),
+              "无视频 F11 切换真实 SDL 全屏，键盘不收到 F11");
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_F, KMOD_RCTRL); f.key(SDL_KEYUP, SDL_SCANCODE_F);
+        check(!f.pump() && f.presenter.is_fullscreen() == fullscreen && f.reports.empty(),
+              "无视频配置 MOD+F 沿原路径恢复窗口模式");
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+        check(!f.pump() && !f.presenter.ready_for_paste(), "无视频设备键按住状态阻止陈旧粘贴");
+        f.window(SDL_WINDOWEVENT_FOCUS_LOST);
+        check(!f.pump() && !f.presenter.ready_for_paste(), "背景失焦沿同一输入释放路径暂停新输入");
+        f.expect({{4}, {}}, "无视频失焦释放已发送设备按键一次");
+        f.window(SDL_WINDOWEVENT_FOCUS_GAINED); check(!f.pump(), "背景恢复本窗口键盘焦点");
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_A); check(!f.pump(), "背景关闭前保持一个真实设备键状态");
+        f.window(SDL_WINDOWEVENT_CLOSE, f.window_id + 1000);
+        check(!f.pump(), "其他窗口关闭事件不关闭背景窗口");
+        if (close_window) f.window(SDL_WINDOWEVENT_CLOSE);
+        else f.key(SDL_KEYDOWN, SDL_SCANCODE_Q, KMOD_RCTRL);
+        check(f.pump() && !f.presenter.ready_for_paste(), "背景 MOD+Q 或窗口关闭沿同一退出路径");
+        f.expect({{4}, {}}, "背景退出释放设备键，且本地 Q 不进入设备");
+        f.release(); f.expect({}, "背景退出后的重复清理不重复释放按键");
+    }
+}
 
 void presenter_physical_keyboard_events() {
     KeyboardFixture f("Presenter physical keyboard regression");
@@ -2080,6 +2225,8 @@ int main() {
     presenter_content_updates();
     presenter_source_queue_changes();
     presenter_window_actions();
+    presenter_background_windows();
+    presenter_background_input();
 
     SDL_Quit();
     if (failures != 0) {

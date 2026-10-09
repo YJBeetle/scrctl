@@ -16,15 +16,13 @@ void Presenter::set_background(uint8_t r, uint8_t g, uint8_t b) {
 
 bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, double scale,
                      bool scale_given, const WindowSpec &spec) {
-    const std::string &title = spec.title;
-    const bool want_readback = spec.want_readback;
+    if (window_ != nullptr || renderer_ != nullptr) return false;
+    video_playback_ = true;
     const int want_w = spec.want_w;
     const int want_h = spec.want_h;
     src_ = crop;
     degrees_ = degrees;
     horizontal_flip_ = spec.horizontal_flip;
-    shortcut_mods_ = spec.shortcut_mods;
-    keyboard_ = KeyboardState(shortcut_mods_);
     scrctl::app::viewport_size(crop, degrees_, view_w_, view_h_);
     SDL_Rect desk{};
     if (want_w == 0 && want_h == 0) {
@@ -45,7 +43,46 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
                     win_w_, win_h_);
     }
 
-    Uint32 win_flags = SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE;
+    if (!open_window(spec)) return false;
+    int out_w = 0, out_h = 0;
+    SDL_GetRendererOutputSize(renderer_, &out_w, &out_h);
+    // 纹理采用完整源帧尺寸，裁剪和缩放通过 RenderCopy 的 src/dst 矩形处理。
+    // BGRA 内存对应小端 ARGB8888。
+    if (!ensure_texture(frame_w, frame_h)) {
+        return false;
+    }
+    std::printf(SCRCTL_TR(
+        "Window %dx%d points / drawable %dx%d pixels / viewport %dx%d (source %dx%d, "
+        "crop %dx%d+%d+%d, clockwise rotation %d degrees)\n"),
+                win_w_, win_h_, out_w, out_h, view_w_, view_h_, frame_w, frame_h, crop.w, crop.h,
+                crop.x, crop.y, degrees_);
+    if (horizontal_flip_) {
+        std::printf(SCRCTL_TR("Display is horizontally flipped before rotation\n"));
+    }
+    return true;
+}
+
+bool Presenter::open_background(const WindowSpec &spec) {
+    if (window_ != nullptr || renderer_ != nullptr || spec.want_w < 0 || spec.want_h < 0) return false;
+    video_playback_ = false;
+    // scrcpy v5 的无视频窗口各维默认 256 点，仅显式指定的维度被覆盖。
+    win_w_ = spec.want_w != 0 ? spec.want_w : 256;
+    win_h_ = spec.want_h != 0 ? spec.want_h : 256;
+    if (!open_window(spec) || !draw_background()) return false;
+    int points_w = 0, points_h = 0, out_w = 0, out_h = 0;
+    SDL_GetWindowSize(window_, &points_w, &points_h);
+    SDL_GetRendererOutputSize(renderer_, &out_w, &out_h);
+    std::printf(SCRCTL_TR("Background window %dx%d points / drawable %dx%d pixels\n"),
+                points_w, points_h, out_w, out_h);
+    return true;
+}
+
+bool Presenter::open_window(const WindowSpec &spec) {
+    shortcut_mods_ = spec.shortcut_mods;
+    keyboard_ = KeyboardState(shortcut_mods_);
+    Uint32 win_flags = SDL_WINDOW_ALLOW_HIGHDPI;
+    if (video_playback_) win_flags |= SDL_WINDOW_RESIZABLE;
+    if (spec.always_on_top) win_flags |= SDL_WINDOW_ALWAYS_ON_TOP;
     // 创建窗口时传入全屏与无边框标志，避免先创建普通窗口再切全屏时保留旧尺寸
     // 约束，导致旋转后的画面不能铺满窗口。
     if (spec.borderless) {
@@ -54,7 +91,7 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
     if (spec.fullscreen) {
         win_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
     }
-    window_ = SDL_CreateWindow(title.c_str(), spec.x, spec.y, win_w_, win_h_, win_flags);
+    window_ = SDL_CreateWindow(spec.title.c_str(), spec.x, spec.y, win_w_, win_h_, win_flags);
     if (window_ == nullptr) {
         std::fprintf(stderr, SCRCTL_TR("Failed to create window: %s\n"), SDL_GetError());
         return false;
@@ -64,7 +101,7 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
         SDL_SetWindowAlwaysOnTop(window_, SDL_TRUE);
     }
     // 需要回读时使用软件渲染器；当前 SDL2 Metal 路径不支持可靠的 RenderReadPixels。
-    const Uint32 flags = want_readback ? SDL_RENDERER_SOFTWARE : SDL_RENDERER_ACCELERATED;
+    const Uint32 flags = spec.want_readback ? SDL_RENDERER_SOFTWARE : SDL_RENDERER_ACCELERATED;
     renderer_ = SDL_CreateRenderer(window_, -1, flags);
     if (renderer_ == nullptr && flags != SDL_RENDERER_SOFTWARE) {
         renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
@@ -83,21 +120,24 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
         std::fprintf(stderr, SCRCTL_TR("Failed to configure viewport: %s\n"), SDL_GetError());
         return false;
     }
+    return true;
+}
+
+bool Presenter::draw_background() {
+    if (!window_ || !renderer_) return false;
+    if (minimized_ || (SDL_GetWindowFlags(window_) & SDL_WINDOW_MINIMIZED)) return true;
     int out_w = 0, out_h = 0;
-    SDL_GetRendererOutputSize(renderer_, &out_w, &out_h);
-    // 纹理采用完整源帧尺寸，裁剪和缩放通过 RenderCopy 的 src/dst 矩形处理。
-    // BGRA 内存对应小端 ARGB8888。
-    if (!ensure_texture(frame_w, frame_h)) {
+    if (!prepare_output() || SDL_GetRendererOutputSize(renderer_, &out_w, &out_h) != 0) {
+        std::fprintf(stderr, SCRCTL_TR("Failed to configure viewport: %s\n"), SDL_GetError());
         return false;
     }
-    std::printf(SCRCTL_TR(
-        "Window %dx%d points / drawable %dx%d pixels / viewport %dx%d (source %dx%d, "
-        "crop %dx%d+%d+%d, clockwise rotation %d degrees)\n"),
-                win_w_, win_h_, out_w, out_h, view_w_, view_h_, frame_w, frame_h, crop.w, crop.h,
-                crop.x, crop.y, degrees_);
-    if (horizontal_flip_) {
-        std::printf(SCRCTL_TR("Display is horizontally flipped before rotation\n"));
+    if (out_w <= 0 || out_h <= 0) return true;
+    if (SDL_SetRenderDrawColor(renderer_, bg_[0], bg_[1], bg_[2], 255) != 0 ||
+        SDL_RenderClear(renderer_) != 0) {
+        std::fprintf(stderr, SCRCTL_TR("Failed to render background: %s\n"), SDL_GetError());
+        return false;
     }
+    SDL_RenderPresent(renderer_);
     return true;
 }
 
@@ -124,6 +164,7 @@ bool Presenter::ensure_texture(int width, int height) {
 }
 
 bool Presenter::draw(const scrctl::Frame &f, const Crop &crop, const char *readback_path) {
+    if (!video_playback_) return false;
     // 上传整帧时 SDL 按纹理的宽高读取像素。截图不含 HEVC 对齐填充，因此不能
     // 将其较短的行跨度及缓冲用于首次视频帧的较大纹理。
     const uint64_t row_bytes = uint64_t(f.width) * 4;
@@ -201,6 +242,7 @@ bool Presenter::draw(const scrctl::Frame &f, const Crop &crop, const char *readb
 }
 
 bool Presenter::readback(const std::string &path) {
+    if (!video_playback_) return false;
     int out_w = 0, out_h = 0;
     if (!prepare_output() || SDL_GetRendererOutputSize(renderer_, &out_w, &out_h) != 0 ||
         out_w <= 0 || out_h <= 0) {
@@ -269,6 +311,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
     }
     SDL_Event e;
     bool quit = false;
+    bool repaint_background = false;
     // 合并同一轮的鼠标移动事件，仅发送最后一个位置，减少高采样率鼠标带来的
     // 重复 HID 报告。按下和抬起仍保留各自事件。
     bool pending_move = false;
@@ -305,6 +348,13 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                 release_input(on_touch, on_keyboard);
             }
             if (apply_pending_resize(on_touch, on_keyboard)) pending_move = false;
+            if (!video_playback_ && (e.window.event == SDL_WINDOWEVENT_EXPOSED ||
+                e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
+                e.window.event == SDL_WINDOWEVENT_RESIZED ||
+                e.window.event == SDL_WINDOWEVENT_SHOWN ||
+                e.window.event == SDL_WINDOWEVENT_RESTORED ||
+                e.window.event == SDL_WINDOWEVENT_MAXIMIZED ||
+                e.window.event == SDL_WINDOWEVENT_DISPLAY_CHANGED)) repaint_background = true;
             break;
         case SDL_KEYDOWN: {
             if (!input_active_ || window_id == 0 || e.key.windowID != window_id) break;
@@ -333,6 +383,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
             } else if ((shortcut && e.key.keysym.sym == SDLK_f && !(mods & KMOD_SHIFT)) ||
                        fullscreen_key) {
                 toggle_fullscreen();
+                repaint_background = !video_playback_;
                 if (apply_pending_resize(on_touch, on_keyboard)) pending_move = false;
             } else if (shortcut && !(mods & KMOD_SHIFT) &&
                        (e.key.keysym.sym == SDLK_g || e.key.keysym.sym == SDLK_w)) {
@@ -355,7 +406,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
             // 也不改变宿主机的全局 text-input 开关。
             break;
         case SDL_MOUSEBUTTONDOWN:
-            if (input_active_ && window_id != 0 && e.button.windowID == window_id &&
+            if (video_playback_ && input_active_ && window_id != 0 && e.button.windowID == window_id &&
                 e.button.button == SDL_BUTTON_LEFT) {
                 // 用原始窗口点换算绘制面，按显示共用的矩形判断留边。
                 // 第一击也不注入触摸，双击只调整本地窗口；文件回放没有触摸
@@ -381,7 +432,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
             }
             break;
         case SDL_MOUSEMOTION:
-            if (input_active_ && window_id != 0 && e.motion.windowID == window_id &&
+            if (video_playback_ && input_active_ && window_id != 0 && e.motion.windowID == window_id &&
                 dragging_ && on_touch) {
                 if (!to_display(e.motion.x, e.motion.y, px, py)) {
                     pending_move = false;
@@ -395,7 +446,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
             }
             break;
         case SDL_MOUSEBUTTONUP:
-            if (input_active_ && window_id != 0 && e.button.windowID == window_id &&
+            if (video_playback_ && input_active_ && window_id != 0 && e.button.windowID == window_id &&
                 e.button.button == SDL_BUTTON_LEFT && dragging_ && on_touch) {
                 if (pending_move) {
                     pending_move = false;
@@ -415,6 +466,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
         }
     }
     if (!quit && apply_pending_resize(on_touch, on_keyboard)) pending_move = false;
+    if (!quit && repaint_background) (void)draw_background();
     if (quit) {
         input_active_ = false;
         pending_move = false;
@@ -484,6 +536,7 @@ bool Presenter::resize_for_content(int old_w, int old_h, int new_w, int new_h) {
 bool Presenter::update_content(const Crop &crop, int degrees,
                                const std::function<void(double, double, bool)> &on_touch,
                                const KeyboardHandler &on_keyboard) {
+    if (!video_playback_) return false;
     int width = 0, height = 0;
     viewport_size(crop, degrees, width, height);
     if (window_ == nullptr || crop.w <= 0 || crop.h <= 0 ||
@@ -542,7 +595,7 @@ bool Presenter::prepare_output() const {
 }
 
 bool Presenter::output_content_rect(ContentRect &rect) const {
-    if (!window_ || !renderer_ || minimized_ ||
+    if (!video_playback_ || !window_ || !renderer_ || minimized_ ||
         (SDL_GetWindowFlags(window_) & SDL_WINDOW_MINIMIZED)) return false;
     int width = 0, height = 0;
     return prepare_output() && SDL_GetRendererOutputSize(renderer_, &width, &height) == 0 &&
@@ -569,7 +622,7 @@ bool Presenter::to_content(int raw_x, int raw_y, int &x, int &y) const {
 bool Presenter::resize_window(bool pixel_perfect,
                               const std::function<void(double, double, bool)> &on_touch,
                               const KeyboardHandler &on_keyboard) {
-    if (!window_ || !renderer_ || minimized_ ||
+    if (!video_playback_ || !window_ || !renderer_ || minimized_ ||
         (SDL_GetWindowFlags(window_) &
          (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MAXIMIZED | SDL_WINDOW_MINIMIZED))) return false;
     if (!prepare_output()) return false;

@@ -56,7 +56,11 @@ struct Options {
     /// --copy TEXT：写入设备剪贴板后退出；空字符串也是显式写入，未指定时不执行。
     std::optional<std::string> copy_text;
     bool paste = false;     ///< --paste：读设备剪贴板打印后退出
-    bool no_window = false; ///< --no-window：不起窗口，只收流（脚本/自动化用）
+    bool no_window = false; ///< 不创建窗口；采集由音频、录制或旧帧诊断消费者决定。
+    /// 关闭视频采集；播放关闭且无视频消费者时也归一化到此状态。
+    bool no_video = false;
+    /// 不显示视频；仍可录制编码视频并在背景窗口转发键盘。
+    bool no_video_playback = false;
     /// --display-orientation：画面顺时针转这么多度。-1 = auto，跟着设备报的
     /// `currentOrientation` 走。
     int orientation = -1;

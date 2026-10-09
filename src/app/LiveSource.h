@@ -18,36 +18,41 @@
 
 namespace scrctl::app {
 
-/// 设备画面源，负责会话建立、画面来源切换和输入转发。
-/// 实时流的收包、组帧、解码及恢复由 FramePump 管理。
+/// 设备会话源，负责会话建立、画面来源切换和输入转发。
+/// 视频由 FramePump 管理；无视频时仍可提供独立音频或仅输入控制。
 class LiveSource final : public FrameSource {
   public:
     ~LiveSource() override;
 
-    /// watch_display 订阅原始显示方向，用于自动旋转及已转正截图的触摸映射；
-    /// 显式渲染角也需要这份原始方向。无窗口时可关闭，避免独占连接
-    /// 及订阅线程。want_audio 决定是否建立独立音频会话；失败时视频继续。
-    /// audio_buffer_ms 是音频预缓冲与目标水位对应的时长。audio_dup 保留手机
-    /// 播放；默认请求转到电脑，不支持该路由时禁用音频，不自动切回双端播放。
-    /// record_orientation 写容器方向元数据，默认 0；不改变编码数据或触摸映射。
-    /// decode_audio=false 仅录原 AAC 音轨，跳过 PCM 解码；须同时请求容器录制。
-    /// decode_video=false 仅录编码视频；须有实时流录制消费者。就绪由完整 IDR
-    /// 的参数与 slice 语法检查确定，不发布像素帧，也不切换到截图。
-    /// should_cancel 在连接和启动步骤之间检查退出请求，阻止后续起流与路由切换；
-    /// 已在进行的底层连接或 RPC 仍可能等待自身超时后才返回。
-    bool start(const std::string &serial, const std::string &wifi, const std::string &record_path,
-               bool hw_decode, bool watch_display, bool want_audio, int audio_buffer_ms,
-               const std::string &video_source, const std::string &test_degrade, std::string &err,
-               uint16_t wifi_port = 49152, bool audio_dup = false,
-               const std::function<bool()> &should_cancel = {}, int record_orientation = 0,
-               bool decode_audio = true, bool decode_video = true);
+    struct Options {
+        std::string serial, wifi, record_path;
+        uint16_t wifi_port = 49152;
+        bool hw_decode = false;
+        bool watch_display = true;
+        bool want_video = true;
+        bool decode_video = true;
+        bool want_audio = true;
+        bool decode_audio = true;
+        int audio_buffer_ms = 50;
+        bool audio_dup = false;
+        std::string video_source = "stream";
+        std::string test_degrade;
+        int record_orientation = 0;
+        std::function<bool()> should_cancel;
+    };
+
+    /// 命名选项区分设备连接、视频、音频和各自的解码需求。
+    /// 无视频时跳过显示查询/订阅/媒体/截图，仍可保留音频或输入控制连接。
+    /// 首版无视频不支持录制；在连接设备前拒绝非空 record_path。
+    /// should_cancel 在启动步骤间检查；正在执行的底层 RPC 仍受自身超时约束。
+    bool start(const Options &options, std::string &err);
 
     /// 打开音频输出。应用先准备 SDL 音频子系统，再调用 start() 建立媒体会话；
     /// 取得 AudioPump 后才可打开声卡。输出失败时，容器录制继续接收音频；
-    /// 未录制时停止本地音频接收和续期。
+    /// 未录制的镜像停止本地音频，纯音频由应用报告原错并执行最终停止。
     bool start_playback(std::string &err);
-    /// 停止声卡、音频收包和 RR 续期，不调用会中断视频的 stopAll。
-    /// 设备侧需等待音频会话到期（当前租期 20 秒）；播放器可能需要手动继续。
+    /// 停止声卡、音频收包和 RR 续期；与视频并用时不调用会中断视频的 stopAll。
+    /// 默认设备音频会话需等待租期；纯音频拥有者使用既有会话尽力 stopAll。
     void abandon_audio();
 
     /// 退出专用：先关闭声卡，停止并等待两个收包线程，再检查录制文件收尾。
@@ -60,7 +65,7 @@ class LiveSource final : public FrameSource {
 
     bool next(scrctl::Frame &out, int timeout_ms) override;
 
-    /// 隧道终止后结束画面源，触发会话清理；暂时截图失败仍按退避重试。
+    /// 隧道或纯音频不可重试协商错误结束会话；暂时音频/截图恢复仍按退避重试。
     /// 依据 Stack::pump_error() 判断传输失败，不匹配具体错误文本。普通读超时
     /// 不会停止隧道。该会话不负责重新建立已终止的设备连接。
     [[nodiscard]] bool finished() const override;
@@ -68,7 +73,8 @@ class LiveSource final : public FrameSource {
     [[nodiscard]] std::string end_reason() const override;
 
     [[nodiscard]] bool has_audio() const { return audio_ != nullptr; }
-    [[nodiscard]] bool video_decoding_enabled() const { return decode_video_; }
+    [[nodiscard]] bool has_video() const { return want_video_; }
+    [[nodiscard]] bool video_decoding_enabled() const { return want_video_ && decode_video_; }
 
     /// 返回会话使用的 Device 引用，供 --start-app 等设备操作复用，避免重复所有权。
     [[nodiscard]] scrctl::remote::Device &device() { return *device_; }
@@ -134,6 +140,7 @@ class LiveSource final : public FrameSource {
     double touch_x_ = 0, touch_y_ = 0;
     uint64_t serial_ = 0;
     bool recording_error_reported_ = false;
+    bool want_video_ = true;
     bool decode_video_ = true;
 
     // 截图源的序号和失败状态随每次新源一起重置，只由 start_screenshot 安装。

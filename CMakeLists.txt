@@ -507,7 +507,7 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(frame_capture_test PRIVATE scrctl_core)
     add_test(NAME frame_capture COMMAND frame_capture_test)
     set_tests_properties(frame_capture PROPERTIES TIMEOUT 30)
-    set_tests_properties(audio_capture PROPERTIES TIMEOUT 15)
+    set_tests_properties(audio_capture PROPERTIES TIMEOUT 30)
 
     scrctl_add_test_executable(decode_test tests/decode_test.cpp)
     target_link_libraries(decode_test PRIVATE scrctl_core)

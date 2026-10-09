@@ -152,12 +152,23 @@ bool AudioPump::validate_stream_mode(const StreamSession::Started &started,
 
 void AudioPump::reject_negotiation(std::string &err) {
     negotiation_invalid_ = true;
-    char lease_note[384];
-    std::snprintf(lease_note, sizeof(lease_note), SCRCTL_TR(
-        ". Audio keepalive has stopped; wait for session expiry (about %u seconds), "
-        "then resume the phone's player if needed"), options_.lease_seconds);
-    err += lease_note;
-    // 只停音频本地收包和续期，让已接受的设备音频会话到期；stopAll 会中断视频。
+    if (options_.stop_device_on_exit && cleanup_session_ != nullptr) {
+        err += SCRCTL_TR(". Audio reception stopped; cleanup will request the device to stop streaming");
+    } else {
+        char lease_note[384];
+        std::snprintf(lease_note, sizeof(lease_note), SCRCTL_TR(
+            ". Audio keepalive has stopped; wait for session expiry (about %u seconds), "
+            "then resume the phone's player if needed"), options_.lease_seconds);
+        err += lease_note;
+    }
+    // 首次 AcceptedInvalidAnswer 没有有效 handle，不能声称已经停止设备会话。
+    // 默认与视频并用时只停本地收包和续期，避免 stopAll 中断视频。
+    note_terminal_error(err);
+}
+
+void AudioPump::note_terminal_error(const std::string &err) {
+    std::lock_guard<std::mutex> lock(live_mutex_);
+    if (terminal_error_.empty()) terminal_error_ = err;
 }
 
 bool AudioPump::start_session(std::string &err) {
@@ -185,9 +196,10 @@ bool AudioPump::start_session(std::string &err) {
     }
     const auto &started = session->started();
     if (!validate_stream_mode(started, options_, err)) {
+        if (options_.stop_device_on_exit) cleanup_session_ = std::move(session);
         reject_negotiation(err);
-        // 会话已被设备接受，但路由不符。停止本地收包，不发 RR，让音频租期到期；
-        // 不能调用 stopAll，因为视频已在运行。也不能为获得声音而静默改成双端播放。
+        // 不发 RR，也不为获得声音而静默改成双端播放。仅音频拥有者的最终
+        // 清理可使用已确认的 handle；与视频并用时仍让音频租期到期。
         return false;
     }
     if (!started.has_remote_ssrc || !started.has_local_ssrc) {
@@ -198,6 +210,7 @@ bool AudioPump::start_session(std::string &err) {
                      started.remote_ssrc, started.local_ssrc);
     }
     session_ = std::move(session);
+    cleanup_session_.reset();
     if (options_.recorder != nullptr && !worker_.joinable()) {
         (void)options_.recorder->begin_track(Recorder::Track::Audio, started.session_uuid,
             started.has_local_ssrc ? std::optional<uint32_t>(started.local_ssrc) : std::nullopt);
@@ -240,10 +253,22 @@ void AudioPump::stop() {
     if (worker_.joinable()) {
         worker_.join();
     }
-    // 此处不调用 session_->stop()：当前 stopmediastream 只支持
-    // stopAll，会同时结束视频会话。FramePump 停止时已负责 stopAll；
-    // 单独运行音频时依赖自身 RTCP 空闲租期释放设备会话。
+    // 接收线程已退出，外部应先关闭声卡。默认拥有者仍由 FramePump 停设备，
+    // 单独音频的唯一拥有者才可使用已确认的会话调用 stopAll。
+    if (options_.stop_device_on_exit && !device_stop_attempted_) {
+        device_stop_attempted_ = true;
+        const auto *session = session_ != nullptr ? session_.get() : cleanup_session_.get();
+        if (session != nullptr) {
+            std::string stop_error;
+            if (!session->stop(device_, stop_error, verbose_)) {
+                note_terminal_error(stop_error);
+                std::fprintf(stderr, SCRCTL_TR("Failed to stop audio-only device sessions: %s\n"),
+                             stop_error.c_str());
+            }
+        }
+    }
     session_.reset();
+    cleanup_session_.reset();
     clear_live();
 }
 
@@ -388,6 +413,11 @@ std::string AudioPump::backend_name() const {
     return backend_name_.empty() ? std::string("none") : backend_name_;
 }
 
+std::string AudioPump::terminal_error() const {
+    std::lock_guard<std::mutex> lock(live_mutex_);
+    return terminal_error_;
+}
+
 void AudioPump::loop() {
     std::vector<uint8_t> datagram;
     std::string err;
@@ -457,7 +487,8 @@ void AudioPump::loop() {
                 }
                 std::fprintf(stderr, SCRCTL_TR("Audio: device session ended (%llu ms without audio); recreating session\n"),
                              static_cast<unsigned long long>(quiet));
-                session_.reset();
+                if (options_.stop_device_on_exit) cleanup_session_ = std::move(session_);
+                else session_.reset();
                 clear_live();
                 continue;
             }

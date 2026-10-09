@@ -10,6 +10,7 @@
 #include <deque>
 #include <filesystem>
 #include <mutex>
+#include <optional>
 #include <string_view>
 #include <thread>
 
@@ -38,17 +39,21 @@ struct Script {
     std::condition_variable ready;
     std::deque<Bytes> packets;
     std::vector<Session::Request> starts;
+    std::deque<Session::StartStatus> start_results;
+    std::optional<int64_t> route_mode;
     std::vector<std::pair<Bytes, uint16_t>> sent;
     std::vector<Bytes> decoded;
-    bool local_present = true, end_once = false, send_ok = true;
+    bool local_present = true, end_once = false, send_ok = true, stop_ok = true;
     uint32_t local = 0;
-    std::atomic<unsigned> factories{0}, regulators{0}, pcm_calls{0}, opens{0}, stops{0};
+    std::atomic<unsigned> factories{0}, regulators{0}, pcm_calls{0}, opens{0}, stops{0}, receivers{0};
+    bool stop_before_join = false;
     bool decoder_available = false;
     void reset() {
         std::lock_guard lock(mutex);
-        packets.clear(); starts.clear(); sent.clear(); decoded.clear();
-        local_present = true; end_once = false; send_ok = true; local = 0;
-        factories = 0; regulators = 0; pcm_calls = 0; opens = 0; stops = 0;
+        packets.clear(); starts.clear(); sent.clear(); decoded.clear(); start_results.clear(); route_mode.reset();
+        local_present = true; end_once = false; send_ok = true; stop_ok = true; local = 0;
+        factories = 0; regulators = 0; pcm_calls = 0; opens = 0; stops = 0; receivers = 0;
+        stop_before_join = false;
         decoder_available = false;
     }
     void enqueue(Bytes packet) {
@@ -124,7 +129,8 @@ void no_pcm(const Pump& pump) {
 void gates_and_default() {
     script.reset(); scrctl::remote::Device device; std::string error;
     Pump::Options options;
-    check(options.decode_pcm, "existing callers decode PCM by default");
+    check(options.decode_pcm && !options.stop_device_on_exit,
+          "existing callers decode PCM and do not own stopAll by default");
     check(!Pump::start(device, options, error) && error == "controlled decoder unavailable" &&
           script.factories == 1 && script.start_count() == 0,
           "default decoder failure occurs before any device audio routing request");
@@ -155,7 +161,109 @@ void gates_and_default() {
     { std::lock_guard lock(script.mutex);
       check(script.decoded.size() == 2 && script.decoded.front() == silence,
             "real RTP parser strips marker, CSRC, extension and padding before decoding"); }
-    check(script.stops == 0, "stopping the audio pump never sends device stopAll");
+    check(script.stops == 0 && pump->terminal_error().empty(),
+          "default audio stop never sends device stopAll or makes ordinary decode failure terminal");
+}
+
+void audio_only_cleanup() {
+    for (const bool stop_ok : {true, false}) {
+        script.reset(); script.decoder_available = true; script.stop_ok = stop_ok;
+        scrctl::remote::Device device; std::string error;
+        Pump::Options options; options.stop_device_on_exit = true;
+        auto pump = Pump::start(device, options, error);
+        check(pump != nullptr, "audio-only owner starts the existing PCM receive loop");
+        if (!pump) continue;
+        check(wait([] { return script.receivers != 0; }), "audio-only fixture enters the real worker's receive boundary");
+        scrctl::app::AudioOut output;
+        check(!output.open(*pump, error) && error == "controlled audio device unavailable",
+              "audio-only playback failure retains the original SDL device error");
+        script.enqueue(rtp(20, 0, 0));
+        check(wait([&] { return pump->stats().decoded == 1; }), "audio-only loop remains owned until explicit final cleanup");
+        pump->stop();
+        check(error == "controlled audio device unavailable", "cleanup does not overwrite the caller's playback error");
+        check(script.stops == 1 && script.receivers == 0 && !script.stop_before_join,
+              "audio-only owner joins receive before the sole stopAll request");
+        check(pump->receiver_port() == 0 && pump->payload_type() == 0,
+              "final cleanup clears the cross-thread session snapshot");
+        check(pump->terminal_error() == (stop_ok ? "" : "controlled stop failure"),
+              "stopAll failure is a readable sticky terminal error instead of a clean success");
+        const auto sent = script.sent_count();
+        pump->stop(); pump.reset();
+        check(script.stops == 1 && script.sent_count() == sent,
+              "repeated stop and destructor neither repeat stopAll nor continue RR");
+    }
+}
+void initial_rejection_cleanup() {
+    for (const bool owner : {false, true}) {
+        script.reset(); script.decoder_available = true;
+        script.start_results.push_back(Session::StartStatus::AcceptedInvalidAnswer);
+        scrctl::remote::Device device; std::string error;
+        Pump::Options options; options.stop_device_on_exit = owner;
+        check(!Pump::start(device, options, error) && script.start_count() == 1,
+              "accepted-invalid initial answer cannot publish an audio pump or retry startup");
+        check(error.find("controlled accepted-invalid answer") == 0 &&
+              error.find("wait for session expiry") != std::string::npos && script.stops == 0,
+              "initial accepted-invalid reply has no confirmed handle and truthfully relies on lease expiry");
+        check(script.sent_count() == 0 && script.regulators == 0,
+              "initial rejection starts neither RR worker nor PCM regulator");
+
+        script.reset(); script.decoder_available = true; script.route_mode = 8;
+        check(!Pump::start(device, options, error) &&
+              error.find("Computer-only audio routing was not accepted") == 0,
+              "valid session with rejected routing retains the explicit negotiation error");
+        check(script.stops == (owner ? 1u : 0u) && !script.stop_before_join && script.sent_count() == 0,
+              "only audio-only owner cleans up a confirmed but rejected route without any keepalive");
+        check(error.find(owner ? "cleanup will request the device to stop streaming" : "wait for session expiry") != std::string::npos,
+              "rejected routing diagnostic distinguishes stopAll ownership from video-safe expiry");
+    }
+}
+void audio_only_recovery() {
+    script.reset(); script.decoder_available = true; script.end_once = true;
+    script.start_results = {Session::StartStatus::Started, Session::StartStatus::NotConfirmed,
+                            Session::StartStatus::Started};
+    scrctl::remote::Device device; std::string error;
+    Pump::Options options; options.stop_device_on_exit = true;
+    auto pump = Pump::start(device, options, error);
+    check(pump != nullptr, "audio-only ordinary-recovery fixture starts");
+    if (pump) {
+        check(wait([] { return script.start_count() >= 2; }), "quiet state triggers a controlled unconfirmed recovery attempt");
+        check(pump->terminal_error().empty(), "ordinary recovery failure and read timeout are not terminal audio errors");
+        check(wait([&] { return pump->stats().restarts >= 1; }, 2500ms),
+              "ordinary NotConfirmed recovery retries after the existing backoff and recovers");
+        check(script.start_count() == 3 && pump->terminal_error().empty(),
+              "successful recovery keeps terminal status clear without repeated routing requests");
+        script.enqueue(rtp(30, 0, 0));
+        check(wait([&] { return pump->stats().decoded == 1; }), "recovered audio-only session resumes the actual PCM loop");
+        pump->stop(); pump.reset();
+        check(script.stops == 1 && !script.stop_before_join,
+              "successful audio-only recovery still stops device exactly once after join");
+    }
+    for (const bool owner : {false, true}) {
+        script.reset(); script.decoder_available = true; script.end_once = true;
+        script.stop_ok = false;
+        script.start_results = {Session::StartStatus::Started, Session::StartStatus::AcceptedInvalidAnswer};
+        options.stop_device_on_exit = owner;
+        pump = Pump::start(device, options, error);
+        check(pump != nullptr, "terminal-recovery fixture first establishes an actual confirmed audio session");
+        if (!pump) continue;
+        check(wait([&] { return !pump->terminal_error().empty(); }),
+              "accepted-invalid recovery latches a readable terminal error");
+        const auto first = pump->terminal_error();
+        check(first.find("controlled accepted-invalid answer") == 0 && pump->receiver_port() == 0 &&
+              pump->stats().restarts == 0, "invalid recovery clears live session data and never publishes a replacement");
+        const auto starts = script.start_count(), sent = script.sent_count();
+        std::this_thread::sleep_for(1100ms);
+        check(starts == 2 && script.start_count() == starts && script.sent_count() == sent,
+              "accepted-invalid recovery stops RR and does not retry after the normal one-second backoff");
+        check(first.find(owner ? "cleanup will request the device to stop streaming" : "wait for session expiry") != std::string::npos,
+              "recovery cleanup ownership uses a previously confirmed handle only when allowed");
+        pump->stop(); pump->stop();
+        check(script.stops == (owner ? 1u : 0u) && script.receivers == 0 && !script.stop_before_join,
+              "only audio-only owner performs one stopAll after terminal recovery worker exits");
+        check(pump->terminal_error() == first, "failed stopAll and repeated clear do not overwrite the negotiation first error");
+        pump.reset();
+        check(script.stops == (owner ? 1u : 0u), "destructor preserves stopAll idempotence after terminal recovery");
+    }
 }
 
 #ifdef SCRCTL_HAVE_LIBAVFORMAT
@@ -367,11 +475,18 @@ namespace scrctl::media {
 std::unique_ptr<StreamSession> StreamSession::start(remote::Device&, const Request& request, std::string& error,
         bool, remote::ServiceConnection*, StartStatus* status) {
     std::lock_guard lock(script.mutex); script.starts.push_back(request);
+    const auto result = script.start_results.empty() ? StartStatus::Started : script.start_results.front();
+    if (!script.start_results.empty()) script.start_results.pop_front();
+    if (status) *status = result;
+    if (result != StartStatus::Started) {
+        error = result == StartStatus::AcceptedInvalidAnswer ? "controlled accepted-invalid answer" : "controlled unconfirmed request";
+        return nullptr;
+    }
     Started started; started.sender_port = 24680; started.payload_type = 101;
     started.local_ssrc = script.local; started.has_local_ssrc = script.local_present;
     started.remote_ssrc = 123; started.has_remote_ssrc = true;
     started.session_uuid.assign(16, static_cast<uint8_t>(script.starts.size()));
-    auto config = xpc::make_dict(); xpc::dict_set(config, "AudioStreamMode", xpc::make_int64(request.offer.audio_dup ? 8 : 10));
+    auto config = xpc::make_dict(); xpc::dict_set(config, "AudioStreamMode", xpc::make_int64(script.route_mode.value_or(request.offer.audio_dup ? 8 : 10)));
     auto connection = xpc::make_dict(); xpc::dict_set(connection, "streamConfig", std::move(config));
     started.answer = xpc::make_dict(); xpc::dict_set(started.answer, "connection", std::move(connection));
     error.clear(); if (status) *status = StartStatus::Started;
@@ -383,6 +498,10 @@ bool StreamSession::next_packet(Bytes& packet, int timeout, std::string& error) 
     uint16_t port = 0; return next_packet(packet, port, timeout, error);
 }
 bool StreamSession::next_packet(Bytes& packet, uint16_t& port, int timeout, std::string& error) {
+    struct Receiving {
+        Receiving() { ++script.receivers; }
+        ~Receiving() { --script.receivers; }
+    } receiving;
     std::unique_lock lock(script.mutex);
     if (!script.ready.wait_for(lock, std::chrono::milliseconds(timeout), [] { return !script.packets.empty(); })) {
         error = "controlled timeout"; return false;
@@ -393,7 +512,12 @@ bool StreamSession::send_rtp(const Bytes& payload, uint16_t port, std::string& e
     std::lock_guard lock(script.mutex); script.sent.emplace_back(payload, port);
     error = script.send_ok ? "" : "controlled send failure"; return script.send_ok;
 }
-bool StreamSession::stop(remote::Device&, std::string& error, bool) const { ++script.stops; error.clear(); return true; }
+bool StreamSession::stop(remote::Device&, std::string& error, bool) const {
+    std::lock_guard lock(script.mutex); ++script.stops;
+    if (script.receivers != 0) script.stop_before_join = true;
+    error = script.stop_ok ? "" : "controlled stop failure";
+    return script.stop_ok;
+}
 StreamSession::ServerState StreamSession::probe(remote::Device&, const Bytes&, std::string& error, bool) {
     std::lock_guard lock(script.mutex); error.clear();
     if (script.end_once) { script.end_once = false; return ServerState::Ended; }
@@ -416,6 +540,9 @@ extern "C" SDL_AudioDeviceID SDLCALL SDL_OpenAudioDevice(const char*, int, const
 }
 int main() {
     gates_and_default();
+    audio_only_cleanup();
+    initial_rejection_cleanup();
+    audio_only_recovery();
 #ifdef SCRCTL_HAVE_LIBAVFORMAT
     const Directory directory;
     missing_audio_consumer(directory);

@@ -82,6 +82,12 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         ->excludes("--no-audio");
     app.add_flag("--no-audio-playback", o.no_audio_playback,
                  SCRCTL_N_("Disable computer audio playback; capture audio only when recording to MP4 or MKV"));
+    app.add_flag("--no-video", o.no_video, SCRCTL_N_("Do not start video stream"));
+    app.add_flag("--no-video-playback", o.no_video_playback,
+                 SCRCTL_N_("Disable video display; keep encoded video when recording"));
+    bool no_playback = false;
+    app.add_flag("-N,--no-playback", no_playback,
+                 SCRCTL_N_("Disable computer video and audio playback; keep selected recording tracks"));
     app.add_flag("--no-window", o.no_window, SCRCTL_N_("Run without a window"));
     app.add_flag("--hw-decode", o.hw_decode, SCRCTL_N_("Use platform hardware decoder; default: software"));
     app.add_flag("--debug-input", o.debug_input, SCRCTL_N_("Print input coordinates"));
@@ -143,6 +149,8 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     try {
         app.parse(argc, argv);
         if (!language.select()) return ParseResult::Error;
+        if (o.no_window || o.no_video || no_playback) o.no_video_playback = true;
+        if (no_playback) o.no_audio_playback = true;
         // 没有本机播放或容器音轨消费者时，跳过音频采集和设备路由请求。
         if (o.no_audio_playback && !record_container_format(o.record)) o.no_audio = true;
         if (o.audio_dup && o.no_audio) {
@@ -150,6 +158,22 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
                 "Audio capture is disabled; --audio-dup requires playback or MP4/MKV recording"));
         }
         if (o.video_source == "display") o.video_source = "stream";
+        // 按帧数退出和旧诊断选项仍有视频消费者；其余无播放、无录制时不采集视频。
+        // 文件回放保留旧 --no-window 的解码/计数用法，新增禁用视频选项没有文件用途。
+        if (!o.path.empty() && (app.count("--no-video") || app.count("--no-video-playback") || no_playback)) {
+            throw CLI::ValidationError("--play", SCRCTL_TR("File playback requires video; incompatible with video playback disable options"));
+        }
+        if (o.path.empty() && o.no_video_playback && o.record.empty() && o.exit_after == 0 &&
+            !o.hw_decode && o.test_degrade.empty() && o.video_source != "screenshot") {
+            o.no_video = true;
+        }
+        if (o.no_video && !o.record.empty()) {
+            throw CLI::ValidationError("--record", SCRCTL_TR("Audio-only recording is not supported yet; omit --no-video or disable recording"));
+        }
+        if (o.no_video && (o.exit_after > 0 || o.hw_decode || !o.test_degrade.empty() ||
+                           o.video_source == "screenshot")) {
+            throw CLI::ValidationError("--no-video", SCRCTL_TR("Frame counting, hardware decoding, fallback tests and screenshots require video capture"));
+        }
         if (record_container_format(o.record) && o.video_source == "screenshot") {
             throw CLI::ValidationError("--record", SCRCTL_TR(
                 "Container recording requires live video; screenshot polling cannot be recorded"));
@@ -256,6 +280,17 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         }
         if (o.no_window && o.verify_at > 0) {
             throw CLI::ValidationError("--verify", SCRCTL_TR("Requires a window; incompatible with --no-window"));
+        }
+        if (o.no_video_playback && o.verify_at > 0) {
+            throw CLI::ValidationError("--verify", SCRCTL_TR("Window readback requires video playback"));
+        }
+        const bool standalone = o.list_devices || o.list_apps || o.pair || o.copy_text.has_value() ||
+                                o.paste || o.show_version;
+        const bool startup_control = !o.start_app.empty() || !o.test_touch.empty() ||
+                                     !o.test_button.empty() || !o.test_type.empty();
+        if (!standalone && o.no_video && o.no_audio &&
+            (o.no_control || (o.no_window && !startup_control))) {
+            throw CLI::ValidationError("--no-playback", SCRCTL_TR("Nothing to do: enable media, recording or device control"));
         }
     } catch (const CLI::CallForHelp &) {
         if (!language.select()) return ParseResult::Error;

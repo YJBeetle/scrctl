@@ -160,9 +160,13 @@ int main() {
               "signal requests orderly exit while runtime is active");
         scrctl::app::LiveSource source;
         std::string err;
-        check(!source.start("must-not-connect", "must-not-resolve", "", false, false,
-                            true, 200, "stream", "", err, 49152, false,
-                            [&runtime] { return runtime.stop_requested(); }) &&
+        scrctl::app::LiveSource::Options options;
+        options.serial = "must-not-connect";
+        options.wifi = "must-not-resolve";
+        options.watch_display = false;
+        options.audio_buffer_ms = 200;
+        options.should_cancel = [&runtime] { return runtime.stop_requested(); };
+        check(!source.start(options, err) &&
                   !err.empty() && !source.has_audio(),
               "an exit signal cancels actual startup before device connection or audio routing");
     }
@@ -181,6 +185,9 @@ int main() {
                "--no-window"}) == 1 && !std::filesystem::exists("must-not-create.mkv"),
           "audio output startup failure cannot silently turn requested AV recording into video-only");
     check(SDL_WasInit(0) == 0, "rejected AV recording cleans SDL before device connection");
+    check(run({"scrctl", "--no-video", "--no-window", "--serial", "must-not-connect"}) == 1,
+          "audio-only output failure is fatal before opening a device or routing its sound");
+    check(SDL_WasInit(0) == 0, "rejected audio-only startup cleans the SDL runtime");
     {
         scrctl::app::SdlRuntime runtime;
         std::string err;
@@ -210,9 +217,18 @@ int main() {
                                        bool hardware, const std::string &degrade,
                                        const char *expected) {
             err.clear();
-            return !source.start("must-not-connect", "must-not-resolve", record,
-                                 hardware, false, false, 200, kind, degrade, err,
-                                 49152, false, {}, 0, true, false) &&
+            scrctl::app::LiveSource::Options options;
+            options.serial = "must-not-connect";
+            options.wifi = "must-not-resolve";
+            options.record_path = record;
+            options.hw_decode = hardware;
+            options.watch_display = false;
+            options.want_audio = false;
+            options.audio_buffer_ms = 200;
+            options.video_source = kind;
+            options.test_degrade = degrade;
+            options.decode_video = false;
+            return !source.start(options, err) &&
                    err.find(expected) != std::string::npos && !source.has_audio() &&
                    !source.video_decoding_enabled();
         };
@@ -232,8 +248,13 @@ int main() {
     {
         scrctl::app::LiveSource source;
         std::string err = "previous error";
-        check(!source.start("must-not-connect", "must-not-resolve", "", false, false,
-                            true, 200, "stream", "", err, 49152, false, {}, 0, false) &&
+        scrctl::app::LiveSource::Options options;
+        options.serial = "must-not-connect";
+        options.wifi = "must-not-resolve";
+        options.watch_display = false;
+        options.audio_buffer_ms = 200;
+        options.decode_audio = false;
+        check(!source.start(options, err) &&
                   err.find("requires a container recording") != std::string::npos && !source.has_audio(),
               "capture-only without a container fails before connecting a device or routing audio");
         check(source.keyboard_state({}, err) && err.empty(),
@@ -250,6 +271,32 @@ int main() {
         err.clear();
         check(!source.type_text("", 0, err) && err == first_error,
               "empty text preserves a latched input failure");
+    }
+
+    {
+        scrctl::app::LiveSource source;
+        scrctl::app::LiveSource::Options options;
+        options.serial = "must-not-connect";
+        options.wifi = "must-not-resolve";
+        options.want_video = false;
+        options.record_path = "must-not-create.mkv";
+        std::string err;
+        check(!source.start(options, err) && !source.has_video() &&
+                  !source.video_decoding_enabled() && !source.has_audio() &&
+                  !err.empty() && !std::filesystem::exists(options.record_path),
+              "audio-only recording is rejected before connection or file creation");
+        options.record_path.clear();
+        options.want_audio = false;
+        options.should_cancel = [] { return true; };
+        scrctl::app::LiveSource cancelled;
+        check(!cancelled.start(options, err) && !err.empty() &&
+                  !cancelled.has_video() && !cancelled.video_decoding_enabled() && !cancelled.has_audio(),
+              "control-only startup obeys cancellation before opening the device");
+        scrctl::Frame frame;
+        const auto begin = std::chrono::steady_clock::now();
+        check(!cancelled.next(frame, 50) && !frame &&
+                  std::chrono::steady_clock::now() - begin >= std::chrono::milliseconds(40),
+              "no-video event polling has a bounded wait and does not invent frames");
     }
 
     const auto path =

@@ -30,6 +30,10 @@ public:
         /// false 将手机音频转到电脑（negotiator mode 10）；true 保留手机播放（mode 6）。
         /// 起流和会话重建使用相同策略，不自动切换为双端播放。
         bool audio_dup = false;
+        /// 仅不拥有视频会话的唯一媒体拥有者可启用。stop() 先 join 接收线程，
+        /// 再通过已有有效 StreamSession 调用设备 stopAll；默认只关闭本地音频。
+        /// 已接受但首答复无法解析时没有有效 handle，仍只能停止 RR 并等待租期。
+        bool stop_device_on_exit = false;
         /// 音频会话的 avcMediaStreamOptionClientSessionID（16 字节 XPC UUID）。
         /// 为空时由设备生成。
         ///
@@ -159,7 +163,13 @@ public:
     /// 返回实际解码后端名，便于区分会话、解码及播放缓冲的问题。
     [[nodiscard]] std::string backend_name() const;
 
-    /// 停止工作线程并释放本地会话。设备停止策略见 stop()；析构也会调用。
+    /// 不可重试的协商/最终设备停止错误快照；普通超时、重建退避和解码失败
+    /// 不会置错。首错不会被会话清理或后续错误覆盖。
+    [[nodiscard]] std::string terminal_error() const;
+
+    /// 停止并 join 工作线程，再释放会话。默认不发送会中断视频的 stopAll；
+    /// stop_device_on_exit 的唯一拥有者用当前或最近一次有效会话尽力 stopAll。
+    /// 重复调用不重复设备请求；需先关闭借用此对象的声卡回调。
     void stop();
 
 private:
@@ -181,6 +191,7 @@ private:
 
     bool start_session(std::string &err);
     void reject_negotiation(std::string &err);
+    void note_terminal_error(const std::string &err);
     void publish_live();
     void clear_live();
     void loop();
@@ -200,6 +211,11 @@ private:
     /// 仅工作线程及 join 后的 stop() 访问 session_。对外信息经 live_
     /// 快照提供，不能将重建时会被 reset 的指针交给其他线程。
     std::unique_ptr<StreamSession> session_;
+    /// 仅唯一音频拥有者保留最近一次确认的会话，使恢复失败后仍可调用已验证
+    /// 的 stopAll。没有首次有效答复时不凭空构造会话；最多保留一个旧 handle。
+    std::unique_ptr<StreamSession> cleanup_session_;
+    /// stop() 在 join 后串行使用，析构或显式重复 stop 不重发设备请求。
+    bool device_stop_attempted_ = false;
     std::thread worker_;
     std::atomic<bool> stopping_ { false };
 
@@ -207,6 +223,7 @@ private:
     Live live_;
     /// 解码器创建后后端名保持不变，重建只更换媒体会话。
     std::string backend_name_;
+    std::string terminal_error_;
 
     mutable std::mutex mutex_;
     std::vector<int16_t> ring_;

@@ -8,7 +8,10 @@
 #include "app/ViewGeom.h"
 #include "media/RecordingMuxer.h"
 #include "media/RecordingVideoConfig.h"
+#include <algorithm>
+#include <chrono>
 #include <cstdio>
+#include <thread>
 
 namespace scrctl::app {
 
@@ -20,6 +23,10 @@ bool LiveSource::finish_recording(std::string &err) {
     audio_out_.close();
     if (audio_ != nullptr) {
         audio_->stop();
+    }
+    if (!want_video_ && audio_ != nullptr) {
+        err = audio_->terminal_error();
+        if (!err.empty()) return false;
     }
     std::string video_error;
     const bool video_ok = pump_ == nullptr || pump_->finish_recording(video_error);
@@ -39,12 +46,15 @@ bool LiveSource::finish_recording(std::string &err) {
     return video_ok;
 }
 
-bool LiveSource::start(const std::string &serial, const std::string &wifi,
-                       const std::string &record_path, bool hw_decode, bool watch_display,
-                       bool want_audio, int audio_buffer_ms, const std::string &video_source,
-                       const std::string &test_degrade, std::string &err, uint16_t wifi_port,
-                       bool audio_dup, const std::function<bool()> &should_cancel,
-                       int record_orientation, bool decode_audio, bool decode_video) {
+bool LiveSource::start(const Options &config, std::string &err) {
+    const auto &serial = config.serial, &wifi = config.wifi, &record_path = config.record_path;
+    const auto &video_source = config.video_source, &test_degrade = config.test_degrade;
+    const auto &should_cancel = config.should_cancel;
+    const bool hw_decode = config.hw_decode, watch_display = config.watch_display;
+    const bool want_audio = config.want_audio, audio_dup = config.audio_dup;
+    const bool decode_audio = config.decode_audio, decode_video = config.want_video && config.decode_video;
+    const int audio_buffer_ms = config.audio_buffer_ms, record_orientation = config.record_orientation;
+    const uint16_t wifi_port = config.wifi_port;
     const auto cancelled = [&] {
         if (!should_cancel || !should_cancel()) {
             return false;
@@ -52,23 +62,28 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
         err = SCRCTL_TR("Device startup cancelled");
         return true;
     };
+    want_video_ = config.want_video;
+    decode_video_ = decode_video;
     if (cancelled()) {
         return false;
     }
-    decode_video_ = decode_video;
-    if (!decode_video && record_path.empty()) {
+    if (!want_video_ && !record_path.empty()) {
+        err = SCRCTL_TR("Recording without video is not supported yet");
+        return false;
+    }
+    if (want_video_ && !decode_video && record_path.empty()) {
         err = SCRCTL_TR("Video capture without decoding requires a recording consumer");
         return false;
     }
-    if (!decode_video && video_source == "screenshot") {
+    if (want_video_ && !decode_video && video_source == "screenshot") {
         err = SCRCTL_TR("Video capture without decoding requires a live video stream");
         return false;
     }
-    if (!decode_video && (!test_degrade.empty() || hw_decode)) {
+    if (want_video_ && !decode_video && (!test_degrade.empty() || hw_decode)) {
         err = SCRCTL_TR("Hardware decoding and fallback tests require video decoding");
         return false;
     }
-    if (!decode_video && !scrctl::media::recording_idr_checks_available(err)) return false;
+    if (want_video_ && !decode_video && !scrctl::media::recording_idr_checks_available(err)) return false;
     const auto container_format = record_container_format(record_path);
     const bool container_recording = container_format.has_value();
     if (want_audio && !decode_audio && !container_recording) {
@@ -104,191 +119,194 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     }
     device_ = std::make_unique<scrctl::remote::Device>(std::move(*dev));
 
-    // 目录没有 com.apple.coredevice.* 服务时，显示查询、订阅和媒体建立均不可用。
-    // 媒体建立会输出完整目录诊断，此处避免显示查询和订阅重复输出同一错误。
-    bool coredevice_family_empty = true;
-    for (const auto &s : device_->rsd().services()) {
-        if (s.name.rfind("com.apple.coredevice", 0) == 0) {
-            coredevice_family_empty = false;
-            break;
+    if (want_video_) {
+        // 目录没有 com.apple.coredevice.* 服务时，显示查询、订阅和媒体建立均不可用。
+        // 媒体建立会输出完整目录诊断，此处避免显示查询和订阅重复输出同一错误。
+        bool coredevice_family_empty = true;
+        for (const auto &s : device_->rsd().services()) {
+            if (s.name.rfind("com.apple.coredevice", 0) == 0) {
+                coredevice_family_empty = false;
+                break;
+            }
         }
-    }
 
-    scrctl::media::FramePump::Options options;
-    if (!container_recording) options.record_path = record_path;
-    options.use_hardware = hw_decode;
-    options.decode_video = decode_video;
+        scrctl::media::FramePump::Options options;
+        if (!container_recording) options.record_path = record_path;
+        options.use_hardware = hw_decode;
+        options.decode_video = decode_video;
 
-    // 起流前查询显示几何。编码尺寸包含 HEVC 对齐填充，设备报告的可见区
-    // 可用于正确裁剪和触摸映射。机型表仅覆盖已测设备，无法通用于其他尺寸。
-    // 查询使用独立 deviceinfo 连接；提前执行可减少首帧显示后的额外等待。
-    // 失败时 resolve_crop 使用机型表，并标明尺寸来源。
-    {
-        std::string derr;
-        const auto info = scrctl::remote::fetch_display_info(*device_, derr);
-        const scrctl::remote::Display *d =
-            info == std::nullopt ? nullptr : info->find(options.display_id);
-        if (info != std::nullopt && d == nullptr) {
-            // id 对不上时退回主屏：外接屏的 displayId 是设备分配的，不保证连续。
-            d = info->primary();
+        // 起流前查询显示几何。编码尺寸包含 HEVC 对齐填充，设备报告的可见区
+        // 可用于正确裁剪和触摸映射。机型表仅覆盖已测设备，无法通用于其他尺寸。
+        // 查询使用独立 deviceinfo 连接；提前执行可减少首帧显示后的额外等待。
+        // 失败时 resolve_crop 使用机型表，并标明尺寸来源。
+        {
+            std::string derr;
+            const auto info = scrctl::remote::fetch_display_info(*device_, derr);
+            const scrctl::remote::Display *d =
+                info == std::nullopt ? nullptr : info->find(options.display_id);
+            if (info != std::nullopt && d == nullptr) {
+                // id 对不上时退回主屏：外接屏的 displayId 是设备分配的，不保证连续。
+                d = info->primary();
+            }
+            if (d != nullptr) {
+                panel_degrees_ = scrctl::app::parse_orientation_degrees(d->orientation);
+            }
+            if (d != nullptr && d->width > 0 && d->height > 0) {
+                display_w_ = d->width;
+                display_h_ = d->height;
+                display_id_ = d->id;
+                display_name_ = d->name;
+            } else if (!coredevice_family_empty) {
+                std::fprintf(stderr, SCRCTL_TR("Failed to query display dimensions: %s (using model crop table)\n"),
+                             derr.empty() ? SCRCTL_TR("Update contains no usable dimensions") : derr.c_str());
+            }
         }
-        if (d != nullptr) {
-            panel_degrees_ = scrctl::app::parse_orientation_degrees(d->orientation);
-        }
-        if (d != nullptr && d->width > 0 && d->height > 0) {
-            display_w_ = d->width;
-            display_h_ = d->height;
-            display_id_ = d->id;
-            display_name_ = d->name;
-        } else if (!coredevice_family_empty) {
-            std::fprintf(stderr, SCRCTL_TR("Failed to query display dimensions: %s (using model crop table)\n"),
-                         derr.empty() ? SCRCTL_TR("Update contains no usable dimensions") : derr.c_str());
-        }
-    }
 
-    if (cancelled()) {
-        return false;
-    }
-    // 初次查询只确定启动时的朝向；后续变化由常驻显示订阅推送。
-    // 订阅失败仍可镜像，视频保留初次查询结果；截图输入必须有持续的朝向来源。
-    if (watch_display) {
-        std::string werr;
-        watcher_ = scrctl::remote::DisplayWatcher::start(*device_, display_id_, werr, false);
-        if (watcher_ == nullptr && !coredevice_family_empty) {
-            std::fprintf(stderr, SCRCTL_TR("Failed to subscribe to display changes: %s (automatic rotation unavailable)\n"), werr.c_str());
+        if (cancelled()) {
+            return false;
         }
-    }
+        // 初次查询只确定启动时的朝向；后续变化由常驻显示订阅推送。
+        // 订阅失败仍可镜像，视频保留初次查询结果；截图输入必须有持续的朝向来源。
+        if (watch_display) {
+            std::string werr;
+            watcher_ = scrctl::remote::DisplayWatcher::start(*device_, display_id_, werr, false);
+            if (watcher_ == nullptr && !coredevice_family_empty) {
+                std::fprintf(stderr, SCRCTL_TR("Failed to subscribe to display changes: %s (automatic rotation unavailable)\n"), werr.c_str());
+            }
+        }
 
-    if (cancelled()) {
-        return false;
-    }
-    // --video-source=screenshot 强制使用截图轮询，不尝试建立媒体流。
-    const bool force_screenshot = video_source == "screenshot";
-    if (!force_screenshot) {
-        if (container_recording) {
-            scrctl::media::Recorder::Options ro;
-            ro.path = record_path;
-            ro.format = *container_format;
-            ro.video_orientation = record_orientation;
-            ro.include_audio = want_audio;
-            recorder_ = scrctl::media::Recorder::start(ro, err);
-            if (recorder_ == nullptr) return false;
-            options.recorder = recorder_.get();
+        if (cancelled()) {
+            return false;
         }
-        pump_ = scrctl::media::FramePump::start(*device_, options, err);
-        if (pump_ != nullptr) {
-            // 创建媒体泵时建立统计时间基线，首次速率使用真实经过的时间。
-            stats_.video_started(SDL_GetTicks64());
+        // --video-source=screenshot 强制使用截图轮询，不尝试建立媒体流。
+        const bool force_screenshot = video_source == "screenshot";
+        if (!force_screenshot) {
+            if (container_recording) {
+                scrctl::media::Recorder::Options ro;
+                ro.path = record_path;
+                ro.format = *container_format;
+                ro.video_orientation = record_orientation;
+                ro.include_audio = want_audio;
+                recorder_ = scrctl::media::Recorder::start(ro, err);
+                if (recorder_ == nullptr) return false;
+                options.recorder = recorder_.get();
+            }
+            pump_ = scrctl::media::FramePump::start(*device_, options, err);
+            if (pump_ != nullptr) {
+                // 创建媒体泵时建立统计时间基线，首次速率使用真实经过的时间。
+                stats_.video_started(SDL_GetTicks64());
+            }
         }
-    }
-    if (cancelled()) {
-        return false;
-    }
-    if (pump_ == nullptr) {
-        // 设备因系统版本拒绝媒体流（9021 / requires iOS）时自动改用截图。
-        // 其他错误保留原失败结果，例如会话被占用；用户也可显式选择截图模式。
-        const bool version_gate = err.find("requires iOS") != std::string::npos;
-        if (decode_video && (version_gate || force_screenshot)) {
-            if (recorder_ != nullptr) recorder_->fail(SCRCTL_TR("Live video unavailable; recording stopped"));
-            const std::string stream_err = err;
-            std::string serr;
-            if (start_screenshot(/*capture_first=*/true, serr)) {
-                if (!stream_err.empty()) {
-                    std::printf(SCRCTL_TR("Media stream unavailable: %s\n"), stream_err.c_str());
+        if (cancelled()) {
+            return false;
+        }
+        if (pump_ == nullptr) {
+            // 设备因系统版本拒绝媒体流（9021 / requires iOS）时自动改用截图。
+            // 其他错误保留原失败结果，例如会话被占用；用户也可显式选择截图模式。
+            const bool version_gate = err.find("requires iOS") != std::string::npos;
+            if (decode_video && (version_gate || force_screenshot)) {
+                if (recorder_ != nullptr) recorder_->fail(SCRCTL_TR("Live video unavailable; recording stopped"));
+                const std::string stream_err = err;
+                std::string serr;
+                if (start_screenshot(/*capture_first=*/true, serr)) {
+                    if (!stream_err.empty()) {
+                        std::printf(SCRCTL_TR("Media stream unavailable: %s\n"), stream_err.c_str());
+                    }
+                    std::printf(SCRCTL_TR(
+                        "Using screenshot polling; refresh rate depends on capture time. Input control "
+                        "remains available\n"));
+                    err.clear();
+                } else if (force_screenshot) {
+                    err = SCRCTL_TR("Failed to start screenshot polling: ") + serr;
+                    return false;
                 }
-                std::printf(SCRCTL_TR(
-                    "Using screenshot polling; refresh rate depends on capture time. Input control "
-                    "remains available\n"));
-                err.clear();
-            } else if (force_screenshot) {
-                err = SCRCTL_TR("Failed to start screenshot polling: ") + serr;
+            }
+        }
+        if (pump_ == nullptr && screenshot_.source == nullptr) {
+            return false;
+        }
+        if (cancelled()) {
+            return false;
+        }
+        scrctl::Frame first;
+        if (screenshot_.source != nullptr) {
+            uint64_t s = 0;
+            if (!screenshot_.source->latest(first, s, 5000)) {
+                err = SCRCTL_TR("No first screenshot within 5 seconds");
+                screenshot_.source.reset();
                 return false;
+            }
+            // 用局部序号读取首张截图，主循环仍可取得这张图。PNG 是已摆正的可见区，
+            // 不能直接用它覆盖面板轴上的尺寸与原始方向；取帧时分别发布这两种几何。
+        } else if (decode_video) {
+            if (!pump_->latest(first, 5000)) {
+                err = SCRCTL_TR("No first decoded frame within 5 seconds");
+                return false;
+            }
+        } else if (!pump_->wait_ready(5000)) {
+            err = pump_->capture_error();
+            if (err.empty()) err = SCRCTL_TR("No valid recording IDR within 5 seconds");
+            return false;
+        }
+        if (!decode_video) {
+            err = pump_->capture_error();
+            if (!err.empty()) return false;
+        }
+        uint32_t stream_w = first.width, stream_h = first.height;
+        if (!decode_video) {
+            int checked_w = 0, checked_h = 0;
+            pump_->size(checked_w, checked_h);
+            if (checked_w <= 0 || checked_h <= 0) {
+                err = SCRCTL_TR("Video became unavailable before recording startup completed");
+                return false;
+            }
+            stream_w = static_cast<uint32_t>(checked_w);
+            stream_h = static_cast<uint32_t>(checked_h);
+        }
+        if (cancelled()) {
+            return false;
+        }
+        if (screenshot_.source != nullptr) {
+            std::printf(SCRCTL_TR("Screenshot mirroring started: %s / iOS %s, %ux%u\n"),
+                        device_->property("ProductType").c_str(),
+                        device_->property("OSVersion").c_str(), first.width, first.height);
+        } else if (decode_video) {
+            std::printf(SCRCTL_TR("Video stream started: %s / iOS %s, receive port=%u PT=%u, first frame %ux%u\n"),
+                        device_->property("ProductType").c_str(),
+                        device_->property("OSVersion").c_str(), pump_->receiver_port(),
+                        pump_->payload_type(), first.width, first.height);
+        } else {
+            std::printf(SCRCTL_TR("Encoded video capture started: %s / iOS %s, receive port=%u PT=%u, checked dimensions %ux%u\n"),
+                        device_->property("ProductType").c_str(),
+                        device_->property("OSVersion").c_str(), pump_->receiver_port(),
+                        pump_->payload_type(), stream_w, stream_h);
+        }
+        // 此处报告几何来源，无窗口客户端也能看到设备尺寸及旋转结果。
+        if (display_w_ > 0) {
+            std::printf(
+                SCRCTL_TR(
+                    "Display geometry: visible area %dx%d (displayId=%llu %s), UI rotation %d "
+                    "degrees clockwise, stream %ux%u\n"),
+                display_w_, display_h_, static_cast<unsigned long long>(display_id_),
+                display_name_.c_str(), panel_degrees_.value_or(0), stream_w, stream_h);
+        }
+        if (!record_path.empty()) {
+            if (screenshot_.source != nullptr && !container_recording) {
+                std::printf(SCRCTL_TR("Screenshot mode cannot record Annex-B; ignoring --record\n"));
+            } else if (screenshot_.source == nullptr) {
+                std::printf(SCRCTL_TR("Recording to %s\n"), record_path.c_str());
             }
         }
     }
-    if (pump_ == nullptr && screenshot_.source == nullptr) {
-        return false;
-    }
-    if (cancelled()) {
-        return false;
-    }
-    scrctl::Frame first;
-    if (screenshot_.source != nullptr) {
-        uint64_t s = 0;
-        if (!screenshot_.source->latest(first, s, 5000)) {
-            err = SCRCTL_TR("No first screenshot within 5 seconds");
-            screenshot_.source.reset();
-            return false;
-        }
-        // 用局部序号读取首张截图，主循环仍可取得这张图。PNG 是已摆正的可见区，
-        // 不能直接用它覆盖面板轴上的尺寸与原始方向；取帧时分别发布这两种几何。
-    } else if (decode_video) {
-        if (!pump_->latest(first, 5000)) {
-            err = SCRCTL_TR("No first decoded frame within 5 seconds");
-            return false;
-        }
-    } else if (!pump_->wait_ready(5000)) {
-        err = pump_->capture_error();
-        if (err.empty()) err = SCRCTL_TR("No valid recording IDR within 5 seconds");
-        return false;
-    }
-    if (!decode_video) {
-        err = pump_->capture_error();
-        if (!err.empty()) return false;
-    }
-    uint32_t stream_w = first.width, stream_h = first.height;
-    if (!decode_video) {
-        int checked_w = 0, checked_h = 0;
-        pump_->size(checked_w, checked_h);
-        if (checked_w <= 0 || checked_h <= 0) {
-            err = SCRCTL_TR("Video became unavailable before recording startup completed");
-            return false;
-        }
-        stream_w = static_cast<uint32_t>(checked_w);
-        stream_h = static_cast<uint32_t>(checked_h);
-    }
-    if (cancelled()) {
-        return false;
-    }
-    if (screenshot_.source != nullptr) {
-        std::printf(SCRCTL_TR("Screenshot mirroring started: %s / iOS %s, %ux%u\n"),
-                    device_->property("ProductType").c_str(),
-                    device_->property("OSVersion").c_str(), first.width, first.height);
-    } else if (decode_video) {
-        std::printf(SCRCTL_TR("Video stream started: %s / iOS %s, receive port=%u PT=%u, first frame %ux%u\n"),
-                    device_->property("ProductType").c_str(),
-                    device_->property("OSVersion").c_str(), pump_->receiver_port(),
-                    pump_->payload_type(), first.width, first.height);
-    } else {
-        std::printf(SCRCTL_TR("Encoded video capture started: %s / iOS %s, receive port=%u PT=%u, checked dimensions %ux%u\n"),
-                    device_->property("ProductType").c_str(),
-                    device_->property("OSVersion").c_str(), pump_->receiver_port(),
-                    pump_->payload_type(), stream_w, stream_h);
-    }
-    // 此处报告几何来源，无窗口客户端也能看到设备尺寸及旋转结果。
-    if (display_w_ > 0) {
-        std::printf(
-            SCRCTL_TR(
-                "Display geometry: visible area %dx%d (displayId=%llu %s), UI rotation %d "
-                "degrees clockwise, stream %ux%u\n"),
-            display_w_, display_h_, static_cast<unsigned long long>(display_id_),
-            display_name_.c_str(), panel_degrees_.value_or(0), stream_w, stream_h);
-    }
-    if (!record_path.empty()) {
-        if (screenshot_.source != nullptr && !container_recording) {
-            std::printf(SCRCTL_TR("Screenshot mode cannot record Annex-B; ignoring --record\n"));
-        } else if (screenshot_.source == nullptr) {
-            std::printf(SCRCTL_TR("Recording to %s\n"), record_path.c_str());
-        }
-    }
 
-    // 在取得视频首帧后建立音频，避免首帧额外等待一次音频 RPC（实测约
-    // 80–100 ms）。音频失败只输出错误，视频仍继续。音频与视频使用独立会话。
+    // 有视频时在首帧后建立独立音频会话，避免首帧额外等待音频 RPC（实测
+    // 80–100 ms）。无视频时直接建立音频；此时音频启动失败应结束整个任务。
     if (want_audio && screenshot_.source != nullptr) {
         std::printf(SCRCTL_TR("Screenshot mode does not start audio\n"));
     }
     if (want_audio && screenshot_.source == nullptr) {
         if (decode_audio && !scrctl::kHaveAudioDecoder) {
+            if (!want_video_) { err = SCRCTL_TR(scrctl::kNoAudioDecoderMessage); return false; }
             if (recorder_ != nullptr) recorder_->fail(SCRCTL_TR(scrctl::kNoAudioDecoderMessage));
             std::fprintf(stderr, "%s\n", SCRCTL_TR(scrctl::kNoAudioDecoderMessage));
         } else {
@@ -297,6 +315,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             ao.audio_dup = audio_dup;
             ao.recorder = recorder_.get();
             ao.decode_pcm = decode_audio;
+            ao.stop_device_on_exit = !want_video_;
             if (!audio_dup) {
                 std::printf(SCRCTL_TR(
                     "Forwarding audio to the computer. Switching routes may pause the phone's "
@@ -308,12 +327,13 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             }
             // 录制首错可能在等待就绪后由异步写入线程报告。仅录制模式在
             // 音频协商前再次检查，避免已失去消费者后仍切换手机音频路由。
-            if (!decode_video) {
+            if (want_video_ && !decode_video) {
                 err = pump_->capture_error();
                 if (!err.empty()) return false;
             }
             audio_ = scrctl::media::AudioPump::start(*device_, ao, aerr);
             if (audio_ == nullptr) {
+                if (!want_video_) { err = aerr; return false; }
                 if (recorder_ != nullptr) recorder_->fail(aerr);
                 std::fprintf(stderr, SCRCTL_TR("Failed to start audio: %s (video continues)\n"), aerr.c_str());
             } else {
@@ -351,7 +371,7 @@ bool LiveSource::start_playback(std::string &err) {
         return false;
     }
     if (!audio_out_.open(*audio_, err)) {
-        if (recorder_ == nullptr) abandon_audio();
+        if (want_video_ && recorder_ == nullptr) abandon_audio();
         return false;
     }
     return true;
@@ -519,7 +539,7 @@ bool LiveSource::start_screenshot(bool capture_first, std::string &err) {
 }
 
 void LiveSource::update_picture_source() {
-    if (!decode_video_) return;
+    if (!want_video_ || !decode_video_) return;
     // 只回收已退出的 worker，避免在渲染线程上等待截图 RPC；未退出的源仍持有 Device。
     scrctl::app::reap_finished(
         retired_, [](const scrctl::media::ScreenshotSource &src) { return src.worker_done(); });
@@ -555,6 +575,11 @@ void LiveSource::update_picture_source() {
 }
 
 bool LiveSource::next(scrctl::Frame &out, int timeout_ms) {
+    if (!want_video_) {
+        // 音频在独立 worker 推进，控制会话也没有像素帧；有限等待避免空转。
+        if (!finished()) std::this_thread::sleep_for(std::chrono::milliseconds(std::clamp(timeout_ms, 1, 50)));
+        return false;
+    }
     update_picture_source();
     if (recorder_ != nullptr && !recording_error_reported_) {
         const auto error = recorder_->error();
@@ -589,12 +614,14 @@ bool LiveSource::next(scrctl::Frame &out, int timeout_ms) {
 }
 
 bool LiveSource::finished() const {
-    return !encoded_capture_error().empty() || (device_ != nullptr && device_->stack() != nullptr &&
-           !device_->stack()->pump_error().empty());
+    return !encoded_capture_error().empty() ||
+           (!want_video_ && audio_ != nullptr && !audio_->terminal_error().empty()) ||
+           (device_ != nullptr && device_->stack() != nullptr &&
+            !device_->stack()->pump_error().empty());
 }
 
 std::string LiveSource::encoded_capture_error() const {
-    if (decode_video_) return {};
+    if (!want_video_ || decode_video_) return {};
     if (pump_ != nullptr) return pump_->capture_error();
     return recorder_ != nullptr ? recorder_->error() : std::string{};
 }
@@ -602,6 +629,10 @@ std::string LiveSource::encoded_capture_error() const {
 std::string LiveSource::end_reason() const {
     const auto capture_error = encoded_capture_error();
     if (!capture_error.empty()) return SCRCTL_TR("Encoded video capture stopped: ") + capture_error;
+    if (!want_video_ && audio_ != nullptr) {
+        auto audio_error = audio_->terminal_error();
+        if (!audio_error.empty()) return SCRCTL_TR("Audio stopped: ") + audio_error;
+    }
     const std::string why =
         device_ != nullptr && device_->stack() != nullptr ? device_->stack()->pump_error() : "";
     return SCRCTL_TR("Device connection lost (") + why + SCRCTL_TR("); closing session");
@@ -626,24 +657,24 @@ void LiveSource::print_stats() {
         snapshot.screenshot = LiveStats::Screenshot{screenshot_.source->stats(), SDL_GetTicks64()};
     } else if (pump_ != nullptr) {
         snapshot.video = LiveStats::Video{pump_->stats(), SDL_GetTicks64()};
-        if (audio_ != nullptr) {
-            LiveStats::Audio audio;
-            audio.counters = audio_->stats();
-            audio.delivered = audio_out_.delivered();
-            audio.output_open = audio_out_.dev_open();
-            if (audio.output_open) {
-                if (const char *driver = SDL_GetCurrentAudioDriver()) {
-                    audio.output_driver = driver;
-                }
+    }
+    if (audio_ != nullptr) {
+        LiveStats::Audio audio;
+        audio.counters = audio_->stats();
+        audio.delivered = audio_out_.delivered();
+        audio.output_open = audio_out_.dev_open();
+        if (audio.output_open) {
+            if (const char *driver = SDL_GetCurrentAudioDriver()) {
+                audio.output_driver = driver;
             }
-            audio.silence = audio_out_.silence();
-            audio.preroll_silence = audio_out_.preroll_silence();
-            audio.underrun_silence = audio_out_.underrun_silence();
-            audio.underrun_callbacks = audio_out_.underrun_callbacks();
-            audio.sample_rate = audio_->sample_rate();
-            audio.buffered_frames = audio_->buffered_frames();
-            snapshot.audio = std::move(audio);
         }
+        audio.silence = audio_out_.silence();
+        audio.preroll_silence = audio_out_.preroll_silence();
+        audio.underrun_silence = audio_out_.underrun_silence();
+        audio.underrun_callbacks = audio_out_.underrun_callbacks();
+        audio.sample_rate = audio_->sample_rate();
+        audio.buffered_frames = audio_->buffered_frames();
+        snapshot.audio = std::move(audio);
     }
     stats_.print(snapshot);
 }

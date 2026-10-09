@@ -98,6 +98,11 @@ int run(int argc, char **argv) {
         o.path.empty() && !o.no_audio && o.video_source != "screenshot",
         !o.no_audio_playback, audio_init_error);
     if (!audio_init_error.empty()) {
+        if (o.no_video) {
+            std::fprintf(stderr, SCRCTL_TR("Failed to initialize audio output: %s\n"),
+                         audio_init_error.c_str());
+            return 1;
+        }
         std::fprintf(stderr, SCRCTL_TR("Failed to initialize audio output: %s (audio disabled; video continues)\n"),
                      audio_init_error.c_str());
         if (record_container_format(o.record) && !o.no_audio) {
@@ -130,22 +135,35 @@ int run(int argc, char **argv) {
         std::string err;
         // 无窗口录制直接消费编码 AU。依赖像素的旧选项仍走解码路径：
         // --exit-after 继续按已交付帧计数，硬件后端和强制降级也不被忽略。
-        const bool needs_pixels = !o.no_window || o.record.empty() ||
+        const bool needs_pixels = !o.no_video_playback || o.record.empty() ||
             o.video_source == "screenshot" || o.exit_after > 0 || o.hw_decode ||
             !o.test_degrade.empty();
         // 未编入公开 IDR 检查能力时沿用旧解码路径，保留平台后端的裸流录制。
         // LiveSource 显式请求不解码时仍严格检查能力，不接受未经检查的就绪。
         std::string capture_check_error;
-        const bool decode_video = needs_pixels ||
-            !scrctl::media::recording_idr_checks_available(capture_check_error);
-        if (!made->start(o.serial, o.wifi, o.record, o.hw_decode, !o.no_window,
-                         want_audio, o.audio_buffer_ms, o.video_source, o.test_degrade, err,
-                         o.wifi_port, o.audio_dup, [&runtime] { return runtime.stop_requested(); },
-                         o.record_orientation, !o.no_audio_playback, decode_video)) {
+        LiveSource::Options live_options;
+        live_options.serial = o.serial;
+        live_options.wifi = o.wifi;
+        live_options.wifi_port = o.wifi_port;
+        live_options.record_path = o.record;
+        live_options.hw_decode = o.hw_decode;
+        live_options.watch_display = !o.no_video_playback;
+        live_options.want_video = !o.no_video;
+        live_options.decode_video = !o.no_video && (needs_pixels ||
+            !scrctl::media::recording_idr_checks_available(capture_check_error));
+        live_options.want_audio = want_audio;
+        live_options.decode_audio = !o.no_audio_playback;
+        live_options.audio_buffer_ms = o.audio_buffer_ms;
+        live_options.audio_dup = o.audio_dup;
+        live_options.video_source = o.video_source;
+        live_options.test_degrade = o.test_degrade;
+        live_options.record_orientation = o.record_orientation;
+        live_options.should_cancel = [&runtime] { return runtime.stop_requested(); };
+        if (!made->start(live_options, err)) {
             if (exit_requested()) {
                 return finish_source(made.get(), 0);
             }
-            std::fprintf(stderr, SCRCTL_TR("Failed to start video: %s\n"), err.c_str());
+            std::fprintf(stderr, SCRCTL_TR("Failed to start device session: %s\n"), err.c_str());
             // 设备通话期间可能拒绝媒体流，错误码为 9022。曾观察到此时会话列表为空，
             // 截图服务仍可用；提示用户结束通话后重试。
             if (err.find("9022") != std::string::npos) {
@@ -207,6 +225,10 @@ int run(int argc, char **argv) {
     if (live != nullptr && live->has_audio() && !o.no_audio_playback) {
         std::string aerr;
         if (!live->start_playback(aerr)) {
+            if (!live->has_video()) {
+                std::fprintf(stderr, SCRCTL_TR("Failed to open audio output: %s\n"), aerr.c_str());
+                return finish_exit(1);
+            }
             if (record_container_format(o.record)) {
                 std::fprintf(stderr, SCRCTL_TR(
                     "Failed to open audio output: %s (recording and audio reception continue)\n"),
@@ -276,6 +298,10 @@ int run(int argc, char **argv) {
             return finish_exit(1);
         }
     }
+    // 只有显式启动操作的无媒体/无窗口命令，操作完成后没有事件消费者。
+    if (live != nullptr && !live->has_video() && !live->has_audio() && o.no_window) {
+        return finish_exit(0);
+    }
 
     int rendered = 0;
     std::unique_ptr<Presenter> presenter;
@@ -311,7 +337,7 @@ int run(int argc, char **argv) {
                      control_err.c_str());
     };
     auto on_touch = [&](double x, double y, bool down) {
-        if (!control_enabled || live == nullptr || control_warned) {
+        if (!control_enabled || live == nullptr || control_warned || o.no_video_playback) {
             return;
         }
         if (!live->control(x, y, down, control_err)) {
@@ -381,6 +407,29 @@ int run(int argc, char **argv) {
         on_keyboard({});
     };
 
+    const auto window_spec = [&] {
+        WindowSpec spec;
+        spec.title = o.title;
+        spec.want_w = o.win_w;
+        spec.want_h = o.win_h;
+        spec.x = o.win_x.value_or(SDL_WINDOWPOS_CENTERED);
+        spec.y = o.win_y.value_or(SDL_WINDOWPOS_CENTERED);
+        spec.always_on_top = o.always_on_top;
+        spec.borderless = o.borderless;
+        spec.fullscreen = o.fullscreen;
+        spec.want_readback = o.verify_at > 0;
+        spec.shortcut_mods = o.shortcut_mods;
+        spec.horizontal_flip = o.display_flip;
+        return spec;
+    };
+    if (o.no_video_playback && !o.no_window) {
+        presenter = std::make_unique<Presenter>();
+        presenter->set_debug_input(o.debug_input);
+        presenter->set_background(o.bg[0], o.bg[1], o.bg[2]);
+        if (!presenter->open_background(window_spec())) return finish_exit(1);
+        seen_generation = presenter->input_generation();
+    }
+
     // 复用 Frame 的像素缓冲，避免每帧重新分配并提交约 11 MiB 内存。
     // 取帧仍需复制像素，额外分配会增加渲染延迟。
     scrctl::Frame f;
@@ -427,13 +476,15 @@ int run(int argc, char **argv) {
             continue;
         }
 
-        if (o.no_window) {
-            // 无窗口模式只消费帧，用于脚本和自动化。
+        if (o.no_video_playback) {
+            // 旧诊断选项仍可消费真实帧；背景窗口只处理键盘和本地快捷键。
             ++rendered;
             if (o.exit_after > 0 && rendered >= o.exit_after) {
                 std::printf(SCRCTL_TR("Reached --exit-after %d\n"), o.exit_after);
                 break;
             }
+            if (presenter) quit = presenter->pump(on_touch, on_keyboard, on_paste);
+            service_paste();
             continue;
         }
 
@@ -458,22 +509,10 @@ int run(int argc, char **argv) {
         if (presenter == nullptr) {
             presenter = std::make_unique<Presenter>();
             presenter->set_debug_input(o.debug_input);
-            WindowSpec spec;
-            spec.title = o.title;
-            spec.want_w = o.win_w;
-            spec.want_h = o.win_h;
-            spec.x = o.win_x.value_or(SDL_WINDOWPOS_CENTERED);
-            spec.y = o.win_y.value_or(SDL_WINDOWPOS_CENTERED);
-            spec.always_on_top = o.always_on_top;
-            spec.borderless = o.borderless;
-            spec.fullscreen = o.fullscreen;
-            spec.want_readback = o.verify_at > 0;
-            spec.shortcut_mods = o.shortcut_mods;
-            spec.horizontal_flip = o.display_flip;
             presenter->set_background(o.bg[0], o.bg[1], o.bg[2]);
             if (!presenter->open(static_cast<int>(f.width), static_cast<int>(f.height),
                                  crop, degrees, o.scale, o.scale_given,
-                                 spec)) {
+                                 window_spec())) {
                 return finish_exit(1);
             }
             seen_generation = presenter->input_generation();
@@ -527,7 +566,9 @@ int run(int argc, char **argv) {
                      o.verify_at, rendered);
         return 1;
     }
-    if (live != nullptr && !live->video_decoding_enabled()) {
+    if (live != nullptr && !live->has_video()) {
+        std::printf(SCRCTL_TR("Finished: device session closed\n"));
+    } else if (live != nullptr && !live->video_decoding_enabled()) {
         std::printf(SCRCTL_TR("Finished: encoded video recording finalized\n"));
     } else {
         std::printf(SCRCTL_TR("Finished: processed %d frames\n"), rendered);
