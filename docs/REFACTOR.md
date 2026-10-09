@@ -2433,3 +2433,10 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
 - 正式 CMake 的主程序与相关测试目标构建通过，窗口及生命周期 CTest 2/2、
   1.97 秒；本机 SDL2-compat 窗口为 3462/0、三个既有跳过。独立复核再次
   检查 Application 的同步取消、结果 epoch/id 与发送顺序，未发现阻塞问题。
+- [固定 b08ea0c 的 CI](https://github.com/YJBeetle/scrctl/actions/runs/37978387628)
+  四作业各 58/58、合计 232/232。Windows / Ubuntu 窗口为 3464/0、两个原有
+  跳过，Mac / sanitizer 为 3462/0、三个原有跳过；新增完整输入与同轮取消
+  用例均直接执行通过。sanitizer 作业及 LastTest 未发现 ASan / UBSan 错误标记。
+  Mac / Windows 依赖、搬移后的中英文 / auto 帮助及版本启动通过，固定源码、
+  产物元数据和摘要已核对。本轮只下载小日志，不代替本机执行发布大包；
+  Application 的异步取消顺序仍是源码复核，不能从窗口用例推导真机粘贴交付。
