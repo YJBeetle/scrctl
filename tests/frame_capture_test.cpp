@@ -206,12 +206,28 @@ void healthy_static_capture(const Directory& directory) {
     std::jthread heartbeat([](std::stop_token token) {
         while (!token.stop_requested()) { script.enqueue(sr(24000, 1001)); std::this_thread::sleep_for(200ms); }
     });
-    const auto until = std::chrono::steady_clock::now() + 5300ms;
-    while (std::chrono::steady_clock::now() < until) std::this_thread::sleep_for(20ms);
+    const auto begin = std::chrono::steady_clock::now();
+    const auto minimum = begin + 5300ms;
+    const auto deadline = begin + 8000ms;
+    // 必须跨过五秒无关键帧边界，同时等接收线程实际处理足够的 SR/RR。
+    // sanitizer 或繁忙 CI 的调度可能延后处理；八秒上限仍会暴露停止收发。
+    while (std::chrono::steady_clock::now() < deadline) {
+        const auto stats = pump->stats();
+        if (std::chrono::steady_clock::now() >= minimum &&
+            stats.sr_packets >= 20 && stats.rtcp_sent >= 5) break;
+        std::this_thread::sleep_for(20ms);
+    }
     heartbeat.request_stop(); heartbeat.join();
+    const auto stats = pump->stats();
+    std::printf("static capture: SR=%llu RR=%llu gaps=%llu elapsed=%lld ms\n",
+                static_cast<unsigned long long>(stats.sr_packets),
+                static_cast<unsigned long long>(stats.rtcp_sent),
+                static_cast<unsigned long long>(stats.gaps),
+                static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - begin).count()));
     check(script.start_count() == 1 && pump->stats().restarts == 0 && pump->wait_ready(0),
           "a valid IDR followed by SR-only silence beyond five seconds does not trigger no-key restart");
-    check(pump->stats().sr_packets >= 20 && pump->stats().rtcp_sent >= 5 && pump->stats().gaps == 0,
+    check(stats.sr_packets >= 20 && stats.rtcp_sent >= 5 && stats.gaps == 0,
           "SR heartbeat and RR renewal continue without decoding and late/foreign packets create no gap");
     { std::lock_guard lock(script.mutex);
       bool found = false, matching_feedback = true;
