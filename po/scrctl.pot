@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-09 21:56+0800\n"
+"POT-Creation-Date: 2026-10-09 22:37+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -29,7 +29,7 @@ msgstr ""
 msgid "SDL initialization failed: %s\n"
 msgstr ""
 
-#: src/app/Application.cpp:87 src/app/Application.cpp:443
+#: src/app/Application.cpp:87 src/app/Application.cpp:455
 #, c-format
 msgid "Received exit signal; closing device session\n"
 msgstr ""
@@ -162,55 +162,55 @@ msgstr ""
 msgid "No diagnostic available"
 msgstr ""
 
-#: src/app/Application.cpp:439
+#: src/app/Application.cpp:451
 #, c-format
 msgid "Reached --time-limit %d seconds\n"
 msgstr ""
 
-#: src/app/Application.cpp:454
+#: src/app/Application.cpp:466
 #, c-format
 msgid ""
 "  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
 msgstr ""
 
-#: src/app/Application.cpp:482 src/app/Application.cpp:548
+#: src/app/Application.cpp:491 src/app/Application.cpp:559
 #, c-format
 msgid "Reached --exit-after %d\n"
 msgstr ""
 
-#: src/app/Application.cpp:498
+#: src/app/Application.cpp:509
 #, c-format
 msgid ""
 "Mouse input is unavailable: screenshot orientation or display dimensions are "
 "unknown or inconsistent\n"
 msgstr ""
 
-#: src/app/Application.cpp:524
+#: src/app/Application.cpp:535
 #, c-format
 msgid "Render content changed to %dx%d; rotation %d degrees clockwise\n"
 msgstr ""
 
-#: src/app/Application.cpp:564
+#: src/app/Application.cpp:574
 #, c-format
 msgid "Window readback was not reached (requested frame %d, rendered %d)\n"
 msgstr ""
 
-#: src/app/Application.cpp:570
+#: src/app/Application.cpp:580
 #, c-format
 msgid "Finished: audio recording finalized\n"
 msgstr ""
 
-#: src/app/Application.cpp:572
+#: src/app/Application.cpp:582
 #, c-format
 msgid "Finished: device session closed\n"
 msgstr ""
 
-#: src/app/Application.cpp:575
+#: src/app/Application.cpp:585
 #, c-format
 msgid "Finished: encoded video recording finalized\n"
 msgstr ""
 
-#: src/app/Application.cpp:577
+#: src/app/Application.cpp:587
 #, c-format
 msgid "Finished: processed %d frames\n"
 msgstr ""
@@ -247,6 +247,7 @@ msgid ""
 "Paste computer clipboard: MOD+V (Unicode supported).\n"
 "Actual window size: MOD+G. Remove image margins: MOD+W or double-click an "
 "empty margin.\n"
+"Rotate display left/right: MOD+Left/Right (recordings unchanged).\n"
 "Audio is forwarded to the computer by default; --audio-dup keeps phone "
 "playback. Switching routes may pause the phone's player; resume it if "
 "needed.\n"
@@ -258,7 +259,7 @@ msgid ""
 "device."
 msgstr ""
 
-#: src/app/Cli.cpp:31 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
+#: src/app/Cli.cpp:32 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
 #: tools/audio_decode_probe.cpp:193 tools/audio_pump_probe.cpp:85
 #: tools/feature_probe.cpp:61 tools/hid_probe.cpp:184
 #: tools/screenshot_probe.cpp:52 tools/stall_probe.cpp:59
@@ -266,322 +267,322 @@ msgstr ""
 msgid "Show help"
 msgstr ""
 
-#: src/app/Cli.cpp:32
+#: src/app/Cli.cpp:33
 msgid "Play an Annex-B HEVC file"
 msgstr ""
 
-#: src/app/Cli.cpp:33 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
+#: src/app/Cli.cpp:34 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
 msgid "Device UDID"
 msgstr ""
 
-#: src/app/Cli.cpp:34
+#: src/app/Cli.cpp:35
 msgid "LAN address, or auto to discover a paired wireless device"
 msgstr ""
 
-#: src/app/Cli.cpp:36
+#: src/app/Cli.cpp:37
 msgid "RemotePairing port for a manual LAN address; default: 49152"
 msgstr ""
 
-#: src/app/Cli.cpp:39
+#: src/app/Cli.cpp:40
 msgid "Create or verify a remote pairing record over USB, then exit"
 msgstr ""
 
-#: src/app/Cli.cpp:42
+#: src/app/Cli.cpp:43
 msgid ""
 "Allow replacing an incomplete or rejected pairing record; requires --pair"
 msgstr ""
 
-#: src/app/Cli.cpp:45
+#: src/app/Cli.cpp:46
 msgid ""
 "Record selected video/audio tracks to .mp4 or .mkv; other extensions save "
 "raw HEVC without audio"
 msgstr ""
 
-#: src/app/Cli.cpp:47
+#: src/app/Cli.cpp:48
 msgid ""
 "Launch bundle ID; ? matches name prefix, + terminates the previous instance"
 msgstr ""
 
-#: src/app/Cli.cpp:48
+#: src/app/Cli.cpp:49
 msgid "Window title"
 msgstr ""
 
-#: src/app/Cli.cpp:49
+#: src/app/Cli.cpp:50
 msgid "SDL render driver, e.g. metal / software"
 msgstr ""
 
-#: src/app/Cli.cpp:51
+#: src/app/Cli.cpp:52
 msgid ""
 "display for live video (default), screenshot for polling; stream is an alias "
 "for display"
 msgstr ""
 
-#: src/app/Cli.cpp:53
+#: src/app/Cli.cpp:54
 msgid "Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"
 msgstr ""
 
-#: src/app/Cli.cpp:60
+#: src/app/Cli.cpp:61
 msgid "Inject home/lock/volup/voldn/mute"
 msgstr ""
 
-#: src/app/Cli.cpp:62
+#: src/app/Cli.cpp:63
 msgid "Inject ASCII text (device text field must have focus)"
 msgstr ""
 
-#: src/app/Cli.cpp:63
+#: src/app/Cli.cpp:64
 msgid "Force alternating video fallback and recovery at T1,T2,... seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:64
+#: src/app/Cli.cpp:65
 msgid "Write device clipboard and exit (supports Unicode)"
 msgstr ""
 
-#: src/app/Cli.cpp:66
+#: src/app/Cli.cpp:67
 msgid "List USB and RemotePairing devices; wireless scan defaults to 3 seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:68
+#: src/app/Cli.cpp:69
 msgid ""
 "Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"
 msgstr ""
 
-#: src/app/Cli.cpp:70
+#: src/app/Cli.cpp:71
 msgid "Disable input control"
 msgstr ""
 
-#: src/app/Cli.cpp:73
+#: src/app/Cli.cpp:74
 msgid "List device apps"
 msgstr ""
 
-#: src/app/Cli.cpp:74
+#: src/app/Cli.cpp:75
 msgid "Show version"
 msgstr ""
 
-#: src/app/Cli.cpp:75
+#: src/app/Cli.cpp:76
 msgid "Desktop fullscreen"
 msgstr ""
 
-#: src/app/Cli.cpp:76
+#: src/app/Cli.cpp:77
 msgid "Keep window on top"
 msgstr ""
 
-#: src/app/Cli.cpp:77
+#: src/app/Cli.cpp:78
 msgid "Borderless window"
 msgstr ""
 
-#: src/app/Cli.cpp:78
+#: src/app/Cli.cpp:79
 msgid "Prevent local screen sleep while running"
 msgstr ""
 
-#: src/app/Cli.cpp:79
+#: src/app/Cli.cpp:80
 msgid "Do not start audio stream"
 msgstr ""
 
-#: src/app/Cli.cpp:81
+#: src/app/Cli.cpp:82
 msgid "Keep audio playing on the phone while forwarding it to the computer"
 msgstr ""
 
-#: src/app/Cli.cpp:84
+#: src/app/Cli.cpp:85
 msgid ""
 "Disable computer audio playback; capture audio only when recording to MP4 or "
 "MKV"
 msgstr ""
 
-#: src/app/Cli.cpp:85
+#: src/app/Cli.cpp:86
 msgid "Do not start video stream"
 msgstr ""
 
-#: src/app/Cli.cpp:87
+#: src/app/Cli.cpp:88
 msgid "Disable video display; keep encoded video when recording"
 msgstr ""
 
-#: src/app/Cli.cpp:90
+#: src/app/Cli.cpp:91
 msgid ""
 "Disable computer video and audio playback; keep selected recording tracks"
 msgstr ""
 
-#: src/app/Cli.cpp:91
+#: src/app/Cli.cpp:92
 msgid "Run without a window"
 msgstr ""
 
-#: src/app/Cli.cpp:92
+#: src/app/Cli.cpp:93
 msgid "Use platform hardware decoder; default: software"
 msgstr ""
 
-#: src/app/Cli.cpp:93
+#: src/app/Cli.cpp:94
 msgid "Print input coordinates"
 msgstr ""
 
-#: src/app/Cli.cpp:94
+#: src/app/Cli.cpp:95
 msgid "Add tunnel diagnostics to --stats"
 msgstr ""
 
-#: src/app/Cli.cpp:95
+#: src/app/Cli.cpp:96
 msgid "Print statistics every second"
 msgstr ""
 
-#: src/app/Cli.cpp:96
+#: src/app/Cli.cpp:97
 msgid "Read device clipboard; with --copy, read back after writing"
 msgstr ""
 
-#: src/app/Cli.cpp:99
+#: src/app/Cli.cpp:100
 msgid "Window horizontal position; integer or auto (default)"
 msgstr ""
 
-#: src/app/Cli.cpp:101
+#: src/app/Cli.cpp:102
 msgid "Window vertical position; integer or auto (default)"
 msgstr ""
 
-#: src/app/Cli.cpp:103
+#: src/app/Cli.cpp:104
 msgid ""
 "Shortcut modifiers, separated by commas: lctrl, rctrl, lalt, ralt, lsuper, "
 "rsuper; default: lalt,lsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:104
+#: src/app/Cli.cpp:105
 msgid "Window width; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:105
+#: src/app/Cli.cpp:106
 msgid "Window height; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:106
+#: src/app/Cli.cpp:107
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:108
+#: src/app/Cli.cpp:109
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr ""
 
-#: src/app/Cli.cpp:110
+#: src/app/Cli.cpp:111
 msgid "Exit after N frames; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:112
+#: src/app/Cli.cpp:113
 msgid "Finite positive scale; default: fit screen"
 msgstr ""
 
-#: src/app/Cli.cpp:130
+#: src/app/Cli.cpp:131
 msgid ""
 "Display and recording orientation: 0/90/180/270 or flip0/flip90/flip180/"
 "flip270; recording cannot flip; auto changes display only"
 msgstr ""
 
-#: src/app/Cli.cpp:134
+#: src/app/Cli.cpp:135
 msgid ""
 "Display orientation: auto, 0/90/180/270 or flip0/flip90/flip180/flip270; "
 "flip horizontally before clockwise rotation"
 msgstr ""
 
-#: src/app/Cli.cpp:138
+#: src/app/Cli.cpp:139
 msgid ""
 "Clockwise MP4/MKV recording rotation: 0/90/180/270; default: 0; display is "
 "unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:141
+#: src/app/Cli.cpp:142
 msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:143
+#: src/app/Cli.cpp:144
 msgid "Background color: RGB or RRGGBB, with optional #"
 msgstr ""
 
-#: src/app/Cli.cpp:144
+#: src/app/Cli.cpp:145
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr ""
 
-#: src/app/Cli.cpp:158
+#: src/app/Cli.cpp:159
 msgid ""
 "Audio capture is disabled; --audio-dup requires playback or MP4/MKV recording"
 msgstr ""
 
-#: src/app/Cli.cpp:164
+#: src/app/Cli.cpp:165
 msgid ""
 "File playback requires video; incompatible with video playback disable "
 "options"
 msgstr ""
 
-#: src/app/Cli.cpp:172
+#: src/app/Cli.cpp:173
 msgid "Audio-only recording requires MP4 or MKV; raw HEVC cannot contain audio"
 msgstr ""
 
-#: src/app/Cli.cpp:175
+#: src/app/Cli.cpp:176
 msgid "Recording requires at least one enabled audio or video track"
 msgstr ""
 
-#: src/app/Cli.cpp:178 src/app/LiveSource.cpp:91
+#: src/app/Cli.cpp:179 src/app/LiveSource.cpp:91
 msgid "Recording orientation requires a video track"
 msgstr ""
 
-#: src/app/Cli.cpp:183
+#: src/app/Cli.cpp:184
 msgid ""
 "Frame counting, hardware decoding, fallback tests and screenshots require "
 "video capture"
 msgstr ""
 
-#: src/app/Cli.cpp:187 src/app/LiveSource.cpp:113
+#: src/app/Cli.cpp:188 src/app/LiveSource.cpp:113
 msgid ""
 "Container recording requires live video; screenshot polling cannot be "
 "recorded"
 msgstr ""
 
-#: src/app/Cli.cpp:191
+#: src/app/Cli.cpp:192
 msgid ""
 "Recording does not support flipping; use --display-orientation for display-"
 "only flipping or reset --record-orientation to a rotation"
 msgstr ""
 
-#: src/app/Cli.cpp:195 src/app/LiveSource.cpp:123
+#: src/app/Cli.cpp:196 src/app/LiveSource.cpp:123
 msgid ""
 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate "
 "only the display"
 msgstr ""
 
-#: src/app/Cli.cpp:198
+#: src/app/Cli.cpp:199
 msgid "Use a manual LAN address; auto uses discovered SRV ports"
 msgstr ""
 
-#: src/app/Cli.cpp:209
+#: src/app/Cli.cpp:210
 msgid "Expected an integer or auto"
 msgstr ""
 
-#: src/app/Cli.cpp:229
+#: src/app/Cli.cpp:230
 msgid ""
 "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:240
+#: src/app/Cli.cpp:241
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr ""
 
-#: src/app/Cli.cpp:247
+#: src/app/Cli.cpp:248
 msgid "Requires a finite positive number"
 msgstr ""
 
-#: src/app/Cli.cpp:262
+#: src/app/Cli.cpp:263
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr ""
 
-#: src/app/Cli.cpp:271
+#: src/app/Cli.cpp:272
 msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
 msgstr ""
 
-#: src/app/Cli.cpp:285
+#: src/app/Cli.cpp:286
 msgid "Frame number must be a positive integer"
 msgstr ""
 
-#: src/app/Cli.cpp:290
+#: src/app/Cli.cpp:291
 msgid "Requires a window; incompatible with --no-window"
 msgstr ""
 
-#: src/app/Cli.cpp:293
+#: src/app/Cli.cpp:294
 msgid "Window readback requires video playback"
 msgstr ""
 
-#: src/app/Cli.cpp:301
+#: src/app/Cli.cpp:302
 msgid "Nothing to do: enable media, recording or device control"
 msgstr ""
 
@@ -1206,7 +1207,7 @@ msgid "Render driver: %s\n"
 msgstr ""
 
 #: src/app/Presenter.cpp:120 src/app/Presenter.cpp:131
-#: src/app/Presenter.cpp:213 src/app/Presenter.cpp:264
+#: src/app/Presenter.cpp:230 src/app/Presenter.cpp:277
 #, c-format
 msgid "Failed to configure viewport: %s\n"
 msgstr ""
@@ -1221,84 +1222,84 @@ msgstr ""
 msgid "Failed to create texture: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:174 src/app/Presenter.cpp:182
+#: src/app/Presenter.cpp:175 src/app/Presenter.cpp:183
 #, c-format
 msgid "Cannot render frame: invalid dimensions or pixel buffer\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:207 src/app/Presenter.cpp:218
-#: src/app/Presenter.cpp:249
+#: src/app/Presenter.cpp:209 src/app/Presenter.cpp:235
+#: src/app/Presenter.cpp:262
 #, c-format
 msgid "Failed to query drawable dimensions: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:224 src/app/Presenter.cpp:233
-#, c-format
-msgid "Failed to render frame: %s\n"
-msgstr ""
-
-#: src/app/Presenter.cpp:228
+#: src/app/Presenter.cpp:214
 #, c-format
 msgid "Failed to upload texture: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:254
+#: src/app/Presenter.cpp:241 src/app/Presenter.cpp:246
+#, c-format
+msgid "Failed to render frame: %s\n"
+msgstr ""
+
+#: src/app/Presenter.cpp:267
 #, c-format
 msgid "Failed to create readback buffer: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:258
+#: src/app/Presenter.cpp:271
 #, c-format
 msgid "Failed to lock readback buffer: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:276
+#: src/app/Presenter.cpp:289
 #, c-format
 msgid "Readback failed: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:283
+#: src/app/Presenter.cpp:296
 #, c-format
 msgid "Failed to save image: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:286
+#: src/app/Presenter.cpp:299
 #, c-format
 msgid "Window readback saved to %s (%dx%d pixels)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:296
+#: src/app/Presenter.cpp:309
 #, c-format
 msgid ""
 "[input] %s raw(%d,%d) viewport %d x%d (rotation %d degrees, horizontal flip: "
 "%s) / window %d x%d / drawable %d x%d -> (%.3f, %.3f)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:299 tools/feature_probe.cpp:26
+#: src/app/Presenter.cpp:312 tools/feature_probe.cpp:26
 #: tools/feature_probe.cpp:27 tools/rr_keepalive_probe.cpp:249
 #: tools/rr_keepalive_probe.cpp:307
 msgid "no"
 msgstr ""
 
-#: src/app/Presenter.cpp:299 tools/feature_probe.cpp:26
+#: src/app/Presenter.cpp:312 tools/feature_probe.cpp:26
 #: tools/feature_probe.cpp:27 tools/rr_keepalive_probe.cpp:249
 #: tools/rr_keepalive_probe.cpp:307
 msgid "yes"
 msgstr ""
 
-#: src/app/Presenter.cpp:429
+#: src/app/Presenter.cpp:457
 msgid "down"
 msgstr ""
 
-#: src/app/Presenter.cpp:443
+#: src/app/Presenter.cpp:471
 msgid "move"
 msgstr ""
 
-#: src/app/Presenter.cpp:523
+#: src/app/Presenter.cpp:586
 msgid "Cannot resize window for new content; keeping previous dimensions"
 msgstr ""
 
-#: src/app/Presenter.cpp:579
+#: src/app/Presenter.cpp:665
 #, c-format
 msgid "Failed to change fullscreen mode: %s\n"
 msgstr ""

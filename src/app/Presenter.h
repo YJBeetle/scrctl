@@ -74,6 +74,10 @@ class Presenter {
     [[nodiscard]] bool ready_for_paste() const;
     /// 查询 SDL 的实际全屏状态，不缓存用户的窗口模式选择。
     [[nodiscard]] bool is_fullscreen() const;
+    /// 将来源或显式方向与用户的本机旋转组合；偏移保持到窗口关闭，不改录制方向。
+    [[nodiscard]] int display_degrees(int base_degrees) const;
+    /// pump 即时重绘失败时锁存，调用方应按渲染错误收尾，而非正常窗口退出。
+    [[nodiscard]] bool render_failed() const { return render_failed_; }
     /// 在内容改变、退出或坐标依据失效时，释放最后一个有效的设备触摸点。
     void release_touch(const std::function<void(double, double, bool)> &on_touch);
     /// 在内容改变或退出前清理两种输入；键盘存在按住状态时发送一次空报告。
@@ -85,6 +89,7 @@ class Presenter {
   private:
     bool open_window(const WindowSpec &spec);
     bool draw_background();
+    bool draw_uploaded(const char *readback_path = nullptr);
     /// 将 SDL 鼠标的窗口点坐标转换为设备整屏的 0..1 坐标。
     /// renderer 固定 logical size=0、scale=1 和完整绘制面视口。
     /// SDL_RenderWindowToLogical 先负责点到物理像素的 DPI 换算，再按与绘制
@@ -104,6 +109,12 @@ class Presenter {
     bool apply_pending_resize(const std::function<void(double, double, bool)> &on_touch,
                               const KeyboardHandler &on_keyboard);
     void discard_queued_input();
+    void discard_queued_pointer();
+    void release_layout_input(const std::function<void(double, double, bool)> &on_touch,
+                              const KeyboardHandler &on_keyboard);
+    bool update_layout(const Crop &crop, int degrees, bool local,
+                       const std::function<void(double, double, bool)> &on_touch,
+                       const KeyboardHandler &on_keyboard);
     bool is_content_point(int x, int y) const;
     /// 返回 true 表示已接受窗口尺寸动作；全屏、最大化、最小化时不执行。
     bool resize_window(bool pixel_perfect,
@@ -115,15 +126,20 @@ class Presenter {
     SDL_Renderer *renderer_ = nullptr;
     SDL_Texture *texture_ = nullptr;
     bool video_playback_ = true;
+    bool texture_uploaded_ = false;
+    bool render_failed_ = false;
     int texture_w_ = 0, texture_h_ = 0;
     Crop src_{};
     /// 窗口对源像素施加的顺时针角度，以及视口尺寸（90/270 时宽高对调）。
     int degrees_ = 0;
+    int rotation_offset_ = 0;
     bool horizontal_flip_ = false;
     int view_w_ = 0, view_h_ = 0;
     int win_w_ = 0, win_h_ = 0;
     /// 特殊模式中的第一次内容基准。中间多次变化不覆盖，恢复时只适配一次。
     bool resize_pending_ = false;
+    /// 最近一次延后布局来自本地动作时，只清旧坐标，保留 Local 直到真实 UP。
+    bool resize_preserve_local_ = false;
     int windowed_content_w_ = 0, windowed_content_h_ = 0;
     /// 无法获取显示器边界时保留原始窗口尺寸。
     static constexpr int win_w_fallback = 1 << 20;

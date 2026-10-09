@@ -6,10 +6,12 @@
 #include "i18n/Translation.h"
 
 #include <SDL.h>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <csignal>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -172,12 +174,70 @@ void audio_only_stats() {
 struct PlaybackState {
     bool active = false;
     bool padding_only = false;
+    bool rotation = false;
+    int base_degrees = 0;
+    bool flip = false;
     bool watching = false;
     int decoded = 0;
     std::atomic<Uint32> window_id{0};
     SDL_Window *window = nullptr;
     SDL_Renderer *renderer = nullptr;
 } playback;
+
+constexpr std::array<uint32_t, 4> quadrant_colors{
+    0xffff0000u, 0xff00ff00u, 0xff0000ffu, 0xffffff00u};
+
+void queue_rotation(SDL_Keycode key, SDL_Scancode scancode) {
+    SDL_Event event{};
+    event.type = SDL_WINDOWEVENT;
+    event.window.windowID = playback.window_id.load();
+    event.window.event = SDL_WINDOWEVENT_FOCUS_GAINED;
+    check(SDL_PushEvent(&event) == 1, "actual playback queues its own focus event");
+    const auto send_key = [&](Uint32 type, SDL_Keycode symbol, SDL_Scancode code, Uint16 mods) {
+        event = {};
+        event.type = type;
+        event.key.windowID = playback.window_id.load();
+        event.key.state = type == SDL_KEYDOWN ? SDL_PRESSED : SDL_RELEASED;
+        event.key.keysym.sym = symbol;
+        event.key.keysym.scancode = code;
+        event.key.keysym.mod = mods;
+        check(SDL_PushEvent(&event) == 1, "actual playback queues a complete MOD-arrow key sequence");
+    };
+    send_key(SDL_KEYDOWN, SDLK_LALT, SDL_SCANCODE_LALT, KMOD_LALT);
+    send_key(SDL_KEYDOWN, key, scancode, KMOD_LALT);
+    send_key(SDL_KEYUP, key, scancode, KMOD_LALT);
+    send_key(SDL_KEYUP, SDLK_LALT, SDL_SCANCODE_LALT, KMOD_NONE);
+}
+
+void check_playback_rotation(int index) {
+    SDL_Window *window = SDL_GetWindowFromID(playback.window_id.load());
+    check(window && window == playback.window && SDL_GetRenderer(window) == playback.renderer,
+          "display shortcut and subsequent frames keep the actual Application window and renderer");
+    if (!window) return;
+    int x = 0, y = 0, width = 0, height = 0;
+    SDL_GetWindowPosition(window, &x, &y);
+    check(x == 100 && y == 120, "display shortcut preserves the user's window position");
+    if (!playback.renderer) return;
+    check(SDL_GetRendererOutputSize(playback.renderer, &width, &height) == 0 && width > 0 && height > 0,
+          "actual playback exposes a valid retained drawable after rotation");
+    if (width <= 0 || height <= 0) return;
+    std::vector<uint32_t> pixels(static_cast<std::size_t>(width) * height);
+    check(SDL_RenderReadPixels(playback.renderer, nullptr, SDL_PIXELFORMAT_ARGB8888,
+                              pixels.data(), width * 4) == 0,
+          "actual Application's retained display can be read without drawing another frame");
+    // 独立的色块顺序，不调用 Presenter/ViewGeom 的旋转或坐标公式。
+    constexpr std::array<std::array<int, 4>, 4> corner_order{{
+        {{0, 1, 2, 3}}, {{2, 0, 3, 1}}, {{3, 2, 1, 0}}, {{1, 3, 0, 2}}
+    }};
+    const int degrees = (playback.base_degrees + (index <= 6 ? 90 : 0)) % 360;
+    for (int corner = 0; corner < 4; ++corner) {
+        const int px = (corner % 2 ? 3 : 1) * width / 4;
+        const int py = (corner / 2 ? 3 : 1) * height / 4;
+        const int source_corner = corner_order[degrees / 90][corner] ^ (playback.flip ? 1 : 0);
+        check(pixels[static_cast<std::size_t>(py) * width + px] == quadrant_colors[source_corner],
+              "Application retains the shortcut direction, CLI flip and source geometry in real pixels");
+    }
+}
 
 int SDLCALL observe_window(void *, SDL_Event *event) {
     if (event && event->type == SDL_WINDOWEVENT) {
@@ -209,7 +269,11 @@ class ControlledPlaybackDecoder final : public scrctl::Decoder {
                 playback.renderer = SDL_GetRenderer(playback.window);
                 SDL_SetWindowSize(playback.window, 96, 144);
                 SDL_SetWindowPosition(playback.window, 100, 120);
+                if (playback.rotation) queue_rotation(SDLK_RIGHT, SDL_SCANCODE_RIGHT);
             }
+        } else if (playback.rotation && index <= 8) {
+            check_playback_rotation(index);
+            if (index == 6) queue_rotation(SDLK_LEFT, SDL_SCANCODE_LEFT);
         } else if (index <= 4) {
             SDL_Window *window = SDL_GetWindowFromID(playback.window_id.load());
             check(window && window == playback.window &&
@@ -225,18 +289,28 @@ class ControlledPlaybackDecoder final : public scrctl::Decoder {
                       "actual Application retains user scale and position instead of reapplying startup parameters");
             }
         }
-        if (index > 4) return false;
-        const bool landscape = !playback.padding_only && index == 2;
+        if (index > (playback.rotation ? 8 : 4)) return false;
+        const bool landscape = playback.rotation ? index >= 5 : !playback.padding_only && index == 2;
         out.width = playback.padding_only && index == 2 ? 80 : landscape ? 96 : 64;
         out.height = playback.padding_only && index == 2 ? 112 : landscape ? 64 : 96;
         out.row_pitch = out.width * 4;
         out.pixels.assign(static_cast<std::size_t>(out.row_pitch) * out.height, 0x80);
+        if (playback.rotation) {
+            for (uint32_t y = 0; y < out.height; ++y) {
+                for (uint32_t x = 0; x < out.width; ++x) {
+                    const auto color = quadrant_colors[(y >= out.height / 2 ? 2 : 0) +
+                                                       (x >= out.width / 2 ? 1 : 0)];
+                    std::memcpy(out.pixels.data() + static_cast<std::size_t>(y) * out.row_pitch + x * 4,
+                                &color, sizeof color);
+                }
+            }
+        }
         return true;
     }
     const char *backend_name() const override { return "ControlledPlaybackLifecycle"; }
 };
 
-void playback_window_lifecycle(const std::filesystem::path &path, bool padding_only) {
+void write_playback_fixture(const std::filesystem::path &path, unsigned frames) {
     std::ofstream file(path, std::ios::binary | std::ios::trunc);
     const auto nal = [&](std::initializer_list<unsigned char> bytes) {
         const unsigned char prefix[]{0, 0, 0, 1};
@@ -244,10 +318,15 @@ void playback_window_lifecycle(const std::filesystem::path &path, bool padding_o
         for (const auto byte : bytes) file.put(static_cast<char>(byte));
     };
     nal({0x40, 1, 0x55}); nal({0x42, 1, 0x55}); nal({0x44, 1, 0x55});
-    for (unsigned char i = 1; i <= 4; ++i) nal({0x26, 1, 0x80, i, 0x55});
+    for (unsigned char i = 1; i <= frames; ++i) nal({0x26, 1, 0x80, i, 0x55});
     file.close();
+}
+
+void playback_window_lifecycle(const std::filesystem::path &path, bool padding_only) {
+    write_playback_fixture(path, 4);
     playback.active = true;
     playback.padding_only = padding_only;
+    playback.rotation = false;
     playback.decoded = 0;
     playback.window_id.store(0);
     playback.window = nullptr; playback.renderer = nullptr;
@@ -260,6 +339,34 @@ void playback_window_lifecycle(const std::filesystem::path &path, bool padding_o
     check(SDL_WasInit(0) == 0 && !playback.watching,
           "controlled playback releases its window, observer and SDL runtime");
     playback.active = false;
+}
+
+void playback_rotation_lifecycle(const std::filesystem::path &path) {
+    for (int base : {0, 90, 180, 270}) {
+        write_playback_fixture(path, 8);
+        playback.active = true;
+        playback.padding_only = false;
+        playback.rotation = true;
+        playback.base_degrees = base;
+        playback.flip = base == 90 || base == 270;
+        playback.decoded = 0;
+        playback.window_id.store(0);
+        playback.window = nullptr;
+        playback.renderer = nullptr;
+        std::vector<std::string> args{
+            "scrctl", "--play", path.string(), "--no-audio", "--no-control",
+            "--render-driver=software", "--window-width=80", "--window-height=120",
+            "--exit-after=8", "--display-orientation=" +
+                (base == 0 ? std::string("auto") :
+                 (playback.flip ? "flip" : "") + std::to_string(base))
+        };
+        check(run(std::move(args)) == 0 && playback.decoded == 8,
+              "actual Application counts only eight decoded frames, including two static shortcut redraws");
+        check(SDL_WasInit(0) == 0 && !playback.watching,
+              "display shortcut playback releases its window, observer and SDL runtime");
+        playback.active = false;
+        playback.rotation = false;
+    }
 }
 } // namespace
 
@@ -464,6 +571,7 @@ int main() {
     check(SDL_WasInit(0) == 0, "unreached readback cleans SDL");
     playback_window_lifecycle(path, false);
     playback_window_lifecycle(path, true);
+    playback_rotation_lifecycle(path);
     caller_signal = 0;
     std::raise(SIGTERM);
     check(caller_signal == SIGTERM, "application restores caller signal handler");

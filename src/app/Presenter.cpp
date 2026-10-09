@@ -158,6 +158,7 @@ bool Presenter::ensure_texture(int width, int height) {
     SDL_SetTextureScaleMode(candidate, SDL_ScaleModeBest);
     SDL_DestroyTexture(texture_);
     texture_ = candidate;
+    texture_uploaded_ = false;
     texture_w_ = width;
     texture_h_ = height;
     return true;
@@ -194,6 +195,7 @@ bool Presenter::draw(const scrctl::Frame &f, const Crop &crop, const char *readb
         crop.input_valid != src_.input_valid || crop.pixel_degrees != src_.pixel_degrees ||
         crop.display_w != src_.display_w || crop.display_h != src_.display_h) {
         release_pending_ = true;
+        texture_uploaded_ = false;
     }
     src_ = crop;
     int view_w = 0, view_h = 0;
@@ -208,6 +210,21 @@ bool Presenter::draw(const scrctl::Frame &f, const Crop &crop, const char *readb
         return false;
     }
     if ((output_w <= 0 || output_h <= 0) && readback_path == nullptr) return true;
+    if (SDL_UpdateTexture(texture_, nullptr, f.pixels.data(), static_cast<int>(f.row_pitch)) != 0) {
+        std::fprintf(stderr, SCRCTL_TR("Failed to upload texture: %s\n"), SDL_GetError());
+        return false;
+    }
+    texture_uploaded_ = true;
+    return draw_uploaded(readback_path);
+}
+
+bool Presenter::draw_uploaded(const char *readback_path) {
+    if (!video_playback_ || !window_ || !renderer_) return false;
+    // open/重建纹理不等于已上传有效像素；静止画面只重绘现有纹理，不缓存另一份 Frame。
+    if (!texture_uploaded_) return true;
+    if ((minimized_ || (SDL_GetWindowFlags(window_) & SDL_WINDOW_MINIMIZED)) &&
+        readback_path == nullptr) return true;
+    int output_w = 0, output_h = 0;
     ContentRect content;
     if (!prepare_output() || SDL_GetRendererOutputSize(renderer_, &output_w, &output_h) != 0) {
         std::fprintf(stderr, SCRCTL_TR("Failed to configure viewport: %s\n"), SDL_GetError());
@@ -222,10 +239,6 @@ bool Presenter::draw(const scrctl::Frame &f, const Crop &crop, const char *readb
     if (SDL_SetRenderDrawColor(renderer_, bg_[0], bg_[1], bg_[2], 255) != 0 ||
         SDL_RenderClear(renderer_) != 0) {
         std::fprintf(stderr, SCRCTL_TR("Failed to render frame: %s\n"), SDL_GetError());
-        return false;
-    }
-    if (SDL_UpdateTexture(texture_, nullptr, f.pixels.data(), static_cast<int>(f.row_pitch)) != 0) {
-        std::fprintf(stderr, SCRCTL_TR("Failed to upload texture: %s\n"), SDL_GetError());
         return false;
     }
     // 目的矩形使用绘制面像素；SDL 完成纹理缩放、翻转和旋转。
@@ -310,7 +323,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
         release_touch(on_touch);
     }
     SDL_Event e;
-    bool quit = false;
+    bool quit = render_failed_;
     bool repaint_background = false;
     // 合并同一轮的鼠标移动事件，仅发送最后一个位置，减少高采样率鼠标带来的
     // 重复 HID 报告。按下和抬起仍保留各自事件。
@@ -348,6 +361,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                 release_input(on_touch, on_keyboard);
             }
             if (apply_pending_resize(on_touch, on_keyboard)) pending_move = false;
+            if (render_failed_) quit = true;
             if (!video_playback_ && (e.window.event == SDL_WINDOWEVENT_EXPOSED ||
                 e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
                 e.window.event == SDL_WINDOWEVENT_RESIZED ||
@@ -385,6 +399,20 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                 toggle_fullscreen();
                 repaint_background = !video_playback_;
                 if (apply_pending_resize(on_touch, on_keyboard)) pending_move = false;
+                if (render_failed_) quit = true;
+            } else if (shortcut && !(mods & KMOD_SHIFT) &&
+                       video_playback_ &&
+                       (e.key.keysym.sym == SDLK_LEFT || e.key.keysym.sym == SDLK_RIGHT)) {
+                const int step = e.key.keysym.sym == SDLK_RIGHT ? 90 : 270;
+                const int degrees = (degrees_ + step) % 360;
+                if (update_layout(src_, degrees, true, on_touch, on_keyboard)) {
+                    rotation_offset_ = (rotation_offset_ + step) % 360;
+                    pending_move = false;
+                    if (!draw_uploaded()) {
+                        render_failed_ = true;
+                        quit = true;
+                    }
+                }
             } else if (shortcut && !(mods & KMOD_SHIFT) &&
                        (e.key.keysym.sym == SDLK_g || e.key.keysym.sym == SDLK_w)) {
                 if (resize_window(e.key.keysym.sym == SDLK_g, on_touch, on_keyboard)) {
@@ -466,7 +494,11 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
         }
     }
     if (!quit && apply_pending_resize(on_touch, on_keyboard)) pending_move = false;
-    if (!quit && repaint_background) (void)draw_background();
+    if (render_failed_) quit = true;
+    if (!quit && repaint_background && !draw_background()) {
+        render_failed_ = true;
+        quit = true;
+    }
     if (quit) {
         input_active_ = false;
         pending_move = false;
@@ -482,6 +514,10 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
 
 bool Presenter::is_fullscreen() const {
     return window_ != nullptr && (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
+}
+
+int Presenter::display_degrees(int base_degrees) const {
+    return (base_degrees % 360 + rotation_offset_ + 360) % 360;
 }
 
 bool Presenter::is_windowed() const {
@@ -510,6 +546,33 @@ void Presenter::discard_queued_input() {
     }, &own_id);
 }
 
+void Presenter::discard_queued_pointer() {
+    if (!window_) return;
+    Uint32 own_id = SDL_GetWindowID(window_);
+    SDL_FilterEvents([](void *userdata, SDL_Event *event) {
+        const Uint32 id = *static_cast<Uint32 *>(userdata);
+        Uint32 event_id = 0;
+        switch (event->type) {
+        case SDL_MOUSEMOTION: event_id = event->motion.windowID; break;
+        case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP: event_id = event->button.windowID; break;
+        case SDL_MOUSEWHEEL: event_id = event->wheel.windowID; break;
+        default: return 1;
+        }
+        return event_id == id ? 0 : 1;
+    }, &own_id);
+}
+
+void Presenter::release_layout_input(const std::function<void(double, double, bool)> &on_touch,
+                                     const KeyboardHandler &on_keyboard) {
+    ++input_generation_;
+    release_touch(on_touch);
+    for (const auto &report : keyboard_.release_device_keys()) {
+        if (on_keyboard) on_keyboard(report);
+    }
+    release_pending_ = false;
+    discard_queued_pointer();
+}
+
 bool Presenter::resize_for_content(int old_w, int old_h, int new_w, int new_h) {
     int width = 0, height = 0;
     SDL_GetWindowSize(window_, &width, &height);
@@ -536,14 +599,30 @@ bool Presenter::resize_for_content(int old_w, int old_h, int new_w, int new_h) {
 bool Presenter::update_content(const Crop &crop, int degrees,
                                const std::function<void(double, double, bool)> &on_touch,
                                const KeyboardHandler &on_keyboard) {
+    return update_layout(crop, degrees, false, on_touch, on_keyboard);
+}
+
+bool Presenter::update_layout(const Crop &crop, int degrees, bool local,
+                              const std::function<void(double, double, bool)> &on_touch,
+                              const KeyboardHandler &on_keyboard) {
     if (!video_playback_) return false;
     int width = 0, height = 0;
     viewport_size(crop, degrees, width, height);
     if (window_ == nullptr || crop.w <= 0 || crop.h <= 0 ||
         (degrees != 0 && degrees != 90 && degrees != 180 && degrees != 270)) return false;
+    // 来源坐标发生变化时，旧纹理不能作为新裁剪的已上传画面；等待新 Frame。
+    if (!local && (crop.x != src_.x || crop.y != src_.y || crop.w != src_.w ||
+                   crop.h != src_.h || crop.input_valid != src_.input_valid ||
+                   crop.pixel_degrees != src_.pixel_degrees ||
+                   crop.display_w != src_.display_w || crop.display_h != src_.display_h)) {
+        texture_uploaded_ = false;
+    }
     if (degrees == degrees_ && width == view_w_ && height == view_h_) return true;
-    release_input(on_touch, on_keyboard);
-    discard_queued_input();
+    if (local) release_layout_input(on_touch, on_keyboard);
+    else {
+        release_input(on_touch, on_keyboard);
+        discard_queued_input();
+    }
     if (width != view_w_ || height != view_h_) {
         if (is_windowed()) {
             const int old_w = resize_pending_ ? windowed_content_w_ : view_w_;
@@ -560,16 +639,23 @@ bool Presenter::update_content(const Crop &crop, int degrees,
     src_ = crop;
     view_w_ = width;
     view_h_ = height;
+    if (resize_pending_) resize_preserve_local_ = local;
     return true;
 }
 
 bool Presenter::apply_pending_resize(const std::function<void(double, double, bool)> &on_touch,
                                      const KeyboardHandler &on_keyboard) {
     if (!resize_pending_ || !is_windowed()) return false;
-    release_input(on_touch, on_keyboard);
-    discard_queued_input();
+    const bool repaint = resize_preserve_local_ && texture_uploaded_;
+    if (resize_preserve_local_ && !release_pending_) release_layout_input(on_touch, on_keyboard);
+    else {
+        release_input(on_touch, on_keyboard);
+        discard_queued_input();
+    }
     resize_for_content(windowed_content_w_, windowed_content_h_, view_w_, view_h_);
     resize_pending_ = false;
+    resize_preserve_local_ = false;
+    if (repaint && !draw_uploaded()) render_failed_ = true;
     return true;
 }
 
@@ -637,12 +723,7 @@ bool Presenter::resize_window(bool pixel_perfect,
                                   drawable_w, drawable_h, width, height);
     if (!valid) return false;
 
-    ++input_generation_;
-    release_touch(on_touch);
-    for (const auto &report : keyboard_.release_device_keys()) {
-        if (on_keyboard) on_keyboard(report);
-    }
-    release_pending_ = false;
+    release_layout_input(on_touch, on_keyboard);
     if (width == points_w && height == points_h) return true;
 
     int x = 0, y = 0;

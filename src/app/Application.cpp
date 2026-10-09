@@ -421,6 +421,18 @@ int run(int argc, char **argv) {
         spec.horizontal_flip = o.display_flip;
         return spec;
     };
+    const auto pump_window = [&] {
+        if (presenter) {
+            quit = presenter->pump(on_touch, on_keyboard, on_paste);
+            // 静止画面的本地重绘也可能失败；与新帧绘制失败一样返回错误，
+            // 仍经统一退出流程取消粘贴并收尾录制，不能视为用户正常关闭。
+            if (presenter->render_failed()) {
+                exit_code = 1;
+                quit = true;
+            }
+        }
+        service_paste();
+    };
     if (o.no_video_playback && !o.no_window) {
         presenter = std::make_unique<Presenter>();
         presenter->set_debug_input(o.debug_input);
@@ -468,10 +480,7 @@ int run(int argc, char **argv) {
                 break;
             }
             // 等待下一帧时也需要处理窗口事件，避免窗口失去响应。
-            if (presenter != nullptr) {
-                quit = presenter->pump(on_touch, on_keyboard, on_paste);
-            }
-            service_paste();
+            pump_window();
             continue;
         }
 
@@ -482,16 +491,18 @@ int run(int argc, char **argv) {
                 std::printf(SCRCTL_TR("Reached --exit-after %d\n"), o.exit_after);
                 break;
             }
-            if (presenter) quit = presenter->pump(on_touch, on_keyboard, on_paste);
-            service_paste();
+            pump_window();
             continue;
         }
 
         // 有效内容包括裁剪后的宽高和窗口旋转；编码填充变化只更新纹理。
         // 启动窗口参数只在首次 open 时生效，转屏继续沿用用户实际窗口布局。
         const auto geometry = source->frame_geometry();
-        const int degrees = o.orientation >= 0 ? o.orientation :
+        const int base_degrees = o.orientation >= 0 ? o.orientation :
             (geometry.screenshot ? 0 : geometry.panel_degrees.value_or(0));
+        // 设备方向和 CLI 值提供基准，用户快捷键追加本机显示偏移。
+        // 后续帧继续沿用偏移，不改写采集、截图像素方向或录制方向。
+        const int degrees = presenter ? presenter->display_degrees(base_degrees) : base_degrees;
         const Crop crop = resolve_crop(o, f, geometry, degrees != applied_degrees);
         if (!crop.input_valid && control_enabled && !input_geometry_warned) {
             std::fprintf(stderr, SCRCTL_TR(
@@ -548,8 +559,7 @@ int run(int argc, char **argv) {
             std::printf(SCRCTL_TR("Reached --exit-after %d\n"), o.exit_after);
             break;
         }
-        quit = presenter->pump(on_touch, on_keyboard, on_paste);
-        service_paste();
+        pump_window();
     }
 
     if (presenter != nullptr) {
