@@ -3732,3 +3732,70 @@ ClientSessionID 均保持原有配置。
 `/private/tmp/scrctl-apple-audio-route-20261008/`；初始化对照位于
 `/private/tmp/scrctl-audio-decoder-init-assessment-20261008/`；正式程序的自动
 状态检查位于 `/private/tmp/scrctl-audio-routing-auto-evidence-20261008/`。
+
+## 33. 设备方向控制：Apple 客户端的静态格式
+
+本机 CoreDevice 506.6 / ProductBuildVersion 17C52 提供真实的方向查询、
+指定方向和左右旋转 API，具体实现为 BackBoardOrientationControl。这是客户端
+二进制的静态证据，不是当前 iPhone 已接受请求的证明。服务资料指向
+`com.apple.coredevice.devicecontrol`，与触摸和 Consumer 按钮使用的服务分别处理。
+
+客户端创建的 XPC dictionary 包含：
+
+| 字段 | 值 |
+| --- | --- |
+| featureIdentifier | `com.apple.coredevice.feature.remote.devicecontrol.orientation` |
+| messageType | `OrientationRequest` |
+| payload | 以下三个枚举分支之一 |
+
+Swift 编码元数据、raw-value getter 和实际编码分支对应下列结构。JSON 仅用于
+表达 XPC dictionary；这些不是已经捕获的线上 JSON：
+
+```json
+{"currentOrientation": {}}
+{"changeOrientation": {"_0": "landscapeLeft"}}
+{"rotate": {"_0": "right"}}
+```
+
+DeviceOrientation 的准确字符串为 `unknown`、`portrait`、`portraitUpsideDown`、
+`landscapeLeft`、`landscapeRight`、`faceUp`、`faceDown`；旋转方向为 `right` / `left`。
+它们不是 Android 的 rotation 整数，不能把 Swift case 次序当作线上数值。
+OrientationInfo 的编码字段为：
+
+| 字段 | 类型 |
+| --- | --- |
+| currentDeviceOrientation | DeviceOrientation |
+| currentDeviceNonFlatOrientation | DeviceOrientation |
+| currentDeviceOrientationLocked | Bool |
+
+外层成功 / 失败回复、当前设备的服务权限和具体状态码尚未实测。请求没有锁定或
+解锁参数，返回 locked Bool 也不能证明 setter 保持或恢复原来的方向锁定。
+物理方向、非平放方向和应用 UI 显示方向是不同状态；现有 DisplayInfo 曾出现
+物理 portrait 与 UI rot270 同时成立，不能直接用物理枚举代替窗口显示状态。
+
+scrcpy v5 的设备转屏先读当前 rotation 和冻结状态，目标为 `(rotation & 1) ^ 1`，
+并在原来允许自动转屏时恢复自动转屏。因此 MOD+R 应切换横竖屏并保持原策略，
+不能直接循环四个方向。后续先做有界只读查询，再在支持转屏的应用上记录原方向、
+锁定和 UI 状态，执行一次有据可查的 setter 并读回。原锁定 on / off 分别验证；
+没有恢复依据时不猜发 unknown / faceUp，也不以本机画面旋转冒充设备转屏。
+
+来源 SHA256：CoreDevice 为 `1dd2f4dbb263afc94aac09addf9246cf5a3ef23ea2e89078fdb0024b9341a771`，
+CoreDeviceUtilities 为 `b14d16d1e6590b44a79767af67c94a2c581ec8fd809cf49543c9913c779f1b49`。
+解析脚本、字段绑定、短反汇编和复现说明保留在
+`/private/tmp/scrctl-device-orientation-research-20261010/`。研究使用的只读 DDI 挂载
+已撤除；本轮没有发送设备请求，也没有改变手机方向锁定。
+
+### 33.1 有界只读查询工具
+
+临时工具已使用当前生产库编译，只有 `currentOrientation` 分支，没有 setter、
+订阅或媒体动作；尚未执行有效设备查询。显式 UDID 与传输方式必需，USB 使用
+`usb_only=true`，Wi-Fi 只接受明确数值地址，不作自动发现或回退。
+服务阶段的截止覆盖建连、握手及一次调用；设备建立本身尚无取消参数，外层
+runner 对整个子进程限时，默认 30 秒，超时后另有最多一秒退出余量。
+收到回复只保留有截断的描述并标为未分类，退出 0 只表示收到回复。
+
+请求编码、参数拒绝和进程限时共 53 项离线检查通过；严格编译和独立源码复核
+通过。这些检查不覆盖当前设备接受、回复结构、服务取消时效或方向锁定保持。
+研究与查询工具的固定证据已长期归档到
+`/Volumes/Data/Workspace/Github/scrctl-fixtures/recording-clock-20261008/device-orientation/`，
+其中 `QUERY_TOOL.md` 记录复现方法与真实阶段边界；归档不是可搬移发布包。
