@@ -39,9 +39,9 @@ enum class NokeyAction {
 /// restarts 为此原因已经重启的次数；already_unusable 表示已进入降级状态。
 NokeyAction plan_nokey(int restarts, int max_restarts, bool already_unusable);
 
-/// 后台执行收包、组帧、解码和视频恢复，供调用方取得最新画面。
+/// 后台执行收包、组帧和视频恢复，默认解码供调用方取得最新画面。
 /// 截图服务实测一次约 344–613 ms，视频可提供更高刷新率。
-/// 本类只提供画面，不承担 HID 认证；2026-09-25 的 hid_gate_probe
+/// 仅录制时可关闭解码；本类不承担 HID 认证。2026-09-25 的 hid_gate_probe
 /// 确认输入控制不依赖保持视频会话，见 docs/coredevice.md §11。
 class FramePump {
 public:
@@ -52,6 +52,10 @@ public:
         /// 可选容器消费者，由拥有者管理。必须在本泵停止并 join 后再销毁；
         /// 与 record_path 的裸 HEVC 写入互斥，未启用时不复制编码 AU。
         Recorder *recorder = nullptr;
+        /// 关闭时只接收并录制原始编码视频，不创建显示解码器或发布像素帧。
+        /// 必须有上述录制消费者；完整 IDR 的参数与 slice header 检查决定
+        /// 是否已就绪和恢复，不把语法有效当成整张图像可解码的证明。
+        bool decode_video = true;
         /// 丢包后等待干净关键帧的最长时间，0 禁用此项后备重建。
         /// 优先发 PLI 请求 IDR，超时后重建会话。早期“设备不响应 PLI”的结论
         /// 来自错误的 UDP 封包；修复后真机已确认 PLI 有效，见 docs/coredevice.md §13。
@@ -155,12 +159,21 @@ public:
     /// 取最新一帧（可能是上一帧的重复副本）。timeout_ms 内一帧都没有则返回 false。
     bool latest(Frame &out, int timeout_ms);
 
+    /// 解码模式等待真实像素帧；仅录制模式等待当前会话参数与采样时间合法的
+    /// 完整类型 19/20 IDR。仅录制不会增加 serial()，latest/newer 不返回假帧。
+    /// 停止、不可用或超时返回 false；丢包/重建后须再次取得合法 IDR。
+    bool wait_ready(int timeout_ms);
+    [[nodiscard]] bool decodes_video() const noexcept { return options_.decode_video; }
+    /// 复制录制消费者/裸文件的首错，或导致 worker 永久终止的错误。
+    /// 可恢复的视频不可用标记不在此接口中；不会借用 worker 的字符串。
+    [[nodiscard]] std::string capture_error() const;
+
     /// 通知媒体泵用户刚操作或请求新画面。流仍有新数据时不处理；静默超过可疑
     /// 阈值时查询设备，超过直接重建阈值时重建会话。当前会话申请 20 秒租期，
     /// 通过周期 RR 保活，详情见 docs/coredevice.md §13。
     void wake() { wake_requested_ = true; }
 
-    /// 返回是否正在查询状态或重建会话，直到新会话输出首帧。
+    /// 返回是否正在查询状态或重建会话，直到新会话输出首帧或校验通过首个 IDR。
     /// 调用方可据此区分恢复期间尚无新帧和画面静止。标记在状态 RPC 前置位，
     /// 避免调用方在耗时查询期间把旧帧当作操作后的结果。
     [[nodiscard]] bool reviving() const { return reviving_; }
@@ -181,7 +194,8 @@ public:
     /// getter 只读取 mutex_ 保护的标量快照，不访问 worker 正在替换的会话。
     [[nodiscard]] uint8_t payload_type() const;
     [[nodiscard]] uint16_t receiver_port() const;
-    /// 最近一帧的尺寸（还没出帧时为 0）。
+    /// 最近像素帧或仅录制模式已检查 IDR 的编码尺寸；还没有有效尺寸时为 0。
+    /// 仅录制模式重建会话时清空尺寸，不沿用旧 epoch 的配置。
     void size(int &width, int &height) const;
 
 private:
@@ -208,6 +222,7 @@ private:
     FILE *record_ = nullptr;
     /// mutex_ 保护，只记录最早错误；清理失败不能覆盖原始写入原因。
     std::string recording_error_;
+    std::string terminal_error_;
 
     /// 解析器仅由后台线程访问，每次重建会话时替换。
     std::unique_ptr<AnnexBParser> parser_;
@@ -220,6 +235,7 @@ private:
     /// 解码缓冲，发布时与 frame_ 交换以复用容量。
     Frame publishing_;
     uint64_t serial_ = 0;
+    bool ready_ = false;
     /// 救流进行中：决定去问设备/重起时置位，新会话第一帧交出来时清掉。
     std::atomic<bool> reviving_ { false };
     bool stopping_ = false;
@@ -246,8 +262,9 @@ private:
     bool awaiting_idr_from_loss_ = false;
     /// 测试选项首次注入失败后禁止 PLI 的状态，仅在工作线程访问。
     bool pli_off_ = false;
-    /// 最近成功输出关键帧的时刻；启动和后备重建前以当前时刻建立等待基线。
-    /// 解析到但未成功解码的关键帧不更新该时刻，避免持续失败无限延后恢复。
+    /// 最近成功输出关键帧，或仅录制模式通过参数/语法/时间校验的 IDR 时刻。
+    /// 启动和后备重建前以当前时刻建立等待基线；不完整或校验失败的关键帧
+    /// 不更新它，避免持续失败无限延后恢复。
     uint64_t last_decoded_keyframe_ms_ = 0;
     /// 有超大 NAL 被丢、需要重起会话。由 AU 回调置位，收包线程消费。
     std::atomic<bool> oversized_restart_ { false };
@@ -257,7 +274,7 @@ private:
     /// 因后端长度限制连续重建的次数；成功解码后归零，上限后进入低频重试。
     int oversized_restarts_ = 0;
     std::atomic<bool> video_unusable_ { false };
-    /// 当前会话是否成功解出关键帧；缺少初始 IDR 时后续参考帧可能无法有效解码。
+    /// 当前会话是否成功解出关键帧，或仅录制模式已检查过完整 IDR。
     std::atomic<bool> ever_keyframe_ { false };
     uint64_t session_start_ms_ = 0;
     int nokey_restarts_ = 0;

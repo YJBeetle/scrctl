@@ -18,6 +18,7 @@
 #include "app/LiveSource.h"
 #include "app/Presenter.h"
 #include "app/RecordFormat.h"
+#include "media/RecordingVideoConfig.h"
 #include "app/SdlRuntime.h"
 #include "media/StreamSession.h"
 #include "remote/Pasteboard.h"
@@ -127,10 +128,20 @@ int run(int argc, char **argv) {
     } else {
         auto made = std::make_unique<LiveSource>();
         std::string err;
+        // 无窗口录制直接消费编码 AU。依赖像素的旧选项仍走解码路径：
+        // --exit-after 继续按已交付帧计数，硬件后端和强制降级也不被忽略。
+        const bool needs_pixels = !o.no_window || o.record.empty() ||
+            o.video_source == "screenshot" || o.exit_after > 0 || o.hw_decode ||
+            !o.test_degrade.empty();
+        // 未编入公开 IDR 检查能力时沿用旧解码路径，保留平台后端的裸流录制。
+        // LiveSource 显式请求不解码时仍严格检查能力，不接受未经检查的就绪。
+        std::string capture_check_error;
+        const bool decode_video = needs_pixels ||
+            !scrctl::media::recording_idr_checks_available(capture_check_error);
         if (!made->start(o.serial, o.wifi, o.record, o.hw_decode, !o.no_window,
                          want_audio, o.audio_buffer_ms, o.video_source, o.test_degrade, err,
                          o.wifi_port, o.audio_dup, [&runtime] { return runtime.stop_requested(); },
-                         o.record_orientation, !o.no_audio_playback)) {
+                         o.record_orientation, !o.no_audio_playback, decode_video)) {
             if (exit_requested()) {
                 return finish_source(made.get(), 0);
             }
@@ -390,10 +401,12 @@ int run(int argc, char **argv) {
         if (o.stats && SDL_GetTicks64() - last_stats_at >= 1000) {
             const Uint64 at = SDL_GetTicks64();
             const double win = std::max(0.001, static_cast<double>(at - last_stats_at) / 1000.0);
-            const int got = rendered - last_rendered;
-            std::printf(SCRCTL_TR("  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"), rendered, got,
-                        got / win,
-                        rendered / std::max(0.001, static_cast<double>(at - start) / 1000.0));
+            if (live == nullptr || live->video_decoding_enabled()) {
+                const int got = rendered - last_rendered;
+                std::printf(SCRCTL_TR("  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"), rendered, got,
+                            got / win,
+                            rendered / std::max(0.001, static_cast<double>(at - start) / 1000.0));
+            }
             source->print_stats();
             last_stats_at = at;
             last_rendered = rendered;
@@ -514,7 +527,11 @@ int run(int argc, char **argv) {
                      o.verify_at, rendered);
         return 1;
     }
-    std::printf(SCRCTL_TR("Finished: processed %d frames\n"), rendered);
+    if (live != nullptr && !live->video_decoding_enabled()) {
+        std::printf(SCRCTL_TR("Finished: encoded video recording finalized\n"));
+    } else {
+        std::printf(SCRCTL_TR("Finished: processed %d frames\n"), rendered);
+    }
     return 0;
 }
 

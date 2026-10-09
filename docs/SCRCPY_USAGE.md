@@ -81,7 +81,7 @@ W 也容许整点取整产生的极小留边，避免反复执行时窗口持续
 | `--orientation` / `--record-orientation` | 数字 `--orientation` 同时设置显示与容器录制方向；`--record-orientation` 只设置录制。按参数顺序覆盖；旧 `--orientation=auto` 仅设置显示 |
 | `--crop` | 裁剪本机显示的源像素；视频和截图各使用自身的像素坐标，不改变设备采集或录制 |
 | `--video-source` | 支持 display 和扩展值 screenshot（截图轮询）；没有 camera 能力 |
-| `--no-window` | 不创建窗口，仍接收和解码视频；可继续播放音频 |
+| `--no-window` | 不创建窗口；录制时可跳过显示解码，仍接收编码视频和续期。按帧数退出、硬件解码、降级测试及缺少 IDR 检查能力时保留原解码路径；可继续播放音频 |
 | `--copy / --paste` | 写入 / 读取设备剪贴板后退出，不模拟设备上的粘贴动作 |
 | 窗口标题与比例 | 默认标题为 scrctl，默认背景为黑色；可以自由调整窗口比例 |
 | Wi-Fi | `--list-devices` 用 mDNS 枚举；`--pair` 经 USB 创建/验证记录，`--wifi auto -s <UDID>` 自动选择无线候选；手动地址可用 `--wifi-port` 指定端口。scrctl 承担配对与连接，Android 的对应入口由 ADB 提供 |
@@ -95,7 +95,8 @@ flip。显示仍保留 `auto` 扩展。scrcpy 的 crop 作用于采集，scrctl 
 [视频方向](https://github.com/Genymobile/scrcpy/blob/v5.0/doc/video.md#orientation)、
 [录制](https://github.com/Genymobile/scrcpy/blob/v5.0/doc/recording.md)。
 
-录制写入失败时停止写文件，视频接收和镜像继续。退出时检查文件刷新与关闭结果；
+录制写入失败时停止写文件。解码模式的镜像继续，仅录制模式结束任务。
+退出时检查文件刷新与关闭结果；
 本次录制只要发生过文件错误，最终退出码就非零，文件可能不完整。
 
 音频路由参照 [scrcpy 音频说明](https://github.com/Genymobile/scrcpy/blob/master/doc/audio.md#source)。

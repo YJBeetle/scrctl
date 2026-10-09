@@ -31,6 +31,8 @@ class LiveSource final : public FrameSource {
     /// 播放；默认请求转到电脑，不支持该路由时禁用音频，不自动切回双端播放。
     /// record_orientation 写容器方向元数据，默认 0；不改变编码数据或触摸映射。
     /// decode_audio=false 仅录原 AAC 音轨，跳过 PCM 解码；须同时请求容器录制。
+    /// decode_video=false 仅录编码视频；须有实时流录制消费者。就绪由完整 IDR
+    /// 的参数与 slice 语法检查确定，不发布像素帧，也不切换到截图。
     /// should_cancel 在连接和启动步骤之间检查退出请求，阻止后续起流与路由切换；
     /// 已在进行的底层连接或 RPC 仍可能等待自身超时后才返回。
     bool start(const std::string &serial, const std::string &wifi, const std::string &record_path,
@@ -38,7 +40,7 @@ class LiveSource final : public FrameSource {
                const std::string &video_source, const std::string &test_degrade, std::string &err,
                uint16_t wifi_port = 49152, bool audio_dup = false,
                const std::function<bool()> &should_cancel = {}, int record_orientation = 0,
-               bool decode_audio = true);
+               bool decode_audio = true, bool decode_video = true);
 
     /// 打开音频输出。应用先准备 SDL 音频子系统，再调用 start() 建立媒体会话；
     /// 取得 AudioPump 后才可打开声卡。输出失败时，容器录制继续接收音频；
@@ -50,7 +52,7 @@ class LiveSource final : public FrameSource {
 
     /// 退出专用：先关闭声卡，停止并等待两个收包线程，再检查录制文件收尾。
     /// 重复调用保留同一结果；禁止在收包线程仍可投递数据时封闭 Recorder。
-    /// 录制写入失败期间镜像仍继续，退出状态由调用者根据此结果决定。
+    /// 解码模式下写入失败期间镜像仍继续；仅录制模式遇到首错会结束画面源。
     bool finish_recording(std::string &err);
 
     /// 返回最近一次交付帧的面板尺寸、原始方向及截图标志。
@@ -66,6 +68,7 @@ class LiveSource final : public FrameSource {
     [[nodiscard]] std::string end_reason() const override;
 
     [[nodiscard]] bool has_audio() const { return audio_ != nullptr; }
+    [[nodiscard]] bool video_decoding_enabled() const { return decode_video_; }
 
     /// 返回会话使用的 Device 引用，供 --start-app 等设备操作复用，避免重复所有权。
     [[nodiscard]] scrctl::remote::Device &device() { return *device_; }
@@ -90,6 +93,7 @@ class LiveSource final : public FrameSource {
 
   private:
     bool start_screenshot(bool capture_first, std::string &err);
+    std::string encoded_capture_error() const;
     void update_picture_source();
     FrameGeometry sample_geometry(bool screenshot) const;
     bool ensure_hid(std::string &err);
@@ -130,6 +134,7 @@ class LiveSource final : public FrameSource {
     double touch_x_ = 0, touch_y_ = 0;
     uint64_t serial_ = 0;
     bool recording_error_reported_ = false;
+    bool decode_video_ = true;
 
     // 截图源的序号和失败状态随每次新源一起重置，只由 start_screenshot 安装。
     struct ScreenshotState {

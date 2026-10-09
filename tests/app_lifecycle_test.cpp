@@ -205,6 +205,32 @@ int main() {
 
     {
         scrctl::app::LiveSource source;
+        std::string err;
+        const auto reject_encoded = [&](const std::string &record, const std::string &kind,
+                                       bool hardware, const std::string &degrade,
+                                       const char *expected) {
+            err.clear();
+            return !source.start("must-not-connect", "must-not-resolve", record,
+                                 hardware, false, false, 200, kind, degrade, err,
+                                 49152, false, {}, 0, true, false) &&
+                   err.find(expected) != std::string::npos && !source.has_audio() &&
+                   !source.video_decoding_enabled();
+        };
+        check(reject_encoded("", "stream", false, "", "requires a recording consumer"),
+              "encoded video without a consumer fails before device connection");
+        check(reject_encoded("must-not-create.hevc", "screenshot", false, "", "requires a live video stream") &&
+                  !std::filesystem::exists("must-not-create.hevc"),
+              "encoded video cannot silently start screenshots or create a raw recording");
+        check(reject_encoded("must-not-create.hevc", "stream", true, "", "require video decoding") &&
+                  !std::filesystem::exists("must-not-create.hevc"),
+              "encoded capture cannot ignore a requested hardware decoder");
+        check(reject_encoded("must-not-create.hevc", "stream", false, "1,2", "require video decoding") &&
+                  !std::filesystem::exists("must-not-create.hevc"),
+              "encoded capture cannot ignore a requested screenshot fallback test");
+    }
+
+    {
+        scrctl::app::LiveSource source;
         std::string err = "previous error";
         check(!source.start("must-not-connect", "must-not-resolve", "", false, false,
                             true, 200, "stream", "", err, 49152, false, {}, 0, false) &&

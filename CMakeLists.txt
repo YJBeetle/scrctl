@@ -502,6 +502,11 @@ if(SCRCTL_BUILD_TESTS)
         src/media/AudioPump.cpp src/app/AudioOut.cpp)
     target_link_libraries(audio_capture_test PRIVATE scrctl_core Scrctl::SDL2)
     add_test(NAME audio_capture COMMAND audio_capture_test)
+    scrctl_add_test_executable(frame_capture_test tests/frame_capture_test.cpp
+        src/media/FramePump.cpp)
+    target_link_libraries(frame_capture_test PRIVATE scrctl_core)
+    add_test(NAME frame_capture COMMAND frame_capture_test)
+    set_tests_properties(frame_capture PROPERTIES TIMEOUT 30)
     set_tests_properties(audio_capture PROPERTIES TIMEOUT 15)
 
     scrctl_add_test_executable(decode_test tests/decode_test.cpp)

@@ -87,11 +87,11 @@ jobs:
         if: runner.os == 'macOS'
         run: python3 tools/test_macos_install.py dist-macos build
 
-      - name: 上传 macOS 测试日志
-        if: always() && runner.os == 'macOS'
+      - name: 上传测试日志
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: macos-test-logs
+          name: ${{ runner.os == 'macOS' && 'macos-test-logs' || 'linux-test-logs' }}
           path: build/Testing/Temporary/*.log
           if-no-files-found: ignore
 

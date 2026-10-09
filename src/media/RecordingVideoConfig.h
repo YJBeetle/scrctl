@@ -38,4 +38,30 @@ struct RecordingVideoConfig {
 [[nodiscard]] RecordingVideoConfig inspect_recording_video_config(
     const Nal& vps, const Nal& sps, const Nal& pps);
 
+/// IDR 语法检查另限制 NAL 数量，避免很小的 NAL 消耗大量 CBS unit 元数据。
+/// 编码字节仍采用 RecordingMuxer 的每包上限；不表示进程或库内部 RSS 上限。
+inline constexpr std::size_t kMaxRecordingIdrNals = 1024;
+
+struct RecordingIdrSyntax {
+    enum class Status { Valid, Invalid, Unsupported };
+    Status status = Status::Invalid;
+    std::string error;
+    [[nodiscard]] bool valid() const noexcept { return status == Status::Valid; }
+};
+
+/// 无持续视频解码模式在请求设备会话前检查此能力。参数检查仍需 libav 的
+/// 软件 HEVC context；IDR 语法检查只用公开 hevc_metadata BSF，不解码图像。
+[[nodiscard]] bool recording_idr_checks_available(std::string& error);
+
+/// 检查一个已由传输层完整交付的原始 IDR AU：仅 base/temporal layer0、
+/// VCL 类型19或20一致、第一条VCL为first slice，其余slice不得开启第二张图；
+/// AU内参数须与当前已检查配置原文相同。公开BSF检查slice header、参数引用
+/// 和至少存在slice data，不验证CABAC块或覆盖整张图像，也不证明可完整解码。
+///
+/// 本函数不修改/返回重写后的编码内容、不保存AU或配置；来源、采样时间、
+/// epoch和网络丢片由调用者检查。临时packet按现有每包上限先校验再分配；
+/// 参数≤1MiB、NAL数量≤1024。无库/能力或分配失败返回Unsupported。
+[[nodiscard]] RecordingIdrSyntax inspect_recording_idr(
+    const std::vector<Nal>& nals, const RecordingVideoConfig& config);
+
 }  // namespace scrctl::media

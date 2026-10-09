@@ -7,6 +7,7 @@
 #include "app/SourcePick.h"
 #include "app/ViewGeom.h"
 #include "media/RecordingMuxer.h"
+#include "media/RecordingVideoConfig.h"
 #include <cstdio>
 
 namespace scrctl::app {
@@ -43,7 +44,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
                        bool want_audio, int audio_buffer_ms, const std::string &video_source,
                        const std::string &test_degrade, std::string &err, uint16_t wifi_port,
                        bool audio_dup, const std::function<bool()> &should_cancel,
-                       int record_orientation, bool decode_audio) {
+                       int record_orientation, bool decode_audio, bool decode_video) {
     const auto cancelled = [&] {
         if (!should_cancel || !should_cancel()) {
             return false;
@@ -54,6 +55,20 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     if (cancelled()) {
         return false;
     }
+    decode_video_ = decode_video;
+    if (!decode_video && record_path.empty()) {
+        err = SCRCTL_TR("Video capture without decoding requires a recording consumer");
+        return false;
+    }
+    if (!decode_video && video_source == "screenshot") {
+        err = SCRCTL_TR("Video capture without decoding requires a live video stream");
+        return false;
+    }
+    if (!decode_video && (!test_degrade.empty() || hw_decode)) {
+        err = SCRCTL_TR("Hardware decoding and fallback tests require video decoding");
+        return false;
+    }
+    if (!decode_video && !scrctl::media::recording_idr_checks_available(err)) return false;
     const auto container_format = record_container_format(record_path);
     const bool container_recording = container_format.has_value();
     if (want_audio && !decode_audio && !container_recording) {
@@ -102,6 +117,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
     scrctl::media::FramePump::Options options;
     if (!container_recording) options.record_path = record_path;
     options.use_hardware = hw_decode;
+    options.decode_video = decode_video;
 
     // 起流前查询显示几何。编码尺寸包含 HEVC 对齐填充，设备报告的可见区
     // 可用于正确裁剪和触摸映射。机型表仅覆盖已测设备，无法通用于其他尺寸。
@@ -172,7 +188,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
         // 设备因系统版本拒绝媒体流（9021 / requires iOS）时自动改用截图。
         // 其他错误保留原失败结果，例如会话被占用；用户也可显式选择截图模式。
         const bool version_gate = err.find("requires iOS") != std::string::npos;
-        if (version_gate || force_screenshot) {
+        if (decode_video && (version_gate || force_screenshot)) {
             if (recorder_ != nullptr) recorder_->fail(SCRCTL_TR("Live video unavailable; recording stopped"));
             const std::string stream_err = err;
             std::string serr;
@@ -206,9 +222,30 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
         }
         // 用局部序号读取首张截图，主循环仍可取得这张图。PNG 是已摆正的可见区，
         // 不能直接用它覆盖面板轴上的尺寸与原始方向；取帧时分别发布这两种几何。
-    } else if (!pump_->latest(first, 5000)) {
-        err = SCRCTL_TR("No first decoded frame within 5 seconds");
+    } else if (decode_video) {
+        if (!pump_->latest(first, 5000)) {
+            err = SCRCTL_TR("No first decoded frame within 5 seconds");
+            return false;
+        }
+    } else if (!pump_->wait_ready(5000)) {
+        err = pump_->capture_error();
+        if (err.empty()) err = SCRCTL_TR("No valid recording IDR within 5 seconds");
         return false;
+    }
+    if (!decode_video) {
+        err = pump_->capture_error();
+        if (!err.empty()) return false;
+    }
+    uint32_t stream_w = first.width, stream_h = first.height;
+    if (!decode_video) {
+        int checked_w = 0, checked_h = 0;
+        pump_->size(checked_w, checked_h);
+        if (checked_w <= 0 || checked_h <= 0) {
+            err = SCRCTL_TR("Video became unavailable before recording startup completed");
+            return false;
+        }
+        stream_w = static_cast<uint32_t>(checked_w);
+        stream_h = static_cast<uint32_t>(checked_h);
     }
     if (cancelled()) {
         return false;
@@ -217,11 +254,16 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
         std::printf(SCRCTL_TR("Screenshot mirroring started: %s / iOS %s, %ux%u\n"),
                     device_->property("ProductType").c_str(),
                     device_->property("OSVersion").c_str(), first.width, first.height);
-    } else {
+    } else if (decode_video) {
         std::printf(SCRCTL_TR("Video stream started: %s / iOS %s, receive port=%u PT=%u, first frame %ux%u\n"),
                     device_->property("ProductType").c_str(),
                     device_->property("OSVersion").c_str(), pump_->receiver_port(),
                     pump_->payload_type(), first.width, first.height);
+    } else {
+        std::printf(SCRCTL_TR("Encoded video capture started: %s / iOS %s, receive port=%u PT=%u, checked dimensions %ux%u\n"),
+                    device_->property("ProductType").c_str(),
+                    device_->property("OSVersion").c_str(), pump_->receiver_port(),
+                    pump_->payload_type(), stream_w, stream_h);
     }
     // 此处报告几何来源，无窗口客户端也能看到设备尺寸及旋转结果。
     if (display_w_ > 0) {
@@ -230,7 +272,7 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
                 "Display geometry: visible area %dx%d (displayId=%llu %s), UI rotation %d "
                 "degrees clockwise, stream %ux%u\n"),
             display_w_, display_h_, static_cast<unsigned long long>(display_id_),
-            display_name_.c_str(), panel_degrees_.value_or(0), first.width, first.height);
+            display_name_.c_str(), panel_degrees_.value_or(0), stream_w, stream_h);
     }
     if (!record_path.empty()) {
         if (screenshot_.source != nullptr && !container_recording) {
@@ -263,6 +305,12 @@ bool LiveSource::start(const std::string &serial, const std::string &wifi,
             std::string aerr;
             if (cancelled()) {
                 return false;
+            }
+            // 录制首错可能在等待就绪后由异步写入线程报告。仅录制模式在
+            // 音频协商前再次检查，避免已失去消费者后仍切换手机音频路由。
+            if (!decode_video) {
+                err = pump_->capture_error();
+                if (!err.empty()) return false;
             }
             audio_ = scrctl::media::AudioPump::start(*device_, ao, aerr);
             if (audio_ == nullptr) {
@@ -471,6 +519,7 @@ bool LiveSource::start_screenshot(bool capture_first, std::string &err) {
 }
 
 void LiveSource::update_picture_source() {
+    if (!decode_video_) return;
     // 只回收已退出的 worker，避免在渲染线程上等待截图 RPC；未退出的源仍持有 Device。
     scrctl::app::reap_finished(
         retired_, [](const scrctl::media::ScreenshotSource &src) { return src.worker_done(); });
@@ -510,8 +559,13 @@ bool LiveSource::next(scrctl::Frame &out, int timeout_ms) {
     if (recorder_ != nullptr && !recording_error_reported_) {
         const auto error = recorder_->error();
         if (!error.empty()) {
-            std::fprintf(stderr, SCRCTL_TR("Recording failed: %s. Mirroring continues; the file is incomplete.\n"),
-                         error.c_str());
+            if (decode_video_) {
+                std::fprintf(stderr, SCRCTL_TR("Recording failed: %s. Mirroring continues; the file is incomplete.\n"),
+                             error.c_str());
+            } else {
+                std::fprintf(stderr, SCRCTL_TR("Recording failed: %s. The file may be incomplete.\n"),
+                             error.c_str());
+            }
             recording_error_reported_ = true;
         }
     }
@@ -535,11 +589,19 @@ bool LiveSource::next(scrctl::Frame &out, int timeout_ms) {
 }
 
 bool LiveSource::finished() const {
-    return device_ != nullptr && device_->stack() != nullptr &&
-           !device_->stack()->pump_error().empty();
+    return !encoded_capture_error().empty() || (device_ != nullptr && device_->stack() != nullptr &&
+           !device_->stack()->pump_error().empty());
+}
+
+std::string LiveSource::encoded_capture_error() const {
+    if (decode_video_) return {};
+    if (pump_ != nullptr) return pump_->capture_error();
+    return recorder_ != nullptr ? recorder_->error() : std::string{};
 }
 
 std::string LiveSource::end_reason() const {
+    const auto capture_error = encoded_capture_error();
+    if (!capture_error.empty()) return SCRCTL_TR("Encoded video capture stopped: ") + capture_error;
     const std::string why =
         device_ != nullptr && device_->stack() != nullptr ? device_->stack()->pump_error() : "";
     return SCRCTL_TR("Device connection lost (") + why + SCRCTL_TR("); closing session");

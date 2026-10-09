@@ -11,6 +11,7 @@
 
 #include "bitstream/AnnexB.h"
 #include "media/Recorder.h"
+#include "media/RecordingVideoConfig.h"
 #include "media/StreamSession.h"
 #include "remote/Device.h"
 #include "rt/Rtcp.h"
@@ -101,9 +102,25 @@ std::unique_ptr<FramePump> FramePump::start(remote::Device &device, const Option
     }
     // 缺少解码后端时不建立设备媒体会话，避免占用设备资源。
     // 使用编译期能力常量，无需创建平台解码会话试探。
-    if (!scrctl::kHaveDecoder) {
+    if (options.decode_video && !scrctl::kHaveDecoder) {
         err = SCRCTL_TR(scrctl::kNoDecoderMessage);
         return nullptr;
+    }
+    if (!options.decode_video) {
+        if (options.recorder == nullptr && options.record_path.empty()) {
+            err = SCRCTL_TR("Video capture without decoding requires a recording consumer");
+            return nullptr;
+        }
+        if (options.use_hardware) {
+            err = SCRCTL_TR("Hardware video decoding requires video decoding");
+            return nullptr;
+        }
+        if (options.debug_fail_decode_of_keyframe != 0 || options.debug_fail_any_keyframe ||
+            options.debug_suppress_pli_after_fail) {
+            err = SCRCTL_TR("Video decode-failure tests require video decoding");
+            return nullptr;
+        }
+        if (!recording_idr_checks_available(err)) return nullptr;
     }
     // restart() 仅建立会话；record_ 和 last_decoded_keyframe_ms_ 等字段完成初始化
     // 后才创建 worker，避免线程读到尚未初始化的无锁状态。
@@ -159,6 +176,7 @@ bool FramePump::finish_recording(std::string &err) {
     close_recording(false);
     std::lock_guard<std::mutex> lock(mutex_);
     err = recording_error_;
+    if (err.empty() && !options_.decode_video) err = terminal_error_;
     return err.empty();
 }
 
@@ -215,8 +233,8 @@ void FramePump::write_recording_nal(std::span<const uint8_t> bytes) {
     }
     const int error = errno;
     note_recording_error(SCRCTL_TR("Cannot write recording file ") + options_.record_path +
-        ": " + std::strerror(error != 0 ? error : EIO), true);
-    close_recording(true);
+        ": " + std::strerror(error != 0 ? error : EIO), options_.decode_video);
+    close_recording(options_.decode_video);
 }
 
 bool FramePump::restart(std::string &err) {
@@ -229,6 +247,8 @@ bool FramePump::restart(std::string &err) {
     {
         // 先撤销旧会话信息，再做耗时的停流和起流 RPC；网络 I/O 不持有此锁。
         std::lock_guard<std::mutex> lock(mutex_);
+        ready_ = false;
+        if (!options_.decode_video) width_ = height_ = 0;
         payload_type_ = 0;
         receiver_port_ = 0;
     }
@@ -255,6 +275,9 @@ bool FramePump::restart(std::string &err) {
             // 续期，等待本次租期释放，不能用 stopAll 中断可能仍在播放的音频。
             negotiation_invalid_ = true;
             video_unusable_ = true;
+            { std::lock_guard<std::mutex> lock(mutex_);
+              if (terminal_error_.empty()) terminal_error_ = err; }
+            cv_.notify_all();
             if (worker_running_) {
                 std::fprintf(stderr, SCRCTL_TR("Video negotiation failed during recovery; stopping video reception: %s\n"), err.c_str());
             }
@@ -292,19 +315,19 @@ void FramePump::loop() {
     /// 软件解码选择跨会话保留，避免每次重建重复尝试能力不足的硬件后端。
     bool software_only = false;
     std::unique_ptr<Decoder> decoder;
-    if (!options_.use_hardware) {
+    if (options_.decode_video && !options_.use_hardware) {
         decoder = create_software_decoder();
         software_only = decoder != nullptr;
         if (!software_only) {
             warn_no_software();
         }
     }
-    if (decoder == nullptr) {
+    if (options_.decode_video && decoder == nullptr) {
         decoder = create_platform_decoder();
     }
     // 两种后端都不可用时退出，避免解引用空 decoder。start() 通常已通过
     // 编译期能力检查拦截，此处仍保留防御检查。
-    if (decoder == nullptr) {
+    if (options_.decode_video && decoder == nullptr) {
         if (options_.recorder != nullptr) {
             options_.recorder->fail(SCRCTL_TR("Video reception stopped because no decoder is available"));
         }
@@ -318,6 +341,9 @@ void FramePump::loop() {
     std::optional<uint32_t> media_source;
     /// 探针用视频接收计数，不包含 SR。
     uint64_t video_seen = 0;
+    std::optional<RecordingVideoConfig> encoded_config;
+    std::optional<int64_t> encoded_high_timestamp;
+    bool capture_failed = false;
 
     /// 丢包后优先用 12 字节 PLI 请求 IDR，再等待完整关键帧解码；重建作为后备。
     /// 真机 PLI 响应曾为 20–35 ms，重建会话 RPC 约 37–90 ms，另需等待首帧。
@@ -359,6 +385,7 @@ void FramePump::loop() {
         parser_->discard_pending();
         awaiting_idr_from_loss_ = true;
         need_keyframe_ = true;
+        { std::lock_guard<std::mutex> lock(mutex_); ready_ = false; }
         request_keyframe();
     };
 
@@ -395,25 +422,113 @@ void FramePump::loop() {
                 std::lock_guard<std::mutex> lock(mutex_);
                 ++stats_.aus;
             }
-            if (options_.recorder != nullptr) {
-                // 容器接收完整原始 AU，不继承显示后端的尺寸、丢帧或恢复门限。
-                // 借用本 AU 或当前 epoch 的参数；Recorder 在返回前完成有界复制。
-                const Nal *vps = &parser_->vps(), *sps = &parser_->sps(), *pps = &parser_->pps();
-                for (const auto &nal : au) {
-                    if (nal.size() < 2) continue;
-                    switch ((nal[0] >> 1) & 0x3f) {
-                        case 32: vps = &nal; break;
-                        case 33: sps = &nal; break;
-                        case 34: pps = &nal; break;
-                        default: break;
+            // 参数必须属于当前解析器/会话。AU 原文优先，完整缓存仅补缺少的前缀。
+            const Nal *vps = &parser_->vps(), *sps = &parser_->sps(), *pps = &parser_->pps();
+            for (const auto &nal : au) {
+                if (nal.size() < 2) continue;
+                switch ((nal[0] >> 1) & 0x3f) {
+                    case 32: vps = &nal; break;
+                    case 33: sps = &nal; break;
+                    case 34: pps = &nal; break;
+                    default: break;
+                }
+            }
+            auto record_unit = [&] {
+                if (options_.recorder != nullptr) {
+                    // 容器接收完整原始 AU，不继承显示后端的尺寸、丢帧或恢复门限。
+                    // 借用本 AU 或当前 epoch 的参数；Recorder 在返回前完成有界复制。
+                    if (!media_source || !unit.sampling_timestamp) {
+                        options_.recorder->fail(SCRCTL_TR("Complete video access unit has no bound sampling timestamp"));
+                    } else {
+                        (void)options_.recorder->video(session_->started().session_uuid, *media_source,
+                            *unit.sampling_timestamp, au, *vps, *sps, *pps);
                     }
                 }
-                if (!media_source || !unit.sampling_timestamp) {
-                    options_.recorder->fail(SCRCTL_TR("Complete video access unit has no bound sampling timestamp"));
-                } else {
-                    (void)options_.recorder->video(session_->started().session_uuid, *media_source,
-                        *unit.sampling_timestamp, au, *vps, *sps, *pps);
+            };
+            if (options_.decode_video) record_unit();
+            if (!options_.decode_video) {
+                // 参数和 IDR 语法通过公开 FFmpeg 接口检查，不配置显示解码器。
+                // 校验在容器异步入队之前；此处的健康判断不等于整张图像解码成功。
+                const bool timestamp_forward = unit.sampling_timestamp &&
+                    (!encoded_high_timestamp || *unit.sampling_timestamp > *encoded_high_timestamp);
+                if (unit.sampling_timestamp &&
+                    (!encoded_high_timestamp || *unit.sampling_timestamp > *encoded_high_timestamp)) {
+                    encoded_high_timestamp = unit.sampling_timestamp;
                 }
+                bool idr = false;
+                for (const auto &nal : au) {
+                    if (nal.size() >= 2) {
+                        const auto type = (nal[0] >> 1) & 0x3f;
+                        if (type == 19 || type == 20) idr = true;
+                    }
+                }
+                // 普通 AU 可能含合法 B-picture；只用最高已见 ticks 限制恢复 IDR。
+                // 容器的无重排/严格递增 PTS 契约仍交给真实 Recorder。
+                const bool timestamp_valid = media_source && unit.sampling_timestamp && (!idr || timestamp_forward);
+                if (!timestamp_valid || (!idr && (!ever_keyframe_ || need_keyframe_))) {
+                    if (!timestamp_valid && options_.recorder != nullptr) {
+                        options_.recorder->fail(SCRCTL_TR("Encoded video access unit has a missing or non-increasing sampling timestamp"));
+                    }
+                    need_keyframe_ = true;
+                    awaiting_idr_from_loss_ = true;
+                    { std::lock_guard<std::mutex> lock(mutex_);
+                      ready_ = false;
+                      ++stats_.dropped_awaiting_keyframe; }
+                    request_keyframe();
+                    return;
+                }
+                if (!idr) { record_unit(); return; }
+                if (!encoded_config || encoded_config->vps != *vps ||
+                    encoded_config->sps != *sps || encoded_config->pps != *pps) {
+                    encoded_config = inspect_recording_video_config(*vps, *sps, *pps);
+                }
+                RecordingIdrSyntax syntax;
+                if (encoded_config->status == RecordingVideoConfig::Status::Unsupported) {
+                    syntax.status = RecordingIdrSyntax::Status::Unsupported;
+                    syntax.error = encoded_config->error;
+                } else {
+                    syntax = inspect_recording_idr(au, *encoded_config);
+                }
+                if (syntax.valid() && options_.recorder != nullptr &&
+                    !encoded_config->permits_equal_dts_pts()) {
+                    syntax.status = RecordingIdrSyntax::Status::Invalid;
+                    syntax.error = SCRCTL_TR("Recording HEVC requires a no-reorder configuration");
+                }
+                if (!syntax.valid()) {
+                    if (options_.recorder != nullptr) options_.recorder->fail(syntax.error);
+                    need_keyframe_ = true;
+                    awaiting_idr_from_loss_ = true;
+                    { std::lock_guard<std::mutex> lock(mutex_);
+                      ready_ = false;
+                      ++stats_.dropped_awaiting_keyframe; }
+                    if (syntax.status == RecordingIdrSyntax::Status::Unsupported) {
+                        capture_failed = true;
+                        video_unusable_ = true;
+                        reviving_ = false;
+                        { std::lock_guard<std::mutex> lock(mutex_);
+                          if (terminal_error_.empty()) terminal_error_ = syntax.error; }
+                        if (options_.recorder == nullptr) note_recording_error(syntax.error, false);
+                        cv_.notify_all();
+                    } else {
+                        request_keyframe();
+                    }
+                    return;
+                }
+                record_unit();
+                need_keyframe_ = false;
+                awaiting_idr_from_loss_ = false;
+                first_pli_ms_ = 0;
+                last_decoded_keyframe_ms_ = now_ms();
+                ever_keyframe_ = true;
+                nokey_restarts_ = 0;
+                video_unusable_ = false;
+                std::lock_guard<std::mutex> lock(mutex_);
+                width_ = encoded_config->width;
+                height_ = encoded_config->height;
+                ready_ = true;
+                reviving_ = false;
+                cv_.notify_all();
+                return;
             }
             // NAL 超过平台后端的长度上限时尝试软件解码。实测 IDR 可达
             // 49652–70101 字节，转场中的非关键帧切片也曾达到 256278 字节。
@@ -563,6 +678,7 @@ void FramePump::loop() {
             width_ = static_cast<int>(frame_.width);
             height_ = static_cast<int>(frame_.height);
             ++serial_;
+            ready_ = true;
             ++stats_.decoded;
             cv_.notify_all();
             stats_.ms_publish += static_cast<double>(now_ms() - t_published0);
@@ -578,6 +694,8 @@ void FramePump::loop() {
                            ? std::optional<uint32_t>(session_->started().local_ssrc)
                            : std::nullopt;
         configured = false;
+        encoded_config.reset();
+        encoded_high_timestamp.reset();
         parser_ = make_parser();
         session_start_ms_ = now_ms();
         last_packet_ms_ = session_start_ms_;
@@ -618,7 +736,11 @@ void FramePump::loop() {
         const auto state = StreamSession::probe(device_, session_->started().session_uuid, perr,
                                                 verbose_);
         if (state == StreamSession::ServerState::Alive) {
-            reviving_ = false;
+            // Alive 只证明设备会话存在。仅录制模式仍须等合法 IDR 完成恢复，
+            // 不能用继续收到 SR 或状态 RPC 回复替代参数/图像头检查。
+            if (options_.decode_video || (ever_keyframe_ && !need_keyframe_)) {
+                reviving_ = false;
+            }
             if (verbose_) {
                 std::printf(SCRCTL_TR("%s: no data for %llu ms; device reports session alive, continuing to wait\n"),
                             why, static_cast<unsigned long long>(quiet_ms));
@@ -678,7 +800,7 @@ void FramePump::loop() {
 
     for (;;) {
         // 已接受但不可用的协商结果不再重试。其设备会话不续期，等待租期释放。
-        if (negotiation_invalid_) {
+        if (negotiation_invalid_ || capture_failed) {
             return;
         }
         // 普通 restart() 失败会使 session_ 为空。统一在此重试并跳过后续会话访问；
@@ -941,6 +1063,24 @@ void FramePump::loop() {
                 discard_for_recovery();
                 continue;
             }
+            if (!options_.decode_video && encoded_config && nal.bytes.size() >= 2) {
+                const Nal *checked = nullptr;
+                switch ((nal.bytes[0] >> 1) & 0x3f) {
+                    case 32: checked = &encoded_config->vps; break;
+                    case 33: checked = &encoded_config->sps; break;
+                    case 34: checked = &encoded_config->pps; break;
+                    default: break;
+                }
+                if (checked != nullptr && *checked != nal.bytes) {
+                    // 参数变化先撤销旧健康/尺寸，不能沿用旧 IDR 的配置接受 P/SR。
+                    // 重复发送同一已检查参数不影响健康；新 IDR 才重新发布尺寸。
+                    {
+                        std::lock_guard<std::mutex> lock(mutex_);
+                        width_ = height_ = 0;
+                    }
+                    discard_for_recovery();
+                }
+            }
             if (options_.recorder != nullptr && nal.bytes.size() >= 2) {
                 const Nal *previous = nullptr;
                 switch ((nal.bytes[0] >> 1) & 0x3f) {
@@ -976,6 +1116,24 @@ bool FramePump::latest(Frame &out, int timeout_ms) {
     }
     out = frame_;
     return true;
+}
+
+bool FramePump::wait_ready(int timeout_ms) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    cv_.wait_for(lock, std::chrono::milliseconds(timeout_ms),
+                 [&] { return ready_ || stopping_ || video_unusable_; });
+    return ready_ && !stopping_ && !video_unusable_;
+}
+
+std::string FramePump::capture_error() const {
+    // Recorder 在本泵之前创建、停止并 join 本泵后才销毁。先复制它的首错，
+    // 避免同时持有两个对象的锁；恢复重建诊断不能覆盖录制已经锁存的错误。
+    if (options_.recorder != nullptr) {
+        auto error = options_.recorder->error();
+        if (!error.empty()) return error;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    return recording_error_.empty() ? terminal_error_ : recording_error_;
 }
 
 uint64_t FramePump::newer(Frame &out, uint64_t since, int timeout_ms) {
