@@ -427,3 +427,17 @@ Windows USB 初始配对、DDI 准备、持续 USB 连接及长暂停音频恢�
 这次通过的是更新后的一轮 USB 短基线。尚未确定归属切换故障的根因，也未覆盖
 长期运行、物理断线自动恢复或 Windows 独立完成 DDI 初始准备；不再把驱动
 “设备重启成功”的返回值当作连接恢复证据。
+
+## 原生 Cryptex DDI 安装（2026-10-11）
+
+`395e80f` 的独立 ARM64 构建通过 Wi-Fi，在 `iPhone14,4` / iOS 27.0.1 上执行
+`--install-ddi --replace-ddi`：Apple TSS 签票、五项资产上传、最终安装回复及
+`com.apple.MobileAsset.DDI / 27.1.5228.8`、`/System/Developer` 挂载核验全部通过，
+退出 0。随后新连接的 5 秒无音频 HEVC 录制正常结束；ffprobe 确认
+1136×2464、252 个视频包。未重复窗口输入、音频或长期运行测试。
+
+Windows 原生证书库不信任该签票服务当前使用的 Apple Root CA；签票请求现限定
+使用 Apple 官方公开根证书，保持 HTTPS、证书链和主机名校验，不修改系统信任库。
+本轮使用 libcurl 8.22.0 / OpenSSL 3.6.5。DDI 下载继续使用 Windows 原生证书库。
+手机 USB 全程保留在 Mac，Windows 使用既有本地配对记录，未重新配对或转交 USB。
+旧系统 Classic / Personalized 真机新装与 Windows USB 初始配对仍未补验收。

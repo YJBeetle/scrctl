@@ -3132,3 +3132,33 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   四组全部通过：macOS、Ubuntu、ASan + UBSan、Windows ARM64 各 73/73。
   四项新增 DDI 回归均实际执行；Windows 产物安装、依赖记录、打包及上传通过。
   未下载产物或重复跑设备验证，CI 不代替旧系统及其他平台的实际新装。
+
+## 第一百五十一轮：跨平台签票信任与原生 DDI 真机验收
+
+- Windows / Debian 的系统证书库在 `gs.apple.com` 的 Apple Root CA 链上分别
+  返回 `UntrustedRoot` / curl 60，尚未执行签票后的镜像替换。Mac 系统库验证正常。
+  官方公开 DER 的 SHA256 与嵌入 PEM 字节一致；非 Apple 平台仅在固定 TSS
+  HTTPS handle 使用这一个根，保留证书链、主机名、TLS 1.2 和禁重定向检查，
+  不安装系统 CA、不影响 DDI 下载，也不降级 HTTP。未知或过旧 curl 后端明确失败。
+- 真实公开证书的离线密码学检查补齐根指纹、CA / 自签、正确服务域名通过，
+  错误域名、缺根、同名自签和过期拒绝；`ddi_tss_test` 的 22 个检查全部通过。
+  Schannel / Rustls 不支持 CA 目录时，仅清除空 `CAPATH` 允许 `NOT_BUILT_IN`，
+  实际 `CAINFO_BLOB` 设置仍必须成功。curl 和 Apple 根证书的材料说明已补齐。
+- Windows ARM64 的 `395e80f` 独立构建使用本机既有记录，Wi-Fi 原生显式替换
+  完成签票、五项上传、最终回复、identifier / version 和挂载核验，退出 0。
+  新连接的 5 秒 HEVC 录制退出 0；ffprobe 为 1136×2464、252 个视频包。
+  libcurl 8.22.0 / OpenSSL 3.6.5；最终中文目录重新生成，帮助的 UTF-8 检查通过。
+- Debian 13.7 ARM64 的 `395e80f` 独立构建使用本机既有记录，Wi-Fi 原生显式
+  替换同样完成签票、上传、安装回复、identifier / version 和挂载核验，退出 0。
+  新连接的 5 秒 HEVC 录制退出 0；ffprobe 为 1136×2464、254 个视频包。
+  构建期间 2 GB 内存耗尽；按用户要求正常关机，用户增加到 8 GB 并开机后完成
+  增量构建。没有修改系统信任库、导出配对凭据或重建配对。
+- 两个平台串行安装到同一台 `iPhone14,4` / iOS 27.0.1，目标均为
+  `com.apple.MobileAsset.DDI / 27.1.5228.8`，挂载目录 `/System/Developer`。
+  手机 USB 保留在 Mac；未重复媒体全矩阵、键盘、窗口输入或长期稳定性测试。
+  本轮补的是 Cryptex 原生安装；Classic / Personalized 旧系统真机新装仍缺设备，
+  既有旧 iPad 功能和实时媒体的系统版本限制保持原证据范围。
+- [CI 38080937013](https://github.com/YJBeetle/scrctl/actions/runs/38080937013)
+  对代码 `395e80ffd7ed9c926df79cc37698e62e5bd6818c` 执行 macOS、Ubuntu、
+  ASan + UBSan、Windows ARM64 四组各 73/73 通过，均执行并通过 `ddi_tss`；
+  macOS 搬移安装、Windows 独立安装检查及产物上传均成功。

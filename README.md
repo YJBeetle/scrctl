@@ -38,8 +38,8 @@ iPad mini 的记录见 [协议记录 §23、§24](docs/coredevice.md#23-那台-i
 | 平台 | 当前范围 |
 | --- | --- |
 | macOS | 有真机连接、镜像、输入和音频记录；本轮验证结果见重构记录 |
-| Linux | Debian ARM64 的构建、离线回归及 Wi-Fi 软件解码、Wayland 窗口、竖横屏鼠标落点、缩放、键盘、Unicode 粘贴、设备按钮和音频路由短测已通过；直接重插接入 VM 后 USB 30 秒录制通过，归属切换仍曾出现 STALL；DDI 初始安装与物理断线恢复仍待验证 |
-| Windows | ARM64 构建与离线测试、USB / Wi-Fi 镜像、截图切换及竖横屏鼠标触摸已验证；FFmpeg 真实音乐解码、短时 USB 播放及新版 Wi-Fi 默认、双端、无音频三种行为已确认；无线首次 PIN 配对和独立重连已通过，实际长暂停恢复、USB 持续连接与 USB 初始配对准备待验证，见 [安装说明](docs/WINDOWS.md) |
+| Linux | Debian ARM64 的构建、离线回归及 Wi-Fi 软件解码、Wayland 窗口、竖横屏鼠标落点、缩放、键盘、Unicode 粘贴、设备按钮和音频路由短测已通过；直接重插接入 VM 后 USB 30 秒录制通过，归属切换仍曾出现 STALL；Cryptex DDI 的 Wi-Fi 原生替换安装及新连接视频录制通过，旧系统 DDI 新装与物理断线恢复仍待验证 |
+| Windows | ARM64 构建与离线测试、USB / Wi-Fi 镜像、截图切换及竖横屏鼠标触摸已验证；FFmpeg 真实音乐解码、短时 USB 播放及新版 Wi-Fi 默认、双端、无音频三种行为已确认；无线首次 PIN 配对和独立重连、Cryptex DDI 的 Wi-Fi 原生替换安装及新连接视频录制已通过，实际长暂停恢复、USB 持续连接与 USB 初始配对准备待验证，见 [安装说明](docs/WINDOWS.md) |
 
 音频在 macOS 使用 AudioToolbox，Windows / Linux 使用 FFmpeg 的原生 AAC-ELD
 解码器与 libswresample。当前 FFmpeg 适配支持 48 kHz、双声道、每帧每声道 480 或

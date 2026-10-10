@@ -140,7 +140,7 @@ scrctl 检查服务和所需功能。Xcode 可能重新挂载自己的开发镜�
 | --- | --- | --- |
 | iOS / iPadOS 16 及以下 | lockdown `mobile_image_mounter`：Classic 签名、ReceiveBytes 上传、MountImage，随后检查挂载签名 / 状态 | 协议离线模拟已覆盖；尚未用旧系统真机新装验收。下载 / 安装能力不表示旧系统具有 CoreDevice 镜像和控制服务 |
 | iOS / iPadOS 17–26 | USB lockdown 或无线 RSD 的 `mobile_image_mounter`：读取硬件身份与 nonce、TSS 签票、Personalized 上传与挂载，随后检查签名 / 状态 | 协议离线模拟已覆盖；之前 iPad mini 的功能记录来自历史已挂载镜像，本轮未重新执行这台设备的新装验收 |
-| iOS / iPadOS 27 | RSD `cryptexd`：通用 Cryptex manifest 个性化签票、资产上传与安装，随后检查 identifier / version 及挂载状态 | macOS USB 在 `iPhone14,4` / iOS 27.0.1 上已通过原生替换安装、identifier / version 与挂载核验，以及重新连接后的 8 秒视频录制；Wi-Fi 已有镜像及挂载核验通过。Linux / Windows 的新装尚未真机验收 |
+| iOS / iPadOS 27 | RSD `cryptexd`：通用 Cryptex manifest 个性化签票、资产上传与安装，随后检查 identifier / version 及挂载状态 | `iPhone14,4` / iOS 27.0.1 已通过 macOS USB、Windows ARM64 Wi-Fi、Debian ARM64 Wi-Fi 原生替换安装，均核对 identifier / version 和挂载；安装后的新连接视频录制分别为 8 / 5 / 5 秒，正常完成 |
 
 挂载状态、签名 / 版本符合预期与产品功能可用仍是不同证据。安装不会改写
 README 中具体机型和系统的功能边界，也不会解除旧系统的实时媒体版本门槛。
