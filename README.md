@@ -128,7 +128,10 @@ MOD+V 只在明确按下时读取电脑剪贴板。后台写入手机后另开�
 在约五秒后请求取消；取消不能撤销手机已经接受的剪贴板写入。目标控件是否允许
 粘贴由手机决定。系统可能提示从 `dtpasteboardd` 粘贴，这是苹果的远程剪贴板
 服务；允许后才能完成粘贴。Mac USB 已验证中文和符号实际进入 Safari 输入框，
-Debian Wi-Fi 窗口已验证中文、符号和 emoji；多行及 Windows 窗口粘贴仍需分别验证。
+Debian Wi-Fi 窗口已验证中文、符号和 emoji；Windows Wi-Fi 窗口的 Unicode 粘贴
+已在临时隔离 Parallels 共享剪贴板后通过，测试结束已恢复共享模式。
+Windows 的普通 Q、字母、数字和退格已实际进入手机输入框且不退出窗口；更多布局、
+组合键、多行粘贴及共享剪贴板开启时的互操作仍需分别验证。
 `--test-type` 仅是 ASCII 诊断入口。
 与 scrcpy 的具体差异和后续对齐项见
 [用法对照](docs/SCRCPY_USAGE.md)。

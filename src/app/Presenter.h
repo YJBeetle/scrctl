@@ -70,6 +70,8 @@ class Presenter {
     void report_input(int raw_x, int raw_y, double fx, double fy, const char *tag) const;
 
     /// 物理键盘报告保留全部按住的 usages；不将 SDL_TEXTINPUT 重复注入成文字。
+    /// 成功打开窗口后停用本进程的 SDL 文本输入，最后一个 Presenter 销毁时
+    /// 恢复原先启用状态；不更改宿主机输入法或键盘布局。
     bool pump(const std::function<void(double, double, bool)> &on_touch,
               const KeyboardHandler &on_keyboard = {}, const PasteHandler &on_paste = {},
               const ButtonHandler &on_button = {});
@@ -94,6 +96,7 @@ class Presenter {
 
   private:
     bool open_window(const WindowSpec &spec);
+    void begin_physical_keyboard_mode();
     bool draw_background();
     bool draw_uploaded(const char *readback_path = nullptr);
     /// 将 SDL 鼠标的窗口点坐标转换为设备整屏的 0..1 坐标。
@@ -148,6 +151,7 @@ class Presenter {
     SDL_Window *window_ = nullptr;
     SDL_Renderer *renderer_ = nullptr;
     SDL_Texture *texture_ = nullptr;
+    bool physical_keyboard_mode_ = false;
     bool video_playback_ = true;
     bool texture_uploaded_ = false;
     bool render_failed_ = false;

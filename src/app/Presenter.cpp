@@ -8,6 +8,23 @@
 #include <limits>
 
 namespace scrctl::app {
+namespace {
+// SDL2 的文本输入状态属于整个 SDL 进程。所有 Presenter 都在 SDL 主线程
+// 创建/销毁；多窗口共享停用范围，最后一个窗口才恢复调用者原来的状态。
+unsigned physical_keyboard_windows = 0;
+bool restore_text_input = false;
+} // namespace
+
+void Presenter::begin_physical_keyboard_mode() {
+    if (physical_keyboard_mode_) return;
+    if (physical_keyboard_windows++ == 0) {
+        restore_text_input = SDL_IsTextInputActive() == SDL_TRUE;
+    }
+    // 仅忽略 TEXTINPUT 不够：Windows IME 可在生成 SDL_KEYDOWN 前消费物理键。
+    // 本前端只转发物理 usages，Unicode 输入由显式剪贴板操作交付。
+    SDL_StopTextInput();
+    physical_keyboard_mode_ = true;
+}
 
 void Presenter::set_background(uint8_t r, uint8_t g, uint8_t b) {
     bg_[0] = r;
@@ -60,6 +77,7 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
     if (horizontal_flip_) {
         std::printf(SCRCTL_TR("Display is horizontally flipped before rotation\n"));
     }
+    begin_physical_keyboard_mode();
     return true;
 }
 
@@ -75,6 +93,7 @@ bool Presenter::open_background(const WindowSpec &spec) {
     SDL_GetRendererOutputSize(renderer_, &out_w, &out_h);
     std::printf(SCRCTL_TR("Background window %dx%d points / drawable %dx%d pixels\n"),
                 points_w, points_h, out_w, out_h);
+    begin_physical_keyboard_mode();
     return true;
 }
 
@@ -492,8 +511,9 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
             break;
         }
         case SDL_TEXTINPUT:
-            // 当前使用 physical 模式。文字输入和 IME 不与物理键报告混合注入，
-            // 也不改变宿主机的全局 text-input 开关。
+        case SDL_TEXTEDITING:
+            // 物理模式已停用本进程 SDL 文本输入；此前排队的文字/IME 编辑
+            // 也不能与物理键报告混合注入。不更改宿主机输入法或键盘布局。
             break;
         case SDL_MOUSEBUTTONDOWN:
             if (input_active_ && window_id != 0 && e.button.windowID == window_id &&
@@ -929,6 +949,9 @@ Presenter::~Presenter() {
     }
     if (window_ != nullptr) {
         SDL_DestroyWindow(window_);
+    }
+    if (physical_keyboard_mode_ && --physical_keyboard_windows == 0 && restore_text_input) {
+        SDL_StartTextInput();
     }
 }
 

@@ -2223,6 +2223,67 @@ void presenter_background_input() {
     }
 }
 
+void presenter_physical_text_input_scope() {
+    const bool originally_active = SDL_IsTextInputActive() == SDL_TRUE;
+    SDL_StartTextInput();
+    check(SDL_IsTextInputActive() == SDL_TRUE, "回归前真实 SDL 文本输入已启用");
+    {
+        auto first = std::make_unique<KeyboardFixture>("Physical input scope first");
+        check(SDL_IsTextInputActive() == SDL_FALSE,
+              "物理键盘窗口暂停 SDL 文本输入，避免 Windows IME 先吞物理 Q");
+        auto second = std::make_unique<KeyboardFixture>("Physical input scope second", 64, 96,
+                                                       0, KMOD_LALT | KMOD_LGUI, true);
+        check(SDL_IsTextInputActive() == SDL_FALSE, "第二个背景窗口继续保持物理键输入");
+        first.reset();
+        check(SDL_IsTextInputActive() == SDL_FALSE,
+              "非 LIFO 销毁首个窗口不能在仍有物理窗口时恢复文本输入");
+        second->window(SDL_WINDOWEVENT_FOCUS_GAINED);
+        second->key(SDL_KEYDOWN, SDL_SCANCODE_Q);
+        SDL_version linked{}; SDL_GetVersion(&linked);
+        // 同旋转队列回归：这些 sdl2-compat 版本不能安全转换合成文本事件。
+        const bool text_push_supported = !(linked.major == 2 && linked.minor == 32 &&
+                                            (linked.patch == 72 || linked.patch == 74));
+        if (text_push_supported) {
+            SDL_Event events[2]{};
+            events[0].type = SDL_TEXTINPUT; events[0].text.windowID = second->window_id;
+            std::strcpy(events[0].text.text, "q");
+            events[1].type = SDL_TEXTEDITING; events[1].edit.windowID = second->window_id;
+            std::strcpy(events[1].edit.text, "q");
+            // ADDEVENT 模拟停用前已排队的事件，不受 StopTextInput 的事件门控过滤。
+            check(SDL_PeepEvents(events, 2, SDL_ADDEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT) == 2,
+                  "真实 SDL 队列包含此前已排队的宿主文本与 IME 编辑事件");
+        } else {
+            std::printf("  SKIP SDL %u.%u.%u 合成文本事件转换；物理键和文本输入生命周期仍验证\n",
+                        linked.major, linked.minor, linked.patch);
+        }
+        second->key(SDL_KEYUP, SDL_SCANCODE_Q);
+        check(!second->pump(), "背景物理窗口处理 Q 与文字事件不会退出");
+        second->expect({{20}, {}}, "物理 Q 恰好 DOWN/UP 一次，宿主文字与 IME 不重复注入");
+        second.reset();
+        check(SDL_IsTextInputActive() == SDL_TRUE,
+              "最后物理窗口销毁后恢复调用者原先启用的 SDL 文本输入");
+    }
+    SDL_StopTextInput();
+    {
+        KeyboardFixture inactive("Physical input originally inactive");
+        check(SDL_IsTextInputActive() == SDL_FALSE, "原先关闭文本输入时物理窗口仍保持关闭");
+    }
+    check(SDL_IsTextInputActive() == SDL_FALSE, "窗口销毁不能启用原先关闭的文本输入");
+    SDL_StartTextInput();
+    {
+        scrctl::app::Presenter failed;
+        scrctl::app::WindowSpec spec; spec.title = "Failed physical input window";
+        spec.want_w = 64; spec.want_h = 96; spec.want_readback = true;
+        const scrctl::app::Crop crop{0, 0, 64, 96, 64, 96};
+        check(!failed.open(-1, 96, crop, 0, 1, false, spec),
+              "真实窗口创建后无效纹理使 open 失败");
+        check(SDL_IsTextInputActive() == SDL_TRUE,
+              "尚未成功建立物理窗口的失败路径不改变调用者文本输入");
+    }
+    check(SDL_IsTextInputActive() == SDL_TRUE, "失败窗口销毁不遗留 SDL 文本输入状态");
+    if (!originally_active) SDL_StopTextInput();
+}
+
 void presenter_physical_keyboard_events() {
     KeyboardFixture f("Presenter physical keyboard regression");
     if (f.window_id == 0) return;
@@ -3323,6 +3384,7 @@ int main() {
     presenter_flip_mouse_events();
     presenter_releases_touch_when_window_deactivates();
     presenter_shortcuts_preserve_normal_input();
+    presenter_physical_text_input_scope();
     presenter_physical_keyboard_events();
     presenter_keyboard_quit_and_close();
     presenter_clipboard_request_context();
