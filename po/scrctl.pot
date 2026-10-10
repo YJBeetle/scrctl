@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-10 00:19+0800\n"
+"POT-Creation-Date: 2026-10-10 13:13+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -233,11 +233,11 @@ msgid ""
 "bytes)\n"
 msgstr ""
 
-#: src/app/Cli.cpp:17
+#: src/app/Cli.cpp:18
 msgid "iOS screen mirroring and control"
 msgstr ""
 
-#: src/app/Cli.cpp:19
+#: src/app/Cli.cpp:20
 msgid ""
 "With no arguments, mirror the connected device.\n"
 "Left mouse button maps to touch. Ordinary keys use the device's keyboard "
@@ -263,7 +263,7 @@ msgid ""
 "device."
 msgstr ""
 
-#: src/app/Cli.cpp:34 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
+#: src/app/Cli.cpp:35 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
 #: tools/audio_decode_probe.cpp:193 tools/audio_pump_probe.cpp:85
 #: tools/feature_probe.cpp:61 tools/hid_probe.cpp:184
 #: tools/screenshot_probe.cpp:52 tools/stall_probe.cpp:59
@@ -271,322 +271,326 @@ msgstr ""
 msgid "Show help"
 msgstr ""
 
-#: src/app/Cli.cpp:35
+#: src/app/Cli.cpp:36
 msgid "Play an Annex-B HEVC file"
 msgstr ""
 
-#: src/app/Cli.cpp:36 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
+#: src/app/Cli.cpp:37 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
 msgid "Device UDID"
 msgstr ""
 
-#: src/app/Cli.cpp:37
+#: src/app/Cli.cpp:39
 msgid "LAN address, or auto to discover a paired wireless device"
 msgstr ""
 
-#: src/app/Cli.cpp:39
+#: src/app/Cli.cpp:42
 msgid "RemotePairing port for a manual LAN address; default: 49152"
 msgstr ""
 
-#: src/app/Cli.cpp:42
+#: src/app/Cli.cpp:45
 msgid "Create or verify a remote pairing record over USB, then exit"
 msgstr ""
 
-#: src/app/Cli.cpp:45
+#: src/app/Cli.cpp:48
 msgid ""
 "Allow replacing an incomplete or rejected pairing record; requires --pair"
 msgstr ""
 
-#: src/app/Cli.cpp:48
+#: src/app/Cli.cpp:51
 msgid ""
 "Record selected video/audio tracks to .mp4 or .mkv; other extensions save "
 "raw HEVC without audio"
 msgstr ""
 
-#: src/app/Cli.cpp:50
+#: src/app/Cli.cpp:53
 msgid ""
 "Launch bundle ID; ? matches name prefix, + terminates the previous instance"
 msgstr ""
 
-#: src/app/Cli.cpp:51
+#: src/app/Cli.cpp:54
 msgid "Window title"
 msgstr ""
 
-#: src/app/Cli.cpp:52
+#: src/app/Cli.cpp:55
 msgid "SDL render driver, e.g. metal / software"
 msgstr ""
 
-#: src/app/Cli.cpp:54
+#: src/app/Cli.cpp:57
 msgid ""
 "display for live video (default), screenshot for polling; stream is an alias "
 "for display"
 msgstr ""
 
-#: src/app/Cli.cpp:56
+#: src/app/Cli.cpp:59
 msgid "Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"
 msgstr ""
 
-#: src/app/Cli.cpp:63
+#: src/app/Cli.cpp:66
 msgid "Inject home/lock/volup/voldn/mute"
 msgstr ""
 
-#: src/app/Cli.cpp:65
+#: src/app/Cli.cpp:68
 msgid "Inject ASCII text (device text field must have focus)"
 msgstr ""
 
-#: src/app/Cli.cpp:66
+#: src/app/Cli.cpp:69
 msgid "Force alternating video fallback and recovery at T1,T2,... seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:67
+#: src/app/Cli.cpp:70
 msgid "Write device clipboard and exit (supports Unicode)"
 msgstr ""
 
-#: src/app/Cli.cpp:69
+#: src/app/Cli.cpp:72
 msgid "List USB and RemotePairing devices; wireless scan defaults to 3 seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:71
+#: src/app/Cli.cpp:74
 msgid ""
 "Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"
 msgstr ""
 
-#: src/app/Cli.cpp:73
+#: src/app/Cli.cpp:76
 msgid "Disable input control"
 msgstr ""
 
-#: src/app/Cli.cpp:76
+#: src/app/Cli.cpp:79
 msgid "List device apps"
 msgstr ""
 
-#: src/app/Cli.cpp:77
+#: src/app/Cli.cpp:80
 msgid "Show version"
 msgstr ""
 
-#: src/app/Cli.cpp:78
+#: src/app/Cli.cpp:81
 msgid "Desktop fullscreen"
 msgstr ""
 
-#: src/app/Cli.cpp:79
+#: src/app/Cli.cpp:82
 msgid "Keep window on top"
 msgstr ""
 
-#: src/app/Cli.cpp:80
+#: src/app/Cli.cpp:83
 msgid "Borderless window"
 msgstr ""
 
-#: src/app/Cli.cpp:81
+#: src/app/Cli.cpp:84
 msgid "Prevent local screen sleep while running"
 msgstr ""
 
-#: src/app/Cli.cpp:82
+#: src/app/Cli.cpp:85
 msgid "Do not start audio stream"
 msgstr ""
 
-#: src/app/Cli.cpp:84
+#: src/app/Cli.cpp:87
 msgid "Keep audio playing on the phone while forwarding it to the computer"
 msgstr ""
 
-#: src/app/Cli.cpp:87
+#: src/app/Cli.cpp:90
 msgid ""
 "Disable computer audio playback; capture audio only when recording to MP4 or "
 "MKV"
 msgstr ""
 
-#: src/app/Cli.cpp:88
+#: src/app/Cli.cpp:91
 msgid "Do not start video stream"
 msgstr ""
 
-#: src/app/Cli.cpp:90
+#: src/app/Cli.cpp:93
 msgid "Disable video display; keep encoded video when recording"
 msgstr ""
 
-#: src/app/Cli.cpp:93
+#: src/app/Cli.cpp:96
 msgid ""
 "Disable computer video and audio playback; keep selected recording tracks"
 msgstr ""
 
-#: src/app/Cli.cpp:94
+#: src/app/Cli.cpp:97
 msgid "Run without a window"
 msgstr ""
 
-#: src/app/Cli.cpp:95
+#: src/app/Cli.cpp:98
 msgid "Use platform hardware decoder; default: software"
 msgstr ""
 
-#: src/app/Cli.cpp:96
+#: src/app/Cli.cpp:99
 msgid "Print input coordinates"
 msgstr ""
 
-#: src/app/Cli.cpp:97
+#: src/app/Cli.cpp:100
 msgid "Add tunnel diagnostics to --stats"
 msgstr ""
 
-#: src/app/Cli.cpp:98
+#: src/app/Cli.cpp:101
 msgid "Print statistics every second"
 msgstr ""
 
-#: src/app/Cli.cpp:99
+#: src/app/Cli.cpp:102
 msgid "Read device clipboard; with --copy, read back after writing"
 msgstr ""
 
-#: src/app/Cli.cpp:102
+#: src/app/Cli.cpp:105
 msgid "Window horizontal position; integer or auto (default)"
 msgstr ""
 
-#: src/app/Cli.cpp:104
+#: src/app/Cli.cpp:107
 msgid "Window vertical position; integer or auto (default)"
 msgstr ""
 
-#: src/app/Cli.cpp:106
+#: src/app/Cli.cpp:109
 msgid ""
 "Shortcut modifiers, separated by commas: lctrl, rctrl, lalt, ralt, lsuper, "
 "rsuper; default: lalt,lsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:107
+#: src/app/Cli.cpp:110
 msgid "Window width; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:108
+#: src/app/Cli.cpp:111
 msgid "Window height; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:109
+#: src/app/Cli.cpp:112
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:111
+#: src/app/Cli.cpp:114
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr ""
 
-#: src/app/Cli.cpp:113
+#: src/app/Cli.cpp:116
 msgid "Exit after N frames; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:115
+#: src/app/Cli.cpp:118
 msgid "Finite positive scale; default: fit screen"
 msgstr ""
 
-#: src/app/Cli.cpp:133
+#: src/app/Cli.cpp:136
 msgid ""
 "Display and recording orientation: 0/90/180/270 or flip0/flip90/flip180/"
 "flip270; recording cannot flip; auto changes display only"
 msgstr ""
 
-#: src/app/Cli.cpp:137
+#: src/app/Cli.cpp:140
 msgid ""
 "Display orientation: auto, 0/90/180/270 or flip0/flip90/flip180/flip270; "
 "flip horizontally before clockwise rotation"
 msgstr ""
 
-#: src/app/Cli.cpp:141
+#: src/app/Cli.cpp:144
 msgid ""
 "Clockwise MP4/MKV recording rotation: 0/90/180/270; default: 0; display is "
 "unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:144
+#: src/app/Cli.cpp:147
 msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:146
+#: src/app/Cli.cpp:149
 msgid "Background color: RGB or RRGGBB, with optional #"
 msgstr ""
 
-#: src/app/Cli.cpp:147
+#: src/app/Cli.cpp:150
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr ""
 
-#: src/app/Cli.cpp:161
+#: src/app/Cli.cpp:164
 msgid ""
 "Audio capture is disabled; --audio-dup requires playback or MP4/MKV recording"
 msgstr ""
 
-#: src/app/Cli.cpp:167
+#: src/app/Cli.cpp:170
 msgid ""
 "File playback requires video; incompatible with video playback disable "
 "options"
 msgstr ""
 
-#: src/app/Cli.cpp:175
+#: src/app/Cli.cpp:178
 msgid "Audio-only recording requires MP4 or MKV; raw HEVC cannot contain audio"
 msgstr ""
 
-#: src/app/Cli.cpp:178
+#: src/app/Cli.cpp:181
 msgid "Recording requires at least one enabled audio or video track"
 msgstr ""
 
-#: src/app/Cli.cpp:181 src/app/LiveSource.cpp:93
+#: src/app/Cli.cpp:184 src/app/LiveSource.cpp:93
 msgid "Recording orientation requires a video track"
 msgstr ""
 
-#: src/app/Cli.cpp:186
+#: src/app/Cli.cpp:189
 msgid ""
 "Frame counting, hardware decoding, fallback tests and screenshots require "
 "video capture"
 msgstr ""
 
-#: src/app/Cli.cpp:190 src/app/LiveSource.cpp:115
+#: src/app/Cli.cpp:193 src/app/LiveSource.cpp:115
 msgid ""
 "Container recording requires live video; screenshot polling cannot be "
 "recorded"
 msgstr ""
 
-#: src/app/Cli.cpp:194
+#: src/app/Cli.cpp:197
 msgid ""
 "Recording does not support flipping; use --display-orientation for display-"
 "only flipping or reset --record-orientation to a rotation"
 msgstr ""
 
-#: src/app/Cli.cpp:198 src/app/LiveSource.cpp:125
+#: src/app/Cli.cpp:201 src/app/LiveSource.cpp:125
 msgid ""
 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate "
 "only the display"
 msgstr ""
 
-#: src/app/Cli.cpp:201
+#: src/app/Cli.cpp:206
+msgid "Requires a nonempty LAN address or auto"
+msgstr ""
+
+#: src/app/Cli.cpp:209
 msgid "Use a manual LAN address; auto uses discovered SRV ports"
 msgstr ""
 
-#: src/app/Cli.cpp:212
+#: src/app/Cli.cpp:220
 msgid "Expected an integer or auto"
 msgstr ""
 
-#: src/app/Cli.cpp:232
+#: src/app/Cli.cpp:240
 msgid ""
 "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:243
+#: src/app/Cli.cpp:251
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr ""
 
-#: src/app/Cli.cpp:250
+#: src/app/Cli.cpp:258
 msgid "Requires a finite positive number"
 msgstr ""
 
-#: src/app/Cli.cpp:265
+#: src/app/Cli.cpp:273
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr ""
 
-#: src/app/Cli.cpp:274
+#: src/app/Cli.cpp:282
 msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
 msgstr ""
 
-#: src/app/Cli.cpp:288
+#: src/app/Cli.cpp:296
 msgid "Frame number must be a positive integer"
 msgstr ""
 
-#: src/app/Cli.cpp:293
+#: src/app/Cli.cpp:301
 msgid "Requires a window; incompatible with --no-window"
 msgstr ""
 
-#: src/app/Cli.cpp:296
+#: src/app/Cli.cpp:304
 msgid "Window readback requires video playback"
 msgstr ""
 
-#: src/app/Cli.cpp:304
+#: src/app/Cli.cpp:312
 msgid "Nothing to do: enable media, recording or device control"
 msgstr ""
 
@@ -618,7 +622,7 @@ msgstr ""
 msgid "no matching pairing record"
 msgstr ""
 
-#: src/app/Commands.cpp:70
+#: src/app/Commands.cpp:70 src/app/DeviceConnection.cpp:237
 #, c-format
 msgid "Discovery warning: %s\n"
 msgstr ""
@@ -715,43 +719,49 @@ msgstr ""
 msgid "Launched %s%s\n"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:81
+#: src/app/DeviceConnection.cpp:15 src/app/DeviceConnection.cpp:52
+#: src/app/DeviceConnection.cpp:69 src/app/DeviceConnection.cpp:187
+#: src/app/LiveSource.cpp:73
+msgid "Device startup cancelled"
+msgstr ""
+
+#: src/app/DeviceConnection.cpp:100
 msgid ""
 "Multiple usable remote pairing records match; select a unique device with -s"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:87
+#: src/app/DeviceConnection.cpp:106
 msgid "No usable remote pairing record matches; pair the device over USB first"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:111
+#: src/app/DeviceConnection.cpp:130
 msgid ""
 "No paired wireless device is available; check the network and pair over USB "
 "first"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:115
+#: src/app/DeviceConnection.cpp:134
 msgid "Multiple paired wireless devices are available; select one with -s"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:133
+#: src/app/DeviceConnection.cpp:154
 msgid "Selected wireless device does not match a usable pairing record"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:137
+#: src/app/DeviceConnection.cpp:158
 msgid "No usable wireless connection candidate is available"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:150
+#: src/app/DeviceConnection.cpp:173
 msgid "Cannot connect to any discovered wireless address"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:161
-msgid "Wi-Fi port must be between 1 and 65535"
+#: src/app/DeviceConnection.cpp:201 src/remote/Discovery.cpp:242
+msgid "USB device enumeration is unavailable"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:176
-msgid "USB device enumeration was unavailable: "
+#: src/app/DeviceConnection.cpp:220
+msgid "Wi-Fi port must be between 1 and 65535"
 msgstr ""
 
 #: src/app/FileSource.cpp:37
@@ -809,10 +819,6 @@ msgstr ""
 msgid "Recording failed: %s. The file may be incomplete.\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:73
-msgid "Device startup cancelled"
-msgstr ""
-
 #: src/app/LiveSource.cpp:85
 msgid "Audio-only recording requires MP4 or MKV"
 msgstr ""
@@ -833,7 +839,7 @@ msgstr ""
 msgid "Hardware decoding and fallback tests require video decoding"
 msgstr ""
 
-#: src/app/LiveSource.cpp:111 src/media/AudioPump.cpp:100
+#: src/app/LiveSource.cpp:111 src/media/AudioPump.cpp:104
 msgid ""
 "Audio capture without PCM decoding requires a container recording with an "
 "audio track"
@@ -1171,144 +1177,144 @@ msgstr ""
 msgid "inactive"
 msgstr ""
 
-#: src/app/Presenter.cpp:39
+#: src/app/Presenter.cpp:56
 #, c-format
 msgid ""
 "Window dimensions are too large; reduce --scale or the requested window "
 "size\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:43
+#: src/app/Presenter.cpp:60
 #, c-format
 msgid "Screen %dx%d points; window scaled to %dx%d (override with --scale)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:56
+#: src/app/Presenter.cpp:73
 #, c-format
 msgid ""
 "Window %dx%d points / drawable %dx%d pixels / viewport %dx%d (source %dx%d, "
 "crop %dx%d+%d+%d, clockwise rotation %d degrees)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:61
+#: src/app/Presenter.cpp:78
 #, c-format
 msgid "Display is horizontally flipped before rotation\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:76
+#: src/app/Presenter.cpp:94
 #, c-format
 msgid "Background window %dx%d points / drawable %dx%d pixels\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:97
+#: src/app/Presenter.cpp:116
 #, c-format
 msgid "Failed to create window: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:111
+#: src/app/Presenter.cpp:130
 #, c-format
 msgid "Failed to create renderer: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:116
+#: src/app/Presenter.cpp:135
 #, c-format
 msgid "Render driver: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:121 src/app/Presenter.cpp:132
-#: src/app/Presenter.cpp:231 src/app/Presenter.cpp:278
+#: src/app/Presenter.cpp:140 src/app/Presenter.cpp:151
+#: src/app/Presenter.cpp:250 src/app/Presenter.cpp:297
 #, c-format
 msgid "Failed to configure viewport: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:138
+#: src/app/Presenter.cpp:157
 #, c-format
 msgid "Failed to render background: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:156
+#: src/app/Presenter.cpp:175
 #, c-format
 msgid "Failed to create texture: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:176 src/app/Presenter.cpp:184
+#: src/app/Presenter.cpp:195 src/app/Presenter.cpp:203
 #, c-format
 msgid "Cannot render frame: invalid dimensions or pixel buffer\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:210 src/app/Presenter.cpp:236
-#: src/app/Presenter.cpp:263
+#: src/app/Presenter.cpp:229 src/app/Presenter.cpp:255
+#: src/app/Presenter.cpp:282
 #, c-format
 msgid "Failed to query drawable dimensions: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:215
+#: src/app/Presenter.cpp:234
 #, c-format
 msgid "Failed to upload texture: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:242 src/app/Presenter.cpp:247
+#: src/app/Presenter.cpp:261 src/app/Presenter.cpp:266
 #, c-format
 msgid "Failed to render frame: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:268
+#: src/app/Presenter.cpp:287
 #, c-format
 msgid "Failed to create readback buffer: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:272
+#: src/app/Presenter.cpp:291
 #, c-format
 msgid "Failed to lock readback buffer: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:290
+#: src/app/Presenter.cpp:309
 #, c-format
 msgid "Readback failed: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:297
+#: src/app/Presenter.cpp:316
 #, c-format
 msgid "Failed to save image: %s\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:300
+#: src/app/Presenter.cpp:319
 #, c-format
 msgid "Window readback saved to %s (%dx%d pixels)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:310
+#: src/app/Presenter.cpp:329
 #, c-format
 msgid ""
 "[input] %s raw(%d,%d) viewport %d x%d (rotation %d degrees, horizontal flip: "
 "%s) / window %d x%d / drawable %d x%d -> (%.3f, %.3f)\n"
 msgstr ""
 
-#: src/app/Presenter.cpp:313 tools/feature_probe.cpp:26
+#: src/app/Presenter.cpp:332 tools/feature_probe.cpp:26
 #: tools/feature_probe.cpp:27 tools/rr_keepalive_probe.cpp:249
 #: tools/rr_keepalive_probe.cpp:307
 msgid "no"
 msgstr ""
 
-#: src/app/Presenter.cpp:313 tools/feature_probe.cpp:26
+#: src/app/Presenter.cpp:332 tools/feature_probe.cpp:26
 #: tools/feature_probe.cpp:27 tools/rr_keepalive_probe.cpp:249
 #: tools/rr_keepalive_probe.cpp:307
 msgid "yes"
 msgstr ""
 
-#: src/app/Presenter.cpp:520
+#: src/app/Presenter.cpp:546
 msgid "down"
 msgstr ""
 
-#: src/app/Presenter.cpp:534
+#: src/app/Presenter.cpp:560
 msgid "move"
 msgstr ""
 
-#: src/app/Presenter.cpp:685
+#: src/app/Presenter.cpp:711
 msgid "Cannot resize window for new content; keeping previous dimensions"
 msgstr ""
 
-#: src/app/Presenter.cpp:767
+#: src/app/Presenter.cpp:793
 #, c-format
 msgid "Failed to change fullscreen mode: %s\n"
 msgstr ""
@@ -1375,22 +1381,22 @@ msgid ""
 "ffmpeg-devel).\n"
 msgstr ""
 
-#: src/decode/FFmpegDecoder.cpp:37
+#: src/decode/FFmpegDecoder.cpp:38
 #, c-format
 msgid "FFmpeg has no HEVC decoder\n"
 msgstr ""
 
-#: src/decode/FFmpegDecoder.cpp:52
+#: src/decode/FFmpegDecoder.cpp:53
 #, c-format
 msgid "Failed to open FFmpeg HEVC decoder: %s\n"
 msgstr ""
 
-#: src/decode/FFmpegDecoder.cpp:105
+#: src/decode/FFmpegDecoder.cpp:106
 #, c-format
 msgid "FFmpeg rejected packet: %s\n"
 msgstr ""
 
-#: src/decode/FFmpegDecoder.cpp:150
+#: src/decode/FFmpegDecoder.cpp:151
 #, c-format
 msgid "Software decoder requires CPU frames; received format=%d %dx%d\n"
 msgstr ""
@@ -1578,95 +1584,95 @@ msgstr ""
 msgid "Nesting too deep"
 msgstr ""
 
-#: src/media/AudioPump.cpp:106
+#: src/media/AudioPump.cpp:110
 #, c-format
 msgid "Clamped --audio-buffer %d to %d ms and adjusted buffer capacity\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:139
+#: src/media/AudioPump.cpp:143
 msgid "Audio routing was not confirmed: answer has no valid AudioStreamMode"
 msgstr ""
 
-#: src/media/AudioPump.cpp:145
+#: src/media/AudioPump.cpp:149
 msgid ""
 "Phone-and-computer audio routing was not accepted (--audio-dup requires "
 "AudioStreamMode 8)"
 msgstr ""
 
-#: src/media/AudioPump.cpp:146
+#: src/media/AudioPump.cpp:150
 msgid ""
 "Computer-only audio routing was not accepted (requires AudioStreamMode 10); "
 "not falling back to --audio-dup"
 msgstr ""
 
-#: src/media/AudioPump.cpp:156
+#: src/media/AudioPump.cpp:160
 msgid ""
 ". Audio reception stopped; cleanup will request the device to stop streaming"
 msgstr ""
 
-#: src/media/AudioPump.cpp:160
+#: src/media/AudioPump.cpp:164
 #, c-format
 msgid ""
 ". Audio keepalive has stopped; wait for session expiry (about %u seconds), "
 "then resume the phone's player if needed"
 msgstr ""
 
-#: src/media/AudioPump.cpp:209
+#: src/media/AudioPump.cpp:213
 #, c-format
 msgid ""
 "Audio answer missing SSRC (RemoteSSRC=%u LocalSSRC=%u); session renewal may "
 "fail\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:269
+#: src/media/AudioPump.cpp:273
 #, c-format
 msgid "Failed to stop audio-only device sessions: %s\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:344
+#: src/media/AudioPump.cpp:366
 #, c-format
 msgid "Audio clock compensation failed: %s; continuing playback\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:447
+#: src/media/AudioPump.cpp:469
 msgid "Audio session was recreated during container recording"
 msgstr ""
 
-#: src/media/AudioPump.cpp:455
+#: src/media/AudioPump.cpp:477
 #, c-format
 msgid "Audio session recreated, receive port=%u\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:468
+#: src/media/AudioPump.cpp:490
 #, c-format
 msgid "Audio negotiation failed during recovery; disabling audio: %s\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:472
+#: src/media/AudioPump.cpp:494
 #, c-format
 msgid "Failed to recreate audio session: %s (retry in 1 second)\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:490
+#: src/media/AudioPump.cpp:512
 msgid "Device ended the recorded audio session"
 msgstr ""
 
-#: src/media/AudioPump.cpp:492
+#: src/media/AudioPump.cpp:514
 #, c-format
 msgid ""
 "Audio: device session ended (%llu ms without audio); recreating session\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:521
+#: src/media/AudioPump.cpp:543
 #, c-format
 msgid "Failed to send audio RTCP keepalive: %s\n"
 msgstr ""
 
-#: src/media/AudioPump.cpp:588
+#: src/media/AudioPump.cpp:610
 msgid "Audio packet loss ended container recording"
 msgstr ""
 
-#: src/media/AudioPump.cpp:608
+#: src/media/AudioPump.cpp:630
 #, c-format
 msgid "Audio decode failed (%zu-byte payload): %s\n"
 msgstr ""
@@ -1847,8 +1853,8 @@ msgstr ""
 #: src/net/Stack.cpp:359 src/net/TcpStream.cpp:44 src/net/TcpStream.cpp:128
 #: src/net/TcpStream.cpp:132 src/net/UdpSocket.cpp:109
 #: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:281
-#: src/transport/Socket.cpp:114 src/wifi/RemotePairing.cpp:35
-#: tools/rr_keepalive_probe.cpp:636
+#: src/transport/Socket.cpp:114 src/transport/Usbmux.cpp:126
+#: src/wifi/RemotePairing.cpp:35 tools/rr_keepalive_probe.cpp:636
 msgid ")"
 msgstr ""
 
@@ -2784,7 +2790,7 @@ msgid "Start CoreDeviceProxy"
 msgstr ""
 
 #: src/remote/Device.cpp:171 src/remote/Rsd.cpp:202 src/remote/Rsd.cpp:425
-#: src/transport/Usbmux.cpp:92 src/wifi/PairRecord.cpp:344
+#: src/transport/Usbmux.cpp:270 src/wifi/PairRecord.cpp:344
 #: tools/wifi_probe.cpp:353
 msgid " failed: "
 msgstr ""
@@ -2930,23 +2936,19 @@ msgstr ""
 msgid "Cannot read pairing records for device discovery"
 msgstr ""
 
-#: src/remote/Discovery.cpp:216
+#: src/remote/Discovery.cpp:217
 msgid "Device discovery timeout must be between 0 and 60000 ms"
 msgstr ""
 
-#: src/remote/Discovery.cpp:231
-msgid "USB device enumeration is unavailable"
-msgstr ""
-
-#: src/remote/DisplayInfo.cpp:103
+#: src/remote/DisplayInfo.cpp:124
 msgid "Update missing displays array: "
 msgstr ""
 
-#: src/remote/DisplayInfo.cpp:139
+#: src/remote/DisplayInfo.cpp:160
 msgid "No recognized display entries"
 msgstr ""
 
-#: src/remote/DisplayInfo.cpp:165
+#: src/remote/DisplayInfo.cpp:186
 msgid " ended without an update"
 msgstr ""
 
@@ -3368,7 +3370,7 @@ msgstr ""
 msgid " port "
 msgstr ""
 
-#: src/remote/Rsd.cpp:202 src/transport/Usbmux.cpp:92
+#: src/remote/Rsd.cpp:202 src/transport/Usbmux.cpp:270
 msgid "Connect to "
 msgstr ""
 
@@ -3520,11 +3522,11 @@ msgstr ""
 msgid "StartService response missing Port"
 msgstr ""
 
-#: src/transport/Socket.cpp:79
+#: src/transport/Socket.cpp:79 src/transport/Usbmux.cpp:121
 msgid "send failed: "
 msgstr ""
 
-#: src/transport/Socket.cpp:83
+#: src/transport/Socket.cpp:83 src/transport/Usbmux.cpp:124
 msgid "Peer closed write direction"
 msgstr ""
 
@@ -3532,11 +3534,11 @@ msgstr ""
 msgid "Read timed out (no bytes before deadline)"
 msgstr ""
 
-#: src/transport/Socket.cpp:109
+#: src/transport/Socket.cpp:109 src/transport/Usbmux.cpp:121
 msgid "recv failed: "
 msgstr ""
 
-#: src/transport/Socket.cpp:113
+#: src/transport/Socket.cpp:113 src/transport/Usbmux.cpp:125
 msgid "Peer closed (received only "
 msgstr ""
 
@@ -3564,7 +3566,7 @@ msgstr ""
 msgid "no results"
 msgstr ""
 
-#: src/transport/TcpConnect.cpp:55
+#: src/transport/TcpConnect.cpp:55 src/transport/Usbmux.cpp:176
 msgid "Failed to enable nonblocking mode: "
 msgstr ""
 
@@ -3683,31 +3685,31 @@ msgstr ""
 msgid "Tunnel packet is not IPv6: version nibble="
 msgstr ""
 
-#: src/transport/Usbmux.cpp:85
+#: src/transport/Usbmux.cpp:165 src/transport/Usbmux.cpp:263
 msgid "socket failed: "
 msgstr ""
 
-#: src/transport/Usbmux.cpp:141
+#: src/transport/Usbmux.cpp:209 src/transport/Usbmux.cpp:319
 msgid "Invalid mux frame length: "
 msgstr ""
 
-#: src/transport/Usbmux.cpp:154
+#: src/transport/Usbmux.cpp:218 src/transport/Usbmux.cpp:332
 msgid "mux response is not a valid plist"
 msgstr ""
 
-#: src/transport/Usbmux.cpp:168
+#: src/transport/Usbmux.cpp:223 src/transport/Usbmux.cpp:346
 msgid "ListDevices response missing DeviceList"
 msgstr ""
 
-#: src/transport/Usbmux.cpp:190
+#: src/transport/Usbmux.cpp:368
 msgid "Connect failed, usbmuxd returned Number="
 msgstr ""
 
-#: src/transport/Usbmux.cpp:211
+#: src/transport/Usbmux.cpp:389
 msgid "ReadPairRecord response missing PairRecordData (response "
 msgstr ""
 
-#: src/transport/Usbmux.cpp:212
+#: src/transport/Usbmux.cpp:390
 msgid "); device may not trust this computer yet"
 msgstr ""
 

@@ -131,7 +131,7 @@ bool LiveSource::start(const Options &config, std::string &err) {
         err = SCRCTL_TR("Invalid --test-degrade: ") + err;
         return false;
     }
-    auto dev = open_device(serial, wifi, err, wifi_port);
+    auto dev = open_device(serial, wifi, err, wifi_port, config.should_cancel);
     if (!dev) {
         return false;
     }

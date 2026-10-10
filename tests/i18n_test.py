@@ -74,6 +74,9 @@ for language, expected in [('en', 'finite positive'), ('zh-CN', '有限正数')]
     # 语言选择不能把数字解析切成 locale 相关的小数逗号。
     result = run(['--lang', language, '--scale=0.5', '--version'], {'LC_ALL': 'fr_FR.UTF-8'})
     assert result.returncode == 0 and 'scrctl' in result.stdout, result.stderr
+for language, expected in [('en', 'nonempty LAN address'), ('zh-CN', '非空局域网地址')]:
+    result = run(['--lang', language, '--wifi', '', '--wifi-port', '55000', '--version'])
+    assert result.returncode == 2 and expected in result.stderr, result.stderr
 for language, expected in [('en', 'Keep audio playing on the phone'),
                            ('zh-CN', '转发音频到电脑，同时保留手机播放')]:
     result = run(['--lang', language, '--help'])

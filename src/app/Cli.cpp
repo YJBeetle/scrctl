@@ -6,6 +6,7 @@
 #include <CLI/CLI.hpp>
 #include <algorithm>
 #include <charconv>
+#include <cctype>
 #include <map>
 #include <cmath>
 #include <cstdio>
@@ -34,7 +35,9 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.set_help_flag("-h,--help", SCRCTL_N_("Show help"));
     app.add_option("--play", o.path, SCRCTL_N_("Play an Annex-B HEVC file"));
     app.add_option("-s,--serial", o.serial, SCRCTL_N_("Device UDID"));
-    app.add_option("--wifi", o.wifi, SCRCTL_N_("LAN address, or auto to discover a paired wireless device"));
+    // 先允许零个值，再显式校验；CLI11 的必填值会把 --wifi= 后的下一个选项吞作地址。
+    app.add_option("--wifi", o.wifi, SCRCTL_N_("LAN address, or auto to discover a paired wireless device"))
+        ->expected(0, 1);
     app.add_option("--wifi-port", o.wifi_port,
                    SCRCTL_N_("RemotePairing port for a manual LAN address; default: 49152"))
         ->check(CLI::Range(1, 65535))->needs("--wifi");
@@ -196,6 +199,11 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         if (!o.record.empty() && !record_container_format(o.record) && o.record_orientation != 0) {
             throw CLI::ValidationError("--record", SCRCTL_TR(
                 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate only the display"));
+        }
+        if (app.count("--wifi") && std::all_of(o.wifi.begin(), o.wifi.end(), [](unsigned char c) {
+                return std::isspace(c);
+            })) {
+            throw CLI::ValidationError("--wifi", SCRCTL_TR("Requires a nonempty LAN address or auto"));
         }
         if (o.wifi == "auto" && app.count("--wifi-port")) {
             throw CLI::ValidationError("--wifi-port", SCRCTL_TR("Use a manual LAN address; auto uses discovered SRV ports"));

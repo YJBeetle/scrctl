@@ -4,11 +4,18 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <map>
 #include <tuple>
 
 namespace scrctl::app {
 namespace {
+bool startup_cancelled(const std::function<bool()> &should_cancel, std::string &error) {
+    if (!should_cancel || !should_cancel()) return false;
+    error = SCRCTL_TR("Device startup cancelled");
+    return true;
+}
+
 bool ipv6_link_local(std::string_view address) {
     // fe80::/10，包含 fe80..febf。地址可带数字或接口名 scope。
     if (address.size() < 4) return false;
@@ -35,10 +42,16 @@ void preserve_scope(remote::DiscoveryCandidate &candidate) {
     else if (!candidate.interface_name.empty()) candidate.address += "%" + candidate.interface_name;
 }
 
-std::optional<wifi::PairRecord> load_selected_record(std::string_view serial, std::string &error) {
+std::optional<wifi::PairRecord> load_selected_record(std::string_view serial, std::string &error,
+                                                   const std::function<bool()> &should_cancel) {
     std::vector<std::string> warnings;
     bool cancelled = false;
-    const auto records = remote::detail::load_discovery_records(wifi::default_record_dir(), {}, warnings, cancelled);
+    const auto records = remote::detail::load_discovery_records(
+        wifi::default_record_dir(), should_cancel, warnings, cancelled);
+    if (cancelled || startup_cancelled(should_cancel, error)) {
+        error = SCRCTL_TR("Device startup cancelled");
+        return std::nullopt;
+    }
     auto selected = detail::select_pairing_record(records, serial, error);
     if (!selected && !warnings.empty()) {
         for (const auto &warning : warnings) error += "\n" + warning;
@@ -46,21 +59,27 @@ std::optional<wifi::PairRecord> load_selected_record(std::string_view serial, st
     return selected;
 }
 
-std::optional<remote::Device> open_discovered_device(const std::string &serial, std::string &error) {
+std::optional<remote::Device> open_discovered_device(const std::string &serial, std::string &error,
+                                                   const std::function<bool()> &should_cancel) {
     remote::DiscoveryOptions options;
     options.include_usb = false;
+    options.should_cancel = should_cancel;
     const auto discovery = remote::discover_devices(options);
+    if (discovery.cancelled || startup_cancelled(should_cancel, error)) {
+        error = SCRCTL_TR("Device startup cancelled");
+        return std::nullopt;
+    }
     auto selection = detail::select_paired_wireless_device(discovery.devices, serial, error);
     if (!selection) {
         for (const auto &warning : discovery.warnings) error += "\n" + warning;
         return std::nullopt;
     }
-    const auto record = load_selected_record(selection->udid, error);
+    const auto record = load_selected_record(selection->udid, error, should_cancel);
     if (!record) return std::nullopt;
     return detail::connect_wireless_candidates(*selection, *record, error,
         [](const std::string &address, const wifi::PairRecord &paired, uint16_t port, std::string &err) {
             return remote::Device::establish_wifi(address, paired, err, false, port);
-        });
+        }, should_cancel);
 }
 } // namespace
 
@@ -126,8 +145,10 @@ std::optional<detail::WirelessSelection> detail::select_paired_wireless_device(
 std::optional<remote::Device> detail::connect_wireless_candidates(const WirelessSelection &selection,
                                                                const wifi::PairRecord &record,
                                                                std::string &error,
-                                                               const WifiConnector &connect) {
+                                                               const WifiConnector &connect,
+                                                               const std::function<bool()> &should_cancel) {
     error.clear();
+    if (startup_cancelled(should_cancel, error)) return std::nullopt;
     if (selection.udid.empty() || record.udid != selection.udid ||
         !record.complete() || !record.has_peer_identity()) {
         error = SCRCTL_TR("Selected wireless device does not match a usable pairing record");
@@ -139,11 +160,13 @@ std::optional<remote::Device> detail::connect_wireless_candidates(const Wireless
     }
     std::string failures;
     for (const auto &candidate : selection.candidates) {
+        if (startup_cancelled(should_cancel, error)) return std::nullopt;
         if (candidate.transport != remote::DiscoveryTransport::remote_pairing ||
             candidate.pairing != remote::DiscoveryPairing::ready ||
             candidate.address.empty() || !candidate.port) continue;
         std::string candidate_error;
         auto device = connect(candidate.address, record, candidate.port, candidate_error);
+        if (startup_cancelled(should_cancel, error)) return std::nullopt;
         if (device) return device;
         failures += "\n  " + candidate.address + ":" + std::to_string(candidate.port) + ": " + candidate_error;
     }
@@ -152,28 +175,67 @@ std::optional<remote::Device> detail::connect_wireless_candidates(const Wireless
     return std::nullopt;
 }
 
-std::optional<remote::Device> open_device(const std::string &serial, const std::string &wifi,
-                                          std::string &error, uint16_t wifi_port) {
+std::optional<remote::Device> detail::open_default_device(
+    const std::string &serial, std::string &error, const std::function<bool()> &should_cancel,
+    const DefaultDeviceOperations &operations) {
     error.clear();
-    if (wifi == "auto") return open_discovered_device(serial, error);
+    if (startup_cancelled(should_cancel, error)) return std::nullopt;
+    std::vector<transport::DeviceRecord> devices;
+    std::string usb_error;
+    const auto status = operations.enumerate(devices, std::chrono::milliseconds(1000), should_cancel, usb_error);
+    if (status == transport::UsbmuxDiscoveryStatus::cancelled || startup_cancelled(should_cancel, error)) {
+        error = SCRCTL_TR("Device startup cancelled");
+        return std::nullopt;
+    }
+    if (status == transport::UsbmuxDiscoveryStatus::complete && has_usbmux_match(devices, serial)) {
+        // 完整快照先应用真实 UDID/传输歧义政策；不可用快照不能冒充空列表。
+        if (!remote::detail::select_usbmux_device(devices, serial, error)) return std::nullopt;
+        if (startup_cancelled(should_cancel, error)) return std::nullopt;
+        // 保留原 USB 连接路径及二次枚举；协议失败不能据此改连无线会话。
+        auto device = operations.connect_usbmux(serial, error);
+        if (startup_cancelled(should_cancel, error)) return std::nullopt;
+        return device;
+    }
+    std::string warning;
+    if (status != transport::UsbmuxDiscoveryStatus::complete) {
+        warning = SCRCTL_TR("USB device enumeration is unavailable");
+        if (!usb_error.empty()) warning += ": " + usb_error;
+        if (operations.report_warning) operations.report_warning(warning);
+    }
+    if (startup_cancelled(should_cancel, error)) return std::nullopt;
+    auto device = operations.connect_wireless(serial, error);
+    if (startup_cancelled(should_cancel, error)) return std::nullopt;
+    if (!device && !warning.empty()) error += "\n" + warning;
+    return device;
+}
+
+std::optional<remote::Device> open_device(const std::string &serial, const std::string &wifi,
+                                          std::string &error, uint16_t wifi_port,
+                                          const std::function<bool()> &should_cancel) {
+    error.clear();
+    if (startup_cancelled(should_cancel, error)) return std::nullopt;
+    if (wifi == "auto") return open_discovered_device(serial, error, should_cancel);
     if (!wifi.empty()) {
         if (!wifi_port) {
             error = SCRCTL_TR("Wi-Fi port must be between 1 and 65535");
             return std::nullopt;
         }
-        const auto record = load_selected_record(serial, error);
+        const auto record = load_selected_record(serial, error, should_cancel);
         if (!record) return std::nullopt;
-        return remote::Device::establish_wifi(wifi, *record, error, false, wifi_port);
+        if (startup_cancelled(should_cancel, error)) return std::nullopt;
+        auto device = remote::Device::establish_wifi(wifi, *record, error, false, wifi_port);
+        if (startup_cancelled(should_cancel, error)) return std::nullopt;
+        return device;
     }
-    std::string usb_error;
-    const auto devices = remote::Device::list(usb_error);
-    if (detail::has_usbmux_match(devices, serial)) {
-        // 设备存在时，任何 USB 协议失败都保留原错误，不能据此改连另一无线会话。
-        return remote::Device::establish(serial, error);
-    }
-    auto wireless = open_discovered_device(serial, error);
-    if (!wireless && !usb_error.empty())
-        error += "\n" + std::string(SCRCTL_TR("USB device enumeration was unavailable: ")) + usb_error;
-    return wireless;
+    return detail::open_default_device(serial, error, should_cancel, {
+        transport::Usbmux::list_devices_for_discovery,
+        [](const std::string &selected, std::string &err) { return remote::Device::establish(selected, err); },
+        [&](const std::string &selected, std::string &err) {
+            return open_discovered_device(selected, err, should_cancel);
+        },
+        [](const std::string &warning) {
+            std::fprintf(stderr, SCRCTL_TR("Discovery warning: %s\n"), warning.c_str());
+        },
+    });
 }
 } // namespace scrctl::app

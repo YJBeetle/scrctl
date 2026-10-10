@@ -10,11 +10,13 @@ namespace scrctl::app {
 
 /// wifi="auto" 只扫描本次 mDNS 广播，按唯一已配对设备尝试所有可用地址与 SRV 端口。
 /// 显式地址使用 wifi_port；无线模式只使用已有完整且有设备身份的记录，不创建配对。
-/// wifi 为空时优先匹配的 usbmux 设备，缺少候选才尝试自动无线；USB 协议失败直接返回。
+/// wifi 为空时先有界枚举 usbmux；缺少候选或枚举不可用时尝试自动无线，后者输出警告。
+/// 完整列表的选择歧义或 USB 协议失败直接返回；取消覆盖枚举及连接前的检查。
 /// serial 始终是原始 USB/配对记录 UDID，不能用净化后的文件名或广播 identifier 替代。
 std::optional<remote::Device> open_device(const std::string &serial, const std::string &wifi,
                                           std::string &err,
-                                          uint16_t wifi_port = wifi::kAdvertisedPortFallback);
+                                          uint16_t wifi_port = wifi::kAdvertisedPortFallback,
+                                          const std::function<bool()> &should_cancel = {});
 
 namespace detail {
 struct WirelessSelection {
@@ -30,13 +32,28 @@ std::optional<wifi::PairRecord> select_pairing_record(const std::vector<wifi::Pa
                                                     std::string_view serial, std::string &error);
 bool has_usbmux_match(const std::vector<transport::DeviceRecord> &devices, std::string_view serial);
 
+/// 默认连接的内部离线测试边界。生产始终使用系统 usbmux，枚举预算为 1000 ms；
+/// 此边界不改变随后设备认证或媒体连接的 socket 语义。
+struct DefaultDeviceOperations {
+    std::function<transport::UsbmuxDiscoveryStatus(
+        std::vector<transport::DeviceRecord> &, std::chrono::milliseconds,
+        const std::function<bool()> &, std::string &)> enumerate;
+    std::function<std::optional<remote::Device>(const std::string &, std::string &)> connect_usbmux;
+    std::function<std::optional<remote::Device>(const std::string &, std::string &)> connect_wireless;
+    std::function<void(const std::string &)> report_warning;
+};
+std::optional<remote::Device> open_default_device(
+    const std::string &serial, std::string &error, const std::function<bool()> &should_cancel,
+    const DefaultDeviceOperations &operations);
+
 using WifiConnector = std::function<std::optional<remote::Device>(
     const std::string &, const wifi::PairRecord &, uint16_t, std::string &)>;
 /// 依次连接选择结果，某一候选失败不丢弃其余候选；全部失败时保留各次错误。
 std::optional<remote::Device> connect_wireless_candidates(const WirelessSelection &selection,
                                                         const wifi::PairRecord &record,
                                                         std::string &error,
-                                                        const WifiConnector &connect);
+                                                        const WifiConnector &connect,
+                                                        const std::function<bool()> &should_cancel = {});
 } // namespace detail
 
 } // namespace scrctl::app

@@ -25,6 +25,7 @@ struct Event {
 struct Script {
     unsigned devices = 0, universal = 0, indigo = 0;
     bool universal_ok = true, indigo_ok = true;
+    bool cancellation_callback_received = false;
     std::vector<Event> events;
     std::map<std::size_t, std::string> failures;
     void reset() { *this = {}; }
@@ -44,8 +45,43 @@ void start(Source& source) {
     Source::Options options;
     options.want_video = options.want_audio = false;
     std::string error;
+    const auto devices = script.devices;
     check(source.start(options, error) && !source.has_video() && !source.has_audio(),
           "actual control-only LiveSource starts without media or a desktop window");
+    check(script.devices == devices + 1,
+          "control-only startup uses exactly the offline device-open replacement");
+}
+void startup_cancellation() {
+    Source::Options options;
+    options.want_video = options.want_audio = false;
+    std::string error;
+    script.reset();
+    {
+        Source source;
+        options.should_cancel = [] { return true; };
+        check(!source.start(options, error) && error == "Device startup cancelled" &&
+                  script.devices == 0 && script.universal == 0 && script.indigo == 0 && script.events.empty(),
+              "pre-cancelled LiveSource does not open even the offline device boundary");
+    }
+    script.reset();
+    {
+        Source source;
+        unsigned cancel_checks = 0;
+        options.should_cancel = [&] { ++cancel_checks; return script.devices != 0; };
+        check(!source.start(options, error) && error == "Device startup cancelled",
+              "cancellation observed inside device-open is returned by LiveSource");
+        check(script.devices == 1 && script.cancellation_callback_received && cancel_checks >= 2 &&
+                  script.universal == 0 && script.indigo == 0 && script.events.empty(),
+              "LiveSource passes the live callback to its exact offline five-argument replacement");
+    }
+    script.reset();
+    {
+        Source source;
+        options.should_cancel = [] { return false; };
+        check(source.start(options, error) && script.devices == 1 && script.cancellation_callback_received &&
+                  script.universal == 0 && script.indigo == 0 && script.events.empty(),
+              "non-cancelled callback preserves control-only startup without real device services");
+    }
 }
 void locked(Source& source, const std::string& expected) {
     const auto count = script.events.size();
@@ -220,8 +256,17 @@ void service_and_cleanup_failures() {
 
 namespace scrctl::app {
 std::optional<remote::Device> open_device(const std::string&, const std::string&,
-                                         std::string& error, uint16_t) {
-    ++script.devices; error.clear(); return remote::Device{};
+                                         std::string& error, uint16_t,
+                                         const std::function<bool()>& should_cancel) {
+    // Keep this signature identical to DeviceConnection.h: an old overload would
+    // leave LiveSource's symbol unresolved and pull in the real device connector.
+    ++script.devices;
+    script.cancellation_callback_received = static_cast<bool>(should_cancel);
+    if (should_cancel && should_cancel()) {
+        error = SCRCTL_TR("Device startup cancelled");
+        return std::nullopt;
+    }
+    error.clear(); return remote::Device{};
 }
 } // namespace scrctl::app
 
@@ -259,7 +304,7 @@ bool Buttons::release(uint16_t page, uint16_t code, std::string& error) {
 
 int main() {
     scrctl::i18n::initialize("en");
-    before_start(); normal_and_repeat(); release_every_input(); send_failures(); service_and_cleanup_failures();
+    startup_cancellation(); before_start(); normal_and_repeat(); release_every_input(); send_failures(); service_and_cleanup_failures();
     std::printf("live_hid: %d checks, %d failures\n", checks, failures);
     return failures != 0;
 }

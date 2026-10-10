@@ -2,12 +2,24 @@
 #include "remote/Device.h"
 
 #include <cstdio>
+#include <array>
+#include <atomic>
+#include <chrono>
+#include <cstring>
+#include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
+#ifndef _WIN32
+#include <cstdlib>
+#include <sys/un.h>
+#include <unistd.h>
+#endif
 
 namespace {
 using namespace scrctl;
+using namespace std::chrono_literals;
 int checks = 0, failures = 0;
 void check(bool ok, const char *label) {
     ++checks;
@@ -231,6 +243,283 @@ void test_usbmux_device_selection() {
     check(selected && selected->device_id == other.device_id,
           "explicit USB-only selection preserves exact serial among other devices and empty IDs");
 }
+
+void test_default_connection_policy() {
+    using transport::UsbmuxDiscoveryStatus;
+    auto status = UsbmuxDiscoveryStatus::complete;
+    std::vector<transport::DeviceRecord> records{{1, "first", "USB", 0}};
+    int enumerations = 0, usb_attempts = 0, wifi_attempts = 0;
+    bool cancel = false, fail_usb = false, fail_wifi = false, cancel_after_enumeration = false;
+    std::string error, selected_serial, enumeration_error;
+    std::vector<std::string> warnings;
+    app::detail::DefaultDeviceOperations operations{
+        [&](auto &out, std::chrono::milliseconds budget, const auto &should_cancel, std::string &err) {
+            ++enumerations;
+            check(budget == 1000ms && !should_cancel(), "default preselection has a bounded one-second budget and live cancel callback");
+            out = records;
+            err = enumeration_error;
+            if (cancel_after_enumeration) cancel = true;
+            return status;
+        },
+        [&](const std::string &serial, std::string &err) -> std::optional<remote::Device> {
+            ++usb_attempts;
+            selected_serial = serial;
+            if (fail_usb) { err = "synthetic USB protocol failure"; return std::nullopt; }
+            return remote::Device{};
+        },
+        [&](const std::string &serial, std::string &err) -> std::optional<remote::Device> {
+            ++wifi_attempts;
+            selected_serial = serial;
+            if (fail_wifi) { err = "synthetic wireless failure"; return std::nullopt; }
+            return remote::Device{};
+        },
+        [&](const std::string &warning) { warnings.push_back(warning); },
+    };
+    auto open = [&](std::string serial = {}) {
+        enumerations = usb_attempts = wifi_attempts = 0;
+        warnings.clear();
+        error = "stale error";
+        return app::detail::open_default_device(serial, error, [&] { return cancel; }, operations);
+    };
+    auto device = open();
+    check(device && enumerations == 1 && usb_attempts == 1 && wifi_attempts == 0 &&
+              selected_serial.empty() && error.empty() && warnings.empty(),
+          "complete unique USB snapshot preserves default establish serial and bypasses wireless");
+    records.push_back({2, "second", "USB", 0});
+    device = open();
+    check(!device && !error.empty() && usb_attempts == 0 && wifi_attempts == 0,
+          "complete multiple-device snapshot fails before any USB or wireless connection");
+    device = open("first");
+    check(device && selected_serial == "first" && usb_attempts == 1 && wifi_attempts == 0,
+          "complete list honors exact serial among other connected devices");
+    records = {{1, "first", "USB", 0}, {2, "first", "USB", 0}};
+    device = open("first");
+    check(!device && usb_attempts == 0 && wifi_attempts == 0,
+          "duplicate same-transport connections are not hidden by preselection");
+    records = {{1, "first", "USB", 0}, {2, "first", "Network", 0}};
+    device = open();
+    check(device && usb_attempts == 1 && wifi_attempts == 0,
+          "same UDID USB and Network entries keep existing USB selection policy");
+    fail_usb = true;
+    device = open();
+    check(!device && error == "synthetic USB protocol failure" && wifi_attempts == 0,
+          "USB authentication or protocol failure is returned without wireless fallback");
+    fail_usb = false;
+    device = open("wireless-only");
+    check(device && selected_serial == "wireless-only" && usb_attempts == 0 && wifi_attempts == 1 && warnings.empty(),
+          "confirmed nonmatching USB snapshot falls back with the requested original serial");
+    records.clear();
+    device = open();
+    check(device && usb_attempts == 0 && wifi_attempts == 1 && warnings.empty(),
+          "confirmed empty USB snapshot falls back without an unavailable warning");
+    // Even a partial list from a failed source must not resolve device ambiguity.
+    records = {{1, "first", "USB", 0}, {2, "second", "USB", 0}};
+    status = UsbmuxDiscoveryStatus::timed_out;
+    device = open();
+    check(device && usb_attempts == 0 && wifi_attempts == 1 && warnings.size() == 1 && error.empty(),
+          "timed-out USB source retains wireless fallback and warns even when fallback succeeds");
+    status = UsbmuxDiscoveryStatus::unavailable;
+    enumeration_error = "synthetic daemon unavailable";
+    device = open();
+    check(device && usb_attempts == 0 && wifi_attempts == 1 && warnings.size() == 1 &&
+              warnings[0].find(enumeration_error) != std::string::npos && error.empty(),
+          "unavailable source reports its diagnostic even when wireless fallback succeeds");
+    fail_wifi = true;
+    device = open();
+    check(!device && usb_attempts == 0 && wifi_attempts == 1 && warnings.size() == 1 &&
+              error.find("synthetic wireless failure") != std::string::npos &&
+              error.find(enumeration_error) != std::string::npos,
+          "unavailable source and failed wireless fallback retain both diagnostics");
+    fail_wifi = false;
+    status = UsbmuxDiscoveryStatus::cancelled;
+    device = open();
+    check(!device && usb_attempts == 0 && wifi_attempts == 0 && warnings.empty() &&
+              error == "Device startup cancelled",
+          "enumerator cancellation is not treated as an unavailable USB source");
+    status = UsbmuxDiscoveryStatus::complete;
+    cancel_after_enumeration = true;
+    device = open();
+    check(!device && usb_attempts == 0 && wifi_attempts == 0 && error == "Device startup cancelled",
+          "caller cancellation after a complete snapshot prevents all connection attempts");
+    cancel_after_enumeration = false;
+    device = open();
+    check(!device && enumerations == 0 && usb_attempts == 0 && wifi_attempts == 0,
+          "pre-cancelled startup does not access USB or wireless sources");
+    for (const std::string wifi : {"", "auto", "192.0.2.1"}) {
+        device = app::open_device({}, wifi, error, 49152, [] { return true; });
+        check(!device && error == "Device startup cancelled",
+              "public default, auto and manual connection paths honor pre-cancellation");
+    }
+
+    app::detail::WirelessSelection wireless{"first", {candidate("192.0.2.1", 49152), candidate("192.0.2.2", 49153)}};
+    cancel = false;
+    int candidates = 0;
+    device = app::detail::connect_wireless_candidates(wireless, record("first"), error,
+        [&](const auto &, const auto &, auto, std::string &err) -> std::optional<remote::Device> {
+            ++candidates;
+            err = "synthetic first failure";
+            cancel = true;
+            return std::nullopt;
+        }, [&] { return cancel; });
+    check(!device && candidates == 1 && error == "Device startup cancelled",
+          "cancellation between wireless candidates prevents starting another authentication");
+}
+
+uint32_t read_le(const uint8_t *data) {
+    return uint32_t(data[0]) | uint32_t(data[1]) << 8 | uint32_t(data[2]) << 16 | uint32_t(data[3]) << 24;
+}
+void write_le(uint8_t *data, uint32_t value) {
+    for (unsigned index = 0; index < 4; ++index) data[index] = static_cast<uint8_t>(value >> (index * 8));
+}
+
+// Private fake daemon: actual connect/accept and framed ListDevices, never the system service.
+class SelectionServer {
+public:
+    transport::detail::UsbmuxDiscoveryEndpoint endpoint;
+    std::atomic<bool> valid_request{false};
+    explicit SelectionServer(std::optional<std::vector<transport::DeviceRecord>> response) {
+        std::string error;
+        if (!transport::initialize_sockets(error)) throw std::runtime_error(error);
+#ifdef _WIN32
+        listener_.reset(::socket(AF_INET, SOCK_STREAM, 0));
+        sockaddr_in address{};
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+#else
+        char directory[] = "/tmp/scrctl-select-XXXXXX";
+        if (!::mkdtemp(directory)) throw std::runtime_error("mkdtemp failed");
+        directory_ = directory;
+        endpoint.path = directory_ + "/socket";
+        listener_.reset(::socket(AF_UNIX, SOCK_STREAM, 0));
+        sockaddr_un address{};
+        address.sun_family = AF_UNIX;
+        std::memcpy(address.sun_path, endpoint.path.c_str(), endpoint.path.size() + 1);
+#endif
+        if (!listener_.valid() || ::bind(listener_.fd(), reinterpret_cast<sockaddr *>(&address), sizeof(address)))
+            throw std::runtime_error("private bind failed");
+#ifdef _WIN32
+        socklen_t size = sizeof(address);
+        if (::getsockname(listener_.fd(), reinterpret_cast<sockaddr *>(&address), &size))
+            throw std::runtime_error("getsockname failed");
+        endpoint.port = ntohs(address.sin_port);
+#endif
+        if (::listen(listener_.fd(), 1)) throw std::runtime_error("private listen failed");
+        worker_ = std::thread([this, response = std::move(response)] {
+            while (!stopped_ && transport::wait_socket(listener_.fd(), false, 10) <= 0) {}
+            if (stopped_) return;
+            transport::Socket peer(::accept(listener_.fd(), nullptr, nullptr));
+            std::string error;
+            peer.set_read_timeout(500, error);
+            std::array<uint8_t, 16> header{};
+            if (!peer.read_exact(header.data(), header.size(), error)) return;
+            const auto total = read_le(header.data());
+            if (total < 16 || total > 4096 || read_le(header.data() + 4) != 1 ||
+                read_le(header.data() + 8) != 8 || read_le(header.data() + 12) != 1) return;
+            std::string body(total - 16, '\0');
+            if (!peer.read_exact(body.data(), body.size(), error)) return;
+            while (!body.empty() && body.back() == '\0') body.pop_back();
+            const auto request = plist::parse(body);
+            const auto type = request ? request->find("MessageType") : nullptr;
+            if (!type || type->as_string_or() != "ListDevices") return;
+            valid_request = true;
+            if (response) {
+                auto list = plist::Value::Array();
+                for (const auto &device : *response) {
+                    auto properties = plist::Value::Dict();
+                    properties.set("SerialNumber", plist::Value::Str(device.udid));
+                    properties.set("ConnectionType", plist::Value::Str(device.connection_type));
+                    auto entry = plist::Value::Dict();
+                    entry.set("DeviceID", plist::Value::Int(device.device_id));
+                    entry.set("Properties", std::move(properties));
+                    list.push(std::move(entry));
+                }
+                auto reply = plist::Value::Dict();
+                reply.set("DeviceList", std::move(list));
+                auto xml = plist::write(reply);
+                std::vector<uint8_t> packet(16 + xml.size() + 1);
+                write_le(packet.data(), static_cast<uint32_t>(packet.size()));
+                write_le(packet.data() + 4, 1);
+                write_le(packet.data() + 8, 8);
+                write_le(packet.data() + 12, 1);
+                std::memcpy(packet.data() + 16, xml.data(), xml.size());
+                if (!peer.write_all(packet.data(), packet.size(), error)) return;
+            }
+            while (!stopped_) std::this_thread::sleep_for(1ms);
+        });
+    }
+    ~SelectionServer() {
+        stopped_ = true;
+        if (worker_.joinable()) worker_.join();
+        listener_.close();
+#ifndef _WIN32
+        ::unlink(endpoint.path.c_str());
+        ::rmdir(directory_.c_str());
+#endif
+    }
+private:
+    transport::Socket listener_;
+    std::atomic<bool> stopped_{false};
+    std::thread worker_;
+#ifndef _WIN32
+    std::string directory_;
+#endif
+};
+
+void test_default_private_daemon() {
+    auto run = [](std::optional<std::vector<transport::DeviceRecord>> reply, bool cancel) {
+        const bool stalled = !reply.has_value();
+        const bool ambiguous = reply && reply->size() > 1;
+        SelectionServer server(std::move(reply));
+        int usb_attempts = 0, wifi_attempts = 0, cancel_checks = 0;
+        auto observed_status = transport::UsbmuxDiscoveryStatus::unavailable;
+        std::vector<std::string> warnings;
+        std::string error;
+        const auto start = std::chrono::steady_clock::now();
+        auto should_cancel = [&] {
+            ++cancel_checks;
+            return cancel && server.valid_request && std::chrono::steady_clock::now() - start > 80ms;
+        };
+        auto device = app::detail::open_default_device({}, error, should_cancel, {
+            [&](auto &out, auto budget, const auto &stop, auto &err) {
+                observed_status = transport::detail::list_usbmux_devices_at(server.endpoint, out, budget, stop, err);
+                return observed_status;
+            },
+            [&](const auto &, auto &) -> std::optional<remote::Device> { ++usb_attempts; return remote::Device{}; },
+            [&](const auto &, auto &) -> std::optional<remote::Device> { ++wifi_attempts; return remote::Device{}; },
+            [&](const auto &warning) { warnings.push_back(warning); },
+        });
+        const auto elapsed = std::chrono::steady_clock::now() - start;
+        std::printf("default_selection_private: case=%s status=%d elapsed_ms=%lld usb=%d wifi=%d warnings=%zu\n",
+                    cancel ? "cancel" : stalled ? "stalled" : ambiguous ? "ambiguous" : "empty",
+                    static_cast<int>(observed_status),
+                    static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count()),
+                    usb_attempts, wifi_attempts, warnings.size());
+        check(server.valid_request, "default selection sends real framed ListDevices to its private fake daemon");
+        if (cancel) {
+            check(!device && usb_attempts == 0 && wifi_attempts == 0 && warnings.empty() &&
+                      error == "Device startup cancelled" && elapsed < 500ms && cancel_checks > 2 &&
+                      observed_status == transport::UsbmuxDiscoveryStatus::cancelled,
+                  "private daemon stalled reply is cancellable without starting wireless fallback");
+        } else if (stalled) {
+            check(device && usb_attempts == 0 && wifi_attempts == 1 && error.empty() &&
+                      warnings.size() == 1 && elapsed >= 900ms && elapsed < 3s &&
+                      observed_status == transport::UsbmuxDiscoveryStatus::timed_out,
+                  "private daemon stalled reply reaches warned wireless fallback within the shared one-second budget");
+        } else if (!ambiguous) {
+            check(device && usb_attempts == 0 && wifi_attempts == 1 && warnings.empty() && error.empty() &&
+                      observed_status == transport::UsbmuxDiscoveryStatus::complete,
+                  "real confirmed-empty reply permits wireless fallback without source warning");
+        } else {
+            check(!device && usb_attempts == 0 && wifi_attempts == 0 && warnings.empty() && !error.empty() &&
+                      observed_status == transport::UsbmuxDiscoveryStatus::complete,
+                  "real complete ambiguous reply rejects selection rather than trying a wireless device");
+        }
+    };
+    run(std::nullopt, false);
+    run(std::nullopt, true);
+    run(std::vector<transport::DeviceRecord>{}, false);
+    run(std::vector<transport::DeviceRecord>{{1, "first", "USB", 0}, {2, "second", "USB", 0}}, false);
+}
 } // namespace
 
 int main() {
@@ -239,6 +528,8 @@ int main() {
     test_connection_attempts();
     test_usbmux_precedence();
     test_usbmux_device_selection();
+    test_default_connection_policy();
+    test_default_private_daemon();
     std::printf("device_selection: %d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }
