@@ -183,6 +183,8 @@ void Stack::fail_endpoints(const std::string &reason) {
 void Stack::stop_pump() {
   if (!impl_->registered)
     return;
+  if (net_debug_)
+    std::fprintf(stderr, "tunnel: local shutdown requested\n");
   stopping_ = true;
   {
     std::lock_guard lock(err_mu_);
@@ -296,6 +298,9 @@ void Stack::pump_loop() {
       std::lock_guard lock(err_mu_);
       pump_err_ = error.empty() ? SCRCTL_TR("Tunnel read failed") : error;
     }
+    // 后续端点可能只报告 lwIP 已关闭；诊断模式先保留隧道的首个错误。
+    if (net_debug_)
+      std::fprintf(stderr, "tunnel: pump failed: %s\n", pump_error().c_str());
     stopping_ = true;
     fail_endpoints(pump_error());
   }

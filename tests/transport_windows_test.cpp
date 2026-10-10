@@ -1,6 +1,7 @@
 #include "socket_pair.h"
 #include "transport/TlsChannel.h"
 #include "tls_psk_move.h"
+#include "tunnel_tls_failure.h"
 #include <array>
 #include <chrono>
 #include <cstdio>
@@ -141,5 +142,6 @@ int main() {
     tls_psk();
     scrctl_test::tls_failures(check);
     scrctl_test::tls_psk_moves(check);
+    scrctl_test::tunnel_tls_failures(check);
     return failures ? 1 : 0;
 }

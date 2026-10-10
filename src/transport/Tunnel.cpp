@@ -2,8 +2,11 @@
 #include "Tunnel.h"
 
 #include <cstring>
+#include <cerrno>
+#include <openssl/err.h>
 
 #include "json/Json.h"
+#include "transport/SocketPlatform.h"
 
 namespace scrctl::transport {
 namespace {
@@ -22,6 +25,49 @@ uint16_t get_be16(const uint8_t *p) {
     return static_cast<uint16_t>(uint16_t(p[0]) << 8 | p[1]);
 }
 
+// SSL_get_error depends on the calling thread's error queue. Start each I/O
+// with a clean queue and native error state, then capture both before formatting
+// anything. In particular, a stale errno must not turn EOF into a socket error.
+void clear_tls_io_errors() {
+    ERR_clear_error();
+    errno = 0;
+#ifdef _WIN32
+    WSASetLastError(0);
+#endif
+}
+
+std::string tls_io_failure(std::string_view operation, int returned, int ssl_error,
+                           int saved_errno, int saved_socket_error) {
+    const char *category = "UNKNOWN";
+    switch (ssl_error) {
+    case SSL_ERROR_NONE: category = "NONE (short write)"; break;
+    case SSL_ERROR_ZERO_RETURN: category = "ZERO_RETURN (close_notify)"; break;
+    case SSL_ERROR_SYSCALL:
+        category = returned == 0 && saved_errno == 0 && saved_socket_error == 0
+                       ? "SYSCALL (EOF without close_notify)" : "SYSCALL";
+        break;
+    case SSL_ERROR_SSL: category = "SSL"; break;
+    case SSL_ERROR_WANT_READ: category = "WANT_READ"; break;
+    case SSL_ERROR_WANT_WRITE: category = "WANT_WRITE"; break;
+    }
+    std::string message(operation);
+    message += ": return=" + std::to_string(returned) + ", ssl_error=" +
+               std::to_string(ssl_error) + " " + category +
+               ", errno=" + std::to_string(saved_errno);
+#ifdef _WIN32
+    message += ", socket_error=" + std::to_string(saved_socket_error);
+#endif
+    // Error codes/reasons contain no application bytes. Do not retrieve the
+    // queue's optional extra data (which may contain protocol content).
+    for (unsigned long code; (code = ERR_get_error()) != 0;) {
+        char reason[256]{};
+        ERR_error_string_n(code, reason, sizeof(reason));
+        message += "; ";
+        message += reason;
+    }
+    return message;
+}
+
 }  // namespace
 
 PacketTunnel::PacketTunnel(PacketTunnel &&) noexcept = default;
@@ -29,9 +75,14 @@ PacketTunnel &PacketTunnel::operator=(PacketTunnel &&) noexcept = default;
 
 bool PacketTunnel::write_all(const void *data, size_t len, std::string &err) {
     if (tls_.handle() != nullptr) {
+        clear_tls_io_errors();
         const int n = SSL_write(tls_.handle(), data, static_cast<int>(len));
+        const int saved_errno = errno;
+        const int saved_socket_error = socket_error();
         if (n != static_cast<int>(len)) {
-            return err = SCRCTL_TR("Tunnel TLS write failed"), false;
+            const int ssl_error = SSL_get_error(tls_.handle(), n);
+            return err = tls_io_failure(SCRCTL_TR("Tunnel TLS write failed"), n,
+                                       ssl_error, saved_errno, saved_socket_error), false;
         }
         return true;
     }
@@ -43,9 +94,14 @@ bool PacketTunnel::read_all(void *data, size_t len, std::string &err) {
         auto *p = static_cast<uint8_t *>(data);
         size_t got = 0;
         while (got < len) {
+            clear_tls_io_errors();
             const int n = SSL_read(tls_.handle(), p + got, static_cast<int>(len - got));
+            const int saved_errno = errno;
+            const int saved_socket_error = socket_error();
             if (n <= 0) {
-                return err = SCRCTL_TR("Tunnel TLS read failed"), false;
+                const int ssl_error = SSL_get_error(tls_.handle(), n);
+                return err = tls_io_failure(SCRCTL_TR("Tunnel TLS read failed"), n,
+                                           ssl_error, saved_errno, saved_socket_error), false;
             }
             got += static_cast<size_t>(n);
         }

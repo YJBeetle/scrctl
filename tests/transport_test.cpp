@@ -13,6 +13,7 @@
 
 #include "transport/TlsChannel.h"
 #include "tls_psk_move.h"
+#include "tunnel_tls_failure.h"
 #include "transport/Usbmux.h"
 
 namespace {
@@ -176,6 +177,7 @@ int main() {
     readable_wait_results();
     scrctl_test::tls_failures(check);
     scrctl_test::tls_psk_moves(check);
+    scrctl_test::tunnel_tls_failures(check);
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;
 }

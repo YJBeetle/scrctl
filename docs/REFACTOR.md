@@ -2963,3 +2963,36 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
 - 已把该项从待测改为已知限制：本台设备和应用需先关闭竖排锁才能远程转屏；
   其他设备与应用另行覆盖。与 scrcpy 的 Android freeze/thaw 实现区别见
   协议记录 §33.4。仅记录设备验证和完善用法文档，不修改产品请求路径。
+
+## 第一百四十六轮：USB 首故障对照与隧道诊断
+
+- Windows / Debian 采用已有 `80a549f` 产品；该提交到当前 main 的 USB transport、
+  net、Device、DeviceConnection、LiveSource 源码无差异，不为方向快捷键重复构建。
+  单台手机由主代理串行切换归属，子代理仅准备环境和读取状态。
+- Mac 初始纯 usbmux 枚举为空。Windows 接入后纯 USB 枚举成功，Apple mux/composite
+  驱动正常；普通建连读取 Apple daemon 的 lockdown 记录，与无线记录目录无关。
+  使用独立空 XDG_DATA_HOME 防止无线记录回退；无窗口、无音频、无控制的 90 秒
+  裸 HEVC 录制计划在约 6.6 秒内失败，未收到首个有效 IDR，随后 USB 枚举为空。
+  原 AppleMobileDeviceProcess PID 和 27015 监听保持不变，不能用驱动仍正常推定
+  传输健康。PowerShell runner 未取得有效进程退出码，不据此声称退出 0/1。
+- 首次 runner 没启用录制，产品正确报告 Nothing to do；纠正后才启动上述媒体。
+  Windows 日志只留下后续 TCP/UDP 的 lwIP -16，系统事件及常见 Apple 日志目录
+  没有本次 remove/STALL 证据，不能据此归因音频、虚拟机或手机。
+- Debian 再接入时，原 usbmuxd 由 udev 正常启动，config 4 和 ff/fe/02 mux 接口
+  保持存在；在没有启动 scrctl 媒体的情况下即 RX STALL 并移除设备。因此停止
+  Linux 起流，不反复重启 daemon、替换版本或猜测 clear-halt/reset 恢复。
+- 将手机交回 Mac，用户物理重插并保持解锁后，IORegistry 可见 iPhone 和 config 6；
+  原生 usbmuxd 仍出现 MuxInterfaceSend 失败、kAMDDeviceDisconnectedError，Finder
+  也未显示手机。这证明本轮原生枚举也异常，尚不能定位设备、线缆或主机端原因。
+  一次系统服务重启尝试被 SIP 拒绝，服务未重启；没有修改 SIP 或配对记录。
+  用户暂不方便更换 Mac 接口，物理链路对照留待后续，手机保留在 Mac。
+- PacketTunnel 的 TLS 读写失败增加 SSL 返回值、错误类别、立即保存的 errno /
+  Windows socket error 与本次 OpenSSL 原因；每次 I/O 清除旧错误队列，避免陈旧
+  错误污染 SSL_get_error。只增加诊断，不改重试、恢复或包处理行为。
+  --debug-net 在 pump 失败时先记录首错，并标记本地主动 shutdown，避免后续
+  lwIP 关闭或首帧超时掩盖隧道错误。TLS EOF 等错误本身不能证明 USB 物理断开。
+- 真实本地 PSK / CDTunnel 对照覆盖 close_notify、裸 EOF、主动 shutdown 后写失败
+  和旧错误隔离；已有 net、transport 两项 CTest 通过（2/2，0.57 秒）。未重复
+  已验收的普通 Q、触摸、方向锁、音频或无线配对。USB 持续连接仍未通过。
+- 本轮证据位于 `/private/tmp/scrctl-usb-stability-20261010` 及两份平台准备目录；
+  媒体、手机画面与配对凭据不作为安全文本归档内容。
