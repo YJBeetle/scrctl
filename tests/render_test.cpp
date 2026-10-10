@@ -1124,6 +1124,56 @@ struct ButtonFixture : KeyboardFixture {
     }
 };
 
+void presenter_device_rotation_shortcut() {
+    KeyboardFixture f("Presenter device rotation request");
+    if (!f.window_id) return;
+    int requests = 0;
+    const auto pump = [&] {
+        return f.presenter.pump(f.on_touch(), f.on_keyboard(), {}, {}, [&] { ++requests; });
+    };
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_R, KMOD_LALT);
+    check(!pump() && requests == 1, "fresh MOD+R 仅请求一次设备旋转，不退出窗口");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_R, KMOD_LALT, 1);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_R, KMOD_LALT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_R, KMOD_RSHIFT);
+    check(!pump() && requests == 1, "repeat、重复 DOWN 和 MOD 先松后的 UP 不重复请求旋转");
+    f.expect({}, "旋转快捷键的 DOWN/UP 均不泄漏设备键盘");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_R, KMOD_LGUI); f.key(SDL_KEYUP, SDL_SCANCODE_R);
+    check(!pump() && requests == 2, "抬起后新的默认 Super+R 可再请求一次旋转");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_R, KMOD_LALT | KMOD_LSHIFT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_R);
+    check(!pump() && requests == 2, "MOD+Shift+R 不请求设备旋转");
+    f.expect({}, "带 Shift 的未分配 MOD 组合仍仅在本地消费");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_R); f.key(SDL_KEYUP, SDL_SCANCODE_R);
+    check(!pump() && requests == 2, "普通 r 不退出也不请求旋转");
+    f.expect({{21}, {}}, "普通 r 仍传递完整物理键盘 DOWN/UP");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_R);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_R, KMOD_LALT, 1);
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_R, KMOD_LALT);
+    f.key(SDL_KEYUP, SDL_SCANCODE_R);
+    check(!pump() && requests == 2, "后按 MOD 不能抢走已经交付设备的 r 归属");
+    f.expect({{21}, {}}, "原设备 r 的重复事件和最终 UP 保留物理键盘路径");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_R, KMOD_LALT); f.key(SDL_KEYUP, SDL_SCANCODE_R);
+    check(!f.pump(), "无 RotateHandler 时 MOD+R 仅消费且不退出");
+    f.expect({}, "无旋转通路不会把 MOD+R 降级成设备文字输入");
+    f.key(SDL_KEYDOWN, SDL_SCANCODE_R, KMOD_LALT); f.key(SDL_KEYUP, SDL_SCANCODE_R);
+    check(!f.presenter.pump({}) && requests == 2,
+          "no-control 默认空 handler 仍可安全消费旋转快捷键");
+
+    KeyboardFixture background("Presenter no-video device rotation request", 160, 112, 0,
+                               KMOD_RCTRL, true);
+    if (!background.window_id) return;
+    int background_requests = 0;
+    background.key(SDL_KEYDOWN, SDL_SCANCODE_R, KMOD_RCTRL);
+    background.key(SDL_KEYUP, SDL_SCANCODE_R);
+    check(!background.presenter.pump(background.on_touch(), background.on_keyboard(), {}, {},
+                                     [&] { ++background_requests; }) && background_requests == 1,
+          "无视频背景窗口也可按自定义 MOD+R 请求设备旋转");
+    background.expect({}, "背景窗口旋转快捷键不传设备文字");
+    check(background.touches.empty() && !background.presenter.render_failed(),
+          "设备旋转请求不依赖本机视频纹理、不制造触点或渲染失败");
+}
+
 // 暂停仅针对本机显示；以实际上传/回读像素区分 pause、re-pause 和 unpause，
 // 不借助生产状态 getter，也不构造停止 FrameSource 的替代实现。
 void presenter_display_pause() {
@@ -3576,6 +3626,7 @@ int main() {
     presenter_background_windows();
     presenter_background_input();
     presenter_device_buttons();
+    presenter_device_rotation_shortcut();
 
     SDL_Quit();
     if (failures != 0) {

@@ -97,7 +97,8 @@ std::unique_ptr<OrientationControl> OrientationControl::connect(Device &device, 
     }
     auto connection = device.connect(kService, err, verbose, cancel);
     if (!connection || cancelled(cancel, err)) return nullptr;
-    return std::unique_ptr<OrientationControl>(new OrientationControl(std::move(connection), cancel));
+    return std::unique_ptr<OrientationControl>(
+        new OrientationControl(device, std::move(connection), verbose, cancel));
 }
 
 CallResult OrientationControl::exchange(const xpc::Value &request, OrientationState &out,
@@ -107,8 +108,14 @@ CallResult OrientationControl::exchange(const xpc::Value &request, OrientationSt
         err = SCRCTL_TR("Device orientation reply timeout must be positive");
         return CallResult::DeviceError;
     }
+    // Never issue a second WANTING_REPLY request on the same devicecontrol connection.
+    // Moving the prebuilt first connection also makes failed/cancelled mutations consume it:
+    // the next explicit operation may connect again, but this operation is never retried.
+    auto connection = std::move(connection_);
+    if (!connection) connection = device_.connect(kService, err, verbose_, cancel_);
+    if (!connection || cancelled(cancel_, err)) return CallResult::TransportError;
     xpc::Value reply;
-    if (!connection_->call(request, reply, timeout_ms, err)) {
+    if (!connection->call(request, reply, timeout_ms, err)) {
         cancelled(cancel_, err);
         return CallResult::TransportError;
     }

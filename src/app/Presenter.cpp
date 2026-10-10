@@ -374,7 +374,7 @@ void Presenter::report_input(int raw_x, int raw_y, double fx, double fy, const c
 
 bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                      const KeyboardHandler &on_keyboard, const PasteHandler &on_paste,
-                     const ButtonHandler &on_button) {
+                     const ButtonHandler &on_button, const RotateHandler &on_rotate) {
     apply_pending_resize(on_touch, on_keyboard, on_button);
     if (release_pending_) {
         release_input(on_touch, on_keyboard, on_button);
@@ -487,6 +487,14 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                 quit = true;
             } else if (shortcut && e.key.keysym.sym == SDLK_v && !(mods & KMOD_SHIFT)) {
                 if (on_paste) on_paste();
+            } else if (shortcut && e.key.keysym.sym == SDLK_r && !(mods & KMOD_SHIFT)) {
+                if (on_rotate) {
+                    // 请求改变设备坐标依据前结束已有触点，避免跨方向保持拖动。
+                    // 保留本地快捷键归属直到真实 UP；没有控制回调时只消费组合键。
+                    release_layout_input(on_touch, on_keyboard, on_button);
+                    pending_move = false;
+                    on_rotate();
+                }
             } else if (shortcut && e.key.keysym.sym == SDLK_z && video_playback_) {
                 if (paused_input_stale_) pending_move = false;
                 if (!refresh_display((mods & KMOD_SHIFT) != 0, on_touch, on_keyboard, on_button)) {

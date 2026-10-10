@@ -234,6 +234,7 @@ add_library(scrctl_app STATIC
         src/app/Presenter.cpp
         src/app/KeyboardState.cpp
         src/app/ClipboardPasteJob.cpp
+        src/app/DeviceRotationJob.cpp
         src/app/AudioOut.cpp
         src/app/FileSource.cpp
         src/app/Cli.cpp
@@ -341,6 +342,11 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(clipboard_job_test PRIVATE Scrctl::Threading)
     add_test(NAME clipboard_job COMMAND clipboard_job_test)
     set_tests_properties(clipboard_job PROPERTIES TIMEOUT 15)
+
+    scrctl_add_test_executable(device_rotation_test tests/device_rotation_test.cpp)
+    target_link_libraries(device_rotation_test PRIVATE scrctl_app)
+    add_test(NAME device_rotation COMMAND device_rotation_test)
+    set_tests_properties(device_rotation PROPERTIES TIMEOUT 15)
 
     scrctl_add_test_executable(app_lifecycle_test tests/app_lifecycle_test.cpp)
     target_link_libraries(app_lifecycle_test PRIVATE scrctl_app)

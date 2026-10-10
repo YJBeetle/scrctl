@@ -25,6 +25,7 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         "Home: MOD+H or middle mouse button. Volume: MOD+Up/Down. Lock button: MOD+P.\n"
         "Actual window size: MOD+G. Remove image margins: MOD+W or double-click an empty margin.\n"
         "Rotate display left/right: MOD+Left/Right (recordings unchanged).\n"
+        "Rotate device portrait/landscape: MOD+R (requires device control and a supported app).\n"
         "Pause or refresh paused display: MOD+Z. Resume display: MOD+Shift+Z (capture, audio and recording continue).\n"
         "Mirror display horizontally: MOD+Shift+Left/Right. Mirror vertically: MOD+Shift+Up/Down.\n"
         "Audio is forwarded to the computer by default; --audio-dup keeps phone playback. "

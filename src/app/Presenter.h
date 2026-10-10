@@ -28,6 +28,8 @@ class Presenter {
   public:
     using KeyboardHandler = std::function<void(const KeyboardState::Report &)>;
     using PasteHandler = std::function<void()>;
+    /// 单次设备横竖屏请求；调用方异步执行，不能阻塞窗口事件循环。
+    using RotateHandler = std::function<void()>;
     /// Consumer 按钮的真实 DOWN/UP；false 表示发送失败，窗口会尽力释放其它输入。
     using ButtonHandler = std::function<bool(uint16_t, uint16_t, bool)>;
 
@@ -74,7 +76,7 @@ class Presenter {
     /// 恢复原先启用状态；不更改宿主机输入法或键盘布局。
     bool pump(const std::function<void(double, double, bool)> &on_touch,
               const KeyboardHandler &on_keyboard = {}, const PasteHandler &on_paste = {},
-              const ButtonHandler &on_button = {});
+              const ButtonHandler &on_button = {}, const RotateHandler &on_rotate = {});
     /// 异步粘贴完成时必须再次检查焦点、按住状态和代次。释放输入及新设备
     /// DOWN 使旧代次失效，完整点击/按键抬起后也不能向已改变的上下文粘贴。
     [[nodiscard]] uint64_t input_generation() const { return input_generation_; }

@@ -14,6 +14,7 @@
 #include "app/Cli.h"
 #include "app/Commands.h"
 #include "app/ClipboardPasteJob.h"
+#include "app/DeviceRotationJob.h"
 #include "app/FileSource.h"
 #include "app/LiveSource.h"
 #include "app/Presenter.h"
@@ -22,6 +23,7 @@
 #include "app/SdlRuntime.h"
 #include "media/StreamSession.h"
 #include "remote/Pasteboard.h"
+#include "remote/OrientationControl.h"
 
 namespace scrctl::app {
 
@@ -118,6 +120,7 @@ int run(int argc, char **argv) {
     std::unique_ptr<FrameSource> source;
     // 作业借用 Device；必须先取消并等待，再销毁 source 中的设备与隧道。
     std::unique_ptr<ClipboardPasteJob> paste_job;
+    std::unique_ptr<DeviceRotationJob> rotation_job;
     LiveSource *live = nullptr;
     // 返回值必须在 FILE 刷新、关闭之后确定。析构仍负责兜底，但无法修改已经
     // 求值的 return 0；取消启动时 made 也可能已经拥有视频 worker 和录制文件。
@@ -184,6 +187,7 @@ int run(int argc, char **argv) {
     }
     const auto finish_exit = [&](int code) {
         if (paste_job) paste_job->shutdown();
+        if (rotation_job) rotation_job->shutdown();
         return finish_source(live, code);
     };
     if (exit_requested()) {
@@ -205,6 +209,7 @@ int run(int argc, char **argv) {
 
     const bool control_enabled = live != nullptr && !o.no_control;
     if (control_enabled && !o.no_window) {
+        rotation_job = std::make_unique<DeviceRotationJob>(live->device());
         paste_job = std::make_unique<ClipboardPasteJob>(
             [live](const std::string &text, std::stop_token cancel) {
                 ClipboardPasteJob::OperationResult result;
@@ -424,6 +429,32 @@ int run(int argc, char **argv) {
         on_keyboard({});
     };
 
+    Presenter::RotateHandler on_rotate;
+    if (rotation_job) {
+        on_rotate = [&] {
+            if (runtime.stop_requested()) return;
+            cancel_paste();
+            const auto started = rotation_job->start();
+            if (started == DeviceRotationJob::StartStatus::Busy) {
+                std::fprintf(stderr, "%s\n", SCRCTL_TR("Device rotation is already in progress"));
+            } else if (started != DeviceRotationJob::StartStatus::Started) {
+                std::fprintf(stderr, "%s\n", SCRCTL_TR("Could not start device rotation"));
+            }
+        };
+    }
+    const auto service_rotation = [&] {
+        if (!rotation_job) return;
+        const auto result = rotation_job->poll();
+        if (!result || result->cancelled || quit || runtime.stop_requested()) return;
+        if (result->success) {
+            std::printf(SCRCTL_TR("Device rotation requested: %s\n"),
+                        scrctl::remote::OrientationControl::name(result->target).data());
+        } else {
+            std::fprintf(stderr, SCRCTL_TR("Device rotation failed: %s\n"),
+                         result->error.empty() ? SCRCTL_TR("No diagnostic available") : result->error.c_str());
+        }
+    };
+
     const auto window_spec = [&] {
         WindowSpec spec;
         spec.title = o.title;
@@ -441,7 +472,7 @@ int run(int argc, char **argv) {
     };
     const auto pump_window = [&] {
         if (presenter) {
-            quit = presenter->pump(on_touch, on_keyboard, on_paste, on_button);
+            quit = presenter->pump(on_touch, on_keyboard, on_paste, on_button, on_rotate);
             // 静止画面的本地重绘也可能失败；与新帧绘制失败一样返回错误，
             // 仍经统一退出流程取消粘贴并收尾录制，不能视为用户正常关闭。
             if (presenter->render_failed()) {
@@ -450,6 +481,7 @@ int run(int argc, char **argv) {
             }
         }
         service_paste();
+        service_rotation();
     };
     if (o.no_video_playback && !o.no_window) {
         presenter = std::make_unique<Presenter>();

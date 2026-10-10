@@ -3768,15 +3768,15 @@ OrientationInfo 的编码字段为：
 | currentDeviceNonFlatOrientation | DeviceOrientation |
 | currentDeviceOrientationLocked | Bool |
 
-查询回复的三个直接字段已按 §33.2 实测；失败回复和 setter 的状态码仍未实测。
+查询回复的三个直接字段已按 §33.2 实测；setter 的有效回复见 §33.3，失败回复仍未分类。
 请求没有锁定或解锁参数，返回 locked Bool 也不能证明 setter 保持或恢复原来的方向锁定。
 物理方向、非平放方向和应用 UI 显示方向是不同状态；现有 DisplayInfo 曾出现
 物理 portrait 与 UI rot270 同时成立，不能直接用物理枚举代替窗口显示状态。
 
 scrcpy v5 的设备转屏先读当前 rotation 和冻结状态，目标为 `(rotation & 1) ^ 1`，
 并在原来允许自动转屏时恢复自动转屏。因此 MOD+R 应切换横竖屏并保持原策略，
-不能直接循环四个方向。后续先做有界只读查询，再在支持转屏的应用上记录原方向、
-锁定和 UI 状态，执行一次有据可查的 setter 并读回。原锁定 on / off 分别验证；
+不能直接循环四个方向。方向锁关闭时的应用效果已按 §33.3 验证，
+方向锁开启时仍需单独验证；
 没有恢复依据时不猜发 unknown / faceUp，也不以本机画面旋转冒充设备转屏。
 
 来源 SHA256：CoreDevice 为 `1dd2f4dbb263afc94aac09addf9246cf5a3ef23ea2e89078fdb0024b9341a771`，
@@ -3821,3 +3821,23 @@ runner 对整个子进程限时，默认 30 秒，超时后另有最多一秒退
 原日志、独立复核及证明范围另存于
 `/Volumes/Data/Workspace/Github/scrctl-fixtures/recording-clock-20261008/device-orientation-wifi-query/`。
 §33.1 的原离线归档保持编制时点记录，不用后续真机结果覆盖它。
+
+### 33.3 方向 setter 与独立连接
+
+2026-10-10，同一台 iOS 27 iPhone、Mac Wi-Fi、无边记，用户关闭竖排方向锁。
+首先同一服务连接依次 query/change：基线 `faceUp/nonflat=portrait/locked=false`，
+请求 `landscapeLeft` 后回复等待 EOF；用户看到设备画面转为横屏，新的查询连接
+也返回 `landscapeLeft/landscapeLeft/false`。该失败不能认定请求未执行，也不能
+自动重发。静态复核确认查询及 setter 均为带回复调用，不改成单向发送。
+
+随后把查询和 setter 放在独立服务连接：手机保持横放，基线
+`landscapeLeft/landscapeLeft/false`，单次请求 portrait 取得有效直接字典
+`portrait/portrait/false`。用户确认无边记实际切为竖屏并保持；关闭 setter
+连接后新的查询仍返回 portrait。此前用户确认重新物理转动可正常自动转屏，
+控制中心的方向锁仍关闭。这里只证明本应用、本初态；不把 locked 字段等同于
+用户方向锁，也不承诺其他应用响应或开启方向锁时的策略。
+
+OrientationControl 现在每次 RPC 独占服务连接：首连接预建，其后重新建连，
+请求结束即关闭；Device 必须覆盖控制对象生命期。每项 mutation 只发送一次，
+失败没有盲目重试或猜测恢复。MOD+R 使用后台单任务查询横竖基线后切换，
+平放只采用有效 nonflat，不据电脑显示角度计算设备目标。

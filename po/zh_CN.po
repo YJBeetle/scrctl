@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-10 19:59+0800\n"
+"POT-Creation-Date: 2026-10-10 20:47+0800\n"
 "PO-Revision-Date: 2026-10-09 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -12,35 +12,35 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: src/app/Application.cpp:44
+#: src/app/Application.cpp:46
 #, c-format
 msgid ""
 "Visible area %ux%u -> %dx%d (device did not report dimensions; using model "
 "table)\n"
 msgstr "可见区 %ux%u -> %dx%d（设备未报告尺寸，使用机型表）\n"
 
-#: src/app/Application.cpp:80 src/app/Commands.cpp:119
+#: src/app/Application.cpp:82 src/app/Commands.cpp:119
 #, c-format
 msgid "SDL initialization failed: %s\n"
 msgstr "SDL 初始化失败: %s\n"
 
-#: src/app/Application.cpp:87 src/app/Application.cpp:473
+#: src/app/Application.cpp:89 src/app/Application.cpp:505
 #, c-format
 msgid "Received exit signal; closing device session\n"
 msgstr "收到退出信号，正在关闭设备会话\n"
 
-#: src/app/Application.cpp:102
+#: src/app/Application.cpp:104
 #, c-format
 msgid "Failed to initialize audio output: %s\n"
 msgstr "无法初始化音频输出：%s\n"
 
-#: src/app/Application.cpp:106
+#: src/app/Application.cpp:108
 #, c-format
 msgid ""
 "Failed to initialize audio output: %s (audio disabled; video continues)\n"
 msgstr "初始化音频输出失败：%s（已禁用音频，视频继续）\n"
 
-#: src/app/Application.cpp:110
+#: src/app/Application.cpp:112
 msgid ""
 "Audio recording requires an audio stream. Use --no-audio-playback to record "
 "without a sound device, or --no-audio to record video only."
@@ -48,37 +48,37 @@ msgstr ""
 "录音需要启用音频流。没有声音设备时，可用 --no-audio-playback 只录制、不播放；"
 "或用 --no-audio 只录视频。"
 
-#: src/app/Application.cpp:167
+#: src/app/Application.cpp:170
 #, c-format
 msgid "Failed to start device session: %s\n"
 msgstr "无法启动设备会话：%s\n"
 
-#: src/app/Application.cpp:173
+#: src/app/Application.cpp:176
 #, c-format
 msgid "Device is in a call. End the call and try again.\n"
 msgstr "设备正在通话，请结束通话后重试。\n"
 
-#: src/app/Application.cpp:194
+#: src/app/Application.cpp:198
 #, c-format
 msgid "File playback cannot launch a device app; ignoring --start-app\n"
 msgstr "文件回放模式无法启动设备应用，已忽略 --start-app\n"
 
-#: src/app/Application.cpp:219
+#: src/app/Application.cpp:224
 msgid "Device clipboard text did not match; paste skipped"
 msgstr "手机剪贴板内容与发送文本不一致，未执行粘贴"
 
-#: src/app/Application.cpp:231
+#: src/app/Application.cpp:236
 #, c-format
 msgid ""
 "Failed to open audio output: %s (recording and audio reception continue)\n"
 msgstr "打开音频输出失败：%s（录制和音频接收继续）\n"
 
-#: src/app/Application.cpp:234
+#: src/app/Application.cpp:239
 #, c-format
 msgid "Failed to open audio output: %s\n"
 msgstr "无法打开音频输出：%s\n"
 
-#: src/app/Application.cpp:238
+#: src/app/Application.cpp:243
 #, c-format
 msgid ""
 "Failed to open audio output: %s (audio disabled; video continues). The "
@@ -88,128 +88,146 @@ msgstr ""
 "打开音频输出失败：%s（已禁用音频，视频继续）。手机音频路由可能保持到会话到期"
 "（约 20 秒）；如有需要，请在手机上继续播放。\n"
 
-#: src/app/Application.cpp:245
+#: src/app/Application.cpp:250
 #, c-format
 msgid ""
 "Local audio playback disabled; recording original AAC without PCM decoding\n"
 msgstr "电脑音频播放已关闭；直接录制原始 AAC，不解码为 PCM\n"
 
-#: src/app/Application.cpp:269 tools/rr_keepalive_probe.cpp:770
+#: src/app/Application.cpp:274 tools/rr_keepalive_probe.cpp:770
 msgid "failed"
 msgstr "失败"
 
-#: src/app/Application.cpp:269
+#: src/app/Application.cpp:274
 msgid "injected"
 msgstr "已注入"
 
-#: src/app/Application.cpp:281
+#: src/app/Application.cpp:286
 #, c-format
 msgid "--test-button %s: pressed\n"
 msgstr "--test-button %s: 已按下\n"
 
-#: src/app/Application.cpp:283
+#: src/app/Application.cpp:288
 #, c-format
 msgid "--test-button %s failed: %s\n"
 msgstr "--test-button %s 失败: %s\n"
 
-#: src/app/Application.cpp:295
+#: src/app/Application.cpp:300
 #, c-format
 msgid "--test-type %s: injected\n"
 msgstr "--test-type %s: 已注入\n"
 
-#: src/app/Application.cpp:297
+#: src/app/Application.cpp:302
 #, c-format
 msgid "--test-type failed: %s\n"
 msgstr "--test-type 失败: %s\n"
 
-#: src/app/Application.cpp:336
+#: src/app/Application.cpp:341
 #, c-format
 msgid "Input injection failed (further attempts disabled): %s\n"
 msgstr "注入输入失败（已停止尝试）: %s\n"
 
-#: src/app/Application.cpp:372
+#: src/app/Application.cpp:377
 msgid "Release the held keys or mouse button before pasting"
 msgstr "请先松开按键或鼠标，再粘贴"
 
-#: src/app/Application.cpp:376
+#: src/app/Application.cpp:381
 msgid "Clipboard paste is already in progress"
 msgstr "上一项剪贴板粘贴仍在进行"
 
-#: src/app/Application.cpp:383
+#: src/app/Application.cpp:388
 #, c-format
 msgid "Failed to read computer clipboard: %s\n"
 msgstr "无法读取电脑剪贴板：%s\n"
 
-#: src/app/Application.cpp:389
+#: src/app/Application.cpp:394
 msgid "Clipboard text exceeds the 1 MiB paste limit"
 msgstr "剪贴板文本超过 1 MiB 粘贴上限"
 
-#: src/app/Application.cpp:397
+#: src/app/Application.cpp:402
 msgid "Could not start clipboard paste"
 msgstr "无法开始剪贴板粘贴"
 
-#: src/app/Application.cpp:407
+#: src/app/Application.cpp:412
 msgid "Clipboard paste timed out"
 msgstr "剪贴板粘贴超时"
 
-#: src/app/Application.cpp:415
+#: src/app/Application.cpp:420
 #, c-format
 msgid "Clipboard paste failed: %s\n"
 msgstr "剪贴板粘贴失败：%s\n"
 
-#: src/app/Application.cpp:416
+#: src/app/Application.cpp:421 src/app/Application.cpp:454
 msgid "No diagnostic available"
 msgstr "没有可用的错误信息"
 
-#: src/app/Application.cpp:469
+#: src/app/Application.cpp:439
+msgid "Device rotation is already in progress"
+msgstr "设备转屏请求正在进行"
+
+#: src/app/Application.cpp:441
+msgid "Could not start device rotation"
+msgstr "无法启动设备转屏请求"
+
+#: src/app/Application.cpp:450
+#, c-format
+msgid "Device rotation requested: %s\n"
+msgstr "已请求设备转屏：%s\n"
+
+#: src/app/Application.cpp:453
+#, c-format
+msgid "Device rotation failed: %s\n"
+msgstr "设备转屏请求失败：%s\n"
+
+#: src/app/Application.cpp:501
 #, c-format
 msgid "Reached --time-limit %d seconds\n"
 msgstr "达到 --time-limit %d 秒\n"
 
-#: src/app/Application.cpp:484
+#: src/app/Application.cpp:516
 #, c-format
 msgid ""
 "  Render: %d frames total, %d this interval / %.1f fps, average %.1f fps\n"
 msgstr "  渲染：累计 %d 帧，本次 %d 帧 / %.1f fps，全程平均 %.1f fps\n"
 
-#: src/app/Application.cpp:509 src/app/Application.cpp:577
+#: src/app/Application.cpp:541 src/app/Application.cpp:609
 #, c-format
 msgid "Reached --exit-after %d\n"
 msgstr "达到 --exit-after %d\n"
 
-#: src/app/Application.cpp:527
+#: src/app/Application.cpp:559
 #, c-format
 msgid ""
 "Mouse input is unavailable: screenshot orientation or display dimensions are "
 "unknown or inconsistent\n"
 msgstr "截图的朝向或显示尺寸尚未确认，已暂停鼠标输入\n"
 
-#: src/app/Application.cpp:553
+#: src/app/Application.cpp:585
 #, c-format
 msgid "Render content changed to %dx%d; rotation %d degrees clockwise\n"
 msgstr "画面尺寸变为 %dx%d，顺时针旋转 %d 度\n"
 
-#: src/app/Application.cpp:592
+#: src/app/Application.cpp:624
 #, c-format
 msgid "Window readback was not reached (requested frame %d, rendered %d)\n"
 msgstr "未执行窗口回读：要求第 %d 帧，实际显示了 %d 帧\n"
 
-#: src/app/Application.cpp:598
+#: src/app/Application.cpp:630
 #, c-format
 msgid "Finished: audio recording finalized\n"
 msgstr "已完成：音频录制已保存\n"
 
-#: src/app/Application.cpp:600
+#: src/app/Application.cpp:632
 #, c-format
 msgid "Finished: device session closed\n"
 msgstr "已结束：设备会话已关闭\n"
 
-#: src/app/Application.cpp:603
+#: src/app/Application.cpp:635
 #, c-format
 msgid "Finished: encoded video recording finalized\n"
 msgstr "结束：编码视频录制已完成收尾\n"
 
-#: src/app/Application.cpp:605
+#: src/app/Application.cpp:637
 #, c-format
 msgid "Finished: processed %d frames\n"
 msgstr "完成：处理 %d 帧\n"
@@ -251,6 +269,8 @@ msgid ""
 "Actual window size: MOD+G. Remove image margins: MOD+W or double-click an "
 "empty margin.\n"
 "Rotate display left/right: MOD+Left/Right (recordings unchanged).\n"
+"Rotate device portrait/landscape: MOD+R (requires device control and a "
+"supported app).\n"
 "Pause or refresh paused display: MOD+Z. Resume display: MOD+Shift+Z "
 "(capture, audio and recording continue).\n"
 "Mirror display horizontally: MOD+Shift+Left/Right. Mirror vertically: "
@@ -265,23 +285,9 @@ msgid ""
 "extension.\n"
 "Wireless use requires pairing. --help / --version do not connect to the "
 "device."
-msgstr ""
-"不指定参数时，镜像已连接的设备。\n"
-"鼠标左键映射为触摸。普通按键使用设备的键盘布局和输入法。\n"
-"退出：MOD+Q。全屏：MOD+F 或 F11。MOD 默认是左 Alt 或左 Super，可用 --shortcut-mod 更改。\n"
-"粘贴电脑剪贴板：MOD+V（支持 Unicode）。\n"
-"主屏：MOD+H 或鼠标中键。音量：MOD+上/下。侧键：MOD+P。\n"
-"恢复原尺寸：MOD+G。去掉画面留边：MOD+W 或双击空白留边。\n"
-"向左/右旋转显示：MOD+左/右（不改变录制）。\n"
-"暂停或刷新冻结画面：MOD+Z。恢复显示：MOD+Shift+Z（采集、音频和录制继续）。\n"
-"水平镜像：MOD+Shift+左/右。垂直镜像：MOD+Shift+上/下。\n"
-"默认将音频转到电脑；--audio-dup 保留手机播放。切换路由可能暂停手机播放器，请按需继续播放。\n"
-"设备决定编码尺寸、码率和帧率。显示裁剪及 --display-orientation 不改变录制；"
-"--orientation 同时旋转显示与容器录制。所选轨道可录制为 .mp4 或 .mkv，裸视频请用 .hevc；"
-"--record-format 可覆盖文件扩展名。\n"
-"无线使用需要配对。--help / --version 不连接设备。"
+msgstr "不指定参数时，镜像已连接的设备。\n鼠标左键映射为触摸。普通按键使用设备的键盘布局和输入法。\n退出：MOD+Q。全屏：MOD+F 或 F11。MOD 默认是左 Alt 或左 Super，可用 --shortcut-mod 更改。\n粘贴电脑剪贴板：MOD+V（支持 Unicode）。\n主屏：MOD+H 或鼠标中键。音量：MOD+上/下。侧键：MOD+P。\n恢复原尺寸：MOD+G。去掉画面留边：MOD+W 或双击空白留边。\n向左/右旋转显示：MOD+左/右（不改变录制）。\n切换手机横竖屏：MOD+R（需启用设备控制且应用支持转屏）。\n暂停或刷新冻结画面：MOD+Z。恢复显示：MOD+Shift+Z（采集、音频和录制继续）。\n水平镜像：MOD+Shift+左/右。垂直镜像：MOD+Shift+上/下。\n默认将音频转到电脑；--audio-dup 保留手机播放。切换路由可能暂停手机播放器，请按需继续播放。\n设备决定编码尺寸、码率和帧率。显示裁剪及 --display-orientation 不改变录制；--orientation 同时旋转显示与容器录制。所选轨道可录制为 .mp4 或 .mkv，裸视频请用 .hevc；--record-format 可覆盖文件扩展名。\n无线使用需要配对。--help / --version 不连接设备。"
 
-#: src/app/Cli.cpp:37 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
+#: src/app/Cli.cpp:38 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
 #: tools/audio_decode_probe.cpp:193 tools/audio_pump_probe.cpp:85
 #: tools/feature_probe.cpp:61 tools/hid_probe.cpp:184
 #: tools/screenshot_probe.cpp:52 tools/stall_probe.cpp:59
@@ -289,185 +295,185 @@ msgstr ""
 msgid "Show help"
 msgstr "显示帮助"
 
-#: src/app/Cli.cpp:38
+#: src/app/Cli.cpp:39
 msgid "Play an Annex-B HEVC file"
 msgstr "回放 Annex-B HEVC 文件"
 
-#: src/app/Cli.cpp:39 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
+#: src/app/Cli.cpp:40 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
 msgid "Device UDID"
 msgstr "设备 UDID"
 
-#: src/app/Cli.cpp:41
+#: src/app/Cli.cpp:42
 msgid "LAN address, or auto to discover a paired wireless device"
 msgstr "局域网地址；设为 auto 可自动发现已配对的无线设备"
 
-#: src/app/Cli.cpp:44
+#: src/app/Cli.cpp:45
 msgid "RemotePairing port for a manual LAN address; default: 49152"
 msgstr "手动指定局域网地址时使用的 RemotePairing 端口，默认 49152"
 
-#: src/app/Cli.cpp:47
+#: src/app/Cli.cpp:48
 msgid ""
 "Pair over USB, or use --wifi auto for phone-initiated PIN pairing, then exit"
 msgstr "通过 USB 配对，或用 --wifi auto 等待手机发起 PIN 配对，完成后退出"
 
-#: src/app/Cli.cpp:50
+#: src/app/Cli.cpp:51
 msgid "Pairing timeout in milliseconds (1..300000); default: 120000"
 msgstr "配对超时，单位毫秒（1..300000）；默认：120000"
 
-#: src/app/Cli.cpp:53
+#: src/app/Cli.cpp:54
 msgid ""
 "Allow replacing an incomplete or rejected pairing record; requires --pair"
 msgstr "允许替换不完整或被设备拒绝的配对记录；需要 --pair"
 
-#: src/app/Cli.cpp:56
+#: src/app/Cli.cpp:57
 msgid ""
 "Record selected tracks; format follows .mp4/.mkv or raw HEVC, unless --"
 "record-format is specified"
 msgstr ""
 "录制所选轨道；默认按 .mp4/.mkv 或裸 HEVC 选择格式，可用 --record-format 覆盖"
 
-#: src/app/Cli.cpp:63
+#: src/app/Cli.cpp:64
 msgid ""
 "Recording format: mp4, mkv or hevc (raw video extension); requires --record"
 msgstr "录制格式：mp4、mkv 或 hevc（裸视频扩展）；需要 --record"
 
-#: src/app/Cli.cpp:65
+#: src/app/Cli.cpp:66
 msgid ""
 "Launch bundle ID; ? matches name prefix, + terminates the previous instance"
 msgstr "启动 bundle id；? 按名称前缀，+ 先终止实例"
 
-#: src/app/Cli.cpp:66
+#: src/app/Cli.cpp:67
 msgid "Window title"
 msgstr "窗口标题"
 
-#: src/app/Cli.cpp:67
+#: src/app/Cli.cpp:68
 msgid "SDL render driver, e.g. metal / software"
 msgstr "SDL 渲染驱动，如 metal / software"
 
-#: src/app/Cli.cpp:69
+#: src/app/Cli.cpp:70
 msgid ""
 "display for live video (default), screenshot for polling; stream is an alias "
 "for display"
 msgstr ""
 "display 为实时视频（默认），screenshot 为截图轮询；stream 是 display 的别名"
 
-#: src/app/Cli.cpp:71
+#: src/app/Cli.cpp:72
 msgid "Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"
 msgstr "注入直线 X0,Y0,X1,Y1 后退出（归一化坐标）"
 
-#: src/app/Cli.cpp:78
+#: src/app/Cli.cpp:79
 msgid "Inject home/lock/volup/voldn/mute"
 msgstr "注入 home/lock/volup/voldn/mute"
 
-#: src/app/Cli.cpp:80
+#: src/app/Cli.cpp:81
 msgid "Inject ASCII text (device text field must have focus)"
 msgstr "注入 ASCII 文本（设备需已聚焦文本框）"
 
-#: src/app/Cli.cpp:81
+#: src/app/Cli.cpp:82
 msgid "Force alternating video fallback and recovery at T1,T2,... seconds"
 msgstr "按 T1,T2,... 秒交替强制降级与恢复"
 
-#: src/app/Cli.cpp:82
+#: src/app/Cli.cpp:83
 msgid "Write device clipboard and exit (supports Unicode)"
 msgstr "写入设备剪贴板后退出（支持中文）"
 
-#: src/app/Cli.cpp:84
+#: src/app/Cli.cpp:85
 msgid "List USB and RemotePairing devices; wireless scan defaults to 3 seconds"
 msgstr "列出 USB 与 RemotePairing 设备；默认扫描无线设备 3 秒"
 
-#: src/app/Cli.cpp:86
+#: src/app/Cli.cpp:87
 msgid ""
 "Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"
 msgstr "无线设备扫描时间，单位毫秒（0..60000）；0 表示只列出 usbmux 设备"
 
-#: src/app/Cli.cpp:88
+#: src/app/Cli.cpp:89
 msgid "Disable input control"
 msgstr "关闭输入控制"
 
-#: src/app/Cli.cpp:91
+#: src/app/Cli.cpp:92
 msgid "List device apps"
 msgstr "列出设备 App"
 
-#: src/app/Cli.cpp:92
+#: src/app/Cli.cpp:93
 msgid "Show version"
 msgstr "显示版本"
 
-#: src/app/Cli.cpp:93
+#: src/app/Cli.cpp:94
 msgid "Desktop fullscreen"
 msgstr "桌面全屏"
 
-#: src/app/Cli.cpp:94
+#: src/app/Cli.cpp:95
 msgid "Keep window on top"
 msgstr "窗口置顶"
 
-#: src/app/Cli.cpp:95
+#: src/app/Cli.cpp:96
 msgid "Borderless window"
 msgstr "无边框窗口"
 
-#: src/app/Cli.cpp:96
+#: src/app/Cli.cpp:97
 msgid "Prevent local screen sleep while running"
 msgstr "运行期间禁止本机息屏"
 
-#: src/app/Cli.cpp:97
+#: src/app/Cli.cpp:98
 msgid "Do not start audio stream"
 msgstr "不启动音频流"
 
-#: src/app/Cli.cpp:99
+#: src/app/Cli.cpp:100
 msgid "Keep audio playing on the phone while forwarding it to the computer"
 msgstr "转发音频到电脑，同时保留手机播放"
 
-#: src/app/Cli.cpp:102
+#: src/app/Cli.cpp:103
 msgid ""
 "Disable computer audio playback; capture audio only when recording to MP4 or "
 "MKV"
 msgstr "关闭电脑音频播放；仅录制 MP4 或 MKV 时采集音频"
 
-#: src/app/Cli.cpp:103
+#: src/app/Cli.cpp:104
 msgid "Do not start video stream"
 msgstr "不采集视频"
 
-#: src/app/Cli.cpp:105
+#: src/app/Cli.cpp:106
 msgid "Disable video display; keep encoded video when recording"
 msgstr "不显示视频；录制时仍接收编码视频"
 
-#: src/app/Cli.cpp:108
+#: src/app/Cli.cpp:109
 msgid ""
 "Disable computer video and audio playback; keep selected recording tracks"
 msgstr "不在电脑播放视频或音频；录制时保留所选轨道"
 
-#: src/app/Cli.cpp:109
+#: src/app/Cli.cpp:110
 msgid "Run without a window"
 msgstr "无窗口运行"
 
-#: src/app/Cli.cpp:110
+#: src/app/Cli.cpp:111
 msgid "Use platform hardware decoder; default: software"
 msgstr "使用平台硬件解码，默认软件解码"
 
-#: src/app/Cli.cpp:111
+#: src/app/Cli.cpp:112
 msgid "Print input coordinates"
 msgstr "打印输入坐标"
 
-#: src/app/Cli.cpp:112
+#: src/app/Cli.cpp:113
 msgid "Add tunnel diagnostics to --stats"
 msgstr "在 --stats 中增加隧道网络诊断"
 
-#: src/app/Cli.cpp:113
+#: src/app/Cli.cpp:114
 msgid "Print statistics every second"
 msgstr "每秒打印统计"
 
-#: src/app/Cli.cpp:114
+#: src/app/Cli.cpp:115
 msgid "Read device clipboard; with --copy, read back after writing"
 msgstr "读取设备剪贴板；与 --copy 同用时写后读回"
 
-#: src/app/Cli.cpp:117
+#: src/app/Cli.cpp:118
 msgid "Window horizontal position; integer or auto (default)"
 msgstr "窗口横坐标：整数或 auto（默认）"
 
-#: src/app/Cli.cpp:119
+#: src/app/Cli.cpp:120
 msgid "Window vertical position; integer or auto (default)"
 msgstr "窗口纵坐标：整数或 auto（默认）"
 
-#: src/app/Cli.cpp:121
+#: src/app/Cli.cpp:122
 msgid ""
 "Shortcut modifiers, separated by commas: lctrl, rctrl, lalt, ralt, lsuper, "
 "rsuper; default: lalt,lsuper"
@@ -475,31 +481,31 @@ msgstr ""
 "快捷键修饰键，用逗号分隔：lctrl、rctrl、lalt、ralt、lsuper、rsuper；默认 "
 "lalt,lsuper"
 
-#: src/app/Cli.cpp:122
+#: src/app/Cli.cpp:123
 msgid "Window width; 0 for automatic"
 msgstr "窗口宽度，0 为自动"
 
-#: src/app/Cli.cpp:123
+#: src/app/Cli.cpp:124
 msgid "Window height; 0 for automatic"
 msgstr "窗口高度，0 为自动"
 
-#: src/app/Cli.cpp:124
+#: src/app/Cli.cpp:125
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr "运行秒数，0 为不限"
 
-#: src/app/Cli.cpp:126
+#: src/app/Cli.cpp:127
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr "音频缓冲毫秒数，默认 50，上限 1000"
 
-#: src/app/Cli.cpp:128
+#: src/app/Cli.cpp:129
 msgid "Exit after N frames; 0 for unlimited"
 msgstr "处理 N 帧后退出，0 为不限"
 
-#: src/app/Cli.cpp:130
+#: src/app/Cli.cpp:131
 msgid "Finite positive scale; default: fit screen"
 msgstr "有限正数缩放比例，默认自动适应屏幕"
 
-#: src/app/Cli.cpp:148
+#: src/app/Cli.cpp:149
 msgid ""
 "Display and recording orientation: 0/90/180/270 or flip0/flip90/flip180/"
 "flip270; recording cannot flip; auto changes display only"
@@ -507,7 +513,7 @@ msgstr ""
 "显示和录制方向：0/90/180/270 或 flip0/flip90/flip180/flip270；录制不支持翻"
 "转，auto 只设置显示"
 
-#: src/app/Cli.cpp:152
+#: src/app/Cli.cpp:153
 msgid ""
 "Display orientation: auto, 0/90/180/270 or flip0/flip90/flip180/flip270; "
 "flip horizontally before clockwise rotation"
@@ -515,64 +521,64 @@ msgstr ""
 "显示方向：auto、0/90/180/270 或 flip0/flip90/flip180/flip270；先水平翻转，再"
 "顺时针旋转"
 
-#: src/app/Cli.cpp:156
+#: src/app/Cli.cpp:157
 msgid ""
 "Clockwise MP4/MKV recording rotation: 0/90/180/270; default: 0; display is "
 "unchanged"
 msgstr "顺时针旋转 MP4/MKV 录制：0/90/180/270，默认 0；不改变显示"
 
-#: src/app/Cli.cpp:159
+#: src/app/Cli.cpp:160
 msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
 msgstr "裁剪显示像素：WxH+X+Y 或 W:H:X:Y；不改变录制内容"
 
-#: src/app/Cli.cpp:161
+#: src/app/Cli.cpp:162
 msgid "Background color: RGB or RRGGBB, with optional #"
 msgstr "背景色：RGB 或 RRGGBB，可带 # 前缀"
 
-#: src/app/Cli.cpp:162
+#: src/app/Cli.cpp:163
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr "第 N 帧回读窗口为 BMP：N FILE（需要窗口）"
 
-#: src/app/Cli.cpp:171 src/app/LiveSource.cpp:82
+#: src/app/Cli.cpp:172 src/app/LiveSource.cpp:82
 msgid "Requires a nonempty recording file"
 msgstr "需要非空的录制文件路径"
 
-#: src/app/Cli.cpp:180
+#: src/app/Cli.cpp:181
 msgid ""
 "Audio capture is disabled; --audio-dup requires playback or MP4/MKV recording"
 msgstr "音频采集已关闭；--audio-dup 需要电脑播放或 MP4/MKV 音轨录制"
 
-#: src/app/Cli.cpp:186
+#: src/app/Cli.cpp:187
 msgid ""
 "File playback requires video; incompatible with video playback disable "
 "options"
 msgstr "文件播放需要视频，不能同时指定关闭视频播放的选项"
 
-#: src/app/Cli.cpp:194
+#: src/app/Cli.cpp:195
 msgid "Audio-only recording requires MP4 or MKV; raw HEVC cannot contain audio"
 msgstr "仅录音频需要使用 MP4 或 MKV；裸 HEVC 无法保存音频"
 
-#: src/app/Cli.cpp:197
+#: src/app/Cli.cpp:198
 msgid "Recording requires at least one enabled audio or video track"
 msgstr "录制需要至少启用音频或视频中的一项"
 
-#: src/app/Cli.cpp:200 src/app/LiveSource.cpp:97
+#: src/app/Cli.cpp:201 src/app/LiveSource.cpp:97
 msgid "Recording orientation requires a video track"
 msgstr "录制方向需要视频轨道"
 
-#: src/app/Cli.cpp:205
+#: src/app/Cli.cpp:206
 msgid ""
 "Frame counting, hardware decoding, fallback tests and screenshots require "
 "video capture"
 msgstr "按帧计数、硬件解码、降级测试和截图需要采集视频"
 
-#: src/app/Cli.cpp:209 src/app/LiveSource.cpp:119
+#: src/app/Cli.cpp:210 src/app/LiveSource.cpp:119
 msgid ""
 "Container recording requires live video; screenshot polling cannot be "
 "recorded"
 msgstr "容器录制需要实时视频流，不能录制截图轮询"
 
-#: src/app/Cli.cpp:213
+#: src/app/Cli.cpp:214
 msgid ""
 "Recording does not support flipping; use --display-orientation for display-"
 "only flipping or reset --record-orientation to a rotation"
@@ -580,65 +586,65 @@ msgstr ""
 "录制不支持翻转；只翻转显示请使用 --display-orientation，或在后面用 --record-"
 "orientation 指定旋转角度"
 
-#: src/app/Cli.cpp:217 src/app/LiveSource.cpp:129
+#: src/app/Cli.cpp:218 src/app/LiveSource.cpp:129
 msgid ""
 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate "
 "only the display"
 msgstr "录制旋转需要 MP4 或 MKV；只旋转显示请使用 --display-orientation"
 
-#: src/app/Cli.cpp:222
+#: src/app/Cli.cpp:223
 msgid "Requires a nonempty LAN address or auto"
 msgstr "需要非空局域网地址或 auto"
 
-#: src/app/Cli.cpp:225
+#: src/app/Cli.cpp:226
 msgid "Use a manual LAN address; auto uses discovered SRV ports"
 msgstr "用于手动指定的局域网地址；auto 使用广播的 SRV 端口"
 
-#: src/app/Cli.cpp:229
+#: src/app/Cli.cpp:230
 msgid ""
 "Wireless first pairing requires --wifi auto; existing records cannot be "
 "repaired wirelessly"
 msgstr "首次无线配对需要 --wifi auto；已有配对记录无法通过无线方式修复"
 
-#: src/app/Cli.cpp:240
+#: src/app/Cli.cpp:241
 msgid "Expected an integer or auto"
 msgstr "请使用整数或 auto"
 
-#: src/app/Cli.cpp:260
+#: src/app/Cli.cpp:261
 msgid ""
 "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
 msgstr "请使用 lctrl、rctrl、lalt、ralt、lsuper 或 rsuper，以逗号分隔"
 
-#: src/app/Cli.cpp:271
+#: src/app/Cli.cpp:272
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr "坐标必须是 [0, 1] 内的有限数"
 
-#: src/app/Cli.cpp:278
+#: src/app/Cli.cpp:279
 msgid "Requires a finite positive number"
 msgstr "需要有限正数"
 
-#: src/app/Cli.cpp:293
+#: src/app/Cli.cpp:294
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr "格式应为 WxH+X+Y 或 W:H:X:Y，尺寸为正、偏移非负"
 
-#: src/app/Cli.cpp:302
+#: src/app/Cli.cpp:303
 msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
 msgstr "请使用 3 位或 6 位十六进制颜色，可带 # 前缀"
 
-#: src/app/Cli.cpp:316
+#: src/app/Cli.cpp:317
 msgid "Frame number must be a positive integer"
 msgstr "帧号需要正整数"
 
-#: src/app/Cli.cpp:321
+#: src/app/Cli.cpp:322
 msgid "Requires a window; incompatible with --no-window"
 msgstr "需要窗口，不能与 --no-window 同用"
 
-#: src/app/Cli.cpp:324
+#: src/app/Cli.cpp:325
 msgid "Window readback requires video playback"
 msgstr "回读窗口画面需要开启视频播放"
 
-#: src/app/Cli.cpp:332
+#: src/app/Cli.cpp:333
 msgid "Nothing to do: enable media, recording or device control"
 msgstr "没有可执行的操作：请开启音视频、录制或设备控制"
 
@@ -816,6 +822,18 @@ msgstr "无法枚举 USB 设备"
 #: src/app/DeviceConnection.cpp:220
 msgid "Wi-Fi port must be between 1 and 65535"
 msgstr "Wi-Fi 端口必须在 1 到 65535 之间"
+
+#: src/app/DeviceRotationJob.cpp:26
+msgid "Device orientation has no portrait or landscape baseline"
+msgstr "无法确定设备当前的横竖屏方向"
+
+#: src/app/DeviceRotationJob.cpp:48
+msgid "Device did not report the requested orientation: "
+msgstr "设备未报告请求的方向："
+
+#: src/app/DeviceRotationJob.cpp:93
+msgid "Device orientation operation threw an exception"
+msgstr "设备方向操作发生异常"
 
 #: src/app/FileSource.cpp:37
 msgid "Cannot read playback file: "
@@ -1296,7 +1314,7 @@ msgid "Render driver: %s\n"
 msgstr "渲染驱动: %s\n"
 
 #: src/app/Presenter.cpp:146 src/app/Presenter.cpp:157
-#: src/app/Presenter.cpp:266 src/app/Presenter.cpp:333
+#: src/app/Presenter.cpp:266 src/app/Presenter.cpp:337
 #, c-format
 msgid "Failed to configure viewport: %s\n"
 msgstr "无法设置显示区域：%s\n"
@@ -1317,7 +1335,7 @@ msgid "Cannot render frame: invalid dimensions or pixel buffer\n"
 msgstr "无法显示这一帧：图像尺寸或像素缓冲无效\n"
 
 #: src/app/Presenter.cpp:245 src/app/Presenter.cpp:271
-#: src/app/Presenter.cpp:318
+#: src/app/Presenter.cpp:322
 #, c-format
 msgid "Failed to query drawable dimensions: %s\n"
 msgstr "查询绘制面尺寸失败: %s\n"
@@ -1332,32 +1350,32 @@ msgstr "上传纹理失败: %s\n"
 msgid "Failed to render frame: %s\n"
 msgstr "无法绘制这一帧：%s\n"
 
-#: src/app/Presenter.cpp:323
+#: src/app/Presenter.cpp:327
 #, c-format
 msgid "Failed to create readback buffer: %s\n"
 msgstr "创建回读缓冲失败: %s\n"
 
-#: src/app/Presenter.cpp:327
+#: src/app/Presenter.cpp:331
 #, c-format
 msgid "Failed to lock readback buffer: %s\n"
 msgstr "锁定回读缓冲失败: %s\n"
 
-#: src/app/Presenter.cpp:345
+#: src/app/Presenter.cpp:349
 #, c-format
 msgid "Readback failed: %s\n"
 msgstr "回读失败: %s\n"
 
-#: src/app/Presenter.cpp:352
+#: src/app/Presenter.cpp:356
 #, c-format
 msgid "Failed to save image: %s\n"
 msgstr "存图失败: %s\n"
 
-#: src/app/Presenter.cpp:355
+#: src/app/Presenter.cpp:359
 #, c-format
 msgid "Window readback saved to %s (%dx%d pixels)\n"
 msgstr "窗口回读已保存到 %s (%dx%d 像素)\n"
 
-#: src/app/Presenter.cpp:365
+#: src/app/Presenter.cpp:369
 #, c-format
 msgid ""
 "[input] %s raw(%d,%d) viewport %d x%d (rotation %d degrees, horizontal flip: "
@@ -1366,31 +1384,31 @@ msgstr ""
 "[输入] %s 原始坐标(%d,%d)，视口 %d x%d（旋转 %d 度，水平翻转：%s）/ 窗口 %d "
 "x%d / 绘制面 %d x%d -> (%.3f, %.3f)\n"
 
-#: src/app/Presenter.cpp:368 tools/feature_probe.cpp:26
+#: src/app/Presenter.cpp:372 tools/feature_probe.cpp:26
 #: tools/feature_probe.cpp:27 tools/rr_keepalive_probe.cpp:249
 #: tools/rr_keepalive_probe.cpp:307
 msgid "no"
 msgstr "无"
 
-#: src/app/Presenter.cpp:368 tools/feature_probe.cpp:26
+#: src/app/Presenter.cpp:372 tools/feature_probe.cpp:26
 #: tools/feature_probe.cpp:27 tools/rr_keepalive_probe.cpp:249
 #: tools/rr_keepalive_probe.cpp:307
 msgid "yes"
 msgstr "有"
 
-#: src/app/Presenter.cpp:597
+#: src/app/Presenter.cpp:609
 msgid "down"
 msgstr "按下"
 
-#: src/app/Presenter.cpp:611
+#: src/app/Presenter.cpp:623
 msgid "move"
 msgstr "移动"
 
-#: src/app/Presenter.cpp:766
+#: src/app/Presenter.cpp:778
 msgid "Cannot resize window for new content; keeping previous dimensions"
 msgstr "无法按新画面调整窗口，继续使用原来的尺寸"
 
-#: src/app/Presenter.cpp:860
+#: src/app/Presenter.cpp:872
 #, c-format
 msgid "Failed to change fullscreen mode: %s\n"
 msgstr "切换全屏失败：%s\n"
@@ -3056,15 +3074,15 @@ msgstr "设备方向请求已取消"
 msgid "Device orientation control is unavailable"
 msgstr "设备方向控制不可用"
 
-#: src/remote/OrientationControl.cpp:107
+#: src/remote/OrientationControl.cpp:108
 msgid "Device orientation reply timeout must be positive"
 msgstr "设备方向回复超时必须为正数"
 
-#: src/remote/OrientationControl.cpp:118
+#: src/remote/OrientationControl.cpp:125
 msgid "Unrecognized device orientation response"
 msgstr "无法识别设备方向回复"
 
-#: src/remote/OrientationControl.cpp:134
+#: src/remote/OrientationControl.cpp:141
 msgid "Device orientation target must be portrait or landscape"
 msgstr "设备目标方向必须为竖屏或横屏"
 
@@ -7690,6 +7708,51 @@ msgstr "不可用"
 #~ "编码尺寸、码率和帧率由设备决定。显示裁剪和 --display-orientation 不改变录"
 #~ "制；--orientation 同时旋转显示和容器录制。使用 .mp4 或 .mkv 保存所选音视频"
 #~ "轨道，或使用 .hevc 保存裸视频；--record-format 覆盖文件扩展名。\n"
+#~ "无线使用需要配对。--help / --version 不连接设备。"
+
+#~ msgid ""
+#~ "With no arguments, mirror the connected device.\n"
+#~ "Left mouse button maps to touch. Ordinary keys use the device's keyboard "
+#~ "layout and input method.\n"
+#~ "Quit: MOD+Q. Fullscreen: MOD+F or F11. MOD defaults to left Alt or left "
+#~ "Super; change it with --shortcut-mod.\n"
+#~ "Paste computer clipboard: MOD+V (Unicode supported).\n"
+#~ "Home: MOD+H or middle mouse button. Volume: MOD+Up/Down. Lock button: "
+#~ "MOD+P.\n"
+#~ "Actual window size: MOD+G. Remove image margins: MOD+W or double-click an "
+#~ "empty margin.\n"
+#~ "Rotate display left/right: MOD+Left/Right (recordings unchanged).\n"
+#~ "Pause or refresh paused display: MOD+Z. Resume display: MOD+Shift+Z "
+#~ "(capture, audio and recording continue).\n"
+#~ "Mirror display horizontally: MOD+Shift+Left/Right. Mirror vertically: "
+#~ "MOD+Shift+Up/Down.\n"
+#~ "Audio is forwarded to the computer by default; --audio-dup keeps phone "
+#~ "playback. Switching routes may pause the phone's player; resume it if "
+#~ "needed.\n"
+#~ "The device chooses encoding dimensions, bitrate and frame rate. Display "
+#~ "crop and --display-orientation leave recordings unchanged; --orientation "
+#~ "rotates display and container recordings together. Record selected tracks "
+#~ "to .mp4 or .mkv, or use .hevc for raw video; --record-format overrides "
+#~ "the file extension.\n"
+#~ "Wireless use requires pairing. --help / --version do not connect to the "
+#~ "device."
+#~ msgstr ""
+#~ "不指定参数时，镜像已连接的设备。\n"
+#~ "鼠标左键映射为触摸。普通按键使用设备的键盘布局和输入法。\n"
+#~ "退出：MOD+Q。全屏：MOD+F 或 F11。MOD 默认是左 Alt 或左 Super，可用 --"
+#~ "shortcut-mod 更改。\n"
+#~ "粘贴电脑剪贴板：MOD+V（支持 Unicode）。\n"
+#~ "主屏：MOD+H 或鼠标中键。音量：MOD+上/下。侧键：MOD+P。\n"
+#~ "恢复原尺寸：MOD+G。去掉画面留边：MOD+W 或双击空白留边。\n"
+#~ "向左/右旋转显示：MOD+左/右（不改变录制）。\n"
+#~ "暂停或刷新冻结画面：MOD+Z。恢复显示：MOD+Shift+Z（采集、音频和录制继"
+#~ "续）。\n"
+#~ "水平镜像：MOD+Shift+左/右。垂直镜像：MOD+Shift+上/下。\n"
+#~ "默认将音频转到电脑；--audio-dup 保留手机播放。切换路由可能暂停手机播放器，"
+#~ "请按需继续播放。\n"
+#~ "设备决定编码尺寸、码率和帧率。显示裁剪及 --display-orientation 不改变录"
+#~ "制；--orientation 同时旋转显示与容器录制。所选轨道可录制为 .mp4 或 .mkv，"
+#~ "裸视频请用 .hevc；--record-format 可覆盖文件扩展名。\n"
 #~ "无线使用需要配对。--help / --version 不连接设备。"
 
 #~ msgid ""
