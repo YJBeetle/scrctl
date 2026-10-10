@@ -74,6 +74,8 @@ struct Fake {
     bool bad_ack = false, bad_complete = false, bad_mount = false, bad_post_signature = false;
     bool upload_failure = false, nonce_changed = false, invalid_identifiers = false;
     bool missing_post_mount = false, oversized = false, after_mount = false;
+    bool attached_copy_entry = false, copy_entry_unmounted = false, wrong_mount_path = false;
+    bool missing_copy_mount_state = false, missing_copy_mount_path = false;
     int reconnects = 0, nonce_queries = 0, writes = 0;
     uint64_t last_budget = 0;
     Fake() {
@@ -90,8 +92,17 @@ struct Fake {
                 auto reply = V::Dict();
                 if (copy_unknown) { reply.set("Error", V::Str("UnknownCommand")); return reply; }
                 auto entries = V::Array();
-                // The fake derives type from the preceding lookup.
-                if (mounted) { auto entry = V::Dict(); entry.set("DiskImageType", V::Str(expected_signature == std::vector<uint8_t>{1,2,3} ? "Personalized" : "Developer")); entries.push(std::move(entry)); }
+                // The fake derives type from the expected signature and may
+                // expose an attached-but-unmounted image independently.
+                if (mounted || attached_copy_entry) {
+                    auto entry = V::Dict();
+                    const bool personalized = expected_signature == std::vector<uint8_t>{1,2,3};
+                    entry.set("DiskImageType", V::Str(personalized ? "Personalized" : "Developer"));
+                    if (!missing_copy_mount_state) entry.set("IsMounted", V::Bool(!copy_entry_unmounted));
+                    if (!missing_copy_mount_path) entry.set("MountPath", V::Str(wrong_mount_path ? "/private/other" :
+                        personalized ? "/System/Developer" : "/Developer"));
+                    entries.push(std::move(entry));
+                }
                 reply.set("EntryList", std::move(entries)); return reply;
             }
             if (name == "QueryDeveloperModeStatus") { auto reply = V::Dict(); reply.set("DeveloperModeStatus", V::Bool(developer)); return reply; }
@@ -185,6 +196,22 @@ int main() {
         Fixture f(ddi::Kind::Personalized, "18.7.8"); Fake fake; fake.empty_signature = true; fake.expected_signature = {1,2,3};
         auto result = run(f, fake, {}, error);
         check(result && result->state == ddi::MountState::Mounted && !result->signature_matches && result->verification == "CopyDevices entry", "Empty Personalized lookup signature requires CopyDevices mounted evidence");
+    }
+    for (auto kind : {ddi::Kind::Classic, ddi::Kind::Personalized}) {
+        Fake fake; fake.attached_copy_entry = true; fake.copy_entry_unmounted = true;
+        fake.expected_signature = kind == ddi::Kind::Personalized ? std::vector<uint8_t>{1,2,3} : std::vector<uint8_t>{42};
+        auto result = ddi::inspect_mounted(fake.service, kind, {}, error);
+        check(result && result->state == ddi::MountState::NotMounted,
+              "CopyDevices attached but unmounted image is not a mounted DDI");
+        fake.copy_entry_unmounted = false; fake.wrong_mount_path = true;
+        check(!ddi::inspect_mounted(fake.service, kind, {}, error),
+              "CopyDevices matching image type at another mount path cannot verify developer mount");
+        fake.wrong_mount_path = false; fake.missing_copy_mount_state = true;
+        check(!ddi::inspect_mounted(fake.service, kind, {}, error),
+              "CopyDevices entry without definite mounted state cannot verify developer mount");
+        fake.missing_copy_mount_state = false; fake.missing_copy_mount_path = true;
+        check(!ddi::inspect_mounted(fake.service, kind, {}, error),
+              "CopyDevices entry without a mount path cannot verify developer mount");
     }
     {
         Fixture f; Fake fake; ddi::MountOptions options; options.cancelled = [] { return true; };

@@ -123,6 +123,16 @@ MountResult inspect(Session &s, Kind kind) {
                 if (!entry.is_dict()) throw std::runtime_error(SCRCTL_TR("Invalid DDI mounted image entry"));
                 auto *type = entry.find("DiskImageType");
                 if (type && type->is_string() && type->string == result.image_type) {
+                    // CopyDevices can describe attached disk images. Their
+                    // type alone does not establish a mounted developer image.
+                    const auto *mounted = entry.find("IsMounted");
+                    if (!mounted || !mounted->is_bool())
+                        throw std::runtime_error(SCRCTL_TR("Invalid DDI mounted image entry"));
+                    if (!mounted->boolean) continue;
+                    const auto *path = entry.find("MountPath");
+                    const std::string_view expected = kind == Kind::Classic ? "/Developer" : "/System/Developer";
+                    if (!path || !path->is_string() || path->string != expected)
+                        throw std::runtime_error(SCRCTL_TR("Invalid DDI mounted image entry"));
                     result.state = MountState::AlreadyMounted; result.verification = "CopyDevices entry"; return result;
                 }
             }
