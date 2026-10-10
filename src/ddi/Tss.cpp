@@ -1,4 +1,5 @@
 #include "ddi/Tss.h"
+#include "ddi/AppleTssTrust.h"
 #include "i18n/Translation.h"
 #include <curl/curl.h>
 #include <openssl/rand.h>
@@ -231,6 +232,59 @@ std::optional<V> build_cryptex_tss_request(const V &identity, const V &chip_inst
 }
 
 namespace detail {
+bool configure_tss_https(CURL *curl, std::string &error) {
+    error.clear();
+    try {
+        require(curl != nullptr, SCRCTL_TR("Cannot create DDI signing HTTPS transport"));
+#define TLS_OPT(option, value) require(curl_easy_setopt(curl, option, value) == CURLE_OK, SCRCTL_TR("Cannot configure DDI signing HTTPS transport"))
+        TLS_OPT(CURLOPT_URL, kTssUrl);
+#if LIBCURL_VERSION_NUM >= 0x075500
+        TLS_OPT(CURLOPT_PROTOCOLS_STR, "https");
+#else
+        TLS_OPT(CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
+#endif
+        // A signing POST must never be forwarded to another origin.
+        TLS_OPT(CURLOPT_FOLLOWLOCATION, 0L);
+        TLS_OPT(CURLOPT_SSL_VERIFYPEER, 1L);
+        TLS_OPT(CURLOPT_SSL_VERIFYHOST, 2L);
+        TLS_OPT(CURLOPT_SSLVERSION, static_cast<long>(CURL_SSLVERSION_TLSv1_2));
+#ifndef __APPLE__
+#if LIBCURL_VERSION_NUM >= 0x074D00
+        const auto *version = curl_version_info(CURLVERSION_NOW);
+        require(version && version->version_num >= 0x074D00 && version->ssl_version,
+            SCRCTL_TR("DDI signing requires libcurl 7.77.0 or later with CA bundle support"));
+        const std::string_view backend = version->ssl_version;
+        // These versions are documented by libcurl's CAINFO_BLOB API. Reject
+        // unknown/older backends instead of falling back to unverified TLS.
+        const bool supported = backend.starts_with("OpenSSL/") || backend.starts_with("LibreSSL/") ||
+            backend.starts_with("BoringSSL") || backend.starts_with("AWS-LC") || backend.starts_with("Schannel") ||
+            (backend.starts_with("GnuTLS/") && version->version_num >= 0x081200) ||
+            (backend.starts_with("mbedTLS/") && version->version_num >= 0x075100) ||
+            (backend.starts_with("rustls/") && version->version_num >= 0x075200) ||
+            (backend.starts_with("wolfSSL/") && version->version_num >= 0x080200);
+        require(supported, SCRCTL_TR("This libcurl TLS backend cannot use the DDI signing CA bundle"));
+        // TSS uses one dedicated public Apple root, independent of incomplete
+        // VM/system CA stores. Do not widen this handle with native/default CAs.
+        TLS_OPT(CURLOPT_SSL_OPTIONS, 0L);
+        TLS_OPT(CURLOPT_CAINFO, static_cast<const char *>(nullptr));
+        const auto clear_path = curl_easy_setopt(curl, CURLOPT_CAPATH, static_cast<const char *>(nullptr));
+        // Schannel/Rustls have no CA-directory support. NOT_BUILT_IN here
+        // means there is no directory to clear, not a failed trust-bundle load.
+        require(clear_path == CURLE_OK || clear_path == CURLE_NOT_BUILT_IN,
+            SCRCTL_TR("Cannot configure DDI signing HTTPS transport"));
+        curl_blob root{const_cast<char *>(kAppleTssRootPem.data()), kAppleTssRootPem.size(), CURL_BLOB_COPY};
+        TLS_OPT(CURLOPT_CAINFO_BLOB, &root);
+#else
+        throw std::runtime_error(SCRCTL_TR("DDI signing requires libcurl 7.77.0 or later with CA bundle support"));
+#endif
+#endif
+#undef TLS_OPT
+        // macOS deliberately keeps the existing system curl/SecureTransport
+        // trust store; SecureTransport does not implement CAINFO_BLOB.
+        return true;
+    } catch (const std::exception &e) { error = e.what(); return false; }
+}
+
 std::optional<std::vector<uint8_t>> parse_tss_response(std::string_view response, bool cryptex, std::string &error) {
     error.clear();
     if (response.empty() || response.size() > kMaxResponse) { error = SCRCTL_TR("DDI signing response has an invalid length"); return {}; }
@@ -300,24 +354,7 @@ std::optional<std::vector<uint8_t>> request_tss_ticket(const V &request, const T
         std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)> headers(raw_headers, curl_slist_free_all);
         const auto timeout = static_cast<long>(std::clamp<int64_t>(options.timeout.count(), 1, std::numeric_limits<long>::max()));
 #define TSS_OPT(option, value) require(curl_easy_setopt(curl.get(), option, value) == CURLE_OK, SCRCTL_TR("Cannot configure DDI signing HTTPS transport"))
-        TSS_OPT(CURLOPT_URL, kTssUrl);
-#if LIBCURL_VERSION_NUM >= 0x075500
-        TSS_OPT(CURLOPT_PROTOCOLS_STR, "https");
-#else
-        TSS_OPT(CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
-#endif
-        // A signing POST must not be forwarded to another origin by a redirect.
-        TSS_OPT(CURLOPT_FOLLOWLOCATION, 0L);
-        TSS_OPT(CURLOPT_SSL_VERIFYPEER, 1L); TSS_OPT(CURLOPT_SSL_VERIFYHOST, 2L);
-        TSS_OPT(CURLOPT_SSLVERSION, static_cast<long>(CURL_SSLVERSION_TLSv1_2));
-#ifdef _WIN32
-#ifdef CURLSSLOPT_NATIVE_CA
-        TSS_OPT(CURLOPT_SSL_OPTIONS, static_cast<long>(CURLSSLOPT_NATIVE_CA));
-        TSS_OPT(CURLOPT_CAINFO, static_cast<const char *>(nullptr)); TSS_OPT(CURLOPT_CAPATH, static_cast<const char *>(nullptr));
-#else
-        throw std::runtime_error(SCRCTL_TR("This Windows libcurl cannot use the native certificate store"));
-#endif
-#endif
+        if (!detail::configure_tss_https(curl.get(), error)) return {};
         TSS_OPT(CURLOPT_NOSIGNAL, 1L); TSS_OPT(CURLOPT_TIMEOUT_MS, timeout);
         TSS_OPT(CURLOPT_CONNECTTIMEOUT_MS, std::min(timeout, 15000L));
         TSS_OPT(CURLOPT_POST, 1L); TSS_OPT(CURLOPT_POSTFIELDS, body.data());

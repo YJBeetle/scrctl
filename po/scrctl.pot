@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-11 02:20+0800\n"
+"POT-Creation-Date: 2026-10-11 03:36+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1857,7 +1857,7 @@ msgstr ""
 msgid "Cannot configure HTTPS downloader"
 msgstr ""
 
-#: src/ddi/Download.cpp:293 src/ddi/Tss.cpp:318
+#: src/ddi/Download.cpp:293
 msgid "This Windows libcurl cannot use the native certificate store"
 msgstr ""
 
@@ -2022,107 +2022,107 @@ msgstr ""
 msgid "Invalid DDI CopyDevices reply"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:123
+#: src/ddi/Mounter.cpp:123 src/ddi/Mounter.cpp:130 src/ddi/Mounter.cpp:135
 msgid "Invalid DDI mounted image entry"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:131
+#: src/ddi/Mounter.cpp:141
 msgid "DDI lookup claims presence without verifiable mounted image"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:141
+#: src/ddi/Mounter.cpp:151
 msgid "Cannot verify device Developer Mode"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:142
+#: src/ddi/Mounter.cpp:152
 msgid "Enable Developer Mode on the device before installing DDI"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:149
+#: src/ddi/Mounter.cpp:159
 msgid "DDI remains mounted after unmount request"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:153 src/ddi/Mounter.cpp:156 src/ddi/Mounter.cpp:160
+#: src/ddi/Mounter.cpp:163 src/ddi/Mounter.cpp:166 src/ddi/Mounter.cpp:170
 msgid "Cannot hash DDI asset"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:172
+#: src/ddi/Mounter.cpp:182
 msgid "DDI asset exceeds install size limit"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:176
+#: src/ddi/Mounter.cpp:186
 msgid "Cannot read complete DDI install asset"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:181
+#: src/ddi/Mounter.cpp:191
 msgid "DDI install asset changed after cache validation"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:207
+#: src/ddi/Mounter.cpp:217
 msgid "Cryptex DDI requires the cryptexd installer"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:209
+#: src/ddi/Mounter.cpp:219
 msgid "DDI install result does not match its catalog"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:212
+#: src/ddi/Mounter.cpp:222
 msgid "DDI install category does not match device OS"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:225
+#: src/ddi/Mounter.cpp:235
 msgid "DDI personalization requires a ticket callback and device ECID"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:232
+#: src/ddi/Mounter.cpp:242
 msgid "Invalid DDI personalization identifiers"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:234
+#: src/ddi/Mounter.cpp:244
 msgid "DDI device hardware identity changed"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:242
+#: src/ddi/Mounter.cpp:252
 msgid "Invalid DDI personalization nonce"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:245
+#: src/ddi/Mounter.cpp:255
 msgid "Cannot parse DDI install manifest"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:248
+#: src/ddi/Mounter.cpp:258
 msgid "DDI personalization did not return a ticket"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:255
+#: src/ddi/Mounter.cpp:265
 msgid "DDI personalization nonce changed before upload"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:257
+#: src/ddi/Mounter.cpp:267
 msgid "Invalid DDI install signature or ticket"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:262
+#: src/ddi/Mounter.cpp:272
 msgid "DDI image transfer callbacks are missing"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:266
+#: src/ddi/Mounter.cpp:276
 msgid "DDI image upload failed"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:273
+#: src/ddi/Mounter.cpp:283
 msgid "Another DDI became mounted during upload"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:279
+#: src/ddi/Mounter.cpp:289
 msgid "DDI mount completed without a verifiable mounted image"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:281
+#: src/ddi/Mounter.cpp:291
 msgid "Mounted DDI signature differs from the uploaded image"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:294
+#: src/ddi/Mounter.cpp:304
 msgid "No pinned DDI catalog matches this installation target"
 msgstr ""
 
@@ -2195,171 +2195,179 @@ msgstr ""
 msgid "DDI service raw upload data is missing"
 msgstr ""
 
-#: src/ddi/Tss.cpp:44
+#: src/ddi/Tss.cpp:45
 msgid "DDI signing metadata contains an invalid numeric identifier"
 msgstr ""
 
-#: src/ddi/Tss.cpp:57
+#: src/ddi/Tss.cpp:58
 msgid "Cannot generate DDI signing request identifier"
 msgstr ""
 
-#: src/ddi/Tss.cpp:72
+#: src/ddi/Tss.cpp:73
 msgid "DDI signing manifest component is malformed"
 msgstr ""
 
-#: src/ddi/Tss.cpp:80 src/ddi/Tss.cpp:85
+#: src/ddi/Tss.cpp:81 src/ddi/Tss.cpp:86
 msgid "DDI restore request rules are malformed"
 msgstr ""
 
-#: src/ddi/Tss.cpp:106
+#: src/ddi/Tss.cpp:107
 msgid "DDI signing nonce has an invalid length"
 msgstr ""
 
-#: src/ddi/Tss.cpp:136 src/ddi/Tss.cpp:190 src/ddi/Tss.cpp:281
+#: src/ddi/Tss.cpp:137 src/ddi/Tss.cpp:191 src/ddi/Tss.cpp:335
 msgid "DDI signing metadata is malformed"
 msgstr ""
 
-#: src/ddi/Tss.cpp:138
+#: src/ddi/Tss.cpp:139
 msgid "DDI signing device identifiers are missing"
 msgstr ""
 
-#: src/ddi/Tss.cpp:141
+#: src/ddi/Tss.cpp:142
 msgid "DDI signing build identities are missing"
 msgstr ""
 
-#: src/ddi/Tss.cpp:148
+#: src/ddi/Tss.cpp:149
 msgid "DDI signing hardware identity is ambiguous"
 msgstr ""
 
-#: src/ddi/Tss.cpp:151
+#: src/ddi/Tss.cpp:152
 msgid "DDI signing manifest has no matching hardware identity"
 msgstr ""
 
-#: src/ddi/Tss.cpp:153
+#: src/ddi/Tss.cpp:154
 msgid "DDI signing component manifest is missing"
 msgstr ""
 
-#: src/ddi/Tss.cpp:175
+#: src/ddi/Tss.cpp:176
 msgid "DDI signing component digest is malformed"
 msgstr ""
 
-#: src/ddi/Tss.cpp:181
+#: src/ddi/Tss.cpp:182
 msgid "DDI signing manifest lacks trusted image components"
 msgstr ""
 
-#: src/ddi/Tss.cpp:192
+#: src/ddi/Tss.cpp:193
 msgid "Cryptex signing identifiers are missing"
 msgstr ""
 
-#: src/ddi/Tss.cpp:200
+#: src/ddi/Tss.cpp:201
 msgid "Cryptex signing build identity is incomplete"
 msgstr ""
 
-#: src/ddi/Tss.cpp:205
+#: src/ddi/Tss.cpp:206
 msgid "Cryptex signing device ECID is missing"
 msgstr ""
 
-#: src/ddi/Tss.cpp:207
+#: src/ddi/Tss.cpp:208
 msgid "Cryptex signing production mode is missing"
 msgstr ""
 
-#: src/ddi/Tss.cpp:215
+#: src/ddi/Tss.cpp:216
 msgid "Cryptex signing component manifest is missing"
 msgstr ""
 
-#: src/ddi/Tss.cpp:224
+#: src/ddi/Tss.cpp:225
 msgid "Cryptex signing component digest is missing"
 msgstr ""
 
-#: src/ddi/Tss.cpp:228
+#: src/ddi/Tss.cpp:229
 msgid "Cryptex signing manifest has no personalized components"
 msgstr ""
 
-#: src/ddi/Tss.cpp:236
-msgid "DDI signing response has an invalid length"
-msgstr ""
-
-#: src/ddi/Tss.cpp:248
-msgid "DDI signing response status is malformed"
-msgstr ""
-
-#: src/ddi/Tss.cpp:251
-msgid "DDI signing response message is malformed"
-msgstr ""
-
-#: src/ddi/Tss.cpp:253
-msgid "DDI signing response envelope is malformed"
-msgstr ""
-
-#: src/ddi/Tss.cpp:257
-msgid "DDI signing response envelope is incomplete"
-msgstr ""
-
-#: src/ddi/Tss.cpp:260
-msgid "Apple rejected DDI signing; status "
-msgstr ""
-
-#: src/ddi/Tss.cpp:263
-msgid "DDI signing response has no ticket plist"
-msgstr ""
-
-#: src/ddi/Tss.cpp:268
-msgid "DDI signing ticket plist is invalid"
-msgstr ""
-
-#: src/ddi/Tss.cpp:272
-msgid "DDI signing response contains no valid ticket"
-msgstr ""
-
-#: src/ddi/Tss.cpp:282
-msgid "DDI signing request is not a dictionary"
-msgstr ""
-
-#: src/ddi/Tss.cpp:284
-msgid "DDI signing request ticket type is ambiguous"
-msgstr ""
-
-#: src/ddi/Tss.cpp:285 src/ddi/Tss.cpp:334
-msgid "DDI signing timed out"
-msgstr ""
-
-#: src/ddi/Tss.cpp:286 src/ddi/Tss.cpp:333
-msgid "DDI signing was cancelled"
-msgstr ""
-
-#: src/ddi/Tss.cpp:288
-msgid "DDI signing request exceeds its size limit"
-msgstr ""
-
-#: src/ddi/Tss.cpp:290
-msgid "Cannot initialize DDI signing HTTPS transport"
-msgstr ""
-
-#: src/ddi/Tss.cpp:292
+#: src/ddi/Tss.cpp:238 src/ddi/Tss.cpp:346
 msgid "Cannot create DDI signing HTTPS transport"
 msgstr ""
 
-#: src/ddi/Tss.cpp:297
-msgid "Cannot create DDI signing HTTPS headers"
-msgstr ""
-
-#: src/ddi/Tss.cpp:302
+#: src/ddi/Tss.cpp:239 src/ddi/Tss.cpp:274 src/ddi/Tss.cpp:356
 msgid "Cannot configure DDI signing HTTPS transport"
 msgstr ""
 
-#: src/ddi/Tss.cpp:331
+#: src/ddi/Tss.cpp:255 src/ddi/Tss.cpp:278
+msgid "DDI signing requires libcurl 7.77.0 or later with CA bundle support"
+msgstr ""
+
+#: src/ddi/Tss.cpp:265
+msgid "This libcurl TLS backend cannot use the DDI signing CA bundle"
+msgstr ""
+
+#: src/ddi/Tss.cpp:290
+msgid "DDI signing response has an invalid length"
+msgstr ""
+
+#: src/ddi/Tss.cpp:302
+msgid "DDI signing response status is malformed"
+msgstr ""
+
+#: src/ddi/Tss.cpp:305
+msgid "DDI signing response message is malformed"
+msgstr ""
+
+#: src/ddi/Tss.cpp:307
+msgid "DDI signing response envelope is malformed"
+msgstr ""
+
+#: src/ddi/Tss.cpp:311
+msgid "DDI signing response envelope is incomplete"
+msgstr ""
+
+#: src/ddi/Tss.cpp:314
+msgid "Apple rejected DDI signing; status "
+msgstr ""
+
+#: src/ddi/Tss.cpp:317
+msgid "DDI signing response has no ticket plist"
+msgstr ""
+
+#: src/ddi/Tss.cpp:322
+msgid "DDI signing ticket plist is invalid"
+msgstr ""
+
+#: src/ddi/Tss.cpp:326
+msgid "DDI signing response contains no valid ticket"
+msgstr ""
+
+#: src/ddi/Tss.cpp:336
+msgid "DDI signing request is not a dictionary"
+msgstr ""
+
+#: src/ddi/Tss.cpp:338
+msgid "DDI signing request ticket type is ambiguous"
+msgstr ""
+
+#: src/ddi/Tss.cpp:339 src/ddi/Tss.cpp:371
+msgid "DDI signing timed out"
+msgstr ""
+
+#: src/ddi/Tss.cpp:340 src/ddi/Tss.cpp:370
+msgid "DDI signing was cancelled"
+msgstr ""
+
+#: src/ddi/Tss.cpp:342
+msgid "DDI signing request exceeds its size limit"
+msgstr ""
+
+#: src/ddi/Tss.cpp:344
+msgid "Cannot initialize DDI signing HTTPS transport"
+msgstr ""
+
+#: src/ddi/Tss.cpp:351
+msgid "Cannot create DDI signing HTTPS headers"
+msgstr ""
+
+#: src/ddi/Tss.cpp:368
 msgid "DDI signing response exceeds its size limit"
 msgstr ""
 
-#: src/ddi/Tss.cpp:332
+#: src/ddi/Tss.cpp:369
 msgid "DDI signing callback failed"
 msgstr ""
 
-#: src/ddi/Tss.cpp:335
+#: src/ddi/Tss.cpp:372
 msgid "DDI signing HTTPS request failed: "
 msgstr ""
 
-#: src/ddi/Tss.cpp:340
+#: src/ddi/Tss.cpp:377
 msgid "DDI signing server did not return HTTP 200"
 msgstr ""
 

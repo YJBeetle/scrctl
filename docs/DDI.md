@@ -104,6 +104,14 @@ ECID 和 nonce 向 Apple TSS 请求个性化票据，因此尚无适用票据的
 Apple 签票服务。票据只用于当前设备与 nonce，不随下载缓存标为通用可安装文件。
 上传前校验所有缓存资产及实际发送内容；失败不会报告安装完成。
 
+签票使用固定 `https://gs.apple.com` 地址，不接受重定向。Windows / Linux 的
+系统证书库可能不包含 Apple TSS 使用的 Apple Root CA，因此签票请求单独使用
+[Apple 官方公开的根证书](https://www.apple.com/certificateauthority/)；它随程序
+提供，不安装到系统，也不影响 DDI 下载的证书校验。macOS 继续使用系统 libcurl
+证书库。证书链、主机名和 TLS 1.2 最低版本检查保持开启；不支持内存 CA bundle
+的 libcurl / TLS 后端会明确失败。OpenSSL / Schannel 至少需要 libcurl 7.77.0，
+其他后端还需满足 libcurl 对 `CAINFO_BLOB` 的版本要求。
+
 下载与设备安装分别使用 `--ddi-download-timeout` / `--ddi-install-timeout` 的预算，
 各默认 300 秒，可设为 1–3600 秒。设备信息查询及 CoreDevice 隧道建立属于连接准备，
 安装预算从安装传输准备好后开始，包含签票、上传、替换及状态核验。连接准备

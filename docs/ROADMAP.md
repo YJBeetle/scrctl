@@ -49,9 +49,9 @@
 ### 2. 协议与生命周期复审
 
 - HTTP/2：nghttp2 可用于已验证的控制流，但偶数文件流不符合其客户端会话模型。
-  当前保留帧子集；文件子流映射和真机 FileTransfer 尚缺验证，见
+  当前保留帧子集；原生 Cryptex DDI 安装已验证客户端奇数号 FileTransfer 上传，见
   [适配记录](NGHTTP2_COMPATIBILITY.md)。控制帧、输入缓冲及当前文件生命周期的
-  离线边界已补齐；文件子流仍需真机互操作验证，当前未建立通用 HTTP/2 会话模型。
+  离线边界已补齐；服务端偶数号 FileTransfer 下载仍需真机互操作验证，当前未建立通用 HTTP/2 会话模型。
 - plist：起流已改用 XML，通用 binary 编解码删除；macOS USB 视频和音频对照通过，
   其他 iOS / iPadOS 版本的 XML 协商需要设备回归，见 [格式记录](BPLIST_COMPATIBILITY.md)。
 - RTCP：同设备 USB 上已完成 RR / PLI / 标准 FIR / FIR+fb 的三轮 40 秒对照，

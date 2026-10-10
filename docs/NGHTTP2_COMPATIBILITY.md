@@ -24,10 +24,18 @@ nghttp2 能处理 RemoteXPC 的空 HEADERS、奇数号双向控制流和大型�
 | 入站分片 | 生产实现捕获的目录和截图记录，以 1 / 17 / 65536 字节分块重放 | 字节计数一致，无非法帧 |
 | 客户端偶数号 HEADERS | 离线尝试将下一个流设为 6，并提交流 2 HEADERS | 设置被拒绝，HEADERS 未发送 |
 | 未经 PUSH_PROMISE 的服务端偶数流 | 离线注入流 2 HEADERS / DATA | 协议错误，文件 DATA 未交付 |
-| 真机 FileTransfer 子流 | 当前设备截图实际返回内联 Data | 未触发，不能声称已做真机文件子流验证 |
+| 真机入站 FileTransfer 子流 | 当前设备截图实际返回内联 Data | 未触发，不能声称已做真机入站文件子流验证 |
 
 旧注释把截图固定描述为 FileTransfer，与当前设备行为不符，已修改。
 原始目录及截图记录在私有临时目录中完成重放，未加入仓库，验证后已清理。
+
+### 2026-10-11：生产实现的出站文件上传
+
+macOS USB 原生 Cryptex DDI 安装在 iPhone14,4 / iOS 27.0.1 上通过：生产
+RemoteXPC 实现以 transfer ID 1–5、客户端奇数号流 5–13 上传五项安装资产，
+收到最终安装回复，并重新核对 DDI 标识、版本和 `/System/Developer` 挂载。
+这验证了生产实现的出站 FileTransfer；没有使用 nghttp2，也未触发服务端偶数号
+文件下载，因此上述 nghttp2 适配结论和入站验证范围保持有效。
 
 ## 复现
 

@@ -8,18 +8,60 @@ and distribution requirements.
 
 Source: https://curl.se/libcurl/
 
-The native DDI downloader links libcurl. macOS may use the system library; Linux
+Native DDI downloads and Apple TSS requests link libcurl. macOS uses the SDK system library; Linux
 and Windows use the configured system or toolchain package. HTTPS peer and host
-verification remain enabled. Windows uses the native certificate store, so an
+verification remain enabled. Windows DDI downloads use the native certificate
+store. Non-Apple TSS requests use the dedicated public Apple root below, so an
 installed scrctl package does not depend on the build machine's CA bundle path.
 Bundled libcurl and its runtime dependencies are recorded by the existing package
 provenance tools and retain their applicable license files.
 
 License text: https://curl.se/docs/copyright.html
 
+```text
+COPYRIGHT AND PERMISSION NOTICE
+
+Copyright (c) 1996 - 2026, Daniel Stenberg, daniel@haxx.se, and many
+contributors, see the THANKS file.
+
+All rights reserved.
+
+Permission to use, copy, modify, and distribute this software for any purpose
+with or without fee is hereby granted, provided that the above copyright
+notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF THIRD PARTY RIGHTS.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+OR OTHER DEALINGS IN THE SOFTWARE.
+
+Except as contained in this notice, the name of a copyright holder shall not
+be used in advertising or otherwise to promote the sale, use or other dealings
+in this Software without prior written authorization of the copyright holder.
+```
+
 DDI payloads are downloaded separately by the user and are not part of the scrctl
 binary package. The fixed third-party download source and verification scope are
 documented in docs/DDI.md.
+
+## Apple Root CA (public certificate)
+
+Non-Apple platforms include the public Apple Root CA exclusively for TLS
+verification of the fixed `https://gs.apple.com` TSS endpoint. The certificate is
+not installed into the system trust store and is not used for DDI asset downloads.
+macOS continues to use its system libcurl trust store for TSS.
+
+Official publication: https://www.apple.com/certificateauthority/
+and https://www.apple.com/appleca/AppleIncRootCertificate.cer
+
+DER SHA256: `b0b1730ecbc7ff4505142c49f1295e6eda6bcaed7e2c68c5be91b5a11001f024`.
+The PEM in `src/ddi/AppleTssTrust.h` is an unmodified encoding of that DER.
+The certificate remains Apple's property; it is not covered by scrctl's license.
+Apple Certificate Policy describes publication and distribution of public root
+certificates: https://images.apple.com/certificateauthority/pdf/Apple_Certificate_Policy_v7.0.pdf
 
 ## nlohmann/json 3.12.0 (MIT)
 
