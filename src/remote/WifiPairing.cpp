@@ -324,7 +324,7 @@ PairingResult pair_wifi_remote(const WifiPairingOptions &options) {
         }
         wifi::PairableHostOptions host;
         host.host_identifier = uuid(result.error);
-        host.host_name = "scrctl " + wifi::local_hostname();
+        host.host_name = wifi::local_hostname();
         const auto key = wifi::ed25519_keypair(result.error);
         const auto irk = wifi::random_bytes(16, result.error);
         host.setup_pin = pin(result.error);

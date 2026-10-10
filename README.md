@@ -334,6 +334,7 @@ Wi-Fi 需要设备可达和已有 RemotePairing 记录。使用 `scrctl --pair -
 输入 PIN 和独立验证。`-s` 在首次无线配对时可省略；指定时会在身份验证后、
 发送成功配对答复前核对设备 UDID。同一记录目录中已有该设备记录时，也在成功答复前拒绝；
 最终保存仍采用独占创建，防止覆盖已有记录。
+广播和配对列表中的电脑名称直接使用本机主机名，不加 `scrctl` 前缀或后缀。
 手机中的电脑型号显示为 `scrctl-macos`、`scrctl-linux` 或 `scrctl-windows`，
 显示序列号为 `SCRCTL-` 加 16 位大写十六进制。后缀使用应用专属 SHA-256：
 优先机器 UUID，读取不到时使用 Linux machine-id / Windows MachineGuid，
