@@ -3,6 +3,7 @@
 #include "app/Cli.h"
 #include "app/RecordFormat.h"
 #include "hid/Hid.h"
+#include "ddi/Selection.h"
 #include <CLI/CLI.hpp>
 #include <algorithm>
 #include <charconv>
@@ -84,8 +85,14 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.add_flag("--list-devices", o.list_devices,
                  SCRCTL_N_("List USB and RemotePairing devices; wireless scan defaults to 3 seconds"));
     app.add_flag("--download-ddi", o.download_ddi,
-                 SCRCTL_N_("Download and verify the supported Cryptex DDI, then exit; does not install on a device"))
+                 SCRCTL_N_("Download and verify a DDI; -s or --wifi reads the target OS/model; does not install"))
         ->disable_flag_override();
+    app.add_option("--ddi-system-version", o.ddi_system_version,
+                   SCRCTL_N_("Target iOS/iPadOS ProductVersion for an offline DDI download, e.g. 18.7.8"))
+        ->needs("--download-ddi");
+    app.add_option("--ddi-product-type", o.ddi_product_type,
+                   SCRCTL_N_("Target product model for manifest checking, e.g. iPad11,2; requires --ddi-system-version"))
+        ->needs("--ddi-system-version");
     app.add_option("--ddi-directory", o.ddi_directory,
                    SCRCTL_N_("DDI cache root directory; defaults to the platform user cache"))
         ->needs("--download-ddi");
@@ -177,16 +184,41 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     try {
         app.parse(argc, argv);
         if (!language.select()) return ParseResult::Error;
+        if (app.count("--wifi") && std::all_of(o.wifi.begin(), o.wifi.end(), [](unsigned char c) {
+            return std::isspace(c);
+        })) {
+            throw CLI::ValidationError("--wifi", SCRCTL_TR("Requires a nonempty LAN address or auto"));
+        }
+        if (o.wifi == "auto" && app.count("--wifi-port")) {
+            throw CLI::ValidationError("--wifi-port", SCRCTL_TR("Use a manual LAN address; auto uses discovered SRV ports"));
+        }
         if (o.download_ddi) {
-            // 独立下载不连接设备，也不接受会被静默忽略的镜像、输入或配对参数。
+            // 独立下载可只读检测目标设备，不接受会被静默忽略的媒体、输入或配对参数。
             for (const auto *option : app.get_options()) {
                 if (option->count() == 0) continue;
                 const auto &name = option->get_name();
                 if (name != "--download-ddi" && name != "--ddi-directory" &&
-                    name != "--ddi-download-timeout" && name != "--lang") {
+                    name != "--ddi-download-timeout" && name != "--lang" &&
+                    name != "--ddi-system-version" && name != "--ddi-product-type" &&
+                    name != "--serial" && name != "--wifi" && name != "--wifi-port") {
                     throw CLI::ValidationError("--download-ddi", SCRCTL_TR(
-                        "Use only --ddi-directory, --ddi-download-timeout and --lang with this standalone command"));
+                        "Use only DDI download, device selection and language options with this standalone command"));
                 }
+            }
+            if (app.count("--ddi-system-version")) {
+                if (app.count("--serial") || app.count("--wifi")) {
+                    throw CLI::ValidationError("--ddi-system-version", SCRCTL_TR(
+                        "Choose device detection with -s/--wifi or an explicit OS/model; do not combine them"));
+                }
+                std::string error;
+                if (!ddi::select_for_version(o.ddi_system_version, error))
+                    throw CLI::ValidationError("--ddi-system-version", error);
+            }
+            for (const auto &[name, value] : std::vector<std::pair<std::string, std::string>>{
+                     {"--serial", o.serial}, {"--ddi-product-type", o.ddi_product_type}}) {
+                if (app.count(name) && std::all_of(value.begin(), value.end(), [](unsigned char c) {
+                    return std::isspace(c);
+                })) throw CLI::ValidationError(name, SCRCTL_TR("Requires a nonempty device identifier"));
             }
             if (app.count("--ddi-directory") && (o.ddi_directory.empty() ||
                 std::all_of(o.ddi_directory.begin(), o.ddi_directory.end(), [](unsigned char c) {
@@ -244,14 +276,6 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         if (!o.record.empty() && !container_format && o.record_orientation != 0) {
             throw CLI::ValidationError("--record", SCRCTL_TR(
                 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate only the display"));
-        }
-        if (app.count("--wifi") && std::all_of(o.wifi.begin(), o.wifi.end(), [](unsigned char c) {
-                return std::isspace(c);
-            })) {
-            throw CLI::ValidationError("--wifi", SCRCTL_TR("Requires a nonempty LAN address or auto"));
-        }
-        if (o.wifi == "auto" && app.count("--wifi-port")) {
-            throw CLI::ValidationError("--wifi-port", SCRCTL_TR("Use a manual LAN address; auto uses discovered SRV ports"));
         }
         if (o.pair && !o.wifi.empty() && (o.wifi != "auto" || o.repair_pairing)) {
             throw CLI::ValidationError("--pair", SCRCTL_TR(

@@ -173,6 +173,8 @@ endif()
 add_library(scrctl_core STATIC
         src/i18n/Translation.cpp
         src/ddi/Download.cpp
+        src/ddi/Selection.cpp
+        src/ddi/Catalog.cpp
         src/json/Json.cpp
         src/plist/Plist.cpp
         src/plist/PlistValue.cpp
@@ -382,6 +384,10 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(ddi_download_test PRIVATE scrctl_core)
     add_test(NAME ddi_download COMMAND ddi_download_test)
     set_tests_properties(ddi_download PROPERTIES TIMEOUT 30)
+
+    scrctl_add_test_executable(ddi_selection_test tests/ddi_selection_test.cpp)
+    target_link_libraries(ddi_selection_test PRIVATE scrctl_core)
+    add_test(NAME ddi_selection COMMAND ddi_selection_test)
 
     scrctl_add_test_executable(keyboard_state_test tests/keyboard_state_test.cpp
         src/app/KeyboardState.cpp)

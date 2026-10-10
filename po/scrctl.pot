@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-11 00:07+0800\n"
+"POT-Creation-Date: 2026-10-11 01:07+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -24,7 +24,7 @@ msgid ""
 "table)\n"
 msgstr ""
 
-#: src/app/Application.cpp:82 src/app/Commands.cpp:72 src/app/Commands.cpp:166
+#: src/app/Application.cpp:82 src/app/Commands.cpp:139 src/app/Commands.cpp:253
 #, c-format
 msgid "SDL initialization failed: %s\n"
 msgstr ""
@@ -251,11 +251,11 @@ msgid ""
 "bytes)\n"
 msgstr ""
 
-#: src/app/Cli.cpp:18
+#: src/app/Cli.cpp:19
 msgid "iOS screen mirroring and control"
 msgstr ""
 
-#: src/app/Cli.cpp:20
+#: src/app/Cli.cpp:21
 msgid ""
 "With no arguments, mirror the connected device.\n"
 "Left mouse button maps to touch. Ordinary keys use the device's keyboard "
@@ -286,7 +286,7 @@ msgid ""
 "device."
 msgstr ""
 
-#: src/app/Cli.cpp:38 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
+#: src/app/Cli.cpp:39 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
 #: tools/audio_decode_probe.cpp:193 tools/audio_pump_probe.cpp:85
 #: tools/feature_probe.cpp:61 tools/hid_probe.cpp:184
 #: tools/screenshot_probe.cpp:52 tools/stall_probe.cpp:59
@@ -294,370 +294,391 @@ msgstr ""
 msgid "Show help"
 msgstr ""
 
-#: src/app/Cli.cpp:39
+#: src/app/Cli.cpp:40
 msgid "Play an Annex-B HEVC file"
 msgstr ""
 
-#: src/app/Cli.cpp:40 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
+#: src/app/Cli.cpp:41 tools/screenshot_probe.cpp:58 tools/stall_probe.cpp:61
 msgid "Device UDID"
 msgstr ""
 
-#: src/app/Cli.cpp:42
+#: src/app/Cli.cpp:43
 msgid "LAN address, or auto to discover a paired wireless device"
 msgstr ""
 
-#: src/app/Cli.cpp:45
+#: src/app/Cli.cpp:46
 msgid "RemotePairing port for a manual LAN address; default: 49152"
 msgstr ""
 
-#: src/app/Cli.cpp:48
+#: src/app/Cli.cpp:49
 msgid ""
 "Pair over USB, or use --wifi auto for phone-initiated PIN pairing, then exit"
 msgstr ""
 
-#: src/app/Cli.cpp:51
+#: src/app/Cli.cpp:52
 msgid "Pairing timeout in milliseconds (1..300000); default: 120000"
 msgstr ""
 
-#: src/app/Cli.cpp:54
+#: src/app/Cli.cpp:55
 msgid ""
 "Allow replacing an incomplete or rejected pairing record; requires --pair"
 msgstr ""
 
-#: src/app/Cli.cpp:57
+#: src/app/Cli.cpp:58
 msgid ""
 "Record selected tracks; format follows .mp4/.mkv or raw HEVC, unless --"
 "record-format is specified"
 msgstr ""
 
-#: src/app/Cli.cpp:64
+#: src/app/Cli.cpp:65
 msgid ""
 "Recording format: mp4, mkv or hevc (raw video extension); requires --record"
 msgstr ""
 
-#: src/app/Cli.cpp:66
+#: src/app/Cli.cpp:67
 msgid ""
 "Launch bundle ID; ? matches name prefix, + terminates the previous instance"
 msgstr ""
 
-#: src/app/Cli.cpp:67
+#: src/app/Cli.cpp:68
 msgid "Window title"
 msgstr ""
 
-#: src/app/Cli.cpp:68
+#: src/app/Cli.cpp:69
 msgid "SDL render driver, e.g. metal / software"
 msgstr ""
 
-#: src/app/Cli.cpp:70
+#: src/app/Cli.cpp:71
 msgid ""
 "display for live video (default), screenshot for polling; stream is an alias "
 "for display"
 msgstr ""
 
-#: src/app/Cli.cpp:72
+#: src/app/Cli.cpp:73
 msgid "Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"
 msgstr ""
 
-#: src/app/Cli.cpp:79
+#: src/app/Cli.cpp:80
 msgid "Inject home/lock/volup/voldn/mute"
 msgstr ""
 
-#: src/app/Cli.cpp:81
+#: src/app/Cli.cpp:82
 msgid "Inject ASCII text (device text field must have focus)"
 msgstr ""
 
-#: src/app/Cli.cpp:82
+#: src/app/Cli.cpp:83
 msgid "Force alternating video fallback and recovery at T1,T2,... seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:83
+#: src/app/Cli.cpp:84
 msgid "Write device clipboard and exit (supports Unicode)"
 msgstr ""
 
-#: src/app/Cli.cpp:85
+#: src/app/Cli.cpp:86
 msgid "List USB and RemotePairing devices; wireless scan defaults to 3 seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:87
+#: src/app/Cli.cpp:88
 msgid ""
-"Download and verify the supported Cryptex DDI, then exit; does not install "
-"on a device"
+"Download and verify a DDI; -s or --wifi reads the target OS/model; does not "
+"install"
 msgstr ""
 
-#: src/app/Cli.cpp:89
+#: src/app/Cli.cpp:91
+msgid ""
+"Target iOS/iPadOS ProductVersion for an offline DDI download, e.g. 18.7.8"
+msgstr ""
+
+#: src/app/Cli.cpp:94
+msgid ""
+"Target product model for manifest checking, e.g. iPad11,2; requires --ddi-"
+"system-version"
+msgstr ""
+
+#: src/app/Cli.cpp:97
 msgid "DDI cache root directory; defaults to the platform user cache"
 msgstr ""
 
-#: src/app/Cli.cpp:92
+#: src/app/Cli.cpp:100
 msgid "Total DDI download timeout in seconds (1..3600); default: 300"
 msgstr ""
 
-#: src/app/Cli.cpp:95
+#: src/app/Cli.cpp:103
 msgid ""
 "Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"
 msgstr ""
 
-#: src/app/Cli.cpp:97
+#: src/app/Cli.cpp:105
 msgid "Disable input control"
 msgstr ""
 
-#: src/app/Cli.cpp:100
+#: src/app/Cli.cpp:108
 msgid "List device apps"
 msgstr ""
 
-#: src/app/Cli.cpp:101
+#: src/app/Cli.cpp:109
 msgid "Show version"
 msgstr ""
 
-#: src/app/Cli.cpp:102
+#: src/app/Cli.cpp:110
 msgid "Desktop fullscreen"
 msgstr ""
 
-#: src/app/Cli.cpp:103
+#: src/app/Cli.cpp:111
 msgid "Keep window on top"
 msgstr ""
 
-#: src/app/Cli.cpp:104
+#: src/app/Cli.cpp:112
 msgid "Borderless window"
 msgstr ""
 
-#: src/app/Cli.cpp:105
+#: src/app/Cli.cpp:113
 msgid "Prevent local screen sleep while running"
 msgstr ""
 
-#: src/app/Cli.cpp:106
+#: src/app/Cli.cpp:114
 msgid "Do not start audio stream"
 msgstr ""
 
-#: src/app/Cli.cpp:108
+#: src/app/Cli.cpp:116
 msgid "Keep audio playing on the phone while forwarding it to the computer"
 msgstr ""
 
-#: src/app/Cli.cpp:111
+#: src/app/Cli.cpp:119
 msgid ""
 "Disable computer audio playback; capture audio only when recording to MP4 or "
 "MKV"
 msgstr ""
 
-#: src/app/Cli.cpp:112
+#: src/app/Cli.cpp:120
 msgid "Do not start video stream"
 msgstr ""
 
-#: src/app/Cli.cpp:114
+#: src/app/Cli.cpp:122
 msgid "Disable video display; keep encoded video when recording"
 msgstr ""
 
-#: src/app/Cli.cpp:117
+#: src/app/Cli.cpp:125
 msgid ""
 "Disable computer video and audio playback; keep selected recording tracks"
 msgstr ""
 
-#: src/app/Cli.cpp:118
+#: src/app/Cli.cpp:126
 msgid "Run without a window"
 msgstr ""
 
-#: src/app/Cli.cpp:119
+#: src/app/Cli.cpp:127
 msgid "Use platform hardware decoder; default: software"
 msgstr ""
 
-#: src/app/Cli.cpp:120
+#: src/app/Cli.cpp:128
 msgid "Print input coordinates"
 msgstr ""
 
-#: src/app/Cli.cpp:121
+#: src/app/Cli.cpp:129
 msgid "Add tunnel diagnostics to --stats"
 msgstr ""
 
-#: src/app/Cli.cpp:122
+#: src/app/Cli.cpp:130
 msgid "Print statistics every second"
 msgstr ""
 
-#: src/app/Cli.cpp:123
+#: src/app/Cli.cpp:131
 msgid "Read device clipboard; with --copy, read back after writing"
 msgstr ""
 
-#: src/app/Cli.cpp:126
+#: src/app/Cli.cpp:134
 msgid "Window horizontal position; integer or auto (default)"
 msgstr ""
 
-#: src/app/Cli.cpp:128
+#: src/app/Cli.cpp:136
 msgid "Window vertical position; integer or auto (default)"
 msgstr ""
 
-#: src/app/Cli.cpp:130
+#: src/app/Cli.cpp:138
 msgid ""
 "Shortcut modifiers, separated by commas: lctrl, rctrl, lalt, ralt, lsuper, "
 "rsuper; default: lalt,lsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:131
+#: src/app/Cli.cpp:139
 msgid "Window width; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:132
+#: src/app/Cli.cpp:140
 msgid "Window height; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:133
+#: src/app/Cli.cpp:141
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:135
+#: src/app/Cli.cpp:143
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr ""
 
-#: src/app/Cli.cpp:137
+#: src/app/Cli.cpp:145
 msgid "Exit after N frames; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:139
+#: src/app/Cli.cpp:147
 msgid "Finite positive scale; default: fit screen"
 msgstr ""
 
-#: src/app/Cli.cpp:157
+#: src/app/Cli.cpp:165
 msgid ""
 "Display and recording orientation: 0/90/180/270 or flip0/flip90/flip180/"
 "flip270; recording cannot flip; auto changes display only"
 msgstr ""
 
-#: src/app/Cli.cpp:161
+#: src/app/Cli.cpp:169
 msgid ""
 "Display orientation: auto, 0/90/180/270 or flip0/flip90/flip180/flip270; "
 "flip horizontally before clockwise rotation"
 msgstr ""
 
-#: src/app/Cli.cpp:165
+#: src/app/Cli.cpp:173
 msgid ""
 "Clockwise MP4/MKV recording rotation: 0/90/180/270; default: 0; display is "
 "unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:168
+#: src/app/Cli.cpp:176
 msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:170
+#: src/app/Cli.cpp:178
 msgid "Background color: RGB or RRGGBB, with optional #"
 msgstr ""
 
-#: src/app/Cli.cpp:171
+#: src/app/Cli.cpp:179
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr ""
 
-#: src/app/Cli.cpp:187
+#: src/app/Cli.cpp:190
+msgid "Requires a nonempty LAN address or auto"
+msgstr ""
+
+#: src/app/Cli.cpp:193
+msgid "Use a manual LAN address; auto uses discovered SRV ports"
+msgstr ""
+
+#: src/app/Cli.cpp:205
 msgid ""
-"Use only --ddi-directory, --ddi-download-timeout and --lang with this "
+"Use only DDI download, device selection and language options with this "
 "standalone command"
 msgstr ""
 
-#: src/app/Cli.cpp:194
+#: src/app/Cli.cpp:211
+msgid ""
+"Choose device detection with -s/--wifi or an explicit OS/model; do not "
+"combine them"
+msgstr ""
+
+#: src/app/Cli.cpp:221
+msgid "Requires a nonempty device identifier"
+msgstr ""
+
+#: src/app/Cli.cpp:227
 msgid "Requires a nonempty directory path"
 msgstr ""
 
-#: src/app/Cli.cpp:199 src/app/LiveSource.cpp:82
+#: src/app/Cli.cpp:232 src/app/LiveSource.cpp:82
 msgid "Requires a nonempty recording file"
 msgstr ""
 
-#: src/app/Cli.cpp:208
+#: src/app/Cli.cpp:241
 msgid ""
 "Audio capture is disabled; --audio-dup requires playback or MP4/MKV recording"
 msgstr ""
 
-#: src/app/Cli.cpp:214
+#: src/app/Cli.cpp:247
 msgid ""
 "File playback requires video; incompatible with video playback disable "
 "options"
 msgstr ""
 
-#: src/app/Cli.cpp:222
+#: src/app/Cli.cpp:255
 msgid "Audio-only recording requires MP4 or MKV; raw HEVC cannot contain audio"
 msgstr ""
 
-#: src/app/Cli.cpp:225
+#: src/app/Cli.cpp:258
 msgid "Recording requires at least one enabled audio or video track"
 msgstr ""
 
-#: src/app/Cli.cpp:228 src/app/LiveSource.cpp:97
+#: src/app/Cli.cpp:261 src/app/LiveSource.cpp:97
 msgid "Recording orientation requires a video track"
 msgstr ""
 
-#: src/app/Cli.cpp:233
+#: src/app/Cli.cpp:266
 msgid ""
 "Frame counting, hardware decoding, fallback tests and screenshots require "
 "video capture"
 msgstr ""
 
-#: src/app/Cli.cpp:237 src/app/LiveSource.cpp:119
+#: src/app/Cli.cpp:270 src/app/LiveSource.cpp:119
 msgid ""
 "Container recording requires live video; screenshot polling cannot be "
 "recorded"
 msgstr ""
 
-#: src/app/Cli.cpp:241
+#: src/app/Cli.cpp:274
 msgid ""
 "Recording does not support flipping; use --display-orientation for display-"
 "only flipping or reset --record-orientation to a rotation"
 msgstr ""
 
-#: src/app/Cli.cpp:245 src/app/LiveSource.cpp:129
+#: src/app/Cli.cpp:278 src/app/LiveSource.cpp:129
 msgid ""
 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate "
 "only the display"
 msgstr ""
 
-#: src/app/Cli.cpp:250
-msgid "Requires a nonempty LAN address or auto"
-msgstr ""
-
-#: src/app/Cli.cpp:253
-msgid "Use a manual LAN address; auto uses discovered SRV ports"
-msgstr ""
-
-#: src/app/Cli.cpp:257
+#: src/app/Cli.cpp:282
 msgid ""
 "Wireless first pairing requires --wifi auto; existing records cannot be "
 "repaired wirelessly"
 msgstr ""
 
-#: src/app/Cli.cpp:268
+#: src/app/Cli.cpp:293
 msgid "Expected an integer or auto"
 msgstr ""
 
-#: src/app/Cli.cpp:288
+#: src/app/Cli.cpp:313
 msgid ""
 "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:299
+#: src/app/Cli.cpp:324
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr ""
 
-#: src/app/Cli.cpp:306
+#: src/app/Cli.cpp:331
 msgid "Requires a finite positive number"
 msgstr ""
 
-#: src/app/Cli.cpp:321
+#: src/app/Cli.cpp:346
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr ""
 
-#: src/app/Cli.cpp:330
+#: src/app/Cli.cpp:355
 msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
 msgstr ""
 
-#: src/app/Cli.cpp:344
+#: src/app/Cli.cpp:369
 msgid "Frame number must be a positive integer"
 msgstr ""
 
-#: src/app/Cli.cpp:349
+#: src/app/Cli.cpp:374
 msgid "Requires a window; incompatible with --no-window"
 msgstr ""
 
-#: src/app/Cli.cpp:352
+#: src/app/Cli.cpp:377
 msgid "Window readback requires video playback"
 msgstr ""
 
-#: src/app/Cli.cpp:360
+#: src/app/Cli.cpp:385
 msgid "Nothing to do: enable media, recording or device control"
 msgstr ""
 
@@ -689,135 +710,154 @@ msgstr ""
 msgid "no matching pairing record"
 msgstr ""
 
-#: src/app/Commands.cpp:80 src/app/Commands.cpp:101
+#: src/app/Commands.cpp:64 src/app/Commands.cpp:119 src/app/Commands.cpp:159
+#: src/ddi/Download.cpp:355
+msgid "DDI download cancelled"
+msgstr ""
+
+#: src/app/Commands.cpp:86
+msgid "Cannot enumerate the target USB device for DDI selection"
+msgstr ""
+
+#: src/app/Commands.cpp:100 src/app/Commands.cpp:121
+msgid "DDI target metadata is missing its OS version or product model"
+msgstr ""
+
+#: src/app/Commands.cpp:148 src/app/Commands.cpp:160 src/app/Commands.cpp:169
+#: src/app/Commands.cpp:188
 #, c-format
 msgid "DDI download failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:91
+#: src/app/Commands.cpp:172
+#, c-format
+msgid "DDI target: OS %s, model %s, image type %s\n"
+msgstr ""
+
+#: src/app/Commands.cpp:179
 #, c-format
 msgid "Downloading DDI: %s (%llu/%llu bytes)\n"
 msgstr ""
 
-#: src/app/Commands.cpp:106
+#: src/app/Commands.cpp:193
 #, c-format
 msgid "Verified cached DDI %s: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:107
+#: src/app/Commands.cpp:194
 #, c-format
 msgid "Downloaded and verified DDI %s: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:109
+#: src/app/Commands.cpp:196
 #, c-format
 msgid "DDI source: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:110
+#: src/app/Commands.cpp:197
 #, c-format
 msgid ""
 "Download complete; device installation is a separate step. See docs/DDI.md.\n"
 msgstr ""
 
-#: src/app/Commands.cpp:119 src/app/DeviceConnection.cpp:237
+#: src/app/Commands.cpp:206 src/app/DeviceConnection.cpp:237
 #, c-format
 msgid "Discovery warning: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:123
+#: src/app/Commands.cpp:210
 msgid "Wireless device (UDID unknown)"
 msgstr ""
 
-#: src/app/Commands.cpp:135
+#: src/app/Commands.cpp:222
 msgid "address unresolved"
 msgstr ""
 
-#: src/app/Commands.cpp:151
+#: src/app/Commands.cpp:238
 #, c-format
 msgid "No devices found\n"
 msgstr ""
 
-#: src/app/Commands.cpp:175
+#: src/app/Commands.cpp:262
 #, c-format
 msgid "Enter this one-use pairing code on the device: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:189
+#: src/app/Commands.cpp:276
 #, c-format
 msgid "Remote pairing failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:193
+#: src/app/Commands.cpp:280
 #, c-format
 msgid "Remote pairing verified for %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:194
+#: src/app/Commands.cpp:281
 #, c-format
 msgid "Remote pairing saved for %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:203 src/app/Commands.cpp:226
+#: src/app/Commands.cpp:290 src/app/Commands.cpp:313
 #, c-format
 msgid "Failed to establish session: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:208
+#: src/app/Commands.cpp:295
 #, c-format
 msgid "Failed to list apps: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:214
+#: src/app/Commands.cpp:301
 #, c-format
 msgid "Total: %zu\n"
 msgstr ""
 
-#: src/app/Commands.cpp:232
+#: src/app/Commands.cpp:319
 #, c-format
 msgid "Wrote %zu bytes to device clipboard\n"
 msgstr ""
 
-#: src/app/Commands.cpp:234
+#: src/app/Commands.cpp:321
 #, c-format
 msgid "--copy failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:241
+#: src/app/Commands.cpp:328
 #, c-format
 msgid "Device clipboard (%zu bytes): "
 msgstr ""
 
-#: src/app/Commands.cpp:245
+#: src/app/Commands.cpp:332
 #, c-format
 msgid "--paste failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:271
+#: src/app/Commands.cpp:358
 #, c-format
 msgid "--start-app requires a nonempty app name\n"
 msgstr ""
 
-#: src/app/Commands.cpp:281
+#: src/app/Commands.cpp:368
 #, c-format
 msgid "Failed to find app by name: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:299
+#: src/app/Commands.cpp:386
 #, c-format
 msgid "No app name starts with %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:307 tools/app_launch_probe.cpp:89
+#: src/app/Commands.cpp:394 tools/app_launch_probe.cpp:89
 #, c-format
 msgid "Failed to launch %s: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:310
+#: src/app/Commands.cpp:397
 msgid " (previous instance terminated)"
 msgstr ""
 
-#: src/app/Commands.cpp:310
+#: src/app/Commands.cpp:397
 #, c-format
 msgid "Launched %s%s\n"
 msgstr ""
@@ -1470,205 +1510,234 @@ msgstr ""
 msgid "Schedule requires at least one time"
 msgstr ""
 
-#: src/ddi/Download.cpp:25
+#: src/ddi/Download.cpp:26
 msgid "DDI cache contains a nonregular file"
 msgstr ""
 
-#: src/ddi/Download.cpp:27
+#: src/ddi/Download.cpp:28
 msgid "DDI file exceeds its size limit"
 msgstr ""
 
-#: src/ddi/Download.cpp:29
+#: src/ddi/Download.cpp:30
 msgid "Cannot open DDI file"
 msgstr ""
 
-#: src/ddi/Download.cpp:33
+#: src/ddi/Download.cpp:34
 msgid "Cannot read complete DDI file"
 msgstr ""
 
-#: src/ddi/Download.cpp:39
+#: src/ddi/Download.cpp:40
 msgid "Cannot open DDI file for checksum"
 msgstr ""
 
-#: src/ddi/Download.cpp:42
+#: src/ddi/Download.cpp:43
 msgid "Cannot initialize DDI checksum"
 msgstr ""
 
-#: src/ddi/Download.cpp:47
+#: src/ddi/Download.cpp:48 src/ddi/Download.cpp:54
 msgid "Cannot calculate DDI checksum"
 msgstr ""
 
-#: src/ddi/Download.cpp:49
+#: src/ddi/Download.cpp:56
 msgid "Cannot read DDI checksum input"
 msgstr ""
 
-#: src/ddi/Download.cpp:53
+#: src/ddi/Download.cpp:60
 msgid "Cannot finalize DDI checksum"
 msgstr ""
 
-#: src/ddi/Download.cpp:70
-msgid "Invalid DDI BuildManifest plist"
-msgstr ""
-
-#: src/ddi/Download.cpp:74
-msgid "DDI BuildManifest does not match the pinned build"
-msgstr ""
-
-#: src/ddi/Download.cpp:87
-msgid "DDI Cryptex manifest entries missing"
-msgstr ""
-
-#: src/ddi/Download.cpp:96
-msgid "DDI Cryptex manifest digest mismatch: "
-msgstr ""
-
-#: src/ddi/Download.cpp:100
-msgid "DDI BuildManifest lacks a Cryptex identity"
-msgstr ""
-
-#: src/ddi/Download.cpp:106
-msgid "DDI cache directory is missing or is a symbolic link"
-msgstr ""
-
-#: src/ddi/Download.cpp:110
-msgid "DDI cache size or file type mismatch: "
-msgstr ""
-
-#: src/ddi/Download.cpp:112
-msgid "DDI cache SHA-256 mismatch: "
-msgstr ""
-
-#: src/ddi/Download.cpp:116
-msgid "DDI cache completion marker mismatch"
-msgstr ""
-
-#: src/ddi/Download.cpp:150
-msgid "Cannot initialize HTTPS downloader"
-msgstr ""
-
-#: src/ddi/Download.cpp:152
-msgid "Cannot create HTTPS downloader"
-msgstr ""
-
-#: src/ddi/Download.cpp:153
-msgid "DDI downloads require HTTPS"
-msgstr ""
-
-#: src/ddi/Download.cpp:157
-msgid "Cannot configure HTTPS downloader"
-msgstr ""
-
-#: src/ddi/Download.cpp:178
-msgid "This Windows libcurl cannot use the native certificate store"
-msgstr ""
-
-#: src/ddi/Download.cpp:197
-msgid "DDI download callback failed"
-msgstr ""
-
-#: src/ddi/Download.cpp:198
-msgid "HTTPS DDI download failed: "
-msgstr ""
-
-#: src/ddi/Download.cpp:203
-msgid "DDI download did not return HTTP 200"
-msgstr ""
-
-#: src/ddi/Download.cpp:234
-msgid "DDI download timeout must be positive"
-msgstr ""
-
-#: src/ddi/Download.cpp:237
-msgid "DDI download timeout exceeds 24 hours"
-msgstr ""
-
-#: src/ddi/Download.cpp:240
-msgid "DDI download cancelled"
-msgstr ""
-
-#: src/ddi/Download.cpp:241 src/ddi/Download.cpp:295
-msgid "DDI download timed out"
-msgstr ""
-
-#: src/ddi/Download.cpp:247
-msgid "DDI cache root must be an absolute path"
-msgstr ""
-
-#: src/ddi/Download.cpp:251
+#: src/ddi/Download.cpp:85 src/ddi/Download.cpp:96
 msgid "Invalid DDI download catalog"
 msgstr ""
 
-#: src/ddi/Download.cpp:255
+#: src/ddi/Download.cpp:103
 msgid "Invalid DDI download asset"
 msgstr ""
 
-#: src/ddi/Download.cpp:258
+#: src/ddi/Download.cpp:144
+msgid "Invalid DDI BuildManifest plist"
+msgstr ""
+
+#: src/ddi/Download.cpp:148
+msgid "DDI BuildManifest does not match the pinned build"
+msgstr ""
+
+#: src/ddi/Download.cpp:175
+msgid "DDI manifest does not support the requested product type"
+msgstr ""
+
+#: src/ddi/Download.cpp:185
+msgid "DDI Cryptex manifest entries missing"
+msgstr ""
+
+#: src/ddi/Download.cpp:199
+msgid "DDI Cryptex manifest digest mismatch: "
+msgstr ""
+
+#: src/ddi/Download.cpp:208
+msgid "DDI BuildManifest lacks a Cryptex identity"
+msgstr ""
+
+#: src/ddi/Download.cpp:209
+msgid "DDI BuildManifest lacks a matching Personalized hardware identity"
+msgstr ""
+
+#: src/ddi/Download.cpp:210
+msgid "DDI Personalized manifest digest mismatch for the requested hardware"
+msgstr ""
+
+#: src/ddi/Download.cpp:219
+msgid "DDI cache directory is missing or is a symbolic link"
+msgstr ""
+
+#: src/ddi/Download.cpp:223
+msgid "DDI cache size or file type mismatch: "
+msgstr ""
+
+#: src/ddi/Download.cpp:225
+msgid "DDI cache SHA-256 mismatch: "
+msgstr ""
+
+#: src/ddi/Download.cpp:227
+msgid "DDI cache Git blob SHA-1 mismatch: "
+msgstr ""
+
+#: src/ddi/Download.cpp:231
+msgid "DDI cache completion marker mismatch"
+msgstr ""
+
+#: src/ddi/Download.cpp:265
+msgid "Cannot initialize HTTPS downloader"
+msgstr ""
+
+#: src/ddi/Download.cpp:267
+msgid "Cannot create HTTPS downloader"
+msgstr ""
+
+#: src/ddi/Download.cpp:268
+msgid "DDI downloads require HTTPS"
+msgstr ""
+
+#: src/ddi/Download.cpp:272
+msgid "Cannot configure HTTPS downloader"
+msgstr ""
+
+#: src/ddi/Download.cpp:293
+msgid "This Windows libcurl cannot use the native certificate store"
+msgstr ""
+
+#: src/ddi/Download.cpp:312
+msgid "DDI download callback failed"
+msgstr ""
+
+#: src/ddi/Download.cpp:313
+msgid "HTTPS DDI download failed: "
+msgstr ""
+
+#: src/ddi/Download.cpp:318
+msgid "DDI download did not return HTTP 200"
+msgstr ""
+
+#: src/ddi/Download.cpp:349
+msgid "DDI download timeout must be positive"
+msgstr ""
+
+#: src/ddi/Download.cpp:352
+msgid "DDI download timeout exceeds 24 hours"
+msgstr ""
+
+#: src/ddi/Download.cpp:356 src/ddi/Download.cpp:410
+msgid "DDI download timed out"
+msgstr ""
+
+#: src/ddi/Download.cpp:362
+msgid "DDI cache root must be an absolute path"
+msgstr ""
+
+#: src/ddi/Download.cpp:365
 msgid "DDI cache root must not be a symbolic link"
 msgstr ""
 
-#: src/ddi/Download.cpp:262
+#: src/ddi/Download.cpp:372
 msgid ""
 "Existing DDI cache is invalid; remove this version directory and retry: "
 msgstr ""
 
-#: src/ddi/Download.cpp:267
+#: src/ddi/Download.cpp:381
 msgid ""
 "Another DDI download owns this version lock; retry after it finishes (remove "
 "the lock only if that process has exited)"
 msgstr ""
 
-#: src/ddi/Download.cpp:274
+#: src/ddi/Download.cpp:389
 msgid "Cannot generate DDI staging directory name"
 msgstr ""
 
-#: src/ddi/Download.cpp:276
+#: src/ddi/Download.cpp:391
 msgid "Cannot create unique DDI staging directory"
 msgstr ""
 
-#: src/ddi/Download.cpp:282
+#: src/ddi/Download.cpp:397
 msgid "Cannot create DDI download file: "
 msgstr ""
 
-#: src/ddi/Download.cpp:286
+#: src/ddi/Download.cpp:401
 msgid "DDI download exceeds pinned file size: "
 msgstr ""
 
-#: src/ddi/Download.cpp:288
+#: src/ddi/Download.cpp:403
 msgid "Cannot write DDI download file: "
 msgstr ""
 
-#: src/ddi/Download.cpp:298
+#: src/ddi/Download.cpp:413
 msgid "DDI download failed"
 msgstr ""
 
-#: src/ddi/Download.cpp:302
+#: src/ddi/Download.cpp:417
 msgid "Cannot flush DDI download file: "
 msgstr ""
 
-#: src/ddi/Download.cpp:304
+#: src/ddi/Download.cpp:419
 msgid "Cannot close DDI download file: "
 msgstr ""
 
-#: src/ddi/Download.cpp:305
+#: src/ddi/Download.cpp:420
 msgid "Incomplete DDI download: "
 msgstr ""
 
-#: src/ddi/Download.cpp:311
+#: src/ddi/Download.cpp:426
 msgid "Cannot write DDI completion marker"
 msgstr ""
 
-#: src/ddi/Download.cpp:313
+#: src/ddi/Download.cpp:428
 msgid ""
 "DDI version directory appeared during download; refusing to overwrite it"
 msgstr ""
 
-#: src/ddi/Download.cpp:335
+#: src/ddi/Download.cpp:450
 msgid "XDG_CACHE_HOME must be an absolute path"
 msgstr ""
 
-#: src/ddi/Download.cpp:348
+#: src/ddi/Download.cpp:463
 msgid ""
 "No absolute platform cache directory is available; specify --ddi-directory"
+msgstr ""
+
+#: src/ddi/Download.cpp:482
+msgid "No pinned Classic DDI exists for the requested OS major.minor version"
+msgstr ""
+
+#: src/ddi/Selection.cpp:20 src/ddi/Selection.cpp:27 src/ddi/Selection.cpp:33
+#: src/ddi/Selection.cpp:39 src/ddi/Selection.cpp:66
+msgid "Invalid numeric Apple ProductVersion"
+msgstr ""
+
+#: src/ddi/Selection.cpp:50
+msgid "DDI kind must be classic, personalized or cryptex"
+msgstr ""
+
+#: src/ddi/Selection.cpp:70
+msgid "DDI selection is not defined for this future Apple OS major version"
 msgstr ""
 
 #: src/decode/AudioDecoder.h:52

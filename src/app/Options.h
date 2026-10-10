@@ -22,8 +22,10 @@ struct Options {
     std::string record; ///< 未指定格式时，.mp4 / .mkv 为容器，其余路径兼容裸 HEVC。
     std::optional<RecordFormat> record_format; ///< 显式格式覆盖扩展名；只用于录制。
     bool list_devices = false;
-    bool download_ddi = false; ///< 下载已验证的开发镜像，不连接或修改设备。
+    bool download_ddi = false; ///< 下载镜像；显式选择设备时只读型号/系统，不安装。
     std::string ddi_directory; ///< 缓存根目录；镜像按固定版本存入子目录。
+    std::string ddi_system_version; ///< 显式 ProductVersion；不连接设备。
+    std::string ddi_product_type; ///< 显式产品型号，用于 manifest 身份预筛。
     int ddi_download_timeout = 300; ///< 整次下载预算，单位秒。
     int discovery_timeout_ms = 3000; ///< --list-devices 的无线扫描时限；0 只列 usbmux
     bool no_control = false; ///< --no-control：关闭输入控制

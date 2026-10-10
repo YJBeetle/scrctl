@@ -14,6 +14,27 @@ MP4 / MKV（HEVC 和 AAC-ELD）及裸 Annex-B HEVC。
 并对丢包和关键帧解码失败做了离线或本地故障注入；这些结果不代表所有机型、
 真实弱网或长时间运行已经验证。
 
+### iOS / iPadOS 与机型
+
+下面是具体设备的实测结果。DDI 的 manifest 声明某个机型，只是型号检查的一部分：
+Personalized 还需匹配同一安装身份与实际 payload，Cryptex 则使用通用资产身份。
+实际安装还需要设备接受个性化签名，产品功能仍取决于系统提供的服务。
+不能把 manifest 的机型列表当作已通过 scrctl 真机测试的支持列表。
+
+| 实测设备 | 系统版本 | 开发镜像与功能范围 |
+| --- | --- | --- |
+| iPhone 13 mini（`iPhone14,4`） | iOS 27.0 | USB / Wi-Fi 实时视频、音频路由、截图、触摸、键盘、剪贴板、设备按键及方向控制已有实测记录；macOS、Debian ARM64 和 Windows ARM64 的具体范围见下表 |
+| iPhone 13 mini（`iPhone14,4`） | iOS 27.0.1 | Cryptex DDI `27A5228h` 安装后恢复屏幕服务，30 秒 USB 视频录制通过；旧 Xcode 26.2 的 `17C52` 镜像缺少屏幕、截图、HID 等服务，不能仅凭“兼容”判断可用；尚未在更新后的系统重测所有功能 |
+| iPad mini 5（`iPad11,2`） | iPadOS 18.7.8 | Personalized DDI 挂载后，截图轮询（约 2–3 fps）、窗口触摸、硬件按键、ASCII 键盘、剪贴板往返、应用列表与启动已验证；实时视频和音频被设备以错误 `9021` 拒绝，明确要求 iOS 27.0 或更高版本；Wi-Fi 配对与连接未在这台设备验收 |
+| 其他机型 / 系统组合 | — | 尚无对应真机验收；应分别检查镜像身份、设备服务目录与功能请求结果 |
+
+iPad mini 的记录见 [协议记录 §23、§24](docs/coredevice.md#23-那台-ipad-mini-到手了21-留的-ab-两问都有答案了实测ipad112--ipados-1878--usb)，
+系统更新后的镜像替换见 [§34](docs/coredevice.md#34-ios-2701-更新后的开发镜像准备)。
+实时媒体的版本拒绝可触发截图轮询；截图模式不采集音频，也没有可录制的 HEVC
+码流。不同设备上相同系统大版本的能力仍须以实际服务与请求结果确认。
+
+### 电脑平台
+
 | 平台 | 当前范围 |
 | --- | --- |
 | macOS | 有真机连接、镜像、输入和音频记录；本轮验证结果见重构记录 |
@@ -275,7 +296,10 @@ ctest --test-dir build-cmake              # 离线自检，不需要真机（项
 macOS 使用 gettext 的 libintl）。开启离线测试需要 Python 3。Debian/Ubuntu 可安装
 `gettext python3 libsdl2-dev libssl-dev libcurl4-openssl-dev libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev`。
 
-开发镜像可使用 `scrctl --download-ddi` 下载并校验，重复运行复用缓存；可用
+开发镜像按需下载，不随安装包捆绑。使用 `scrctl --download-ddi -s <UDID>` 读取 USB
+设备的系统与机型来选镜像；已有无线配对时也可加 `--wifi auto` 或手动地址。
+无设备时用 `--ddi-system-version 18.7.8 --ddi-product-type iPad11,2`
+预下载；裸 `scrctl --download-ddi` 保留固定 iOS 27 Cryptex 下载。重复运行校验并复用缓存；可用
 `--ddi-directory` 指定缓存根目录。下载使用原生 libcurl；macOS 系统提供该库，
 Linux / Windows 构建需要开发包。设备安装和版本边界见 [DDI 说明](docs/DDI.md)。
 
@@ -315,8 +339,10 @@ USB 连接通常需要以下设备准备：
 
 1. 开启开发者模式，按设备提示重启。
 2. 插线后在设备上信任这台电脑。
-3. 挂载与系统版本匹配的个性化开发者磁盘镜像（DDI）。可用 Xcode 的设备管理界面，
-   或研究环境中的 `pymobiledevice3 mounter auto-mount`；scrctl 当前不负责挂载。
+3. 准备与系统和机型适配的开发者磁盘镜像（DDI）。scrctl 提供原生下载及校验，
+   iOS / iPadOS 17–26 选择 Personalized，27 选择 Cryptex；16 及以下可下载已有的
+   Classic 镜像，但这些旧系统的 CoreDevice 功能尚未验证。设备安装仍是独立步骤，
+   见 [DDI 下载与安装](docs/DDI.md)。
 
 系统更新后需要重新检查 DDI。iOS 27.0.1 实测中，旧 Xcode 26.2 的 17C52
 镜像仍被报告为可用，但不提供屏幕、截图和 HID 服务。改用新版 Cryptex DDI 后

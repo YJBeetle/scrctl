@@ -39,7 +39,15 @@ int main() {
              {"--download-ddi", "--ddi-download-timeout", "3601"},
              {"--download-ddi=false"},
              {"--download-ddi", "--pair"}, {"--download-ddi", "--list-devices"},
-             {"--download-ddi", "--wifi", "auto"}, {"--download-ddi", "-s", "device"},
+             {"--ddi-system-version", "18.7.8"}, {"--ddi-product-type", "iPad11,2"},
+             {"--download-ddi", "--ddi-system-version", ""},
+             {"--download-ddi", "--ddi-system-version", "18.x"},
+             {"--download-ddi", "--ddi-system-version", "28.0"},
+             {"--download-ddi", "--ddi-system-version", "18.7.8", "-s", "device"},
+             {"--download-ddi", "--ddi-system-version", "18.7.8", "--wifi", "auto"},
+             {"--download-ddi", "--ddi-system-version", "18.7.8", "--ddi-product-type", ""},
+             {"--download-ddi", "-s", ""}, {"--download-ddi", "--wifi="},
+             {"--download-ddi", "--wifi", "auto", "--wifi-port", "49152"},
              {"--download-ddi", "--record", "capture.hevc"}, {"--download-ddi", "--version"},
              {"--download-ddi", "--play", "file.hevc"}, {"--download-ddi", "--test-button", "home"}}) {
         auto command = args;
@@ -48,6 +56,17 @@ int main() {
         check(parse(std::move(command), rejected) == ParseResult::Error,
               "DDI download rejects invalid budget and ignored device/media commands before side effects");
     }
+    Options old_ipad;
+    check(parse({"scrctl", "--download-ddi", "--ddi-system-version", "18.7.8",
+                 "--ddi-product-type", "iPad11,2"}, old_ipad) == ParseResult::Run &&
+              old_ipad.ddi_system_version == "18.7.8" && old_ipad.ddi_product_type == "iPad11,2",
+          "offline DDI selection preserves old iPad target");
+    Options usb_ddi;
+    check(parse({"scrctl", "--download-ddi", "-s", "device"}, usb_ddi) == ParseResult::Run &&
+              usb_ddi.serial == "device", "DDI selection can read a selected USB device");
+    Options wifi_ddi;
+    check(parse({"scrctl", "--download-ddi", "--wifi", "auto", "-s", "device"}, wifi_ddi) == ParseResult::Run &&
+              wifi_ddi.wifi == "auto", "DDI selection can read a paired wireless device");
     Options o;
     check(parse({"scrctl", "-s", "device", "--scale=0.5", "--title=a=b", "--window-x", "-30",
                  "--orientation", "270", "--crop", "100:200:3:4", "--background-color=#aB10fF",

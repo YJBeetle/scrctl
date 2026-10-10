@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstdlib>
 #include <fstream>
 #include <limits>
@@ -34,12 +35,18 @@ std::string read_file(const fs::path &path, uint64_t limit) {
     return bytes;
 }
 
-std::vector<uint8_t> digest_file(const fs::path &path, const EVP_MD *algorithm) {
+std::vector<uint8_t> digest_file(const fs::path &path, const EVP_MD *algorithm, bool git_blob = false) {
     std::ifstream file(path, std::ios::binary);
     if (!file) throw std::runtime_error(SCRCTL_TR("Cannot open DDI file for checksum"));
     std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
     if (!ctx || EVP_DigestInit_ex(ctx.get(), algorithm, nullptr) != 1)
         throw std::runtime_error(SCRCTL_TR("Cannot initialize DDI checksum"));
+    if (git_blob) {
+        std::string header = "blob " + std::to_string(fs::file_size(path));
+        header += '\0';
+        if (EVP_DigestUpdate(ctx.get(), header.data(), header.size()) != 1)
+            throw std::runtime_error(SCRCTL_TR("Cannot calculate DDI checksum"));
+    }
     std::array<char, 64 * 1024> buf{};
     while (file) {
         file.read(buf.data(), buf.size());
@@ -64,7 +71,74 @@ std::string hex(const std::vector<uint8_t> &bytes) {
 
 std::string marker(const detail::Catalog &catalog) { return catalog.build + "\n" + catalog.source_url + "\n"; }
 
-void check_manifest(const fs::path &directory, const detail::Catalog &catalog) {
+bool hex_digest(std::string_view value, size_t length) {
+    return value.size() == length && value.find_first_not_of("0123456789abcdef") == std::string_view::npos;
+}
+
+void check_catalog(const detail::Catalog &catalog) {
+    std::vector<std::string_view> expected;
+    switch (catalog.kind) {
+    case Kind::Classic: expected = {"DeveloperDiskImage.dmg", "DeveloperDiskImage.dmg.signature"}; break;
+    case Kind::Personalized: expected = {"BuildManifest.plist", "Image.dmg", "Image.dmg.trustcache"}; break;
+    case Kind::Cryptex: expected = {"BuildManifest.plist", "Image.dmg", "Image.dmg.trustcache",
+                                 "Image.dmg.cryptex_info", "Image.dmg.root_hash"}; break;
+    default: throw std::runtime_error(SCRCTL_TR("Invalid DDI download catalog"));
+    }
+    bool build_valid = !catalog.build.empty() &&
+        catalog.build.find_first_not_of("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") == std::string::npos;
+    if (catalog.kind == Kind::Classic) {
+        std::string error;
+        const auto version = parse_product_version(catalog.build, error);
+        build_valid = version && version->major < 17 && catalog.build ==
+            std::to_string(version->major) + "." + std::to_string(version->minor);
+    }
+    if (!build_valid || !catalog.source_url.starts_with("https://") || catalog.assets.size() != expected.size())
+        throw std::runtime_error(SCRCTL_TR("Invalid DDI download catalog"));
+    for (const auto &asset : catalog.assets) {
+        const auto position = std::find(expected.begin(), expected.end(), asset.name);
+        if (position == expected.end() || asset.size == 0 || asset.size > 64 * 1024 * 1024 ||
+            (catalog.kind == Kind::Classic ? !hex_digest(asset.git_blob_sha1, 40) : !hex_digest(asset.sha256, 64)) ||
+            (!asset.sha256.empty() && !hex_digest(asset.sha256, 64)) ||
+            (!asset.git_blob_sha1.empty() && !hex_digest(asset.git_blob_sha1, 40)))
+            throw std::runtime_error(SCRCTL_TR("Invalid DDI download asset"));
+        expected.erase(position); // Reject duplicates, unexpected names and path traversal.
+    }
+}
+
+std::optional<uint64_t> numeric_identity(const plist::Value *value) {
+    if (!value) return std::nullopt;
+    if (value->is_int() && value->integer >= 0) return static_cast<uint64_t>(value->integer);
+    if (!value->is_string() || value->string.empty()) return std::nullopt;
+    std::string_view text = value->string;
+    int base = 10;
+    if (text.starts_with("0x") || text.starts_with("0X")) { base = 16; text.remove_prefix(2); }
+    uint64_t number = 0;
+    const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), number, base);
+    if (ec != std::errc{} || end != text.data() + text.size()) return std::nullopt;
+    return number;
+}
+
+bool ascii_equal_fold(std::string_view first, std::string_view second) {
+    if (first.size() != second.size()) return false;
+    auto lower = [](unsigned char c) { return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c; };
+    for (size_t i = 0; i < first.size(); ++i)
+        if (lower(static_cast<unsigned char>(first[i])) != lower(static_cast<unsigned char>(second[i]))) return false;
+    return true;
+}
+
+bool matches_target(const plist::Value &identity, const DownloadTarget *target) {
+    if (!target) return true;
+    const auto *product = identity.find("Ap,ProductType");
+    const auto *info = identity.find("Info");
+    const auto *model = info ? info->find("DeviceClass") : nullptr;
+    return (target->product_type.empty() || (product && product->is_string() && product->string == target->product_type)) &&
+        (target->hardware_model.empty() || (model && model->is_string() && ascii_equal_fold(model->string, target->hardware_model))) &&
+        (!target->board_id || numeric_identity(identity.find("ApBoardID")) == target->board_id) &&
+        (!target->chip_id || numeric_identity(identity.find("ApChipID")) == target->chip_id);
+}
+
+void check_manifest(const fs::path &directory, const detail::Catalog &catalog, const DownloadTarget *target) {
+    if (catalog.kind == Kind::Classic) return;
     std::string err;
     auto manifest = plist::parse(read_file(directory / "BuildManifest.plist", 8 * 1024 * 1024), &err);
     if (!manifest || !manifest->is_dict()) throw std::runtime_error(SCRCTL_TR("Invalid DDI BuildManifest plist"));
@@ -72,19 +146,47 @@ void check_manifest(const fs::path &directory, const detail::Catalog &catalog) {
     const auto *identities = manifest->find("BuildIdentities");
     if (!build || !build->is_string() || build->string != catalog.build || !identities || !identities->is_array())
         throw std::runtime_error(SCRCTL_TR("DDI BuildManifest does not match the pinned build"));
-    const std::array<std::pair<const char *, const char *>, 4> payloads{{
-        {"Cryptex1,GenericDmg", "Image.dmg"},
-        {"Cryptex1,GenericTrustCache", "Image.dmg.trustcache"},
-        {"Cryptex1,CryptexInfoPlist", "Image.dmg.cryptex_info"},
-        {"Cryptex1,GenericVolume", "Image.dmg.root_hash"},
-    }};
+    const std::vector<std::pair<const char *, const char *>> payloads = catalog.kind == Kind::Cryptex ?
+        std::vector<std::pair<const char *, const char *>>{{"Cryptex1,GenericDmg", "Image.dmg"},
+            {"Cryptex1,GenericTrustCache", "Image.dmg.trustcache"},
+            {"Cryptex1,CryptexInfoPlist", "Image.dmg.cryptex_info"},
+            {"Cryptex1,GenericVolume", "Image.dmg.root_hash"}} :
+        std::vector<std::pair<const char *, const char *>>{{"PersonalizedDMG", "Image.dmg"},
+            {"LoadableTrustCache", "Image.dmg.trustcache"}};
+    std::vector<std::vector<uint8_t>> digests;
+    for (const auto &[key, name] : payloads) {
+        (void)key;
+        digests.push_back(digest_file(directory / name, EVP_sha384()));
+    }
     bool found = false;
+    bool matched_hardware = false;
     for (const auto &identity : identities->array) {
         const auto *info = identity.find("Info");
         const auto *variant = info ? info->find("Variant") : nullptr;
-        if (!variant || !variant->is_string() || !variant->string.ends_with("Developer Disk Image Cryptex")) continue;
+        if (!variant || !variant->is_string()) continue;
+        if (catalog.kind == Kind::Cryptex) {
+            if (!variant->string.ends_with("Developer Disk Image Cryptex")) continue;
+            // Cryptex is a generic identity on some images. Where a product is
+            // supplied, the manifest must at least declare it as supported.
+            if (target && !target->product_type.empty()) {
+                const auto *supported = manifest->find("SupportedProductTypes");
+                if (!supported || !supported->is_array() || std::none_of(supported->array.begin(), supported->array.end(),
+                        [&](const auto &product) { return product.is_string() && product.string == target->product_type; }))
+                    throw std::runtime_error(SCRCTL_TR("DDI manifest does not support the requested product type"));
+            }
+        } else {
+            if (!variant->string.ends_with("Developer PDI") || variant->string.find("Cryptex") != std::string::npos ||
+                !matches_target(identity, target)) continue;
+        }
+        matched_hardware = true;
         const auto *entries = identity.find("Manifest");
-        if (!entries || !entries->is_dict()) throw std::runtime_error(SCRCTL_TR("DDI Cryptex manifest entries missing"));
+        if (!entries || !entries->is_dict()) {
+            if (catalog.kind == Kind::Cryptex)
+                throw std::runtime_error(SCRCTL_TR("DDI Cryptex manifest entries missing"));
+            continue;
+        }
+        bool valid = true;
+        size_t payload_index = 0;
         for (const auto &[key, name] : payloads) {
             const auto *entry = entries->find(key);
             const auto *digest = entry ? entry->find("Digest") : nullptr;
@@ -92,26 +194,39 @@ void check_manifest(const fs::path &directory, const detail::Catalog &catalog) {
             const auto *path = entry_info ? entry_info->find("Path") : nullptr;
             if (!digest || digest->kind != plist::Kind::Data || digest->data.size() != 48 ||
                 !path || !path->is_string() || path->string != name ||
-                digest_file(directory / name, EVP_sha384()) != digest->data)
-                throw std::runtime_error(std::string(SCRCTL_TR("DDI Cryptex manifest digest mismatch: ")) + name);
+                digests[payload_index] != digest->data) {
+                if (catalog.kind == Kind::Cryptex)
+                    throw std::runtime_error(std::string(SCRCTL_TR("DDI Cryptex manifest digest mismatch: ")) + name);
+                valid = false;
+                break;
+            }
+            ++payload_index;
         }
-        found = true;
+        if (valid) found = true;
     }
-    if (!found) throw std::runtime_error(SCRCTL_TR("DDI BuildManifest lacks a Cryptex identity"));
+    if (!found) {
+        if (catalog.kind == Kind::Cryptex) throw std::runtime_error(SCRCTL_TR("DDI BuildManifest lacks a Cryptex identity"));
+        if (!matched_hardware) throw std::runtime_error(SCRCTL_TR("DDI BuildManifest lacks a matching Personalized hardware identity"));
+        throw std::runtime_error(SCRCTL_TR("DDI Personalized manifest digest mismatch for the requested hardware"));
+    }
 }
 
-bool validate_files(const fs::path &directory, const detail::Catalog &catalog, std::string &error, bool complete) {
+bool validate_files(const fs::path &directory, const detail::Catalog &catalog, std::string &error, bool complete,
+                    const DownloadTarget *target) {
     try {
+        check_catalog(catalog);
         if (fs::is_symlink(fs::symlink_status(directory)) || !fs::is_directory(directory))
             throw std::runtime_error(SCRCTL_TR("DDI cache directory is missing or is a symbolic link"));
         for (const auto &asset : catalog.assets) {
             const auto path = directory / asset.name;
             if (fs::is_symlink(fs::symlink_status(path)) || !fs::is_regular_file(path) || fs::file_size(path) != asset.size)
                 throw std::runtime_error(std::string(SCRCTL_TR("DDI cache size or file type mismatch: ")) + asset.name);
-            if (hex(digest_file(path, EVP_sha256())) != asset.sha256)
+            if (!asset.sha256.empty() && hex(digest_file(path, EVP_sha256())) != asset.sha256)
                 throw std::runtime_error(std::string(SCRCTL_TR("DDI cache SHA-256 mismatch: ")) + asset.name);
+            if (!asset.git_blob_sha1.empty() && hex(digest_file(path, EVP_sha1(), true)) != asset.git_blob_sha1)
+                throw std::runtime_error(std::string(SCRCTL_TR("DDI cache Git blob SHA-1 mismatch: ")) + asset.name);
         }
-        check_manifest(directory, catalog);
+        check_manifest(directory, catalog, target);
         if (complete && read_file(directory / ".complete", 4096) != marker(catalog))
             throw std::runtime_error(SCRCTL_TR("DDI cache completion marker mismatch"));
         error.clear();
@@ -223,12 +338,12 @@ const Catalog &cryptex_catalog() {
     return catalog;
 }
 
-bool validate(const fs::path &directory, const Catalog &catalog, std::string &error) {
-    return validate_files(directory, catalog, error, true);
+bool validate(const fs::path &directory, const Catalog &catalog, std::string &error, const DownloadTarget *target) {
+    return validate_files(directory, catalog, error, true, target);
 }
 
 std::optional<DownloadResult> download(const DownloadOptions &options, const Catalog &catalog,
-                                      const Transfer &transfer, std::string &error) {
+                                      const Transfer &transfer, std::string &error, const DownloadTarget *target) {
     error.clear();
     try {
         if (options.timeout <= std::chrono::seconds::zero()) throw std::runtime_error(SCRCTL_TR("DDI download timeout must be positive"));
@@ -245,18 +360,11 @@ std::optional<DownloadResult> download(const DownloadOptions &options, const Cat
         fs::path root = options.cache_root;
         if (root.empty()) { auto selected = default_cache_root(error); if (!selected) return std::nullopt; root = *selected; }
         if (!root.is_absolute()) throw std::runtime_error(SCRCTL_TR("DDI cache root must be an absolute path"));
-        // Catalog is fixed in production; keep the test seam unable to escape the cache root.
-        if (catalog.build.empty() || catalog.build.find_first_not_of("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") != std::string::npos ||
-            !catalog.source_url.starts_with("https://") || catalog.assets.size() != 5)
-            throw std::runtime_error(SCRCTL_TR("Invalid DDI download catalog"));
-        for (const auto &asset : catalog.assets) {
-            if (asset.name.empty() || fs::path(asset.name).filename() != fs::path(asset.name) ||
-                asset.name == "." || asset.name == ".." || asset.size == 0 || asset.size > 64 * 1024 * 1024 || asset.sha256.size() != 64)
-                throw std::runtime_error(SCRCTL_TR("Invalid DDI download asset"));
-        }
+        check_catalog(catalog);
         fs::create_directories(root);
         if (fs::is_symlink(fs::symlink_status(root))) throw std::runtime_error(SCRCTL_TR("DDI cache root must not be a symbolic link"));
-        const auto directory = root / ("cryptex-" + catalog.build);
+        const auto cache_name = std::string(kind_name(catalog.kind)) + "-" + catalog.build;
+        const auto directory = root / cache_name;
         // Only a complete, fully rehashed cache is reused.
         if (fs::exists(directory) || fs::is_symlink(fs::symlink_status(directory))) {
             if (!validate(directory, catalog, error)) {
@@ -265,19 +373,21 @@ std::optional<DownloadResult> download(const DownloadOptions &options, const Cat
                     std::string(utf8_path.begin(), utf8_path.end()) + " (" + error + ")";
                 return std::nullopt;
             }
+            if (target) check_manifest(directory, catalog, target);
             if (stopped()) return std::nullopt;
-            return DownloadResult{directory, catalog.build, catalog.source_url, true};
+            return DownloadResult{directory, catalog.build, catalog.source_url, true, catalog.kind};
         }
-        const auto lock_path = root / ("cryptex-" + catalog.build + ".lock");
+        const auto lock_path = root / (cache_name + ".lock");
         if (!fs::create_directory(lock_path)) throw std::runtime_error(SCRCTL_TR("Another DDI download owns this version lock; retry after it finishes (remove the lock only if that process has exited)"));
         RemovePath lock{lock_path};
         if (fs::exists(directory)) {
             if (!validate(directory, catalog, error) || stopped()) return std::nullopt;
-            return DownloadResult{directory, catalog.build, catalog.source_url, true};
+            if (target) check_manifest(directory, catalog, target);
+            return DownloadResult{directory, catalog.build, catalog.source_url, true, catalog.kind};
         }
         std::vector<uint8_t> nonce(16);
         if (RAND_bytes(nonce.data(), static_cast<int>(nonce.size())) != 1) throw std::runtime_error(SCRCTL_TR("Cannot generate DDI staging directory name"));
-        const auto staging = root / (".cryptex-" + catalog.build + ".partial-" + hex(nonce));
+        const auto staging = root / ("." + cache_name + ".partial-" + hex(nonce));
         if (!fs::create_directory(staging)) throw std::runtime_error(SCRCTL_TR("Cannot create unique DDI staging directory"));
         RemovePath cleanup{staging};
         fs::permissions(staging, fs::perms::owner_all, fs::perm_options::replace);
@@ -309,7 +419,7 @@ std::optional<DownloadResult> download(const DownloadOptions &options, const Cat
             if (!file) throw std::runtime_error(std::string(SCRCTL_TR("Cannot close DDI download file: ")) + asset.name);
             if (received != asset.size) throw std::runtime_error(std::string(SCRCTL_TR("Incomplete DDI download: ")) + asset.name);
         }
-        if (stopped() || !validate_files(staging, catalog, error, false)) return std::nullopt;
+        if (stopped() || !validate_files(staging, catalog, error, false, target)) return std::nullopt;
         std::ofstream complete(staging / ".complete", std::ios::binary);
         complete << marker(catalog);
         complete.close();
@@ -318,7 +428,7 @@ std::optional<DownloadResult> download(const DownloadOptions &options, const Cat
         if (fs::exists(directory)) throw std::runtime_error(SCRCTL_TR("DDI version directory appeared during download; refusing to overwrite it"));
         fs::rename(staging, directory);
         cleanup.path.clear();
-        return DownloadResult{directory, catalog.build, catalog.source_url, false};
+        return DownloadResult{directory, catalog.build, catalog.source_url, false, catalog.kind};
     } catch (const std::exception &e) { error = e.what(); return std::nullopt; }
 }
 } // namespace detail
@@ -356,6 +466,23 @@ std::optional<fs::path> default_cache_root(std::string &error) {
 
 std::optional<DownloadResult> download_cryptex(const DownloadOptions &options, std::string &error) {
     return detail::download(options, detail::cryptex_catalog(), curl_transfer, error);
+}
+
+std::optional<DownloadResult> download_for_target(const DownloadOptions &options,
+                                                const DownloadTarget &target, std::string &error) {
+    const auto selection = select_for_version(target.system_version, error);
+    if (!selection) return std::nullopt;
+    const detail::Catalog *catalog = nullptr;
+    switch (selection->kind) {
+    case Kind::Classic: catalog = detail::classic_catalog(selection->version); break;
+    case Kind::Personalized: catalog = &detail::personalized_catalog(); break;
+    case Kind::Cryptex: catalog = &detail::cryptex_catalog(); break;
+    }
+    if (!catalog) {
+        error = SCRCTL_TR("No pinned Classic DDI exists for the requested OS major.minor version");
+        return std::nullopt;
+    }
+    return detail::download(options, *catalog, curl_transfer, error, &target);
 }
 bool validate_cryptex_cache(const fs::path &directory, std::string &error) {
     return detail::validate(directory, detail::cryptex_catalog(), error);

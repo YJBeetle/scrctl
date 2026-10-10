@@ -57,6 +57,73 @@ const char *pairing_status(remote::DiscoveryPairing status) {
     return SCRCTL_TR("no matching pairing record");
 }
 
+// USB reads ordinary lockdown values, so choosing an image does not itself
+// require a mounted DDI. Wi-Fi reads the authenticated RSD handshake only.
+bool read_ddi_target(const Options &options, const std::function<bool()> &cancelled,
+                     ddi::DownloadTarget &target, std::string &error) {
+    if (cancelled()) { error = SCRCTL_TR("DDI download cancelled"); return false; }
+    if (!options.wifi.empty()) {
+        auto device = open_device(options.serial, options.wifi, error, options.wifi_port, cancelled);
+        if (!device) return false;
+        target.system_version = device->property("OSVersion");
+        target.product_type = device->property("ProductType");
+        target.hardware_model = device->property("HardwareModel");
+        const auto *properties = device->rsd().properties();
+        auto number = [&](const char *key) -> std::optional<uint64_t> {
+            const auto *value = properties ? properties->find(key) : nullptr;
+            if (value && value->type == xpc::Type::UInt64) return value->uint64;
+            if (value && value->type == xpc::Type::Int64 && value->int64 >= 0)
+                return static_cast<uint64_t>(value->int64);
+            return std::nullopt;
+        };
+        target.board_id = number("BoardId");
+        target.chip_id = number("ChipID");
+    } else {
+        std::vector<transport::DeviceRecord> devices;
+        if (transport::Usbmux::list_devices_for_discovery(
+                devices, std::chrono::milliseconds(1000), cancelled, error) !=
+                transport::UsbmuxDiscoveryStatus::complete) {
+            if (error.empty()) error = SCRCTL_TR("Cannot enumerate the target USB device for DDI selection");
+            return false;
+        }
+        const auto selected = remote::detail::select_usbmux_device(devices, options.serial, error, true);
+        if (!selected || cancelled()) return false;
+        auto lockdown = transport::Lockdown::establish(selected->device_id, selected->udid, error);
+        if (!lockdown || cancelled()) return false;
+        auto request = plist::Value::Dict();
+        request.set("Request", plist::Value::Str("GetValue"));
+        plist::Value reply;
+        if (!lockdown->request(request, reply, error)) return false;
+        if (const auto *failure = reply.find("Error")) { error = failure->as_string_or(); return false; }
+        const auto *values = reply.find("Value");
+        if (!values || !values->is_dict()) {
+            error = SCRCTL_TR("DDI target metadata is missing its OS version or product model");
+            return false;
+        }
+        auto text = [&](const char *key) {
+            const auto *value = values->find(key);
+            return value ? value->as_string_or() : std::string{};
+        };
+        auto number = [&](const char *key) -> std::optional<uint64_t> {
+            const auto *value = values->find(key);
+            if (value && value->is_int() && value->integer >= 0)
+                return static_cast<uint64_t>(value->integer);
+            return std::nullopt;
+        };
+        target.system_version = text("ProductVersion");
+        target.product_type = text("ProductType");
+        target.hardware_model = text("HardwareModel");
+        target.board_id = number("BoardId");
+        target.chip_id = number("ChipID");
+    }
+    if (cancelled()) { error = SCRCTL_TR("DDI download cancelled"); return false; }
+    if (target.system_version.empty() || target.product_type.empty()) {
+        error = SCRCTL_TR("DDI target metadata is missing its OS version or product model");
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 std::optional<int> run_standalone_command(const Options &o) {
@@ -85,6 +152,26 @@ std::optional<int> run_standalone_command(const Options &o) {
         }
         options.timeout = std::chrono::seconds(o.ddi_download_timeout);
         options.cancelled = [&] { return runtime.stop_requested(); };
+        ddi::DownloadTarget target;
+        std::string error;
+        if (!o.serial.empty() || !o.wifi.empty()) {
+            if (!read_ddi_target(o, options.cancelled, target, error)) {
+                if (runtime.stop_requested()) error = SCRCTL_TR("DDI download cancelled");
+                std::fprintf(stderr, SCRCTL_TR("DDI download failed: %s\n"), terminal_text(error).c_str());
+                return 1;
+            }
+        } else if (!o.ddi_system_version.empty()) {
+            target.system_version = o.ddi_system_version;
+            target.product_type = o.ddi_product_type;
+        }
+        const auto selection = ddi::select_for_version(target.system_version, error);
+        if (!selection) {
+            std::fprintf(stderr, SCRCTL_TR("DDI download failed: %s\n"), terminal_text(error).c_str());
+            return 1;
+        }
+        std::printf(SCRCTL_TR("DDI target: OS %s, model %s, image type %s\n"),
+                    terminal_text(target.system_version).c_str(), terminal_text(target.product_type).c_str(),
+                    std::string(ddi::kind_name(selection->kind)).c_str());
         std::string last_file;
         uint64_t last_bytes = 0;
         options.progress = [&](const std::string &file, uint64_t received, uint64_t total) {
@@ -96,8 +183,7 @@ std::optional<int> run_standalone_command(const Options &o) {
                 last_bytes = received;
             }
         };
-        std::string error;
-        const auto result = ddi::download_cryptex(options, error);
+        const auto result = ddi::download_for_target(options, target, error);
         if (!result) {
             std::fprintf(stderr, SCRCTL_TR("DDI download failed: %s\n"), terminal_text(error).c_str());
             return 1;

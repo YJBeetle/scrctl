@@ -3065,3 +3065,31 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   新增安装说明区分 Personalized 与 Cryptex，并提示重新确认实际服务。
   更多镜像版本和原生个性化安装留在待办；长期稳定验证按用户要求后续再做，
   Parallels 归属切换故障作为环境历史保留。
+
+## 第一百四十九轮：按系统和机型选择 DDI
+
+- 下载命令增加 `--ddi-system-version` 和 `--ddi-product-type`；`-s` 可通过
+  USB lockdown 查询系统版本、机型与硬件身份，`--wifi` 可从已认证 RSD 属性
+  取得目标信息。仅查询元数据，不起媒体或控制服务；显式目标与设备检测互斥。
+  裸 `--download-ddi` 保留原来的固定 Cryptex 下载行为。
+- 16 及以下按主次版本选择已有 Classic 目录，17–26 选择 Personalized，27
+  选择 Cryptex；没有目录或尚未定义的未来系统版本明确拒绝。Classic 固定
+  40 个目录、80 个资产的尺寸与 Git blob SHA-1，补丁号不另选版、不回退。
+  Personalized 固定三文件的尺寸与 SHA-256，使用同一身份匹配目标型号及
+  可取得的 HardwareModel、BoardId、ChipID，再校验两个 payload 的 SHA-384。
+  Cryptex 保留通用四 payload 校验，指定型号时另查声明的支持名单。
+- Personalized 清单中有部分旧身份引用不同的 payload；没有把型号名单直接
+  当成可用镜像。`iPad11,2` 的 j211ap / 0x16 / 0x8020 身份与当前发布文件
+  匹配；此检查不代表新镜像已在旧 iPad 重新安装。完整缓存不因目标型号
+  不匹配而要求删除；各镜像类型使用独立缓存目录。
+- 本地 Release 构建与 DDI 下载、版本选择、CLI、i18n、翻译目录五项相关
+  CTest 通过。正式命令实际下载 Classic 16.7，并在不可达代理下按 16.7.1
+  复用同一缓存。当前 iPhone 的 USB 与 Wi-Fi 自动检测均取得 27.0.1 /
+  iPhone14,4，并通过型号校验复用已有 Cryptex 缓存；没有操作媒体或镜像安装。
+- Personalized 正式命令按 18.7.8 / iPad11,2 实际下载三文件，共 16536648
+  字节，固定 SHA-256 与匹配身份的 payload 校验通过。初次网络传输触发
+  180 秒测试预算，没有发布完整缓存；第二次放宽到 360 秒后退出 0。
+- README 补充 iPhone14,4 / 27.0、27.0.1 和 iPad11,2 / 18.7.8 的历史实测
+  范围，并区分镜像选择、安装接受和产品功能。旧 iPad 的实时媒体要求
+  iOS 27，不因增加下载目录而宣布支持；Classic 也未验证 CoreDevice 功能。
+  原生个性化签票、安装与挂载继续作为独立待办。
