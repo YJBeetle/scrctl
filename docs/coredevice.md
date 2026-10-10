@@ -3776,7 +3776,7 @@ OrientationInfo 的编码字段为：
 scrcpy v5 的设备转屏先读当前 rotation 和冻结状态，目标为 `(rotation & 1) ^ 1`，
 并在原来允许自动转屏时恢复自动转屏。因此 MOD+R 应切换横竖屏并保持原策略，
 不能直接循环四个方向。方向锁关闭时的应用效果已按 §33.3 验证，
-方向锁开启时仍需单独验证；
+方向锁开启时的受限行为见 §33.4；
 没有恢复依据时不猜发 unknown / faceUp，也不以本机画面旋转冒充设备转屏。
 
 来源 SHA256：CoreDevice 为 `1dd2f4dbb263afc94aac09addf9246cf5a3ef23ea2e89078fdb0024b9341a771`，
@@ -3841,3 +3841,21 @@ OrientationControl 现在每次 RPC 独占服务连接：首连接预建，其�
 请求结束即关闭；Device 必须覆盖控制对象生命期。每项 mutation 只发送一次，
 失败没有盲目重试或猜测恢复。MOD+R 使用后台单任务查询横竖基线后切换，
 平放只采用有效 nonflat，不据电脑显示角度计算设备目标。
+
+### 33.4 控制中心竖排方向锁开启
+
+2026-10-10，用户在同台 iOS 27 iPhone 上开启竖排方向锁，Mac Wi-Fi、无边记。
+只读基线仍为 `portrait/portrait/locked=false`；该服务的 Bool 不可作为控制中心
+锁开关的可靠读数。使用 `dfc5190` 的同一正式 scrctl 二进制，三次显式 MOD+R
+均收到有效方向状态但未报告 landscapeLeft，产品明确报告请求失败；用户确认
+手机画面没有切换。媒体窗口正常退出 0，消费 8199 帧，测试无音频及录制。
+
+另用独立连接对静态已确认的 `rotate {"_0":"right"}` 发出一次带回复请求。
+请求前及回复均为 `portrait/portrait/locked=false`，进程退出 0；用户再次确认
+无边记未转动，控制中心方向锁仍开启。这里的退出 0 仅表示取得有效回复，
+不当作转屏成功。两条接口在此初态都未绕过方向锁，不继续猜测解锁参数。
+
+此结果与 scrcpy 的 Android 实现有差异：scrcpy 仍 freezeRotation 到新目标，
+仅在原来允许自动转屏时 thaw；原来锁定时保留锁定。当前 scrctl 用法应提示先
+关闭竖排方向锁，而非保证完全相同的锁定行为。该结论限定本设备、系统和应用。
+Android 实现依据为本日复核的 [scrcpy Device.rotateDevice](https://github.com/Genymobile/scrcpy/blob/master/server/src/main/java/com/genymobile/scrcpy/device/Device.java)。
