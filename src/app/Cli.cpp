@@ -30,7 +30,8 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         "Switching routes may pause the phone's player; resume it if needed.\n"
         "The device chooses encoding dimensions, bitrate and frame rate. Display crop and "
         "--display-orientation leave recordings unchanged; --orientation rotates display and "
-        "container recordings together. Record selected tracks to .mp4 or .mkv, or use .hevc for raw video.\n"
+        "container recordings together. Record selected tracks to .mp4 or .mkv, or use .hevc for raw video; "
+        "--record-format overrides the file extension.\n"
         "Wireless use requires pairing. --help / --version do not connect to the device."));
     app.set_help_flag("-h,--help", SCRCTL_N_("Show help"));
     app.add_option("--play", o.path, SCRCTL_N_("Play an Annex-B HEVC file"));
@@ -51,8 +52,15 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
                  SCRCTL_N_("Allow replacing an incomplete or rejected pairing record; requires --pair"))
         ->needs("--pair");
     app.add_option("-r,--record", o.record, SCRCTL_N_(
-        "Record selected video/audio tracks to .mp4 or .mkv; other extensions save raw HEVC without audio"))
+        "Record selected tracks; format follows .mp4/.mkv or raw HEVC, unless --record-format is specified"))
         ->excludes("--play");
+    const std::map<std::string, RecordFormat> record_formats = {
+        {"mp4", RecordFormat::Mp4}, {"mkv", RecordFormat::Matroska}, {"hevc", RecordFormat::Hevc},
+    };
+    app.add_option_function<std::string>("--record-format", [&](const std::string& value) {
+        o.record_format = record_formats.at(value);
+    }, SCRCTL_N_("Recording format: mp4, mkv or hevc (raw video extension); requires --record"))
+        ->check(CLI::IsMember(record_formats))->needs("--record");
     app.add_option("--start-app", o.start_app, SCRCTL_N_("Launch bundle ID; ? matches name prefix, + terminates the previous instance"));
     app.add_option("--window-title,--title", o.title, SCRCTL_N_("Window title"));
     app.add_option("--render-driver", o.render_driver, SCRCTL_N_("SDL render driver, e.g. metal / software"));
@@ -158,10 +166,14 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     try {
         app.parse(argc, argv);
         if (!language.select()) return ParseResult::Error;
+        if (o.record_format && o.record.empty()) {
+            throw CLI::ValidationError("--record-format", SCRCTL_TR("Requires a nonempty recording file"));
+        }
+        const auto container_format = record_container_format(o.record, o.record_format);
         if (o.no_window || o.no_video || no_playback) o.no_video_playback = true;
         if (no_playback) o.no_audio_playback = true;
         // 没有本机播放或容器音轨消费者时，跳过音频采集和设备路由请求。
-        if (o.no_audio_playback && !record_container_format(o.record)) o.no_audio = true;
+        if (o.no_audio_playback && !container_format) o.no_audio = true;
         if (o.audio_dup && o.no_audio) {
             throw CLI::ValidationError("--audio-dup", SCRCTL_TR(
                 "Audio capture is disabled; --audio-dup requires playback or MP4/MKV recording"));
@@ -177,7 +189,7 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
             o.no_video = true;
         }
         if (o.no_video && !o.record.empty()) {
-            if (!record_container_format(o.record)) {
+            if (!container_format) {
                 throw CLI::ValidationError("--record", SCRCTL_TR("Audio-only recording requires MP4 or MKV; raw HEVC cannot contain audio"));
             }
             if (o.no_audio) {
@@ -191,7 +203,7 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
                            o.video_source == "screenshot")) {
             throw CLI::ValidationError("--no-video", SCRCTL_TR("Frame counting, hardware decoding, fallback tests and screenshots require video capture"));
         }
-        if (record_container_format(o.record) && o.video_source == "screenshot") {
+        if (container_format && o.video_source == "screenshot") {
             throw CLI::ValidationError("--record", SCRCTL_TR(
                 "Container recording requires live video; screenshot polling cannot be recorded"));
         }
@@ -199,7 +211,7 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
             throw CLI::ValidationError("--record-orientation", SCRCTL_TR(
                 "Recording does not support flipping; use --display-orientation for display-only flipping or reset --record-orientation to a rotation"));
         }
-        if (!o.record.empty() && !record_container_format(o.record) && o.record_orientation != 0) {
+        if (!o.record.empty() && !container_format && o.record_orientation != 0) {
             throw CLI::ValidationError("--record", SCRCTL_TR(
                 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate only the display"));
         }

@@ -105,7 +105,7 @@ int run(int argc, char **argv) {
         }
         std::fprintf(stderr, SCRCTL_TR("Failed to initialize audio output: %s (audio disabled; video continues)\n"),
                      audio_init_error.c_str());
-        if (record_container_format(o.record) && !o.no_audio) {
+        if (record_container_format(o.record, o.record_format) && !o.no_audio) {
             std::fprintf(stderr, "%s\n", SCRCTL_TR(
                 "Audio recording requires an audio stream. Use --no-audio-playback to record "
                 "without a sound device, or --no-audio to record video only."));
@@ -146,6 +146,7 @@ int run(int argc, char **argv) {
         live_options.wifi = o.wifi;
         live_options.wifi_port = o.wifi_port;
         live_options.record_path = o.record;
+        live_options.record_format = o.record_format;
         live_options.hw_decode = o.hw_decode;
         live_options.watch_display = !o.no_video_playback;
         live_options.want_video = !o.no_video;
@@ -225,7 +226,7 @@ int run(int argc, char **argv) {
     if (live != nullptr && live->has_audio() && !o.no_audio_playback) {
         std::string aerr;
         if (!live->start_playback(aerr)) {
-            if (record_container_format(o.record)) {
+            if (record_container_format(o.record, o.record_format)) {
                 std::fprintf(stderr, SCRCTL_TR(
                     "Failed to open audio output: %s (recording and audio reception continue)\n"),
                     aerr.c_str());

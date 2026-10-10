@@ -595,7 +595,27 @@ int main() {
                   !std::filesystem::exists(options.record_path),
               "audio-only recording rejects video rotation before connection or file creation");
         options.record_orientation = 0;
+        options.record_path = "must-not-create.mp4";
+        options.record_format = scrctl::app::RecordFormat::Hevc;
+        scrctl::app::LiveSource explicit_raw;
+        check(!explicit_raw.start(options, err) &&
+                  err.find("Audio-only recording requires MP4 or MKV") != std::string::npos &&
+                  !std::filesystem::exists(options.record_path),
+              "explicit raw format overrides the container suffix before opening an audio-only device");
+        options.record_path = "must-not-create.hevc";
+        options.record_format = scrctl::app::RecordFormat::Matroska;
+        options.want_audio = false;
+        scrctl::app::LiveSource explicit_container;
+        check(!explicit_container.start(options, err) &&
+                  err.find("requires audio capture") != std::string::npos &&
+                  !std::filesystem::exists(options.record_path),
+              "explicit container format overrides the raw suffix before the audio consumer precheck");
         options.record_path.clear();
+        scrctl::app::LiveSource no_record_path;
+        check(!no_record_path.start(options, err) &&
+                  err.find("nonempty recording file") != std::string::npos,
+              "a format without a recording file is rejected by LiveSource before device connection");
+        options.record_format.reset();
         options.want_audio = false;
         options.should_cancel = [] { return true; };
         scrctl::app::LiveSource cancelled;

@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <limits>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -42,9 +43,44 @@ int main() {
               defaults.audio_buffer_ms == 50 && !defaults.audio_dup &&
               !defaults.no_audio && !defaults.no_audio_playback &&
               !defaults.no_video && !defaults.no_video_playback && !defaults.no_window &&
+              !defaults.record_format &&
               defaults.shortcut_mods == (KMOD_LALT | KMOD_LGUI) &&
               defaults.orientation == -1 && !defaults.display_flip && defaults.record_orientation == 0,
           "default options");
+    using RecordFormat = scrctl::app::RecordFormat;
+    using MuxerFormat = scrctl::media::RecordingMuxer::Format;
+    for (const auto& [name, selected, container] : {
+            std::tuple{"mp4", RecordFormat::Mp4, MuxerFormat::Mp4},
+            std::tuple{"mkv", RecordFormat::Matroska, MuxerFormat::Matroska}}) {
+        for (const char* path : {"capture", "capture.hevc"}) {
+            Options recording;
+            check(parse({"scrctl", "--record-format", name, "-r", path, "-N",
+                         "--record-orientation=90"}, recording) == ParseResult::Run &&
+                      recording.record_format == selected && recording.no_video_playback &&
+                      recording.no_audio_playback && !recording.no_audio &&
+                      scrctl::app::record_container_format(recording.record, recording.record_format) == container,
+                  "explicit container format overrides extension and retains encoded audio with no playback");
+            Options audio_only;
+            check(parse({"scrctl", "-r", path, "--record-format=" + std::string(name),
+                         "--no-video", "--no-audio-playback"}, audio_only) == ParseResult::Run &&
+                      audio_only.no_video && !audio_only.no_audio && audio_only.no_audio_playback,
+                  "explicit container format permits audio-only recording without a container extension");
+        }
+    }
+    Options mismatch;
+    check(parse({"scrctl", "-r", "capture.mp4", "--record-format=mkv"}, mismatch) == ParseResult::Run &&
+              scrctl::app::record_container_format(mismatch.record, mismatch.record_format) == MuxerFormat::Matroska,
+          "explicit container format takes precedence over a different recognized extension");
+    Options raw_override;
+    check(parse({"scrctl", "-r", "capture.mkv", "--record-format=hevc", "-N"}, raw_override) ==
+              ParseResult::Run && raw_override.record_format == RecordFormat::Hevc && raw_override.no_audio &&
+              !scrctl::app::record_container_format(raw_override.record, raw_override.record_format),
+          "explicit raw HEVC overrides a container extension and disables audio with no playback");
+    Options inferred;
+    check(parse({"scrctl", "-r", "capture.MP4", "-N"}, inferred) == ParseResult::Run &&
+              !inferred.record_format && !inferred.no_audio &&
+              scrctl::app::record_container_format(inferred.record, inferred.record_format) == MuxerFormat::Mp4,
+          "omitting the format retains case-insensitive extension inference");
     for (const char *flag : {"--no-video", "--no-video-playback", "--no-window"}) {
         Options audio_only;
         check(parse({"scrctl", flag}, audio_only) == ParseResult::Run &&
@@ -90,6 +126,9 @@ int main() {
              {"scrctl", "--no-window", "--no-audio"},
              {"scrctl", "--no-video", "-r", "capture.hevc"},
              {"scrctl", "--no-video", "-r", "capture.aac"},
+             {"scrctl", "--no-video", "-r", "capture.mp4", "--record-format=hevc"},
+             {"scrctl", "-r", "capture.mkv", "--record-format=hevc", "--record-orientation=90"},
+             {"scrctl", "-r", "capture.hevc", "--record-format=mp4", "--video-source=screenshot"},
              {"scrctl", "--no-video", "--no-audio", "-r", "capture.mkv"},
              {"scrctl", "--no-video", "--record-orientation", "90", "-r", "capture.mkv"},
              {"scrctl", "--no-video", "--record-orientation", "flip0", "-r", "capture.mp4"},
@@ -471,6 +510,11 @@ int main() {
         {"--shortcut-mod", "none"},
         {"--video-source", "unknown"},
         {"--video-source", "camera"},
+        {"--record-format", "mp4"},
+        {"--record-format", "hevc", "--record", ""},
+        {"--record", "capture", "--record-format", "webm"},
+        {"--record", "capture", "--record-format", ""},
+        {"--record", "capture", "--record-format"},
         {"--no-audio", "--audio-dup"},
         {"--audio-dup", "--no-audio"},
         {"--orientation", "45"},

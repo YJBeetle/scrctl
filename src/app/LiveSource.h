@@ -3,6 +3,7 @@
 #include "app/AudioOut.h"
 #include "app/FrameSource.h"
 #include "app/LiveStats.h"
+#include "app/RecordFormat.h"
 #include "hid/Hid.h"
 #include "media/FramePump.h"
 #include "media/Recorder.h"
@@ -27,6 +28,7 @@ class LiveSource final : public FrameSource {
 
     struct Options {
         std::string serial, wifi, record_path;
+        std::optional<RecordFormat> record_format;
         uint16_t wifi_port = 49152;
         bool hw_decode = false;
         bool watch_display = true;

@@ -118,7 +118,7 @@ MOD+Shift+← / → 都水平镜像当前电脑画面；MOD+Shift+↑ / ↓ 都�
 
 | 项目 | 当前行为及使用边界 |
 | --- | --- |
-| `--record / -r` | `.mp4` / `.mkv` 保存所选轨道：默认 HEVC 和 AAC-ELD，`--no-audio` 只录视频，`--no-video` 只录音频；其他扩展名兼容裸 HEVC，建议 `.hevc`。MP4 最后视频帧显示 100 ms，参考 scrcpy 的收尾规则 |
+| `--record / -r`、`--record-format` | 默认按 `.mp4` / `.mkv` 扩展名保存所选轨道；其他扩展名兼容裸 HEVC，建议 `.hevc`。显式 `--record-format=mp4|mkv` 与 scrcpy 用法一致，允许无扩展名或不同扩展名；`hevc` 为 scrctl 裸视频扩展。格式选项需要非空录制文件，音轨和方向校验依据所选格式。容器默认 HEVC 和 AAC-ELD，`--no-audio` 只录视频，`--no-video` 只录音频；裸 HEVC 无音轨。MP4 最后视频帧显示 100 ms，参考 scrcpy 的收尾规则 |
 | `--display-orientation` | 只改变本机显示，支持 scrcpy 的四个旋转角度与四个 flip 值；另保留 auto 扩展。flip 先水平翻转，再顺时针旋转，鼠标映射使用相反顺序 |
 | `--orientation` / `--record-orientation` | 数字 `--orientation` 同时设置显示与容器录制方向；`--record-orientation` 只设置录制。按参数顺序覆盖；旧 `--orientation=auto` 仅设置显示 |
 | `--crop` | 裁剪本机显示的源像素；视频和截图各使用自身的像素坐标，不改变设备采集或录制 |

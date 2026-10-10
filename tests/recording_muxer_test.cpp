@@ -1,4 +1,5 @@
 #include "media/RecordingMuxer.h"
+#include "app/RecordFormat.h"
 #include "RecordingAudioEvidence.h"
 
 #include <array>
@@ -9,7 +10,9 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #ifdef SCRCTL_HAVE_LIBAVFORMAT
@@ -157,6 +160,7 @@ struct Track {
 };
 struct File {
     Track video, audio;
+    std::string format_name;
     unsigned streams = 0;
     recording_test::AudioTailEvidence audio_tail;
 };
@@ -167,6 +171,7 @@ File read(const std::filesystem::path& path) {
     const int opened = avformat_open_input(&input, path.string().c_str(), nullptr, nullptr);
     check(opened >= 0 && input != nullptr, "finished file can be reopened by libavformat");
     if (opened < 0 || input == nullptr) return result;
+    result.format_name = input->iformat->name;
     result.streams = input->nb_streams;
     int video_index = -1, audio_index = -1;
     for (unsigned i = 0; i < input->nb_streams; ++i) {
@@ -383,6 +388,35 @@ void containers(const Directory& directory) {
             const std::array<int64_t, 1> pts{0};
             check_video(file.video, pts, format);
         }
+    }
+}
+
+void explicit_formats(const Directory& directory) {
+    using Format = scrctl::app::RecordFormat;
+    // 实际封装后由独立解封装器识别，不能只检查选项枚举或文件名。
+    for (const auto& [selected, filename] : {
+            std::pair{Format::Mp4, "explicit-mp4.mkv"},
+            std::pair{Format::Matroska, "explicit-mkv.mp4"},
+            std::pair{Format::Mp4, "explicit-mp4-no-extension"}}) {
+        const auto path = directory.path / filename;
+        const auto format = scrctl::app::record_container_format(path.string(), selected);
+        check(format.has_value(), "explicit format selects a container independently of its filename");
+        if (!format) continue;
+        std::string error;
+        auto writer = Muxer::open(options(path, *format, Muxer::Audio{}), error);
+        check(writer != nullptr, "selected container opens despite a different or absent extension");
+        if (!writer) continue;
+        check(writer->write_video(idr, {0, 0, 10000}, true, error) &&
+                  writer->write_audio(silence, {0, 0, 10000}, error) && writer->finish(error),
+              "selected container writes and finalizes both original encoded tracks");
+        const auto file = read(path);
+        const auto expected = selected == Format::Mp4 ? "mp4" : "matroska";
+        check(file.format_name.find(expected) != std::string::npos,
+              "independent demux identifies the explicitly selected format instead of the extension");
+        check(file.streams == 2, "explicit format preserves the video and audio consumers");
+        const std::array<int64_t, 1> pts{0};
+        check_video(file.video, pts, *format);
+        check_audio(file.audio, pts, 480);
     }
 }
 
@@ -636,6 +670,7 @@ int main() {
 #ifdef SCRCTL_HAVE_LIBAVFORMAT
     check(Muxer::available(), "libavformat build reports container recording support");
     containers(directory);
+    explicit_formats(directory);
     audio_only_containers(directory);
     audio_evidence_negative_cases(directory);
     container_orientations(directory);

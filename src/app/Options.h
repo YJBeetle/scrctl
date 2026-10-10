@@ -1,5 +1,6 @@
 #pragma once
 
+#include "app/RecordFormat.h"
 #include <SDL_keycode.h>
 #include <cstdint>
 #include <optional>
@@ -18,7 +19,8 @@ struct Options {
     bool pair = false; ///< USB pairing; with --wifi auto accept phone-initiated PIN pairing.
     int pairing_timeout_ms = 120000;
     bool repair_pairing = false; ///< --repair-pairing：允许更新被拒绝或缺少设备身份的旧记录。
-    std::string record; ///< .mp4 / .mkv 为容器录制，其余路径兼容裸 HEVC
+    std::string record; ///< 未指定格式时，.mp4 / .mkv 为容器，其余路径兼容裸 HEVC。
+    std::optional<RecordFormat> record_format; ///< 显式格式覆盖扩展名；只用于录制。
     bool list_devices = false;
     int discovery_timeout_ms = 3000; ///< --list-devices 的无线扫描时限；0 只列 usbmux
     bool no_control = false; ///< --no-control：关闭输入控制

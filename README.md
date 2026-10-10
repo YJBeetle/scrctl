@@ -146,6 +146,7 @@ Windows 的普通 Q、字母、数字和退格已实际进入手机输入框且�
 ```bash
 scrctl --record capture.mkv                # HEVC 视频和 AAC-ELD 音频
 scrctl --record capture.mp4                # 同样保存音视频，使用 MP4 容器
+scrctl --record capture --record-format=mkv # 显式指定容器，不依赖扩展名
 scrctl --record capture.mkv --no-audio     # 只录视频，不改变手机音频路由
 scrctl --record capture.mkv --audio-dup --no-audio-playback  # 保留手机声音，电脑只录制
 scrctl --no-video --record audio.mkv --audio-dup --no-audio-playback --no-window  # 只录音频
@@ -173,8 +174,11 @@ scrctl --record capture.hevc              # 原有裸 HEVC 方式，不录音频
 或 `--test-degrade` 仍使用解码路径；缺少该检查能力时也保留原解码路径。
 这项优化仍依赖 FFmpeg 的公开参数与语法检查接口，不等于取消 FFmpeg 依赖。
 
-扩展名 `.mp4` / `.mkv`（不区分大小写）选择容器录制；其他扩展名保留裸 HEVC
-行为，建议使用 `.hevc`。`--play` 只支持裸 HEVC，不能与 `--record` 同时使用；
+默认按扩展名选择格式：`.mp4` / `.mkv`（不区分大小写）为容器录制，其他扩展名
+保留裸 HEVC 行为，建议使用 `.hevc`。`--record-format=mp4|mkv|hevc` 显式覆盖扩展名，
+必须同时指定非空 `--record` 文件；音轨和录制方向限制依据所选格式。`mp4` / `mkv`
+与 scrcpy 的格式选择用法一致，`hevc` 是 scrctl 的裸视频扩展，不含音轨。
+`--play` 只支持裸 HEVC，不能与 `--record` 同时使用；
 播放容器文件请使用支持 HEVC / AAC-ELD 的播放器。FFmpeg 解码已验证，其他播放器
 兼容性需要单独确认。
 

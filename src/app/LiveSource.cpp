@@ -78,7 +78,11 @@ bool LiveSource::start(const Options &config, std::string &err) {
     if (cancelled()) {
         return false;
     }
-    const auto container_format = record_container_format(record_path);
+    if (config.record_format && record_path.empty()) {
+        err = SCRCTL_TR("Requires a nonempty recording file");
+        return false;
+    }
+    const auto container_format = record_container_format(record_path, config.record_format);
     const bool container_recording = container_format.has_value();
     if (!want_video_ && !record_path.empty()) {
         if (!container_recording) {
