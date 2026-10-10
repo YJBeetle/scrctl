@@ -41,4 +41,40 @@ private:
     Bytes m2_;
 };
 
+/// 同一 Apple SRP-6a 编码的服务端；每个实例由单个配对会话顺序调用。
+/// 仅验证本次 SRP 证明，不赋予首次配对入口或设备身份任何额外信任。
+class SrpServer {
+public:
+    /// private_hex 仅供测试注入正整数 b；空则生成随机 1024 位私钥。
+    SrpServer(std::string user, std::string password, std::string private_hex = "");
+    ~SrpServer();
+    SrpServer(const SrpServer &) = delete;
+    SrpServer &operator=(const SrpServer &) = delete;
+
+    /// 启动或重启一个 challenge，清除旧结果。salt 长度必须为 1..255 字节。
+    /// 成功后仅发布 B；还不发布会话密钥或服务端证明。
+    bool initialize(const Bytes &salt, std::string &err);
+    [[nodiscard]] const Bytes &server_public() const { return b_public_; }  // B
+
+    /// 每个 challenge 只接受一次 A/M1。A 长度为 1..384 字节且 A % N != 0。
+    /// 仅在常量时间校验 64 字节 M1 成功后发布 K/M2。
+    /// 失败、未初始化或重复调用都清除 K/M2；须 initialize 才能重试。
+    bool process(const Bytes &client_public, const Bytes &client_proof, std::string &err);
+    [[nodiscard]] const Bytes &session_key() const { return k_; }    // K
+    [[nodiscard]] const Bytes &server_proof() const { return m2_; }  // M2
+
+private:
+    void clear_secrets();
+    std::string user_;
+    std::string password_;
+    std::string private_hex_;
+    Bytes salt_;
+    Bytes b_public_;
+    Bytes b_private_;
+    Bytes verifier_;
+    Bytes k_;
+    Bytes m2_;
+    bool awaiting_client_ = false;
+};
+
 }  // namespace scrctl::wifi

@@ -128,7 +128,7 @@ MOD+Shift+← / → 都水平镜像当前电脑画面；MOD+Shift+↑ / ↓ 都�
 | 仅录音频 | `--no-video -r audio.mp4` 或 `audio.mkv` 保存一条原 AAC-ELD 音轨；不支持裸 AAC/ADTS。可用 `--no-audio-playback` 关闭电脑播放，音频路由仍由默认行为或 `--audio-dup` 决定 |
 | `--copy / --paste` | 写入 / 读取设备剪贴板后退出，不模拟设备上的粘贴动作 |
 | 窗口标题与比例 | 默认标题为 scrctl，默认背景为黑色；可以自由调整窗口比例 |
-| Wi-Fi | `--list-devices` 用 mDNS 枚举；`--pair` 经 USB 创建/验证记录，`--wifi auto -s <UDID>` 自动选择无线候选；手动地址可用 `--wifi-port` 指定端口。scrctl 承担配对与连接，Android 的对应入口由 ADB 提供 |
+| Wi-Fi | `--list-devices` 用 mDNS 枚举；`--pair` 经 USB 创建/验证记录，`--pair --wifi auto` 接受手机发起的 PIN 首次配对；`--wifi auto -s <UDID>` 自动选择无线候选。手动地址可用 `--wifi-port` 指定端口。scrctl 承担配对与连接，Android 的对应入口由 ADB 提供 |
 | 编码控制 | 当前 Apple 服务决定尺寸、码率、FPS 和编码器，未提供相应覆盖参数 |
 | 视频解码 | 默认软件解码；VideoToolbox 适配存在 NAL 长度限制，见 README |
 | 音频路由 | 默认转到电脑，`--audio-dup` 保留手机播放，语义与 scrcpy 对齐；切路由可能暂时暂停手机播放器，需要手动继续。默认路由失败时音频禁用、视频继续，不自动改为双端播放 |
@@ -146,8 +146,9 @@ flip。显示仍保留 `auto` 扩展。scrcpy 的 crop 作用于采集，scrctl 
 音频路由参照 [scrcpy 音频说明](https://github.com/Genymobile/scrcpy/blob/master/doc/audio.md#source)。
 scrctl 的默认路由已在 macOS、iPhone14,4 / iOS 27 的 USB 与 Wi-Fi 音乐播放中验证：
 电脑发声、手机无声，退出后手动继续可恢复手机播放。Debian ARM64 / PulseAudio
-的 Wi-Fi 默认路由及 `--no-audio` 对照也已通过；Windows 与旧系统的该路由
-尚未验收。程序不调整手机音量，也不自动按播放键。
+的 Wi-Fi 默认路由及 `--no-audio` 对照也已通过。Windows ARM64 / WASAPI 的新版
+Wi-Fi 默认路由完成四分钟播放，`--audio-dup` 和 `--no-audio` 各完成约 90 秒对照，
+用户确认三种输出行为及听感正常；旧系统仍待验收。程序不调整手机音量，也不自动按播放键。
 本轮 QQ 音乐测试观察到默认路由激活时暂停一次，需要在手机上手动继续。
 
 `--no-audio` 与 scrcpy 一致，跳过音频采集和路由请求，保持手机原有的播放与
@@ -181,10 +182,12 @@ scrctl 的默认路由已在 macOS、iPhone14,4 / iOS 27 的 USB 与 Wi-Fi 音�
 
 1. 无线流程已接入主程序：继续验证正式配对、记录复用、按 UDID 自动选择及
    候选重试在更多设备和网络上的行为。Android 由 ADB 承担的配对与连接由 scrctl 处理。
-   正式首次配对仍通过 USB；完全通过 Wi-Fi 首次配对尚未接入主程序。
+   USB 首次配对及 `--pair --wifi auto` 的纯 Wi-Fi PIN 首次配对均已接入；Mac / iOS 27
+   完成新身份配对、独立连接签名验证、保存及 `--wifi auto -s` 新进程重连，
+   Windows/Linux 首次无线配对及更多设备仍待验证。
 2. Windows 音频：FFmpeg AAC-ELD 后端已接入，真实音乐解码及短时 USB 发声通过；
-   无线播放已正常运行 120 秒。Mac 的重采样时钟补偿改善了刺啦声，新调节层
-   仍需 Windows 回归；继续验证持续连接和安装包。
+   新调节层的 Wi-Fi 默认路由、双端播放及关闭音频行为已通过，200 ms 缓冲下未记录播放欠载。
+   继续验证实际停流后的恢复、USB 持续连接和安装包。
 3. 容器录制：MP4 / MKV 和静态录制方向已接入 libavformat，继续验收音视频同步、
    跨平台和长期运行；录制旋转使用容器方向信息，显示 flip 已实现，设备采集裁剪仍待后续处理。
 4. 键盘已接入窗口按下 / 抬起与释放边界；继续验证手机实际输入和主机系统键拦截。

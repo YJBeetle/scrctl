@@ -52,6 +52,9 @@ std::optional<PairRecord> parse_record(std::string_view text, std::string &err);
 /// 设为 0700；Windows 为文件和新建叶子目录设置当前进程用户 SID 的受保护 DACL。
 /// 已有目录和上级目录权限不在此调整。失败返回 false 并填 err，尽量移除临时文件。
 bool save_record(const std::string &path, const PairRecord &record, std::string &err);
+/// Same private temporary-file write, but atomically refuses an existing target
+/// (including symlinks). Used for wireless first pairing; never replaces trust.
+bool save_record_new(const std::string &path, const PairRecord &record, std::string &err);
 /// 最多读取 16 KiB 加一个检测字节，拒绝超限或读取失败，然后解析完整文本。
 std::optional<PairRecord> load_record(const std::string &path, std::string &err);
 

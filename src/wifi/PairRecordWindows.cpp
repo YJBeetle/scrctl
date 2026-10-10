@@ -72,7 +72,7 @@ bool protect_record_directory(const std::string &path, std::string &err) {
 }
 
 bool write_private_record(const std::string &temporary, const std::string &path,
-                          std::string_view text, std::string &err) {
+                          std::string_view text, std::string &err, bool replace) {
     if (text.size() > std::numeric_limits<DWORD>::max()) {
         err = SCRCTL_TR("Incomplete record file write");
         return false;
@@ -103,10 +103,12 @@ bool write_private_record(const std::string &temporary, const std::string &path,
     // 调用方提供同目录临时文件，替换沿用它的安全描述符，不经过跨卷复制。
     // 写入、刷新或替换失败时尝试删除临时文件，保留错误供调用方处理。
     if (!MoveFileExW(temp.c_str(), std::filesystem::path(path).c_str(),
-                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+                     (replace ? MOVEFILE_REPLACE_EXISTING : 0) | MOVEFILE_WRITE_THROUGH)) {
         const DWORD code = GetLastError();
         DeleteFileW(temp.c_str());
-        err = std::string(SCRCTL_TR("Rename failed")) + ": Windows error " + std::to_string(code);
+        err = !replace && (code == ERROR_FILE_EXISTS || code == ERROR_ALREADY_EXISTS)
+            ? SCRCTL_TR("Pairing record already exists; Wi-Fi pairing will not replace it")
+            : std::string(SCRCTL_TR("Rename failed")) + ": Windows error " + std::to_string(code);
         return false;
     }
     return true;

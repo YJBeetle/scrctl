@@ -2741,3 +2741,64 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   与 nm 核对正确替身且不含生产默认选择 helpers；live_hid 112 checks / 0。
   修复后相关 8/8 通过（8.15 秒），最终本地配置全部 48/48 通过（17.88 秒）；
   CI 的探针/实验配置另行验收，不把本地数量冒认为 CI 的 60 项。
+- Windows 键盘重试与 CLI 小证据已归档到
+  `scrctl-fixtures/recording-clock-20261008/night-cli-keyboard-20261010/`。
+  冻结 49 小文本（779756 bytes），实际 52 文件、51 根 SHA 全部通过；manifest
+  SHA256 `94d3d783149ede67e7bfa760c76b2d10c42c141417753bd45e9aec7e84fc146f`。
+  最初无结论和重试成功分别保留，图片、二进制、配对记录和系统剪贴板内容未归档。
+- 提交 `a4454884ce2e0c4be0e7d272928e5d7218cacada` 的 Mac 生产程序完成新的
+  `--list-devices`、`--wifi auto -s` 与默认 `-s` 无线后备短测。设备列表约
+  3.074 秒返回 0，保留同一设备 IPv4 / IPv6、多接口与 scope 候选；两次仅视频
+  HEVC 录制均达到十秒时限并正常退出，分别为 482 / 488 帧，完整软件解码通过。
+  无输出消费者的首次启动被 CLI 正确拒绝，未绕过该检查。测试不操作音频或输入，
+  不切 USB 归属，也不代替多设备、认证取消或真实阻塞 usbmuxd 的运行验证。
+- 同一完整提交在 Debian 13 / ARM64 的全新独立源码与 build 目录完成 Release
+  构建：306 源文件及五份依赖校验通过，SDL2 2.32.4；全部 48/48 CTest 通过，
+  43.37 秒，JUnit 没有整项 skip。render 内部两项 dummy 驱动能力检查明确跳过。
+  实际 exe SHA256 `ec6b3320e2cae145ffd2792532264c3d8ba7785b9e71a19b9618c76599d75afe`。
+  未操作窗口、手机、USB、播放或系统服务，此结果不重复使用旧生产二进制。
+
+## 第一百三十七轮：视频恢复终态夹具的异步检查
+
+- `a445488` 的 [CI 38028167627](https://github.com/YJBeetle/scrctl/actions/runs/38028167627)
+  首次执行中，Mac、Ubuntu 与 ASan/UBSan 的实际 LastTest 各为 60/60；Windows
+  为 59/60，唯一失败是 frame_capture 的 accepted-invalid 完整终态断言。
+  随后的无重试和首错检查仍通过。Windows 安装、依赖来源及搬移门禁被跳过，
+  不将该失败作业的日志 artifact 视为完整新安装包。
+- worker 先在锁内写入错误，随后清除原子恢复标记；公开 getters 并不承诺错误
+  出现时全部终态同时可见。夹具原先只等待错误，接着立刻检查其余条件。现在将
+  同样四项条件放入原两秒预算内等待；生产 FramePump 字节未改，1150 ms 后的
+  不重试与首错检查保留。日志没有记录每个子条件，不把具体失败布尔值当作已证实。
+- 窄改动在 Mac 和 Windows 独立 fresh build 后各执行三次，均为 131 checks / 0
+  failures。Windows 用固定 `a445488` source tar 加单文件 hash overlay，实际启用
+  libavcodec / libavformat；四个阶段原生退出 0、无超时。本地完整配置另为
+  48/48 通过（40.49 秒）。测试提交 `8a905f9` 已推送，后续 CI 与包验收见下方。
+  原首次失败及修复后的完整日志都保留，不放宽期限或用后来成功覆盖失败证据。
+- 完整提交 `8a905f9961f9d513094380b9e3edbf42010e3645` 的
+  [CI 38030341817](https://github.com/YJBeetle/scrctl/actions/runs/38030341817) 首次执行四作业
+  全部 success，macOS、Ubuntu、Windows ARM64 和 ASan/UBSan 实际 LastTest 各 60/60。
+  frame_capture 分别为 131/0、137/0、131/0、131/0；四平台 live_hid 112/0、
+  device_selection 94/0、audio_pause_recovery 3621/0。Windows 来源回归另为 10/10，
+  Mac 与 Windows 原生搬移安装门禁通过，没有重跑覆盖首错。
+- 下载同提交 macOS artifact 11661379365：ZIP digest、306 份源码 blob 与精确提交一致，
+  25 dylib 的签名、安装名、加载路径、中英文 / auto / 版本在本机搬移检查通过，
+  最低 macOS 为 15.0。同提交 Windows artifact 11662250414 的 ZIP digest 与 API 一致，
+  306 份源码 blob、98 ARM64 DLL 的实际 SHA 与 TSV / JSON、76 所属包的精确版本及许可声明
+  逐项相符；此项仅在宿主审计，没有执行 Windows 包。完整第三方源码及逐包许可材料仍待完善。
+- 本地 Windows Release（`4d3b3d5` 基线加冻结的 Presenter 修复，音频源码与 `8a905f9` 一致）
+  的 Wi-Fi / WASAPI / 200 ms 三模式分别正常退出 0：默认 242.349 秒、双端 90.870 秒、
+  无音频 91.895 秒。用户确认默认电脑有声、手机无声，双端两边有声，无音频手机继续、电脑无音乐；
+  两轮电脑播放听感正常且无播放欠载。另一轮 35 秒暂停请求期间 RTP 持续到达，
+  未证明 producer 真暂停，不作为 Windows 长暂停恢复通过，也不修复 USB 稳定性边界。
+- 小证据分别保留在 `/private/tmp/scrctl-frame-terminal-ci-8a905f9-20261010`、
+  `/private/tmp/scrctl-macos-ci-8a905f9-20261010`、
+  `/private/tmp/scrctl-windows-package-8a905f9-audit-20261010`，三模式路径见 [Windows 记录](WINDOWS.md#2026-10-10新版-wi-fi-音频三种行为)。
+- 当前工作实现另完成 Mac / 本台 iOS 27 iPhone 的首次纯 Wi-Fi 配对：同一 identity 广播，
+  广告保留至 M6；手机在“设置 → 隐私与安全性 → 开发者模式”选择与 scrctl 电脑配对。
+  无旧记录的独立 `XDG_DATA_HOME` 下，M1–M6 完成后关闭 setup 连接，fresh outgoing
+  PairVerify 签名验证成功、退出 0，保存设备 UDID；目录 0700、文件 0600，默认旧记录未替换。
+  随后独立新进程 `--wifi auto -s`、无窗口 / 无音频的五秒 HEVC 录制正常写尾并退出 0，
+  没有 USB 配对或 fallback；另一新连接用新记录显式连接 `10.24.24.7:49152` 并取得截图，
+  宿主路由确认经过 LAN `en0`。测试期间物理 USB 仍插着，首次 setup 未记录入站地址。
+  小日志在 `/private/tmp/scrctl-wifi-first-pairing-20261010/fresh-connection.txt`，私有记录不归档。
+  Windows / Linux 首次无线配对仍待验证；此新功能不属于上述 `8a905f9` CI 结果。

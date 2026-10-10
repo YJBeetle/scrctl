@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-10 13:13+0800\n"
+"POT-Creation-Date: 2026-10-10 15:31+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -24,7 +24,7 @@ msgid ""
 "table)\n"
 msgstr ""
 
-#: src/app/Application.cpp:80
+#: src/app/Application.cpp:80 src/app/Commands.cpp:119
 #, c-format
 msgid "SDL initialization failed: %s\n"
 msgstr ""
@@ -288,433 +288,449 @@ msgid "RemotePairing port for a manual LAN address; default: 49152"
 msgstr ""
 
 #: src/app/Cli.cpp:45
-msgid "Create or verify a remote pairing record over USB, then exit"
+msgid ""
+"Pair over USB, or use --wifi auto for phone-initiated PIN pairing, then exit"
 msgstr ""
 
 #: src/app/Cli.cpp:48
+msgid "Pairing timeout in milliseconds (1..300000); default: 120000"
+msgstr ""
+
+#: src/app/Cli.cpp:51
 msgid ""
 "Allow replacing an incomplete or rejected pairing record; requires --pair"
 msgstr ""
 
-#: src/app/Cli.cpp:51
+#: src/app/Cli.cpp:54
 msgid ""
 "Record selected video/audio tracks to .mp4 or .mkv; other extensions save "
 "raw HEVC without audio"
 msgstr ""
 
-#: src/app/Cli.cpp:53
+#: src/app/Cli.cpp:56
 msgid ""
 "Launch bundle ID; ? matches name prefix, + terminates the previous instance"
 msgstr ""
 
-#: src/app/Cli.cpp:54
+#: src/app/Cli.cpp:57
 msgid "Window title"
 msgstr ""
 
-#: src/app/Cli.cpp:55
+#: src/app/Cli.cpp:58
 msgid "SDL render driver, e.g. metal / software"
 msgstr ""
 
-#: src/app/Cli.cpp:57
+#: src/app/Cli.cpp:60
 msgid ""
 "display for live video (default), screenshot for polling; stream is an alias "
 "for display"
 msgstr ""
 
-#: src/app/Cli.cpp:59
+#: src/app/Cli.cpp:62
 msgid "Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"
 msgstr ""
 
-#: src/app/Cli.cpp:66
+#: src/app/Cli.cpp:69
 msgid "Inject home/lock/volup/voldn/mute"
 msgstr ""
 
-#: src/app/Cli.cpp:68
+#: src/app/Cli.cpp:71
 msgid "Inject ASCII text (device text field must have focus)"
 msgstr ""
 
-#: src/app/Cli.cpp:69
+#: src/app/Cli.cpp:72
 msgid "Force alternating video fallback and recovery at T1,T2,... seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:70
+#: src/app/Cli.cpp:73
 msgid "Write device clipboard and exit (supports Unicode)"
 msgstr ""
 
-#: src/app/Cli.cpp:72
+#: src/app/Cli.cpp:75
 msgid "List USB and RemotePairing devices; wireless scan defaults to 3 seconds"
 msgstr ""
 
-#: src/app/Cli.cpp:74
+#: src/app/Cli.cpp:77
 msgid ""
 "Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"
 msgstr ""
 
-#: src/app/Cli.cpp:76
+#: src/app/Cli.cpp:79
 msgid "Disable input control"
 msgstr ""
 
-#: src/app/Cli.cpp:79
+#: src/app/Cli.cpp:82
 msgid "List device apps"
 msgstr ""
 
-#: src/app/Cli.cpp:80
+#: src/app/Cli.cpp:83
 msgid "Show version"
 msgstr ""
 
-#: src/app/Cli.cpp:81
+#: src/app/Cli.cpp:84
 msgid "Desktop fullscreen"
 msgstr ""
 
-#: src/app/Cli.cpp:82
+#: src/app/Cli.cpp:85
 msgid "Keep window on top"
 msgstr ""
 
-#: src/app/Cli.cpp:83
+#: src/app/Cli.cpp:86
 msgid "Borderless window"
 msgstr ""
 
-#: src/app/Cli.cpp:84
+#: src/app/Cli.cpp:87
 msgid "Prevent local screen sleep while running"
 msgstr ""
 
-#: src/app/Cli.cpp:85
+#: src/app/Cli.cpp:88
 msgid "Do not start audio stream"
 msgstr ""
 
-#: src/app/Cli.cpp:87
+#: src/app/Cli.cpp:90
 msgid "Keep audio playing on the phone while forwarding it to the computer"
 msgstr ""
 
-#: src/app/Cli.cpp:90
+#: src/app/Cli.cpp:93
 msgid ""
 "Disable computer audio playback; capture audio only when recording to MP4 or "
 "MKV"
 msgstr ""
 
-#: src/app/Cli.cpp:91
+#: src/app/Cli.cpp:94
 msgid "Do not start video stream"
 msgstr ""
 
-#: src/app/Cli.cpp:93
+#: src/app/Cli.cpp:96
 msgid "Disable video display; keep encoded video when recording"
 msgstr ""
 
-#: src/app/Cli.cpp:96
+#: src/app/Cli.cpp:99
 msgid ""
 "Disable computer video and audio playback; keep selected recording tracks"
 msgstr ""
 
-#: src/app/Cli.cpp:97
+#: src/app/Cli.cpp:100
 msgid "Run without a window"
 msgstr ""
 
-#: src/app/Cli.cpp:98
+#: src/app/Cli.cpp:101
 msgid "Use platform hardware decoder; default: software"
 msgstr ""
 
-#: src/app/Cli.cpp:99
+#: src/app/Cli.cpp:102
 msgid "Print input coordinates"
 msgstr ""
 
-#: src/app/Cli.cpp:100
+#: src/app/Cli.cpp:103
 msgid "Add tunnel diagnostics to --stats"
 msgstr ""
 
-#: src/app/Cli.cpp:101
+#: src/app/Cli.cpp:104
 msgid "Print statistics every second"
 msgstr ""
 
-#: src/app/Cli.cpp:102
+#: src/app/Cli.cpp:105
 msgid "Read device clipboard; with --copy, read back after writing"
 msgstr ""
 
-#: src/app/Cli.cpp:105
+#: src/app/Cli.cpp:108
 msgid "Window horizontal position; integer or auto (default)"
 msgstr ""
 
-#: src/app/Cli.cpp:107
+#: src/app/Cli.cpp:110
 msgid "Window vertical position; integer or auto (default)"
 msgstr ""
 
-#: src/app/Cli.cpp:109
+#: src/app/Cli.cpp:112
 msgid ""
 "Shortcut modifiers, separated by commas: lctrl, rctrl, lalt, ralt, lsuper, "
 "rsuper; default: lalt,lsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:110
+#: src/app/Cli.cpp:113
 msgid "Window width; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:111
+#: src/app/Cli.cpp:114
 msgid "Window height; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:112
+#: src/app/Cli.cpp:115
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:114
+#: src/app/Cli.cpp:117
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr ""
 
-#: src/app/Cli.cpp:116
+#: src/app/Cli.cpp:119
 msgid "Exit after N frames; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:118
+#: src/app/Cli.cpp:121
 msgid "Finite positive scale; default: fit screen"
 msgstr ""
 
-#: src/app/Cli.cpp:136
+#: src/app/Cli.cpp:139
 msgid ""
 "Display and recording orientation: 0/90/180/270 or flip0/flip90/flip180/"
 "flip270; recording cannot flip; auto changes display only"
 msgstr ""
 
-#: src/app/Cli.cpp:140
+#: src/app/Cli.cpp:143
 msgid ""
 "Display orientation: auto, 0/90/180/270 or flip0/flip90/flip180/flip270; "
 "flip horizontally before clockwise rotation"
 msgstr ""
 
-#: src/app/Cli.cpp:144
+#: src/app/Cli.cpp:147
 msgid ""
 "Clockwise MP4/MKV recording rotation: 0/90/180/270; default: 0; display is "
 "unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:147
+#: src/app/Cli.cpp:150
 msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:149
+#: src/app/Cli.cpp:152
 msgid "Background color: RGB or RRGGBB, with optional #"
 msgstr ""
 
-#: src/app/Cli.cpp:150
+#: src/app/Cli.cpp:153
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr ""
 
-#: src/app/Cli.cpp:164
+#: src/app/Cli.cpp:167
 msgid ""
 "Audio capture is disabled; --audio-dup requires playback or MP4/MKV recording"
 msgstr ""
 
-#: src/app/Cli.cpp:170
+#: src/app/Cli.cpp:173
 msgid ""
 "File playback requires video; incompatible with video playback disable "
 "options"
 msgstr ""
 
-#: src/app/Cli.cpp:178
+#: src/app/Cli.cpp:181
 msgid "Audio-only recording requires MP4 or MKV; raw HEVC cannot contain audio"
 msgstr ""
 
-#: src/app/Cli.cpp:181
+#: src/app/Cli.cpp:184
 msgid "Recording requires at least one enabled audio or video track"
 msgstr ""
 
-#: src/app/Cli.cpp:184 src/app/LiveSource.cpp:93
+#: src/app/Cli.cpp:187 src/app/LiveSource.cpp:93
 msgid "Recording orientation requires a video track"
 msgstr ""
 
-#: src/app/Cli.cpp:189
+#: src/app/Cli.cpp:192
 msgid ""
 "Frame counting, hardware decoding, fallback tests and screenshots require "
 "video capture"
 msgstr ""
 
-#: src/app/Cli.cpp:193 src/app/LiveSource.cpp:115
+#: src/app/Cli.cpp:196 src/app/LiveSource.cpp:115
 msgid ""
 "Container recording requires live video; screenshot polling cannot be "
 "recorded"
 msgstr ""
 
-#: src/app/Cli.cpp:197
+#: src/app/Cli.cpp:200
 msgid ""
 "Recording does not support flipping; use --display-orientation for display-"
 "only flipping or reset --record-orientation to a rotation"
 msgstr ""
 
-#: src/app/Cli.cpp:201 src/app/LiveSource.cpp:125
+#: src/app/Cli.cpp:204 src/app/LiveSource.cpp:125
 msgid ""
 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate "
 "only the display"
 msgstr ""
 
-#: src/app/Cli.cpp:206
+#: src/app/Cli.cpp:209
 msgid "Requires a nonempty LAN address or auto"
 msgstr ""
 
-#: src/app/Cli.cpp:209
+#: src/app/Cli.cpp:212
 msgid "Use a manual LAN address; auto uses discovered SRV ports"
 msgstr ""
 
-#: src/app/Cli.cpp:220
+#: src/app/Cli.cpp:216
+msgid ""
+"Wireless first pairing requires --wifi auto; existing records cannot be "
+"repaired wirelessly"
+msgstr ""
+
+#: src/app/Cli.cpp:227
 msgid "Expected an integer or auto"
 msgstr ""
 
-#: src/app/Cli.cpp:240
+#: src/app/Cli.cpp:247
 msgid ""
 "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:251
+#: src/app/Cli.cpp:258
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr ""
 
-#: src/app/Cli.cpp:258
+#: src/app/Cli.cpp:265
 msgid "Requires a finite positive number"
 msgstr ""
 
-#: src/app/Cli.cpp:273
+#: src/app/Cli.cpp:280
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr ""
 
-#: src/app/Cli.cpp:282
+#: src/app/Cli.cpp:289
 msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
 msgstr ""
 
-#: src/app/Cli.cpp:296
+#: src/app/Cli.cpp:303
 msgid "Frame number must be a positive integer"
 msgstr ""
 
-#: src/app/Cli.cpp:301
+#: src/app/Cli.cpp:308
 msgid "Requires a window; incompatible with --no-window"
 msgstr ""
 
-#: src/app/Cli.cpp:304
+#: src/app/Cli.cpp:311
 msgid "Window readback requires video playback"
 msgstr ""
 
-#: src/app/Cli.cpp:312
+#: src/app/Cli.cpp:319
 msgid "Nothing to do: enable media, recording or device control"
 msgstr ""
 
-#: src/app/Commands.cpp:39
+#: src/app/Commands.cpp:41
 msgid "pairing record available"
 msgstr ""
 
-#: src/app/Commands.cpp:41
+#: src/app/Commands.cpp:43
 msgid "pair again over USB"
 msgstr ""
 
-#: src/app/Commands.cpp:43
+#: src/app/Commands.cpp:45
 msgid "old record hint; pair again over USB"
 msgstr ""
 
-#: src/app/Commands.cpp:45
+#: src/app/Commands.cpp:47
 msgid "multiple matching pairing records"
 msgstr ""
 
-#: src/app/Commands.cpp:47
+#: src/app/Commands.cpp:49
 msgid "invalid discovery identity"
 msgstr ""
 
-#: src/app/Commands.cpp:49
+#: src/app/Commands.cpp:51
 msgid "identity matching failed"
 msgstr ""
 
-#: src/app/Commands.cpp:51 src/app/Commands.cpp:53
+#: src/app/Commands.cpp:53 src/app/Commands.cpp:55
 msgid "no matching pairing record"
 msgstr ""
 
-#: src/app/Commands.cpp:70 src/app/DeviceConnection.cpp:237
+#: src/app/Commands.cpp:72 src/app/DeviceConnection.cpp:237
 #, c-format
 msgid "Discovery warning: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:74
+#: src/app/Commands.cpp:76
 msgid "Wireless device (UDID unknown)"
 msgstr ""
 
-#: src/app/Commands.cpp:86
+#: src/app/Commands.cpp:88
 msgid "address unresolved"
 msgstr ""
 
-#: src/app/Commands.cpp:102
+#: src/app/Commands.cpp:104
 #, c-format
 msgid "No devices found\n"
 msgstr ""
 
-#: src/app/Commands.cpp:116
+#: src/app/Commands.cpp:128
+#, c-format
+msgid "Enter this one-use pairing code on the device: %s\n"
+msgstr ""
+
+#: src/app/Commands.cpp:142
 #, c-format
 msgid "Remote pairing failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:120
+#: src/app/Commands.cpp:146
 #, c-format
 msgid "Remote pairing verified for %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:121
+#: src/app/Commands.cpp:147
 #, c-format
 msgid "Remote pairing saved for %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:130 src/app/Commands.cpp:153
+#: src/app/Commands.cpp:156 src/app/Commands.cpp:179
 #, c-format
 msgid "Failed to establish session: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:135
+#: src/app/Commands.cpp:161
 #, c-format
 msgid "Failed to list apps: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:141
+#: src/app/Commands.cpp:167
 #, c-format
 msgid "Total: %zu\n"
 msgstr ""
 
-#: src/app/Commands.cpp:159
+#: src/app/Commands.cpp:185
 #, c-format
 msgid "Wrote %zu bytes to device clipboard\n"
 msgstr ""
 
-#: src/app/Commands.cpp:161
+#: src/app/Commands.cpp:187
 #, c-format
 msgid "--copy failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:168
+#: src/app/Commands.cpp:194
 #, c-format
 msgid "Device clipboard (%zu bytes): "
 msgstr ""
 
-#: src/app/Commands.cpp:172
+#: src/app/Commands.cpp:198
 #, c-format
 msgid "--paste failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:198
+#: src/app/Commands.cpp:224
 #, c-format
 msgid "--start-app requires a nonempty app name\n"
 msgstr ""
 
-#: src/app/Commands.cpp:208
+#: src/app/Commands.cpp:234
 #, c-format
 msgid "Failed to find app by name: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:226
+#: src/app/Commands.cpp:252
 #, c-format
 msgid "No app name starts with %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:234 tools/app_launch_probe.cpp:89
+#: src/app/Commands.cpp:260 tools/app_launch_probe.cpp:89
 #, c-format
 msgid "Failed to launch %s: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:237
+#: src/app/Commands.cpp:263
 msgid " (previous instance terminated)"
 msgstr ""
 
-#: src/app/Commands.cpp:237
+#: src/app/Commands.cpp:263
 #, c-format
 msgid "Launched %s%s\n"
 msgstr ""
@@ -2790,7 +2806,7 @@ msgid "Start CoreDeviceProxy"
 msgstr ""
 
 #: src/remote/Device.cpp:171 src/remote/Rsd.cpp:202 src/remote/Rsd.cpp:425
-#: src/transport/Usbmux.cpp:270 src/wifi/PairRecord.cpp:344
+#: src/transport/Usbmux.cpp:270 src/wifi/PairRecord.cpp:363
 #: tools/wifi_probe.cpp:353
 msgid " failed: "
 msgstr ""
@@ -3474,6 +3490,84 @@ msgid ""
 "button input may still be available; see docs/coredevice.md section 23)"
 msgstr ""
 
+#: src/remote/WifiPairing.cpp:33 src/remote/WifiPairing.cpp:258
+#: src/remote/WifiPairing.cpp:268
+msgid "Wi-Fi pairing cancelled"
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:37
+msgid "Wi-Fi pairing timed out"
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:56
+msgid "Cannot configure Wi-Fi pairing socket: "
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:68
+msgid "Wi-Fi pairing socket wait failed: "
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:108
+msgid "Wi-Fi pairing socket I/O failed: "
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:112
+msgid "Wi-Fi pairing connection closed"
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:169
+msgid "Invalid numeric Wi-Fi pairing endpoint"
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:241
+msgid "Wi-Fi pairing returned an incomplete or unexpected device identity"
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:250 src/remote/WifiPairing.cpp:296
+#: src/wifi/PairRecord.cpp:129 src/wifi/PairRecordWindows.cpp:110
+msgid "Pairing record already exists; Wi-Fi pairing will not replace it"
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:254 src/remote/WifiPairing.cpp:300
+msgid "Cannot inspect the Wi-Fi pairing record path"
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:263
+msgid "New Wi-Fi pairing record verification failed: "
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:271
+msgid "Cannot save the verified Wi-Fi pairing record: "
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:276 src/remote/WifiPairing.cpp:409
+msgid "Wi-Fi pairing workflow failed before completion"
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:284
+msgid ""
+"Wi-Fi pairing requires a PIN display callback and a timeout between 1 and "
+"300000 ms"
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:332
+msgid ""
+"Open Settings > Privacy & Security > Developer Mode on the device and select "
+"Pair with this scrctl computer"
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:345
+msgid "Cannot accept Wi-Fi pairing connection: "
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:352
+msgid "Cannot identify the Wi-Fi pairing peer address"
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:371
+msgid "Reconnecting to verify the new Wi-Fi pairing record"
+msgstr ""
+
 #: src/rt/RtpHevc.cpp:104
 msgid "Not an RTP packet"
 msgstr ""
@@ -3902,40 +3996,104 @@ msgstr ""
 msgid "mDNS endpoint limit reached"
 msgstr ""
 
-#: src/wifi/Mdns.cpp:459
+#: src/wifi/Mdns.cpp:460
 msgid "mDNS interface "
 msgstr ""
 
-#: src/wifi/Mdns.cpp:496
+#: src/wifi/Mdns.cpp:532
 msgid "mDNS query name is too long"
 msgstr ""
 
-#: src/wifi/Mdns.cpp:515
+#: src/wifi/Mdns.cpp:551
 msgid "mDNS query on interface "
 msgstr ""
 
-#: src/wifi/Mdns.cpp:533
+#: src/wifi/Mdns.cpp:569 src/wifi/Mdns.cpp:939
 msgid "mDNS timeout must be between 0 and 60000 ms"
 msgstr ""
 
-#: src/wifi/Mdns.cpp:548
+#: src/wifi/Mdns.cpp:584 src/wifi/Mdns.cpp:924
 msgid "No multicast interface is available for mDNS"
 msgstr ""
 
-#: src/wifi/Mdns.cpp:572
+#: src/wifi/Mdns.cpp:608
 msgid "mDNS receive wait: "
 msgstr ""
 
-#: src/wifi/Mdns.cpp:586
+#: src/wifi/Mdns.cpp:622
 msgid "mDNS receive on interface "
 msgstr ""
 
-#: src/wifi/Mdns.cpp:600
+#: src/wifi/Mdns.cpp:636
 msgid "mDNS packet limit reached"
 msgstr ""
 
-#: src/wifi/Mdns.cpp:617
+#: src/wifi/Mdns.cpp:653
 msgid "mDNS browse: "
+msgstr ""
+
+#: src/wifi/Mdns.cpp:674
+msgid "mDNS advertiser identifier must be a single ASCII DNS label"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:677
+msgid "mDNS advertiser requires a listening TCP port and address family"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:684
+msgid "mDNS advertiser has an empty or oversized TXT field"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:712
+msgid "mDNS advertiser has an invalid service or target DNS name"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:714
+msgid "mDNS advertiser address limit exceeded"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:760
+msgid "mDNS advertiser has an invalid numeric address"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:763
+msgid "mDNS advertiser has no address for a listening family"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:785
+msgid "mDNS advertiser packet is too large"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:809
+msgid "mDNS advertiser send: "
+msgstr ""
+
+#: src/wifi/Mdns.cpp:824
+msgid "mDNS advertiser query has an invalid size"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:830
+msgid "mDNS advertiser question limit exceeded"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:839
+msgid "mDNS advertiser query is truncated or has an invalid name"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:844
+msgid "mDNS advertiser query has an invalid DNS name"
+msgstr ""
+
+#: src/wifi/Mdns.cpp:932
+msgid "mDNS advertiser: "
+msgstr ""
+
+#: src/wifi/Mdns.cpp:963
+msgid "mDNS advertiser receive wait: "
+msgstr ""
+
+#: src/wifi/Mdns.cpp:976
+msgid "mDNS advertiser receive: "
 msgstr ""
 
 #: src/wifi/Opack.cpp:91
@@ -3987,81 +4145,81 @@ msgstr ""
 msgid "OPACK decode: "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:43
+#: src/wifi/PairRecord.cpp:44
 msgid "Hex length must be even"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:63
+#: src/wifi/PairRecord.cpp:64
 msgid "Invalid hex character"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:105 src/wifi/PairRecordWindows.cpp:89
+#: src/wifi/PairRecord.cpp:108 src/wifi/PairRecordWindows.cpp:89
 msgid "Cannot open temporary file "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:110 src/wifi/PairRecord.cpp:296
+#: src/wifi/PairRecord.cpp:113 src/wifi/PairRecord.cpp:306
 #: src/wifi/PairRecordWindows.cpp:47
 msgid "Failed to set record file permissions"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:118 src/wifi/PairRecordWindows.cpp:77
+#: src/wifi/PairRecord.cpp:121 src/wifi/PairRecordWindows.cpp:77
 #: src/wifi/PairRecordWindows.cpp:100
 msgid "Incomplete record file write"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:123 src/wifi/PairRecordWindows.cpp:109
+#: src/wifi/PairRecord.cpp:130 src/wifi/PairRecordWindows.cpp:111
 msgid "Rename failed"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:134
+#: src/wifi/PairRecord.cpp:142
 msgid "Cannot open "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:141
+#: src/wifi/PairRecord.cpp:149
 msgid "Failed to read pairing record file "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:145
+#: src/wifi/PairRecord.cpp:153
 msgid "Pairing record file too large"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:198
+#: src/wifi/PairRecord.cpp:206
 msgid "Invalid scrctl pairing record header"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:205
+#: src/wifi/PairRecord.cpp:213
 msgid "Record line is not key=value"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:216
+#: src/wifi/PairRecord.cpp:224
 msgid "Duplicate pairing record field: "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:225
+#: src/wifi/PairRecord.cpp:233
 msgid " requires "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:225
+#: src/wifi/PairRecord.cpp:233
 msgid "Incorrect field length: "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:226
+#: src/wifi/PairRecord.cpp:234
 msgid " bytes; got "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:253
+#: src/wifi/PairRecord.cpp:261
 msgid "Pairing record peer_identifier must not be empty"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:271
+#: src/wifi/PairRecord.cpp:279
 msgid "Record missing host_private_key"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:286
+#: src/wifi/PairRecord.cpp:296
 msgid "Failed to create directory "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:344
+#: src/wifi/PairRecord.cpp:363
 msgid "Reading directory "
 msgstr ""
 
@@ -4176,6 +4334,81 @@ msgstr ""
 
 #: src/wifi/PairVerify.cpp:173
 msgid "PV-Msg04 response has invalid State (expected 4)"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:64
+msgid "Pairable host expected a plain host envelope with the next sequence"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:95
+msgid ""
+"Pairable host expected setupManualPairing data with the correct session flag"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:104
+msgid "Pairable host received an invalid pairing state or peer error"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:129
+msgid "Pairable host TLV repeated without a valid continuation"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:158
+msgid "Pairable host M5 is missing a complete signed device identity"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:168
+msgid "Pairable host M5 device signature verification failed"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:175
+msgid "Pairable host M5 INFO is not a dictionary"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:181
+msgid "Pairable host M5 INFO has invalid or duplicate keys"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:192
+msgid ""
+"Pairable host M5 INFO lacks a valid UDID/altIRK or contradicts the signed "
+"Identifier"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:204
+msgid "Pairable host M5 INFO has invalid device labels"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:227
+msgid "Pairable host configuration is incomplete or invalid"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:232
+msgid "Pairable host public key does not match its private key"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:254
+msgid "Pairable host rejected an incompatible or pair-verify handshake"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:272
+msgid "Pairable host M1 has an unsupported setup method"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:290
+msgid "Pairable host could not generate a full-width SRP challenge"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:294
+msgid "Pairable host PIN display was cancelled"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:307
+msgid "Pairable host M3 is missing the SRP public key or proof"
+msgstr ""
+
+#: src/wifi/PairableHost.cpp:325
+msgid "Pairable host M5 is missing encrypted identity"
 msgstr ""
 
 #: src/wifi/PairingIdentity.cpp:27
@@ -4332,21 +4565,46 @@ msgstr ""
 msgid "This stream does not support waiting for readability"
 msgstr ""
 
-#: src/wifi/Srp.cpp:113
+#: src/wifi/Srp.cpp:118
 msgid "SRP server public key is empty or exceeds 384 bytes"
 msgstr ""
 
-#: src/wifi/Srp.cpp:119 src/wifi/Srp.cpp:143
+#: src/wifi/Srp.cpp:124 src/wifi/Srp.cpp:148 src/wifi/Srp.cpp:242
+#: src/wifi/Srp.cpp:257
 msgid ""
 "SRP private key must be a nonzero hexadecimal integer of at most 3072 bits"
 msgstr ""
 
-#: src/wifi/Srp.cpp:156
+#: src/wifi/Srp.cpp:161
 msgid "SRP B is a multiple of N; rejected"
 msgstr ""
 
-#: src/wifi/Srp.cpp:196
+#: src/wifi/Srp.cpp:201 src/wifi/Srp.cpp:285 src/wifi/Srp.cpp:353
 msgid "SRP cryptographic operation failed: "
+msgstr ""
+
+#: src/wifi/Srp.cpp:236
+msgid "SRP salt must contain 1 to 255 bytes"
+msgstr ""
+
+#: src/wifi/Srp.cpp:296
+msgid "SRP server requires a new initialized challenge"
+msgstr ""
+
+#: src/wifi/Srp.cpp:303
+msgid "SRP client public key is empty or exceeds 384 bytes"
+msgstr ""
+
+#: src/wifi/Srp.cpp:308
+msgid "SRP client proof must contain 64 bytes"
+msgstr ""
+
+#: src/wifi/Srp.cpp:321
+msgid "SRP A is a multiple of N; rejected"
+msgstr ""
+
+#: src/wifi/Srp.cpp:343
+msgid "SRP client proof mismatch; pairing aborted"
 msgstr ""
 
 #: src/wifi/Tlv.cpp:30

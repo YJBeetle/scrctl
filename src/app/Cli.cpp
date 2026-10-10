@@ -42,8 +42,11 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
                    SCRCTL_N_("RemotePairing port for a manual LAN address; default: 49152"))
         ->check(CLI::Range(1, 65535))->needs("--wifi");
     auto *pair_command = app.add_flag("--pair", o.pair,
-                 SCRCTL_N_("Create or verify a remote pairing record over USB, then exit"))
-        ->excludes("--wifi")->excludes("--play");
+                 SCRCTL_N_("Pair over USB, or use --wifi auto for phone-initiated PIN pairing, then exit"))
+        ->excludes("--play");
+    app.add_option("--pairing-timeout", o.pairing_timeout_ms,
+                   SCRCTL_N_("Pairing timeout in milliseconds (1..300000); default: 120000"))
+        ->check(CLI::Range(1, 300000))->needs("--pair");
     app.add_flag("--repair-pairing", o.repair_pairing,
                  SCRCTL_N_("Allow replacing an incomplete or rejected pairing record; requires --pair"))
         ->needs("--pair");
@@ -207,6 +210,10 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         }
         if (o.wifi == "auto" && app.count("--wifi-port")) {
             throw CLI::ValidationError("--wifi-port", SCRCTL_TR("Use a manual LAN address; auto uses discovered SRV ports"));
+        }
+        if (o.pair && !o.wifi.empty() && (o.wifi != "auto" || o.repair_pairing)) {
+            throw CLI::ValidationError("--pair", SCRCTL_TR(
+                "Wireless first pairing requires --wifi auto; existing records cannot be repaired wirelessly"));
         }
         auto position = [&](const char *name, const std::string &value, std::optional<int> &out) {
             if (!app.count(name)) return;

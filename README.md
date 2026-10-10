@@ -18,7 +18,7 @@ MP4 / MKV（HEVC 和 AAC-ELD）及裸 Annex-B HEVC。
 | --- | --- |
 | macOS | 有真机连接、镜像、输入和音频记录；本轮验证结果见重构记录 |
 | Linux | Debian ARM64 的构建、离线回归及 Wi-Fi 软件解码、Wayland 窗口、竖横屏鼠标落点、缩放、键盘、Unicode 粘贴、设备按钮和音频路由短测已通过；USB 发生端点 STALL，尚未通过；DDI 初始安装与物理断线仍待验证 |
-| Windows | ARM64 构建与离线测试、USB / Wi-Fi 镜像、截图切换及竖横屏鼠标触摸已验证；FFmpeg 真实音乐解码与短时 USB 播放已通过，持续连接与初始配对准备待验证，见 [安装说明](docs/WINDOWS.md) |
+| Windows | ARM64 构建与离线测试、USB / Wi-Fi 镜像、截图切换及竖横屏鼠标触摸已验证；FFmpeg 真实音乐解码、短时 USB 播放及新版 Wi-Fi 默认、双端、无音频三种行为已确认；实际长暂停恢复、USB 持续连接与初始配对准备待验证，见 [安装说明](docs/WINDOWS.md) |
 
 音频在 macOS 使用 AudioToolbox，Windows / Linux 使用 FFmpeg 的原生 AAC-ELD
 解码器与 libswresample。当前 FFmpeg 适配支持 48 kHz、双声道、每帧每声道 480 或
@@ -52,8 +52,11 @@ MP4 / MKV（HEVC 和 AAC-ELD）及裸 Annex-B HEVC。
 默认路由已在 macOS、iPhone14,4 / iOS 27 的 USB 与 Wi-Fi 音乐播放中验证：电脑有声、
 手机无声，结束后手动继续可恢复手机播放。Debian ARM64 的 Wi-Fi / PulseAudio
 短测也确认默认路由、`--no-audio` 和退出后手机声音恢复；`--audio-dup` 已确认电脑
-播放正常。Windows 和旧系统的默认路由尚未验收；音频转发已开始不代表播放器
-在切换期间从未暂停。
+播放正常。Windows ARM64 / WASAPI 的新版 Wi-Fi、200 ms 缓冲已确认默认路由四分钟
+电脑有声、手机无声，双端模式两边有声，无音频模式手机继续播放、电脑无音乐；
+两轮电脑播放听感正常、无播放欠载。该本地 Release 的音频源码与 `8a905f9` 一致，
+不将其当作该提交的 CI 二进制。Windows 真实长暂停恢复及旧系统仍待验收。
+音频转发已开始不代表播放器在切换期间从未暂停。
 
 启用 FFmpeg 的构建使用 libswresample 平滑补偿音频时钟差异，macOS 的 AudioToolbox
 解码也共用这层补偿。`--audio-buffer` 默认 50 ms，目标保持固定；网络或调度抖动
@@ -62,8 +65,10 @@ MP4 / MKV（HEVC 和 AAC-ELD）及裸 Annex-B HEVC。
 [协议调研记录](docs/coredevice.md) 保留原始观察与实验过程；
 [重构记录](docs/REFACTOR.md) 说明当前实现及验证边界；
 [路线图](docs/ROADMAP.md) 列出剩余工作。
-GitHub Actions 配置了 macOS、Ubuntu、Windows ARM64 和 ASan / UBSan 离线作业，真机测试单独进行。
-Windows ARM64 和 macOS 作业另保存可搬移安装包；已下载的真实产物验证结果见各平台说明。
+提交 `8a905f9` 的 [GitHub Actions](https://github.com/YJBeetle/scrctl/actions/runs/38030341817)
+中，macOS、Ubuntu、Windows ARM64 和 ASan / UBSan 各实际执行 60/60 项离线测试并通过。
+下载的同提交 macOS 包已完成 25 dylib 与本机搬移启动审计，Windows 包已核对
+98 DLL 的字节及 76 所属包来源。包审计不代替真机测试或完整第三方源码分发。
 
 ## 实现结构
 
@@ -312,11 +317,16 @@ Wi-Fi 需要设备可达和已有 RemotePairing 记录。使用 `scrctl --pair -
 使用 `scrctl --pair --repair-pairing -s <UDID>` 显式重配。
 新记录通过独立连接验证后才保存，已有有效记录直接复用。验证边界见
 [路线图](docs/ROADMAP.md)。
-记录现在需要包含 USB 配对时校验并保存的设备标识和长期公钥；旧记录缺少这些字段时，
+记录现在需要包含首次配对时校验并保存的设备标识和长期公钥；旧记录缺少这些字段时，
 请重新通过 USB 配对。探针的 `--pmd3-record` 当前只导入主机密钥，因此也不能直接用于
-设备身份验证。正式命令不支持完全通过 Wi-Fi 首次配对；研究工具
-`wifi_probe --pair-setup --address <IP> --no-save` 仅用于协议实验。
-当前设备的无线入口拒绝 PairSetup，网络首次身份确认也仍待验证。
+设备身份验证。也可用 `scrctl --pair --wifi auto` 完成手机发起的首次无线 PIN 配对：
+在手机“设置 → 隐私与安全性 → 开发者模式”中选择与 scrctl 电脑配对，输入电脑显示的 PIN。
+本台 iOS 27 iPhone 已在 Mac 上完成首次无线配对及新进程 `--wifi auto -s` 重连；
+测试记录保存于独立私有目录，默认旧记录未替换。Windows / Linux 的首次无线配对仍待验证，
+无线流程不覆盖已有记录；USB 配对仍可使用。
+`--pairing-timeout=300000` 可将配对预算增加到五分钟，默认两分钟；无线预算包含发现、
+输入 PIN 和独立验证。`-s` 在首次无线配对时可省略；指定时会在保存前核对设备 UDID。
+`wifi_probe --pair-setup --address <IP> --no-save` 仍仅用于协议实验。
 
 ```bash
 scrctl --list-devices

@@ -97,6 +97,11 @@ Bytes xor_hashes(const Bytes &a, const Bytes &b) {
     return r;
 }
 
+void clear_bytes(Bytes &bytes) {
+    if (!bytes.empty()) OPENSSL_cleanse(bytes.data(), bytes.size());
+    bytes.clear();
+}
+
 }  // namespace
 
 SrpClient::SrpClient(std::string user, std::string password, std::string private_hex)
@@ -201,6 +206,153 @@ bool SrpClient::process(const Bytes &salt, const Bytes &server_public, std::stri
 bool SrpClient::verify_server_proof(const Bytes &m2) const {
     return m2_.size() == kHashSize && m2.size() == kHashSize &&
            CRYPTO_memcmp(m2.data(), m2_.data(), kHashSize) == 0;
+}
+
+SrpServer::SrpServer(std::string user, std::string password, std::string private_hex)
+    : user_(std::move(user)), password_(std::move(password)), private_hex_(std::move(private_hex)) {}
+
+SrpServer::~SrpServer() {
+    clear_secrets();
+    clear_bytes(k_);
+    clear_bytes(m2_);
+    if (!password_.empty()) OPENSSL_cleanse(password_.data(), password_.size());
+    if (!private_hex_.empty()) OPENSSL_cleanse(private_hex_.data(), private_hex_.size());
+}
+
+void SrpServer::clear_secrets() {
+    clear_bytes(b_private_);
+    clear_bytes(verifier_);
+    awaiting_client_ = false;
+}
+
+bool SrpServer::initialize(const Bytes &salt, std::string &err) {
+    clear_secrets();
+    clear_bytes(k_);
+    clear_bytes(m2_);
+    salt_.clear();
+    b_public_.clear();
+    err.clear();
+    if (salt.empty() || salt.size() > 255) {
+        err = SCRCTL_TR("SRP salt must contain 1 to 255 bytes");
+        return false;
+    }
+    if (!private_hex_.empty() &&
+        (private_hex_.size() > kWidth * 2 ||
+         private_hex_.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)) {
+        err = SCRCTL_TR("SRP private key must be a nonzero hexadecimal integer of at most 3072 bits");
+        return false;
+    }
+    try {
+        std::unique_ptr<BN_CTX, decltype(&BN_CTX_free)> ctx(BN_CTX_new(), BN_CTX_free);
+        require(ctx != nullptr, "BN_CTX_new");
+        Bn N, g, b, x, v, kb, gb, kv, B;
+        bn_from_hex(kPrimeHex, N);
+        require(BN_set_word(g.v, kGenerator) == 1, "BN_set_word");
+        if (!private_hex_.empty()) {
+            bn_from_hex(private_hex_, b);
+        } else {
+            require(BN_priv_rand(b.v, 1024, BN_RAND_TOP_ONE, BN_RAND_BOTTOM_ANY) == 1, "BN_priv_rand");
+        }
+        if (BN_is_zero(b.v)) {
+            err = SCRCTL_TR("SRP private key must be a nonzero hexadecimal integer of at most 3072 bits");
+            return false;
+        }
+        BN_set_flags(b.v, BN_FLG_CONSTTIME);
+        const auto inner = sha512({bytes_of(user_), Bytes{':'}, bytes_of(password_)});
+        const auto x_hash = sha512({salt, inner});
+        require(BN_bin2bn(x_hash.data(), static_cast<int>(x_hash.size()), x.v) != nullptr, "BN_bin2bn(x)");
+        BN_set_flags(x.v, BN_FLG_CONSTTIME);
+        require(BN_mod_exp(v.v, g.v, x.v, N.v, ctx.get()) == 1, "BN_mod_exp(v)");
+        const auto multiplier = sha512({bytes_of_bn(N.v), pad_bn(g.v, kWidth)});
+        require(BN_bin2bn(multiplier.data(), static_cast<int>(multiplier.size()), kb.v) != nullptr, "BN_bin2bn(k)");
+        // RFC 5054 §2.5.3: B = (k*v + g^b) mod N.
+        require(BN_mod_exp(gb.v, g.v, b.v, N.v, ctx.get()) == 1, "BN_mod_exp(g^b)");
+        require(BN_mod_mul(kv.v, kb.v, v.v, N.v, ctx.get()) == 1, "BN_mod_mul(k*v)");
+        require(BN_mod_add(B.v, kv.v, gb.v, N.v, ctx.get()) == 1, "BN_mod_add(B)");
+        require(!BN_is_zero(B.v), "SRP B == 0");
+        // 所有计算成功后再发布 challenge，密钥和证明仍为空。
+        auto private_value = bytes_of_bn(b.v);
+        auto verifier = bytes_of_bn(v.v);
+        auto public_value = bytes_of_bn(B.v);
+        salt_ = salt;
+        b_private_ = std::move(private_value);
+        verifier_ = std::move(verifier);
+        b_public_ = std::move(public_value);
+        awaiting_client_ = true;
+        return true;
+    } catch (const std::runtime_error &failure) {
+        clear_secrets();
+        err = SCRCTL_TR("SRP cryptographic operation failed: ") + std::string(failure.what());
+        return false;
+    }
+}
+
+bool SrpServer::process(const Bytes &client_public, const Bytes &client_proof, std::string &err) {
+    clear_bytes(k_);
+    clear_bytes(m2_);
+    err.clear();
+    if (!awaiting_client_) {
+        clear_secrets();
+        err = SCRCTL_TR("SRP server requires a new initialized challenge");
+        return false;
+    }
+    // 即使输入不合法也消耗本次 challenge，不能对同一 b 猜测多个 PIN/证明。
+    awaiting_client_ = false;
+    if (client_public.empty() || client_public.size() > kWidth) {
+        clear_secrets();
+        err = SCRCTL_TR("SRP client public key is empty or exceeds 384 bytes");
+        return false;
+    }
+    if (client_proof.size() != kHashSize) {
+        clear_secrets();
+        err = SCRCTL_TR("SRP client proof must contain 64 bytes");
+        return false;
+    }
+    try {
+        std::unique_ptr<BN_CTX, decltype(&BN_CTX_free)> ctx(BN_CTX_new(), BN_CTX_free);
+        require(ctx != nullptr, "BN_CTX_new");
+        Bn N, g, A, b, v, mod, u, vu, base, S;
+        bn_from_hex(kPrimeHex, N);
+        require(BN_set_word(g.v, kGenerator) == 1, "BN_set_word");
+        require(BN_bin2bn(client_public.data(), static_cast<int>(client_public.size()), A.v) != nullptr, "BN_bin2bn(A)");
+        require(BN_mod(mod.v, A.v, N.v, ctx.get()) == 1, "BN_mod(A)");
+        if (BN_is_zero(mod.v)) {
+            clear_secrets();
+            err = SCRCTL_TR("SRP A is a multiple of N; rejected");
+            return false;
+        }
+        Bn B;
+        require(BN_bin2bn(b_public_.data(), static_cast<int>(b_public_.size()), B.v) != nullptr, "BN_bin2bn(B)");
+        const auto u_hash = sha512({pad_bn(A.v, kWidth), pad_bn(B.v, kWidth)});
+        require(BN_bin2bn(u_hash.data(), static_cast<int>(u_hash.size()), u.v) != nullptr, "BN_bin2bn(u)");
+        require(!BN_is_zero(u.v), "SRP u == 0");
+        require(BN_bin2bn(b_private_.data(), static_cast<int>(b_private_.size()), b.v) != nullptr, "BN_bin2bn(b)");
+        require(BN_bin2bn(verifier_.data(), static_cast<int>(verifier_.size()), v.v) != nullptr, "BN_bin2bn(v)");
+        BN_set_flags(b.v, BN_FLG_CONSTTIME);
+        // RFC 5054 §2.6: S = (A * v^u)^b mod N.
+        require(BN_mod_exp(vu.v, v.v, u.v, N.v, ctx.get()) == 1, "BN_mod_exp(v^u)");
+        require(BN_mod_mul(base.v, A.v, vu.v, N.v, ctx.get()) == 1, "BN_mod_mul(A*v^u)");
+        require(BN_mod_exp(S.v, base.v, b.v, N.v, ctx.get()) == 1, "BN_mod_exp(S)");
+        auto key = sha512({bytes_of_bn(S.v)});
+        const auto a_public = bytes_of_bn(A.v);
+        const auto hxor = xor_hashes(sha512_int(N.v), sha512_int(g.v));
+        const auto expected = sha512({hxor, sha512({bytes_of(user_)}), salt_, a_public, b_public_, key});
+        if (CRYPTO_memcmp(client_proof.data(), expected.data(), kHashSize) != 0) {
+            clear_bytes(key);
+            clear_secrets();
+            err = SCRCTL_TR("SRP client proof mismatch; pairing aborted");
+            return false;
+        }
+        auto proof = sha512({a_public, expected, key});
+        clear_secrets();
+        k_ = std::move(key);
+        m2_ = std::move(proof);
+        return true;
+    } catch (const std::runtime_error &failure) {
+        clear_secrets();
+        err = SCRCTL_TR("SRP cryptographic operation failed: ") + std::string(failure.what());
+        return false;
+    }
 }
 
 }  // namespace scrctl::wifi

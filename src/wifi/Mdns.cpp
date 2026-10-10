@@ -450,7 +450,8 @@ struct QuerySocket {
     QuerySocket &operator=(const QuerySocket &) = delete;
 };
 
-std::unique_ptr<QuerySocket> open_socket(const InterfaceAddress &iface, std::vector<std::string> &warnings) {
+std::unique_ptr<QuerySocket> open_socket(const InterfaceAddress &iface, std::vector<std::string> &warnings,
+                                       bool responder = false) {
     auto result = std::make_unique<QuerySocket>();
     result->iface = iface;
     const int family = iface.local.ss_family;
@@ -461,7 +462,24 @@ std::unique_ptr<QuerySocket> open_socket(const InterfaceAddress &iface, std::vec
         return std::unique_ptr<QuerySocket>{};
     };
     if (result->fd == transport::kInvalidSocket) return fail();
-    if (bind(result->fd, reinterpret_cast<const sockaddr *>(&iface.local),
+    sockaddr_storage binding = iface.local;
+    if (responder) {
+        const int reuse = 1;
+        if (setsockopt(result->fd, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char *>(&reuse), sizeof(reuse))) return fail();
+#if defined(SO_REUSEPORT) && !defined(_WIN32)
+        if (setsockopt(result->fd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse))) return fail();
+#endif
+        binding = {};
+        if (family == AF_INET) {
+            auto *address = reinterpret_cast<sockaddr_in *>(&binding);
+            address->sin_family = AF_INET; address->sin_port = htons(MDNS_PORT);
+        } else {
+            auto *address = reinterpret_cast<sockaddr_in6 *>(&binding);
+            address->sin6_family = AF_INET6; address->sin6_port = htons(MDNS_PORT);
+            if (setsockopt(result->fd, IPPROTO_IPV6, IPV6_V6ONLY, reinterpret_cast<const char *>(&reuse), sizeof(reuse))) return fail();
+        }
+    }
+    if (bind(result->fd, reinterpret_cast<const sockaddr *>(&binding),
              family == AF_INET ? sizeof(sockaddr_in) : sizeof(sockaddr_in6)) != 0) return fail();
     if (family == AF_INET) {
         const auto &address = reinterpret_cast<const sockaddr_in *>(&iface.local)->sin_addr;
@@ -472,6 +490,24 @@ std::unique_ptr<QuerySocket> open_socket(const InterfaceAddress &iface, std::vec
         const int hops = 255;
         if (setsockopt(result->fd, IPPROTO_IPV6, IPV6_MULTICAST_IF, reinterpret_cast<const char *>(&iface.index), sizeof(iface.index)) ||
             setsockopt(result->fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, reinterpret_cast<const char *>(&hops), sizeof(hops))) return fail();
+    }
+    if (responder) {
+        if (family == AF_INET) {
+            ip_mreq membership{};
+            inet_pton(AF_INET, "224.0.0.251", &membership.imr_multiaddr);
+            membership.imr_interface = reinterpret_cast<const sockaddr_in *>(&iface.local)->sin_addr;
+            if (setsockopt(result->fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, reinterpret_cast<const char *>(&membership), sizeof(membership))) return fail();
+#ifdef IP_MULTICAST_ALL
+            // Linux 默认也交付其他 socket 的组播 membership；保持接口记录隔离。
+            const int own_membership = 0;
+            if (setsockopt(result->fd, IPPROTO_IP, IP_MULTICAST_ALL, &own_membership, sizeof(own_membership))) return fail();
+#endif
+        } else {
+            ipv6_mreq membership{};
+            inet_pton(AF_INET6, "ff02::fb", &membership.ipv6mr_multiaddr);
+            membership.ipv6mr_interface = iface.index;
+            if (setsockopt(result->fd, IPPROTO_IPV6, IPV6_JOIN_GROUP, reinterpret_cast<const char *>(&membership), sizeof(membership))) return fail();
+        }
     }
 #ifdef _WIN32
     unsigned long nonblocking = 1;
@@ -618,6 +654,344 @@ BrowseResult browse(const BrowseOptions &options) {
     }
     result.cancelled = stop_requested();
     return result;
+}
+
+namespace {
+constexpr std::string_view kHostService = "_remotepairing-pairable-host._tcp.local.";
+constexpr uint32_t kHostTtl = 120;
+
+bool host_label(std::string_view value) {
+    const auto alnum = [](unsigned char ch) {
+        return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+               (ch >= '0' && ch <= '9');
+    };
+    if (value.empty() || value.size() > 63 || !alnum(value.front()) || !alnum(value.back())) return false;
+    return std::all_of(value.begin(), value.end(), [&](unsigned char ch) { return alnum(ch) || ch == '-'; });
+}
+
+bool valid_host(const HostAdvertisement &host, std::string &error) {
+    if (!host_label(host.instance_identifier)) {
+        error = SCRCTL_TR("mDNS advertiser identifier must be a single ASCII DNS label"); return false;
+    }
+    if (!host.port || (!host.advertise_ipv4 && !host.advertise_ipv6)) {
+        error = SCRCTL_TR("mDNS advertiser requires a listening TCP port and address family"); return false;
+    }
+    const std::array<std::pair<std::string_view, std::string_view>, 7> fields{{
+        {"name", host.name}, {"identifier", host.instance_identifier}, {"authTag", host.auth_tag},
+        {"model", host.model}, {"flags", "1"}, {"ver", "26"}, {"minVer", "17"}}};
+    for (const auto &[key, value] : fields) {
+        if (value.empty() || key.size() + 1 + value.size() > 255) {
+            error = SCRCTL_TR("mDNS advertiser has an empty or oversized TXT field"); return false;
+        }
+    }
+    return true;
+}
+
+bool dns_name(std::string_view name) {
+    if (name.empty() || name.size() > 253 || name.back() != '.' || name.find('\0') != std::string_view::npos) return false;
+    size_t at = 0;
+    while (at < name.size()) {
+        const auto end = name.find('.', at);
+        if (end == std::string_view::npos || end == at || end - at > 63) return false;
+        at = end + 1;
+    }
+    return true;
+}
+
+struct HostQuestion { std::string name; uint16_t type = 0; uint16_t cls = 0; };
+
+std::vector<uint8_t> encode_host(const detail::HostRecords &input, uint32_t ttl,
+                                 const std::vector<HostQuestion> &questions, uint16_t id,
+                                 bool legacy, std::string &error) {
+    error.clear();
+    if (!valid_host(input.host, error)) return {};
+    const auto identity = lower(input.host.instance_identifier);
+    if (!dns_name(input.service_instance) || !dns_name(input.target) ||
+        lower(input.service_instance) != identity + "." + std::string(kHostService) ||
+        lower(input.target) != identity + ".local.") {
+        error = SCRCTL_TR("mDNS advertiser has an invalid service or target DNS name"); return {};
+    }
+    if (input.addresses.size() > kMaxAddresses) { error = SCRCTL_TR("mDNS advertiser address limit exceeded"); return {}; }
+    auto text = [](std::string_view value) { return mdns_string_t{value.data(), value.size()}; };
+    std::vector<mdns_record_t> records;
+    records.reserve(9 + input.addresses.size());
+    mdns_record_t ptr{};
+    ptr.name = text(kHostService); ptr.type = MDNS_RECORDTYPE_PTR;
+    ptr.data.ptr.name = text(input.service_instance); ptr.rclass = MDNS_CLASS_IN; ptr.ttl = ttl;
+    records.push_back(ptr);
+    mdns_record_t srv{};
+    srv.name = text(input.service_instance); srv.type = MDNS_RECORDTYPE_SRV;
+    srv.data.srv.name = text(input.target); srv.data.srv.port = input.host.port;
+    srv.rclass = MDNS_CLASS_IN | (legacy ? 0 : MDNS_CACHE_FLUSH); srv.ttl = ttl;
+    records.push_back(srv);
+    const std::array<std::pair<std::string_view, std::string_view>, 7> fields{{
+        {"name", input.host.name}, {"identifier", input.host.instance_identifier},
+        {"authTag", input.host.auth_tag}, {"model", input.host.model},
+        {"flags", "1"}, {"ver", "26"}, {"minVer", "17"}}};
+    for (const auto &[key, value] : fields) {
+        mdns_record_t txt{};
+        txt.name = text(input.service_instance); txt.type = MDNS_RECORDTYPE_TXT;
+        txt.data.txt.key = text(key); txt.data.txt.value = text(value);
+        txt.rclass = srv.rclass; txt.ttl = ttl; records.push_back(txt);
+    }
+    size_t address_count = 0;
+    std::set<std::string> unique;
+    for (const auto &ip : input.addresses) {
+        if (!unique.insert(ip).second) continue;
+        const bool ipv6 = ip.find(':') != std::string::npos;
+        if ((ipv6 && !input.host.advertise_ipv6) || (!ipv6 && !input.host.advertise_ipv4)) continue;
+        mdns_record_t record{};
+        record.name = text(input.target); record.type = ipv6 ? MDNS_RECORDTYPE_AAAA : MDNS_RECORDTYPE_A;
+        record.rclass = srv.rclass; record.ttl = ttl;
+        bool valid = false;
+        if (ipv6) {
+            auto &address = record.data.aaaa.addr;
+            address.sin6_family = AF_INET6;
+            valid = inet_pton(AF_INET6, ip.c_str(), &address.sin6_addr) == 1 &&
+                    !IN6_IS_ADDR_UNSPECIFIED(&address.sin6_addr) && !IN6_IS_ADDR_LOOPBACK(&address.sin6_addr) &&
+                    !IN6_IS_ADDR_MULTICAST(&address.sin6_addr);
+        } else {
+            auto &address = record.data.a.addr;
+            address.sin_family = AF_INET;
+            valid = inet_pton(AF_INET, ip.c_str(), &address.sin_addr) == 1;
+            const uint32_t value = ntohl(address.sin_addr.s_addr);
+            valid = valid && value && value != 0xffffffff && (value >> 24) != 127 && (value >> 28) < 14;
+        }
+        if (!valid) { error = SCRCTL_TR("mDNS advertiser has an invalid numeric address"); return {}; }
+        records.push_back(record); ++address_count;
+    }
+    if (!address_count) { error = SCRCTL_TR("mDNS advertiser has no address for a listening family"); return {}; }
+    alignas(uint32_t) std::array<uint8_t, kMaxPacket> buffer{};
+    mdns_header_t header{};
+    header.query_id = htons(id); header.flags = htons(0x8400);
+    header.questions = htons(static_cast<uint16_t>(questions.size()));
+    header.answer_rrs = htons(static_cast<uint16_t>(mdns_answer_get_record_count(records.data(), records.size())));
+    std::memcpy(buffer.data(), &header, sizeof(header));
+    mdns_string_table_t table{};
+    void *end = buffer.data() + sizeof(header);
+    for (const auto &question : questions) {
+        end = mdns_string_make(buffer.data(), buffer.size(), end, question.name.data(), question.name.size(), &table);
+        if (!end || static_cast<uint8_t *>(end) + 4 > buffer.data() + buffer.size()) {
+            end = nullptr; break;
+        }
+        end = mdns_htons(end, question.type); end = mdns_htons(end, MDNS_CLASS_IN);
+    }
+    for (const auto &record : records) {
+        if (!end) break;
+        end = mdns_answer_add_record(buffer.data(), buffer.size(), end, record, &table);
+    }
+    if (end) end = mdns_answer_add_txt_record(buffer.data(), buffer.size(), end, records.data(), records.size(),
+                                             srv.rclass, ttl, &table);
+    if (!end) { error = SCRCTL_TR("mDNS advertiser packet is too large"); return {}; }
+    return {buffer.data(), static_cast<uint8_t *>(end)};
+}
+
+bool send_host(QuerySocket &socket, std::span<const uint8_t> wire,
+               const sockaddr_storage *peer, socklen_t peer_size, std::string &error) {
+    sockaddr_storage destination{};
+    const int family = socket.iface.local.ss_family;
+    if (peer) destination = *peer;
+    else if (family == AF_INET) {
+        auto *address = reinterpret_cast<sockaddr_in *>(&destination);
+        address->sin_family = AF_INET; address->sin_port = htons(MDNS_PORT);
+        inet_pton(AF_INET, "224.0.0.251", &address->sin_addr);
+    } else {
+        auto *address = reinterpret_cast<sockaddr_in6 *>(&destination);
+        address->sin6_family = AF_INET6; address->sin6_port = htons(MDNS_PORT);
+        address->sin6_scope_id = socket.iface.index;
+        inet_pton(AF_INET6, "ff02::fb", &address->sin6_addr);
+    }
+    const auto size = sendto(socket.fd, reinterpret_cast<const char *>(wire.data()),
+                              static_cast<mdns_size_t>(wire.size()), 0,
+                              reinterpret_cast<const sockaddr *>(&destination),
+                              peer ? peer_size : family == AF_INET ? sizeof(sockaddr_in) : sizeof(sockaddr_in6));
+    if (size < 0 || static_cast<size_t>(size) != wire.size()) {
+        error = std::string(SCRCTL_TR("mDNS advertiser send: ")) + transport::socket_error_message(); return false;
+    }
+    return true;
+}
+
+} // namespace
+
+std::vector<uint8_t> detail::host_announcement(const HostRecords &records, uint32_t ttl, std::string &error) {
+    return encode_host(records, ttl, {}, 0, false, error);
+}
+
+std::vector<detail::HostReply> detail::host_query_reply(const HostRecords &records,
+    std::span<const uint8_t> query, bool legacy, std::string &error) {
+    error.clear();
+    if (query.size() < sizeof(mdns_header_t) || query.size() > kMaxPacket) {
+        error = SCRCTL_TR("mDNS advertiser query has an invalid size"); return {};
+    }
+    const uint16_t flags = mdns_ntohs(query.data() + 2);
+    if (flags & 0x8000) return {}; // 不回应其他公告或自己的回应。
+    if (flags & 0x780f) return {};
+    const auto count = mdns_ntohs(query.data() + 4);
+    if (count > 32) { error = SCRCTL_TR("mDNS advertiser question limit exceeded"); return {}; }
+    size_t offset = sizeof(mdns_header_t);
+    std::vector<HostQuestion> questions;
+    bool unicast = false, multicast = false;
+    for (unsigned i = 0; i < count; ++i) {
+        const size_t before = offset;
+        std::array<char, 256> name{};
+        const auto value = mdns_string_extract(query.data(), query.size(), &offset, name.data(), name.size());
+        if (before == offset || !value.length || value.length >= name.size() || offset + 4 > query.size()) {
+            error = SCRCTL_TR("mDNS advertiser query is truncated or has an invalid name"); return {};
+        }
+        HostQuestion question{std::string(value.str, value.length), mdns_ntohs(query.data() + offset),
+                              mdns_ntohs(query.data() + offset + 2)};
+        if (!dns_name(question.name)) {
+            error = SCRCTL_TR("mDNS advertiser query has an invalid DNS name"); return {};
+        }
+        offset += 4;
+        const auto cls = question.cls & 0x7fff;
+        if (cls != MDNS_CLASS_IN && cls != MDNS_CLASS_ANY) continue;
+        const auto normalized = lower(question.name);
+        const bool any = question.type == MDNS_RECORDTYPE_ANY;
+        const bool matches = (normalized == kHostService && (any || question.type == MDNS_RECORDTYPE_PTR)) ||
+            (normalized == lower(records.service_instance) && (any || question.type == MDNS_RECORDTYPE_SRV || question.type == MDNS_RECORDTYPE_TXT)) ||
+            (normalized == lower(records.target) && (any || (question.type == MDNS_RECORDTYPE_A && records.host.advertise_ipv4) ||
+                                                       (question.type == MDNS_RECORDTYPE_AAAA && records.host.advertise_ipv6)));
+        if (!matches) continue;
+        questions.push_back(std::move(question));
+        if (legacy || (questions.back().cls & MDNS_UNICAST_RESPONSE)) unicast = true;
+        else multicast = true;
+    }
+    if (questions.empty()) return {};
+    std::vector<HostReply> replies;
+    if (legacy) {
+        auto packet = encode_host(records, 10, questions, mdns_ntohs(query.data()), true, error);
+        if (!packet.empty()) replies.push_back({std::move(packet), true});
+    } else {
+        auto packet = encode_host(records, kHostTtl, {}, 0, false, error);
+        if (packet.empty()) return {};
+        if (unicast) replies.push_back({packet, true});
+        if (multicast) replies.push_back({std::move(packet), false});
+    }
+    return replies;
+}
+
+struct Advertiser::Impl {
+    struct Binding { std::unique_ptr<QuerySocket> socket; detail::HostRecords records; };
+    std::vector<Binding> bindings;
+    detail::RecordCache::Clock::time_point next_announcement;
+    bool announce(uint32_t ttl, std::string &error) {
+        bool sent = false;
+        std::string first_error;
+        for (const auto &binding : bindings) {
+            auto packet = detail::host_announcement(binding.records, ttl, error);
+            if (!packet.empty() && send_host(*binding.socket, packet, nullptr, 0, error)) sent = true;
+            else if (first_error.empty()) first_error = error;
+        }
+        error = sent ? std::string{} : first_error;
+        return sent;
+    }
+};
+
+Advertiser::Advertiser(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
+Advertiser::~Advertiser() {
+    try { if (impl_) { std::string ignored; impl_->announce(0, ignored); } } catch (...) {}
+}
+
+std::unique_ptr<Advertiser> Advertiser::start(const HostAdvertisement &host, std::string &error) {
+    error.clear();
+    if (!valid_host(host, error)) return {};
+    try {
+        if (!transport::initialize_sockets(error)) return {};
+        auto impl = std::make_unique<Impl>();
+        std::vector<std::string> warnings;
+        const auto local_interfaces = interfaces(warnings);
+        for (const auto &iface : local_interfaces) {
+            if ((iface.local.ss_family == AF_INET && !host.advertise_ipv4) ||
+                (iface.local.ss_family == AF_INET6 && !host.advertise_ipv6)) continue;
+            detail::HostRecords records{host, host.instance_identifier + "." + std::string(kHostService),
+                                       host.instance_identifier + ".local.", {}};
+            for (const auto &address : local_interfaces) {
+                if (address.cache_index != iface.cache_index) continue;
+                if ((address.local.ss_family == AF_INET && !host.advertise_ipv4) ||
+                    (address.local.ss_family == AF_INET6 && !host.advertise_ipv6)) continue;
+                std::array<char, INET6_ADDRSTRLEN> text{};
+                const void *raw = address.local.ss_family == AF_INET ?
+                    static_cast<const void *>(&reinterpret_cast<const sockaddr_in *>(&address.local)->sin_addr) :
+                    static_cast<const void *>(&reinterpret_cast<const sockaddr_in6 *>(&address.local)->sin6_addr);
+                if (inet_ntop(address.local.ss_family, raw, text.data(), text.size())) records.addresses.emplace_back(text.data());
+            }
+            if (detail::host_announcement(records, kHostTtl, error).empty()) continue;
+            auto socket = open_socket(iface, warnings, true);
+            if (socket) impl->bindings.push_back({std::move(socket), std::move(records)});
+        }
+        if (impl->bindings.empty()) {
+            error = warnings.empty() ? std::string(SCRCTL_TR("No multicast interface is available for mDNS")) : warnings.front();
+            return {};
+        }
+        auto advertiser = std::unique_ptr<Advertiser>(new Advertiser(std::move(impl)));
+        if (!advertiser->impl_->announce(kHostTtl, error)) return {};
+        advertiser->impl_->next_announcement = detail::RecordCache::Clock::now() + std::chrono::seconds(1);
+        return advertiser;
+    } catch (const std::exception &exception) {
+        error = std::string(SCRCTL_TR("mDNS advertiser: ")) + std::string(exception.what()); return {};
+    }
+}
+
+bool Advertiser::poll(int timeout_ms, std::string &error) {
+    error.clear();
+    if (timeout_ms < 0 || timeout_ms > 60000) {
+        error = SCRCTL_TR("mDNS timeout must be between 0 and 60000 ms"); return false;
+    }
+    const auto deadline = detail::RecordCache::Clock::now() + std::chrono::milliseconds(timeout_ms);
+    const auto now = detail::RecordCache::Clock::now();
+    if (now >= impl_->next_announcement) {
+        if (!impl_->announce(kHostTtl, error)) return false;
+        impl_->next_announcement = now + std::chrono::seconds(60);
+    }
+#ifdef _WIN32
+    std::vector<WSAPOLLFD> ready;
+    for (const auto &binding : impl_->bindings) ready.push_back({binding.socket->fd, POLLRDNORM, 0});
+#else
+    std::vector<pollfd> ready;
+    for (const auto &binding : impl_->bindings) ready.push_back({binding.socket->fd, POLLIN, 0});
+#endif
+    const auto until_refresh = std::chrono::duration_cast<std::chrono::milliseconds>(impl_->next_announcement - now).count();
+    const int wait_ms = static_cast<int>(std::max<int64_t>(0, std::min<int64_t>({50, timeout_ms, until_refresh})));
+#ifdef _WIN32
+    const int count = WSAPoll(ready.data(), static_cast<ULONG>(ready.size()), wait_ms);
+#else
+    const int count = ::poll(ready.data(), static_cast<nfds_t>(ready.size()), wait_ms);
+#endif
+    if (count < 0) {
+        if (transport::socket_error() == transport::kSocketInterrupted) return true;
+        error = std::string(SCRCTL_TR("mDNS advertiser receive wait: ")) + transport::socket_error_message(); return false;
+    }
+    alignas(uint32_t) std::array<uint8_t, kMaxPacket + 1> packet{};
+    for (size_t i = 0; i < ready.size(); ++i) {
+        if (!ready[i].revents) continue;
+        auto &binding = impl_->bindings[i];
+        for (int batch = 0; batch < 16; ++batch) {
+            sockaddr_storage peer{}; socklen_t peer_size = sizeof(peer);
+            const auto size = recvfrom(binding.socket->fd, reinterpret_cast<char *>(packet.data()),
+                                      static_cast<int>(packet.size()), 0,
+                                      reinterpret_cast<sockaddr *>(&peer), &peer_size);
+            if (size < 0) {
+                if (!transport::socket_read_timed_out(transport::socket_error())) {
+                    error = std::string(SCRCTL_TR("mDNS advertiser receive: ")) + transport::socket_error_message(); return false;
+                }
+                break;
+            }
+            if (size > 0 && static_cast<size_t>(size) <= kMaxPacket) {
+                const uint16_t port = peer.ss_family == AF_INET ? reinterpret_cast<const sockaddr_in *>(&peer)->sin_port :
+                                      reinterpret_cast<const sockaddr_in6 *>(&peer)->sin6_port;
+                std::string parse_error;
+                const auto replies = detail::host_query_reply(binding.records,
+                    {packet.data(), static_cast<size_t>(size)}, ntohs(port) != MDNS_PORT, parse_error);
+                // 不受信任的坏查询只丢弃；不能用一个坏包中断本机配对监听。
+                for (const auto &reply : replies)
+                    if (!send_host(*binding.socket, reply.packet, reply.unicast ? &peer : nullptr, peer_size, error)) return false;
+            }
+            if (detail::RecordCache::Clock::now() >= deadline) break;
+        }
+        if (detail::RecordCache::Clock::now() >= deadline) break;
+    }
+    return true;
 }
 
 } // namespace scrctl::wifi::mdns

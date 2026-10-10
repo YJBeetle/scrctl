@@ -178,7 +178,9 @@ add_library(scrctl_core STATIC
         src/wifi/PairingIdentity.cpp
         src/wifi/PairVerify.cpp
         src/wifi/PairSetup.cpp
+        src/wifi/PairableHost.cpp
         src/remote/Pairing.cpp
+        src/remote/WifiPairing.cpp
         src/wifi/RemotePairing.cpp)
 target_include_directories(scrctl_core PUBLIC src)
 target_link_libraries(scrctl_core PUBLIC ScrctlAppleFrameworks OpenSSL::SSL OpenSSL::Crypto nlohmann_json::nlohmann_json)
@@ -463,6 +465,14 @@ if(SCRCTL_BUILD_TESTS)
     scrctl_add_test_executable(pairing_workflow_test tests/pairing_workflow_test.cpp)
     target_link_libraries(pairing_workflow_test PRIVATE scrctl_core)
     add_test(NAME pairing_workflow COMMAND pairing_workflow_test)
+
+    foreach(pairing_test IN ITEMS srp_server pairable_host mdns_advertiser wifi_pairing_workflow)
+        scrctl_add_test_executable(${pairing_test}_test tests/${pairing_test}_test.cpp)
+        target_link_libraries(${pairing_test}_test PRIVATE scrctl_core)
+        add_test(NAME ${pairing_test} COMMAND ${pairing_test}_test)
+        set_tests_properties(${pairing_test} PROPERTIES TIMEOUT 30)
+    endforeach()
+    target_link_libraries(mdns_advertiser_test PRIVATE Scrctl::Mdns)
 
     scrctl_add_test_executable(mdns_test tests/mdns_test.cpp)
     target_link_libraries(mdns_test PRIVATE scrctl_core Scrctl::Mdns)

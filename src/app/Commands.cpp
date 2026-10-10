@@ -8,11 +8,13 @@
 
 #include "app/DeviceConnection.h"
 #include "app/Options.h"
+#include "app/SdlRuntime.h"
 #include "i18n/Translation.h"
 #include "remote/App.h"
 #include "remote/Discovery.h"
 #include "remote/Pasteboard.h"
 #include "remote/Pairing.h"
+#include "remote/WifiPairing.h"
 
 namespace scrctl::app {
 namespace {
@@ -105,13 +107,37 @@ std::optional<int> run_standalone_command(const Options &o) {
     }
 
     if (o.pair) {
-        remote::UsbPairingOptions options;
-        options.udid = o.serial;
-        options.allow_repair = o.repair_pairing;
-        options.progress = [](std::string_view message) {
+        auto report = [](std::string_view message) {
             std::fprintf(stderr, "%s\n", terminal_text(std::string(message)).c_str());
         };
-        const auto result = remote::pair_usb_remote(options);
+        remote::PairingResult result;
+        if (o.wifi == "auto") {
+            // Timer-only SDL establishes the existing signal handling without
+            // opening a desktop window, sound output or device media session.
+            SdlRuntime runtime;
+            if (!runtime.initialize(SDL_INIT_TIMER)) {
+                std::fprintf(stderr, SCRCTL_TR("SDL initialization failed: %s\n"), SDL_GetError());
+                return 1;
+            }
+            remote::WifiPairingOptions options;
+            options.udid = o.serial;
+            options.timeout_ms = o.pairing_timeout_ms;
+            options.should_cancel = [&] { return runtime.stop_requested(); };
+            options.progress = report;
+            options.display_pin = [](std::string_view pin, std::string &) {
+                std::fprintf(stderr, SCRCTL_TR("Enter this one-use pairing code on the device: %s\n"),
+                             std::string(pin).c_str());
+                return true;
+            };
+            result = remote::pair_wifi_remote(options);
+        } else {
+            remote::UsbPairingOptions options;
+            options.udid = o.serial;
+            options.timeout_ms = o.pairing_timeout_ms;
+            options.allow_repair = o.repair_pairing;
+            options.progress = report;
+            result = remote::pair_usb_remote(options);
+        }
         if (!result.ok) {
             std::fprintf(stderr, SCRCTL_TR("Remote pairing failed: %s\n"),
                          terminal_text(result.error).c_str());

@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-10 13:13+0800\n"
+"POT-Creation-Date: 2026-10-10 15:31+0800\n"
 "PO-Revision-Date: 2026-10-09 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -19,7 +19,7 @@ msgid ""
 "table)\n"
 msgstr "可见区 %ux%u -> %dx%d（设备未报告尺寸，使用机型表）\n"
 
-#: src/app/Application.cpp:80
+#: src/app/Application.cpp:80 src/app/Commands.cpp:119
 #, c-format
 msgid "SDL initialization failed: %s\n"
 msgstr "SDL 初始化失败: %s\n"
@@ -304,157 +304,162 @@ msgid "RemotePairing port for a manual LAN address; default: 49152"
 msgstr "手动指定局域网地址时使用的 RemotePairing 端口，默认 49152"
 
 #: src/app/Cli.cpp:45
-msgid "Create or verify a remote pairing record over USB, then exit"
-msgstr "通过 USB 创建或验证远程配对记录，然后退出"
+msgid ""
+"Pair over USB, or use --wifi auto for phone-initiated PIN pairing, then exit"
+msgstr "通过 USB 配对，或用 --wifi auto 等待手机发起 PIN 配对，完成后退出"
 
 #: src/app/Cli.cpp:48
+msgid "Pairing timeout in milliseconds (1..300000); default: 120000"
+msgstr "配对超时，单位毫秒（1..300000）；默认：120000"
+
+#: src/app/Cli.cpp:51
 msgid ""
 "Allow replacing an incomplete or rejected pairing record; requires --pair"
 msgstr "允许替换不完整或被设备拒绝的配对记录；需要 --pair"
 
-#: src/app/Cli.cpp:51
+#: src/app/Cli.cpp:54
 msgid ""
 "Record selected video/audio tracks to .mp4 or .mkv; other extensions save "
 "raw HEVC without audio"
 msgstr "用 .mp4 或 .mkv 保存所选音视频轨道；其他扩展名保存不含音频的裸 HEVC"
 
-#: src/app/Cli.cpp:53
+#: src/app/Cli.cpp:56
 msgid ""
 "Launch bundle ID; ? matches name prefix, + terminates the previous instance"
 msgstr "启动 bundle id；? 按名称前缀，+ 先终止实例"
 
-#: src/app/Cli.cpp:54
+#: src/app/Cli.cpp:57
 msgid "Window title"
 msgstr "窗口标题"
 
-#: src/app/Cli.cpp:55
+#: src/app/Cli.cpp:58
 msgid "SDL render driver, e.g. metal / software"
 msgstr "SDL 渲染驱动，如 metal / software"
 
-#: src/app/Cli.cpp:57
+#: src/app/Cli.cpp:60
 msgid ""
 "display for live video (default), screenshot for polling; stream is an alias "
 "for display"
 msgstr ""
 "display 为实时视频（默认），screenshot 为截图轮询；stream 是 display 的别名"
 
-#: src/app/Cli.cpp:59
+#: src/app/Cli.cpp:62
 msgid "Inject X0,Y0,X1,Y1 swipe and exit (normalized coordinates)"
 msgstr "注入直线 X0,Y0,X1,Y1 后退出（归一化坐标）"
 
-#: src/app/Cli.cpp:66
+#: src/app/Cli.cpp:69
 msgid "Inject home/lock/volup/voldn/mute"
 msgstr "注入 home/lock/volup/voldn/mute"
 
-#: src/app/Cli.cpp:68
+#: src/app/Cli.cpp:71
 msgid "Inject ASCII text (device text field must have focus)"
 msgstr "注入 ASCII 文本（设备需已聚焦文本框）"
 
-#: src/app/Cli.cpp:69
+#: src/app/Cli.cpp:72
 msgid "Force alternating video fallback and recovery at T1,T2,... seconds"
 msgstr "按 T1,T2,... 秒交替强制降级与恢复"
 
-#: src/app/Cli.cpp:70
+#: src/app/Cli.cpp:73
 msgid "Write device clipboard and exit (supports Unicode)"
 msgstr "写入设备剪贴板后退出（支持中文）"
 
-#: src/app/Cli.cpp:72
+#: src/app/Cli.cpp:75
 msgid "List USB and RemotePairing devices; wireless scan defaults to 3 seconds"
 msgstr "列出 USB 与 RemotePairing 设备；默认扫描无线设备 3 秒"
 
-#: src/app/Cli.cpp:74
+#: src/app/Cli.cpp:77
 msgid ""
 "Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"
 msgstr "无线设备扫描时间，单位毫秒（0..60000）；0 表示只列出 usbmux 设备"
 
-#: src/app/Cli.cpp:76
+#: src/app/Cli.cpp:79
 msgid "Disable input control"
 msgstr "关闭输入控制"
 
-#: src/app/Cli.cpp:79
+#: src/app/Cli.cpp:82
 msgid "List device apps"
 msgstr "列出设备 App"
 
-#: src/app/Cli.cpp:80
+#: src/app/Cli.cpp:83
 msgid "Show version"
 msgstr "显示版本"
 
-#: src/app/Cli.cpp:81
+#: src/app/Cli.cpp:84
 msgid "Desktop fullscreen"
 msgstr "桌面全屏"
 
-#: src/app/Cli.cpp:82
+#: src/app/Cli.cpp:85
 msgid "Keep window on top"
 msgstr "窗口置顶"
 
-#: src/app/Cli.cpp:83
+#: src/app/Cli.cpp:86
 msgid "Borderless window"
 msgstr "无边框窗口"
 
-#: src/app/Cli.cpp:84
+#: src/app/Cli.cpp:87
 msgid "Prevent local screen sleep while running"
 msgstr "运行期间禁止本机息屏"
 
-#: src/app/Cli.cpp:85
+#: src/app/Cli.cpp:88
 msgid "Do not start audio stream"
 msgstr "不启动音频流"
 
-#: src/app/Cli.cpp:87
+#: src/app/Cli.cpp:90
 msgid "Keep audio playing on the phone while forwarding it to the computer"
 msgstr "转发音频到电脑，同时保留手机播放"
 
-#: src/app/Cli.cpp:90
+#: src/app/Cli.cpp:93
 msgid ""
 "Disable computer audio playback; capture audio only when recording to MP4 or "
 "MKV"
 msgstr "关闭电脑音频播放；仅录制 MP4 或 MKV 时采集音频"
 
-#: src/app/Cli.cpp:91
+#: src/app/Cli.cpp:94
 msgid "Do not start video stream"
 msgstr "不采集视频"
 
-#: src/app/Cli.cpp:93
+#: src/app/Cli.cpp:96
 msgid "Disable video display; keep encoded video when recording"
 msgstr "不显示视频；录制时仍接收编码视频"
 
-#: src/app/Cli.cpp:96
+#: src/app/Cli.cpp:99
 msgid ""
 "Disable computer video and audio playback; keep selected recording tracks"
 msgstr "不在电脑播放视频或音频；录制时保留所选轨道"
 
-#: src/app/Cli.cpp:97
+#: src/app/Cli.cpp:100
 msgid "Run without a window"
 msgstr "无窗口运行"
 
-#: src/app/Cli.cpp:98
+#: src/app/Cli.cpp:101
 msgid "Use platform hardware decoder; default: software"
 msgstr "使用平台硬件解码，默认软件解码"
 
-#: src/app/Cli.cpp:99
+#: src/app/Cli.cpp:102
 msgid "Print input coordinates"
 msgstr "打印输入坐标"
 
-#: src/app/Cli.cpp:100
+#: src/app/Cli.cpp:103
 msgid "Add tunnel diagnostics to --stats"
 msgstr "在 --stats 中增加隧道网络诊断"
 
-#: src/app/Cli.cpp:101
+#: src/app/Cli.cpp:104
 msgid "Print statistics every second"
 msgstr "每秒打印统计"
 
-#: src/app/Cli.cpp:102
+#: src/app/Cli.cpp:105
 msgid "Read device clipboard; with --copy, read back after writing"
 msgstr "读取设备剪贴板；与 --copy 同用时写后读回"
 
-#: src/app/Cli.cpp:105
+#: src/app/Cli.cpp:108
 msgid "Window horizontal position; integer or auto (default)"
 msgstr "窗口横坐标：整数或 auto（默认）"
 
-#: src/app/Cli.cpp:107
+#: src/app/Cli.cpp:110
 msgid "Window vertical position; integer or auto (default)"
 msgstr "窗口纵坐标：整数或 auto（默认）"
 
-#: src/app/Cli.cpp:109
+#: src/app/Cli.cpp:112
 msgid ""
 "Shortcut modifiers, separated by commas: lctrl, rctrl, lalt, ralt, lsuper, "
 "rsuper; default: lalt,lsuper"
@@ -462,31 +467,31 @@ msgstr ""
 "快捷键修饰键，用逗号分隔：lctrl、rctrl、lalt、ralt、lsuper、rsuper；默认 "
 "lalt,lsuper"
 
-#: src/app/Cli.cpp:110
+#: src/app/Cli.cpp:113
 msgid "Window width; 0 for automatic"
 msgstr "窗口宽度，0 为自动"
 
-#: src/app/Cli.cpp:111
+#: src/app/Cli.cpp:114
 msgid "Window height; 0 for automatic"
 msgstr "窗口高度，0 为自动"
 
-#: src/app/Cli.cpp:112
+#: src/app/Cli.cpp:115
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr "运行秒数，0 为不限"
 
-#: src/app/Cli.cpp:114
+#: src/app/Cli.cpp:117
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr "音频缓冲毫秒数，默认 50，上限 1000"
 
-#: src/app/Cli.cpp:116
+#: src/app/Cli.cpp:119
 msgid "Exit after N frames; 0 for unlimited"
 msgstr "处理 N 帧后退出，0 为不限"
 
-#: src/app/Cli.cpp:118
+#: src/app/Cli.cpp:121
 msgid "Finite positive scale; default: fit screen"
 msgstr "有限正数缩放比例，默认自动适应屏幕"
 
-#: src/app/Cli.cpp:136
+#: src/app/Cli.cpp:139
 msgid ""
 "Display and recording orientation: 0/90/180/270 or flip0/flip90/flip180/"
 "flip270; recording cannot flip; auto changes display only"
@@ -494,7 +499,7 @@ msgstr ""
 "显示和录制方向：0/90/180/270 或 flip0/flip90/flip180/flip270；录制不支持翻"
 "转，auto 只设置显示"
 
-#: src/app/Cli.cpp:140
+#: src/app/Cli.cpp:143
 msgid ""
 "Display orientation: auto, 0/90/180/270 or flip0/flip90/flip180/flip270; "
 "flip horizontally before clockwise rotation"
@@ -502,60 +507,60 @@ msgstr ""
 "显示方向：auto、0/90/180/270 或 flip0/flip90/flip180/flip270；先水平翻转，再"
 "顺时针旋转"
 
-#: src/app/Cli.cpp:144
+#: src/app/Cli.cpp:147
 msgid ""
 "Clockwise MP4/MKV recording rotation: 0/90/180/270; default: 0; display is "
 "unchanged"
 msgstr "顺时针旋转 MP4/MKV 录制：0/90/180/270，默认 0；不改变显示"
 
-#: src/app/Cli.cpp:147
+#: src/app/Cli.cpp:150
 msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
 msgstr "裁剪显示像素：WxH+X+Y 或 W:H:X:Y；不改变录制内容"
 
-#: src/app/Cli.cpp:149
+#: src/app/Cli.cpp:152
 msgid "Background color: RGB or RRGGBB, with optional #"
 msgstr "背景色：RGB 或 RRGGBB，可带 # 前缀"
 
-#: src/app/Cli.cpp:150
+#: src/app/Cli.cpp:153
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr "第 N 帧回读窗口为 BMP：N FILE（需要窗口）"
 
-#: src/app/Cli.cpp:164
+#: src/app/Cli.cpp:167
 msgid ""
 "Audio capture is disabled; --audio-dup requires playback or MP4/MKV recording"
 msgstr "音频采集已关闭；--audio-dup 需要电脑播放或 MP4/MKV 音轨录制"
 
-#: src/app/Cli.cpp:170
+#: src/app/Cli.cpp:173
 msgid ""
 "File playback requires video; incompatible with video playback disable "
 "options"
 msgstr "文件播放需要视频，不能同时指定关闭视频播放的选项"
 
-#: src/app/Cli.cpp:178
+#: src/app/Cli.cpp:181
 msgid "Audio-only recording requires MP4 or MKV; raw HEVC cannot contain audio"
 msgstr "仅录音频需要使用 MP4 或 MKV；裸 HEVC 无法保存音频"
 
-#: src/app/Cli.cpp:181
+#: src/app/Cli.cpp:184
 msgid "Recording requires at least one enabled audio or video track"
 msgstr "录制需要至少启用音频或视频中的一项"
 
-#: src/app/Cli.cpp:184 src/app/LiveSource.cpp:93
+#: src/app/Cli.cpp:187 src/app/LiveSource.cpp:93
 msgid "Recording orientation requires a video track"
 msgstr "录制方向需要视频轨道"
 
-#: src/app/Cli.cpp:189
+#: src/app/Cli.cpp:192
 msgid ""
 "Frame counting, hardware decoding, fallback tests and screenshots require "
 "video capture"
 msgstr "按帧计数、硬件解码、降级测试和截图需要采集视频"
 
-#: src/app/Cli.cpp:193 src/app/LiveSource.cpp:115
+#: src/app/Cli.cpp:196 src/app/LiveSource.cpp:115
 msgid ""
 "Container recording requires live video; screenshot polling cannot be "
 "recorded"
 msgstr "容器录制需要实时视频流，不能录制截图轮询"
 
-#: src/app/Cli.cpp:197
+#: src/app/Cli.cpp:200
 msgid ""
 "Recording does not support flipping; use --display-orientation for display-"
 "only flipping or reset --record-orientation to a rotation"
@@ -563,183 +568,194 @@ msgstr ""
 "录制不支持翻转；只翻转显示请使用 --display-orientation，或在后面用 --record-"
 "orientation 指定旋转角度"
 
-#: src/app/Cli.cpp:201 src/app/LiveSource.cpp:125
+#: src/app/Cli.cpp:204 src/app/LiveSource.cpp:125
 msgid ""
 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate "
 "only the display"
 msgstr "录制旋转需要 MP4 或 MKV；只旋转显示请使用 --display-orientation"
 
-#: src/app/Cli.cpp:206
+#: src/app/Cli.cpp:209
 msgid "Requires a nonempty LAN address or auto"
 msgstr "需要非空局域网地址或 auto"
 
-#: src/app/Cli.cpp:209
+#: src/app/Cli.cpp:212
 msgid "Use a manual LAN address; auto uses discovered SRV ports"
 msgstr "用于手动指定的局域网地址；auto 使用广播的 SRV 端口"
 
-#: src/app/Cli.cpp:220
+#: src/app/Cli.cpp:216
+msgid ""
+"Wireless first pairing requires --wifi auto; existing records cannot be "
+"repaired wirelessly"
+msgstr "首次无线配对需要 --wifi auto；已有配对记录无法通过无线方式修复"
+
+#: src/app/Cli.cpp:227
 msgid "Expected an integer or auto"
 msgstr "请使用整数或 auto"
 
-#: src/app/Cli.cpp:240
+#: src/app/Cli.cpp:247
 msgid ""
 "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
 msgstr "请使用 lctrl、rctrl、lalt、ralt、lsuper 或 rsuper，以逗号分隔"
 
-#: src/app/Cli.cpp:251
+#: src/app/Cli.cpp:258
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr "坐标必须是 [0, 1] 内的有限数"
 
-#: src/app/Cli.cpp:258
+#: src/app/Cli.cpp:265
 msgid "Requires a finite positive number"
 msgstr "需要有限正数"
 
-#: src/app/Cli.cpp:273
+#: src/app/Cli.cpp:280
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr "格式应为 WxH+X+Y 或 W:H:X:Y，尺寸为正、偏移非负"
 
-#: src/app/Cli.cpp:282
+#: src/app/Cli.cpp:289
 msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
 msgstr "请使用 3 位或 6 位十六进制颜色，可带 # 前缀"
 
-#: src/app/Cli.cpp:296
+#: src/app/Cli.cpp:303
 msgid "Frame number must be a positive integer"
 msgstr "帧号需要正整数"
 
-#: src/app/Cli.cpp:301
+#: src/app/Cli.cpp:308
 msgid "Requires a window; incompatible with --no-window"
 msgstr "需要窗口，不能与 --no-window 同用"
 
-#: src/app/Cli.cpp:304
+#: src/app/Cli.cpp:311
 msgid "Window readback requires video playback"
 msgstr "回读窗口画面需要开启视频播放"
 
-#: src/app/Cli.cpp:312
+#: src/app/Cli.cpp:319
 msgid "Nothing to do: enable media, recording or device control"
 msgstr "没有可执行的操作：请开启音视频、录制或设备控制"
 
-#: src/app/Commands.cpp:39
+#: src/app/Commands.cpp:41
 msgid "pairing record available"
 msgstr "本机已有配对记录"
 
-#: src/app/Commands.cpp:41
+#: src/app/Commands.cpp:43
 msgid "pair again over USB"
 msgstr "请通过 USB 重新配对"
 
-#: src/app/Commands.cpp:43
+#: src/app/Commands.cpp:45
 msgid "old record hint; pair again over USB"
 msgstr "发现旧配对记录线索；请通过 USB 重新配对"
 
-#: src/app/Commands.cpp:45
+#: src/app/Commands.cpp:47
 msgid "multiple matching pairing records"
 msgstr "有多份匹配的配对记录"
 
-#: src/app/Commands.cpp:47
+#: src/app/Commands.cpp:49
 msgid "invalid discovery identity"
 msgstr "设备广播的身份信息无效"
 
-#: src/app/Commands.cpp:49
+#: src/app/Commands.cpp:51
 msgid "identity matching failed"
 msgstr "匹配设备身份失败"
 
-#: src/app/Commands.cpp:51 src/app/Commands.cpp:53
+#: src/app/Commands.cpp:53 src/app/Commands.cpp:55
 msgid "no matching pairing record"
 msgstr "没有匹配的配对记录"
 
-#: src/app/Commands.cpp:70 src/app/DeviceConnection.cpp:237
+#: src/app/Commands.cpp:72 src/app/DeviceConnection.cpp:237
 #, c-format
 msgid "Discovery warning: %s\n"
 msgstr "设备发现提示：%s\n"
 
-#: src/app/Commands.cpp:74
+#: src/app/Commands.cpp:76
 msgid "Wireless device (UDID unknown)"
 msgstr "无线设备（UDID 未知）"
 
-#: src/app/Commands.cpp:86
+#: src/app/Commands.cpp:88
 msgid "address unresolved"
 msgstr "尚未取得地址"
 
-#: src/app/Commands.cpp:102
+#: src/app/Commands.cpp:104
 #, c-format
 msgid "No devices found\n"
 msgstr "未发现设备\n"
 
-#: src/app/Commands.cpp:116
+#: src/app/Commands.cpp:128
+#, c-format
+msgid "Enter this one-use pairing code on the device: %s\n"
+msgstr "请在设备上输入此一次性配对码：%s\n"
+
+#: src/app/Commands.cpp:142
 #, c-format
 msgid "Remote pairing failed: %s\n"
 msgstr "远程配对失败：%s\n"
 
-#: src/app/Commands.cpp:120
+#: src/app/Commands.cpp:146
 #, c-format
 msgid "Remote pairing verified for %s\n"
 msgstr "已验证 %s 的远程配对记录\n"
 
-#: src/app/Commands.cpp:121
+#: src/app/Commands.cpp:147
 #, c-format
 msgid "Remote pairing saved for %s\n"
 msgstr "已保存 %s 的远程配对记录\n"
 
-#: src/app/Commands.cpp:130 src/app/Commands.cpp:153
+#: src/app/Commands.cpp:156 src/app/Commands.cpp:179
 #, c-format
 msgid "Failed to establish session: %s\n"
 msgstr "建立会话失败: %s\n"
 
-#: src/app/Commands.cpp:135
+#: src/app/Commands.cpp:161
 #, c-format
 msgid "Failed to list apps: %s\n"
 msgstr "列 App 失败: %s\n"
 
-#: src/app/Commands.cpp:141
+#: src/app/Commands.cpp:167
 #, c-format
 msgid "Total: %zu\n"
 msgstr "共 %zu 个\n"
 
-#: src/app/Commands.cpp:159
+#: src/app/Commands.cpp:185
 #, c-format
 msgid "Wrote %zu bytes to device clipboard\n"
 msgstr "已写入设备剪贴板：%zu 字节\n"
 
-#: src/app/Commands.cpp:161
+#: src/app/Commands.cpp:187
 #, c-format
 msgid "--copy failed: %s\n"
 msgstr "--copy 写入失败: %s\n"
 
-#: src/app/Commands.cpp:168
+#: src/app/Commands.cpp:194
 #, c-format
 msgid "Device clipboard (%zu bytes): "
 msgstr "设备剪贴板（%zu 字节）： "
 
-#: src/app/Commands.cpp:172
+#: src/app/Commands.cpp:198
 #, c-format
 msgid "--paste failed: %s\n"
 msgstr "--paste 读取失败: %s\n"
 
-#: src/app/Commands.cpp:198
+#: src/app/Commands.cpp:224
 #, c-format
 msgid "--start-app requires a nonempty app name\n"
 msgstr "--start-app 的名字是空的\n"
 
-#: src/app/Commands.cpp:208
+#: src/app/Commands.cpp:234
 #, c-format
 msgid "Failed to find app by name: %s\n"
 msgstr "按名字找 App 失败: %s\n"
 
-#: src/app/Commands.cpp:226
+#: src/app/Commands.cpp:252
 #, c-format
 msgid "No app name starts with %s\n"
 msgstr "没有名字以 %s 开头的 App\n"
 
-#: src/app/Commands.cpp:234 tools/app_launch_probe.cpp:89
+#: src/app/Commands.cpp:260 tools/app_launch_probe.cpp:89
 #, c-format
 msgid "Failed to launch %s: %s\n"
 msgstr "启动 %s 失败: %s\n"
 
-#: src/app/Commands.cpp:237
+#: src/app/Commands.cpp:263
 msgid " (previous instance terminated)"
 msgstr "（已先终止原实例）"
 
-#: src/app/Commands.cpp:237
+#: src/app/Commands.cpp:263
 #, c-format
 msgid "Launched %s%s\n"
 msgstr "已启动 %s%s\n"
@@ -2858,7 +2874,7 @@ msgid "Start CoreDeviceProxy"
 msgstr "启动 CoreDeviceProxy"
 
 #: src/remote/Device.cpp:171 src/remote/Rsd.cpp:202 src/remote/Rsd.cpp:425
-#: src/transport/Usbmux.cpp:270 src/wifi/PairRecord.cpp:344
+#: src/transport/Usbmux.cpp:270 src/wifi/PairRecord.cpp:363
 #: tools/wifi_probe.cpp:353
 msgid " failed: "
 msgstr " 失败: "
@@ -3551,6 +3567,84 @@ msgstr ""
 "（设备拒绝此系统版本：已测试 iOS 27 设备支持实时媒体，已测试 iOS 18 设备拒"
 "绝；截图回退和按键输入可能仍可用，见 docs/coredevice.md §23）"
 
+#: src/remote/WifiPairing.cpp:33 src/remote/WifiPairing.cpp:258
+#: src/remote/WifiPairing.cpp:268
+msgid "Wi-Fi pairing cancelled"
+msgstr "Wi-Fi 配对已取消"
+
+#: src/remote/WifiPairing.cpp:37
+msgid "Wi-Fi pairing timed out"
+msgstr "Wi-Fi 配对超时"
+
+#: src/remote/WifiPairing.cpp:56
+msgid "Cannot configure Wi-Fi pairing socket: "
+msgstr "无法配置 Wi-Fi 配对套接字："
+
+#: src/remote/WifiPairing.cpp:68
+msgid "Wi-Fi pairing socket wait failed: "
+msgstr "等待 Wi-Fi 配对套接字失败："
+
+#: src/remote/WifiPairing.cpp:108
+msgid "Wi-Fi pairing socket I/O failed: "
+msgstr "Wi-Fi 配对套接字读写失败："
+
+#: src/remote/WifiPairing.cpp:112
+msgid "Wi-Fi pairing connection closed"
+msgstr "Wi-Fi 配对连接已关闭"
+
+#: src/remote/WifiPairing.cpp:169
+msgid "Invalid numeric Wi-Fi pairing endpoint"
+msgstr "Wi-Fi 配对端点的数字地址无效"
+
+#: src/remote/WifiPairing.cpp:241
+msgid "Wi-Fi pairing returned an incomplete or unexpected device identity"
+msgstr "Wi-Fi 配对返回的设备身份不完整或与预期不符"
+
+#: src/remote/WifiPairing.cpp:250 src/remote/WifiPairing.cpp:296
+#: src/wifi/PairRecord.cpp:129 src/wifi/PairRecordWindows.cpp:110
+msgid "Pairing record already exists; Wi-Fi pairing will not replace it"
+msgstr "配对记录已存在；Wi-Fi 配对不会替换该记录"
+
+#: src/remote/WifiPairing.cpp:254 src/remote/WifiPairing.cpp:300
+msgid "Cannot inspect the Wi-Fi pairing record path"
+msgstr "无法检查 Wi-Fi 配对记录路径"
+
+#: src/remote/WifiPairing.cpp:263
+msgid "New Wi-Fi pairing record verification failed: "
+msgstr "新 Wi-Fi 配对记录验证失败："
+
+#: src/remote/WifiPairing.cpp:271
+msgid "Cannot save the verified Wi-Fi pairing record: "
+msgstr "无法保存已验证的 Wi-Fi 配对记录："
+
+#: src/remote/WifiPairing.cpp:276 src/remote/WifiPairing.cpp:409
+msgid "Wi-Fi pairing workflow failed before completion"
+msgstr "Wi-Fi 配对流程尚未完成便失败"
+
+#: src/remote/WifiPairing.cpp:284
+msgid ""
+"Wi-Fi pairing requires a PIN display callback and a timeout between 1 and "
+"300000 ms"
+msgstr "Wi-Fi 配对需要 PIN 显示回调，且超时须在 1 至 300000 毫秒之间"
+
+#: src/remote/WifiPairing.cpp:332
+msgid ""
+"Open Settings > Privacy & Security > Developer Mode on the device and select "
+"Pair with this scrctl computer"
+msgstr "请在设备上打开“设置 > 隐私与安全性 > 开发者模式”，然后选择与这台 scrctl 电脑配对"
+
+#: src/remote/WifiPairing.cpp:345
+msgid "Cannot accept Wi-Fi pairing connection: "
+msgstr "无法接受 Wi-Fi 配对连接："
+
+#: src/remote/WifiPairing.cpp:352
+msgid "Cannot identify the Wi-Fi pairing peer address"
+msgstr "无法识别 Wi-Fi 配对对端的地址"
+
+#: src/remote/WifiPairing.cpp:371
+msgid "Reconnecting to verify the new Wi-Fi pairing record"
+msgstr "正在重新连接以验证新 Wi-Fi 配对记录"
+
 #: src/rt/RtpHevc.cpp:104
 msgid "Not an RTP packet"
 msgstr "不是 RTP 包"
@@ -3979,41 +4073,105 @@ msgstr "mDNS 网卡数量已达到上限"
 msgid "mDNS endpoint limit reached"
 msgstr "mDNS 连接地址数量已达到上限"
 
-#: src/wifi/Mdns.cpp:459
+#: src/wifi/Mdns.cpp:460
 msgid "mDNS interface "
 msgstr "mDNS 网卡 "
 
-#: src/wifi/Mdns.cpp:496
+#: src/wifi/Mdns.cpp:532
 msgid "mDNS query name is too long"
 msgstr "mDNS 查询名称过长"
 
-#: src/wifi/Mdns.cpp:515
+#: src/wifi/Mdns.cpp:551
 msgid "mDNS query on interface "
 msgstr "mDNS 查询失败，网卡 "
 
-#: src/wifi/Mdns.cpp:533
+#: src/wifi/Mdns.cpp:569 src/wifi/Mdns.cpp:939
 msgid "mDNS timeout must be between 0 and 60000 ms"
 msgstr "mDNS 扫描时间必须在 0 到 60000 毫秒之间"
 
-#: src/wifi/Mdns.cpp:548
+#: src/wifi/Mdns.cpp:584 src/wifi/Mdns.cpp:924
 msgid "No multicast interface is available for mDNS"
 msgstr "没有可用于 mDNS 的组播网卡"
 
-#: src/wifi/Mdns.cpp:572
+#: src/wifi/Mdns.cpp:608
 msgid "mDNS receive wait: "
 msgstr "等待 mDNS 数据失败："
 
-#: src/wifi/Mdns.cpp:586
+#: src/wifi/Mdns.cpp:622
 msgid "mDNS receive on interface "
 msgstr "接收 mDNS 数据失败，网卡 "
 
-#: src/wifi/Mdns.cpp:600
+#: src/wifi/Mdns.cpp:636
 msgid "mDNS packet limit reached"
 msgstr "mDNS 数据包数量已达到上限"
 
-#: src/wifi/Mdns.cpp:617
+#: src/wifi/Mdns.cpp:653
 msgid "mDNS browse: "
 msgstr "mDNS 扫描失败："
+
+#: src/wifi/Mdns.cpp:674
+msgid "mDNS advertiser identifier must be a single ASCII DNS label"
+msgstr "mDNS 广播器标识符必须是单个 ASCII DNS 标签"
+
+#: src/wifi/Mdns.cpp:677
+msgid "mDNS advertiser requires a listening TCP port and address family"
+msgstr "mDNS 广播器需要正在监听的 TCP 端口及地址族"
+
+#: src/wifi/Mdns.cpp:684
+msgid "mDNS advertiser has an empty or oversized TXT field"
+msgstr "mDNS 广播器的 TXT 字段为空或过长"
+
+#: src/wifi/Mdns.cpp:712
+msgid "mDNS advertiser has an invalid service or target DNS name"
+msgstr "mDNS 广播器的服务或目标 DNS 名称无效"
+
+#: src/wifi/Mdns.cpp:714
+msgid "mDNS advertiser address limit exceeded"
+msgstr "mDNS 广播器地址数量超过上限"
+
+#: src/wifi/Mdns.cpp:760
+msgid "mDNS advertiser has an invalid numeric address"
+msgstr "mDNS 广播器的数字地址无效"
+
+#: src/wifi/Mdns.cpp:763
+msgid "mDNS advertiser has no address for a listening family"
+msgstr "mDNS 广播器没有与监听地址族对应的地址"
+
+#: src/wifi/Mdns.cpp:785
+msgid "mDNS advertiser packet is too large"
+msgstr "mDNS 广播器数据包过大"
+
+#: src/wifi/Mdns.cpp:809
+msgid "mDNS advertiser send: "
+msgstr "mDNS 广播器发送："
+
+#: src/wifi/Mdns.cpp:824
+msgid "mDNS advertiser query has an invalid size"
+msgstr "mDNS 广播器查询大小无效"
+
+#: src/wifi/Mdns.cpp:830
+msgid "mDNS advertiser question limit exceeded"
+msgstr "mDNS 广播器查询问题数量超过上限"
+
+#: src/wifi/Mdns.cpp:839
+msgid "mDNS advertiser query is truncated or has an invalid name"
+msgstr "mDNS 广播器查询被截断或名称无效"
+
+#: src/wifi/Mdns.cpp:844
+msgid "mDNS advertiser query has an invalid DNS name"
+msgstr "mDNS 广播器查询中的 DNS 名称无效"
+
+#: src/wifi/Mdns.cpp:932
+msgid "mDNS advertiser: "
+msgstr "mDNS 广播器："
+
+#: src/wifi/Mdns.cpp:963
+msgid "mDNS advertiser receive wait: "
+msgstr "mDNS 广播器等待接收："
+
+#: src/wifi/Mdns.cpp:976
+msgid "mDNS advertiser receive: "
+msgstr "mDNS 广播器接收："
 
 #: src/wifi/Opack.cpp:91
 msgid "OPACK encoder does not support negative integers"
@@ -4064,81 +4222,81 @@ msgstr " 字节"
 msgid "OPACK decode: "
 msgstr "OPACK 解码后剩余 "
 
-#: src/wifi/PairRecord.cpp:43
+#: src/wifi/PairRecord.cpp:44
 msgid "Hex length must be even"
 msgstr "hex 长度不是偶数"
 
-#: src/wifi/PairRecord.cpp:63
+#: src/wifi/PairRecord.cpp:64
 msgid "Invalid hex character"
 msgstr "十六进制数据包含无效字符"
 
-#: src/wifi/PairRecord.cpp:105 src/wifi/PairRecordWindows.cpp:89
+#: src/wifi/PairRecord.cpp:108 src/wifi/PairRecordWindows.cpp:89
 msgid "Cannot open temporary file "
 msgstr "无法打开临时文件 "
 
-#: src/wifi/PairRecord.cpp:110 src/wifi/PairRecord.cpp:296
+#: src/wifi/PairRecord.cpp:113 src/wifi/PairRecord.cpp:306
 #: src/wifi/PairRecordWindows.cpp:47
 msgid "Failed to set record file permissions"
 msgstr "设置记录文件权限失败"
 
-#: src/wifi/PairRecord.cpp:118 src/wifi/PairRecordWindows.cpp:77
+#: src/wifi/PairRecord.cpp:121 src/wifi/PairRecordWindows.cpp:77
 #: src/wifi/PairRecordWindows.cpp:100
 msgid "Incomplete record file write"
 msgstr "记录文件写入不完整"
 
-#: src/wifi/PairRecord.cpp:123 src/wifi/PairRecordWindows.cpp:109
+#: src/wifi/PairRecord.cpp:130 src/wifi/PairRecordWindows.cpp:111
 msgid "Rename failed"
 msgstr "重命名失败"
 
-#: src/wifi/PairRecord.cpp:134
+#: src/wifi/PairRecord.cpp:142
 msgid "Cannot open "
 msgstr "无法打开 "
 
-#: src/wifi/PairRecord.cpp:141
+#: src/wifi/PairRecord.cpp:149
 msgid "Failed to read pairing record file "
 msgstr "无法读取配对记录文件 "
 
-#: src/wifi/PairRecord.cpp:145
+#: src/wifi/PairRecord.cpp:153
 msgid "Pairing record file too large"
 msgstr "配对记录文件过大"
 
-#: src/wifi/PairRecord.cpp:198
+#: src/wifi/PairRecord.cpp:206
 msgid "Invalid scrctl pairing record header"
 msgstr "scrctl 配对记录头无效"
 
-#: src/wifi/PairRecord.cpp:205
+#: src/wifi/PairRecord.cpp:213
 msgid "Record line is not key=value"
 msgstr "配对记录中的行必须使用 key=value 格式"
 
-#: src/wifi/PairRecord.cpp:216
+#: src/wifi/PairRecord.cpp:224
 msgid "Duplicate pairing record field: "
 msgstr "配对记录中字段重复："
 
-#: src/wifi/PairRecord.cpp:225
+#: src/wifi/PairRecord.cpp:233
 msgid " requires "
 msgstr " 需要 "
 
-#: src/wifi/PairRecord.cpp:225
+#: src/wifi/PairRecord.cpp:233
 msgid "Incorrect field length: "
 msgstr "字段长度无效："
 
-#: src/wifi/PairRecord.cpp:226
+#: src/wifi/PairRecord.cpp:234
 msgid " bytes; got "
 msgstr " 字节，实际 "
 
-#: src/wifi/PairRecord.cpp:253
+#: src/wifi/PairRecord.cpp:261
 msgid "Pairing record peer_identifier must not be empty"
 msgstr "配对记录中的 peer_identifier 不能为空"
 
-#: src/wifi/PairRecord.cpp:271
+#: src/wifi/PairRecord.cpp:279
 msgid "Record missing host_private_key"
 msgstr "配对记录缺少 host_private_key 字段"
 
-#: src/wifi/PairRecord.cpp:286
+#: src/wifi/PairRecord.cpp:296
 msgid "Failed to create directory "
 msgstr "创建目录失败："
 
-#: src/wifi/PairRecord.cpp:344
+#: src/wifi/PairRecord.cpp:363
 msgid "Reading directory "
 msgstr "读取目录 "
 
@@ -4256,6 +4414,82 @@ msgstr "PV-Msg04 的 TLV 数据不完整： "
 #: src/wifi/PairVerify.cpp:173
 msgid "PV-Msg04 response has invalid State (expected 4)"
 msgstr "PV-Msg04 回复的 State 无效（应为 4）"
+
+#: src/wifi/PairableHost.cpp:64
+msgid "Pairable host expected a plain host envelope with the next sequence"
+msgstr "可配对主机需要来自 host 的明文信封，且序号须为下一个序号"
+
+#: src/wifi/PairableHost.cpp:95
+msgid ""
+"Pairable host expected setupManualPairing data with the correct session flag"
+msgstr "可配对主机需要 setupManualPairing 数据及正确的会话标志"
+
+#: src/wifi/PairableHost.cpp:104
+msgid "Pairable host received an invalid pairing state or peer error"
+msgstr "可配对主机收到无效的配对状态或对端错误"
+
+#: src/wifi/PairableHost.cpp:129
+msgid "Pairable host TLV repeated without a valid continuation"
+msgstr "可配对主机的 TLV 重复，且不符合有效续接规则"
+
+#: src/wifi/PairableHost.cpp:158
+msgid "Pairable host M5 is missing a complete signed device identity"
+msgstr "可配对主机的 M5 缺少完整的已签名设备身份"
+
+#: src/wifi/PairableHost.cpp:168
+msgid "Pairable host M5 device signature verification failed"
+msgstr "可配对主机的 M5 设备签名验证失败"
+
+#: src/wifi/PairableHost.cpp:175
+msgid "Pairable host M5 INFO is not a dictionary"
+msgstr "可配对主机的 M5 INFO 不是字典"
+
+#: src/wifi/PairableHost.cpp:181
+msgid "Pairable host M5 INFO has invalid or duplicate keys"
+msgstr "可配对主机的 M5 INFO 含无效或重复的键"
+
+#: src/wifi/PairableHost.cpp:192
+msgid ""
+"Pairable host M5 INFO lacks a valid UDID/altIRK or contradicts the signed "
+"Identifier"
+msgstr ""
+"可配对主机的 M5 INFO 缺少有效的 UDID/altIRK，或与已签名的 Identifier 矛盾"
+
+#: src/wifi/PairableHost.cpp:204
+msgid "Pairable host M5 INFO has invalid device labels"
+msgstr "可配对主机的 M5 INFO 含无效的设备标签"
+
+#: src/wifi/PairableHost.cpp:227
+msgid "Pairable host configuration is incomplete or invalid"
+msgstr "可配对主机的配置不完整或无效"
+
+#: src/wifi/PairableHost.cpp:232
+msgid "Pairable host public key does not match its private key"
+msgstr "可配对主机的公钥与私钥不匹配"
+
+#: src/wifi/PairableHost.cpp:254
+msgid "Pairable host rejected an incompatible or pair-verify handshake"
+msgstr "可配对主机拒绝了不兼容的握手或配对验证握手"
+
+#: src/wifi/PairableHost.cpp:272
+msgid "Pairable host M1 has an unsupported setup method"
+msgstr "可配对主机的 M1 使用了不支持的配对设置方式"
+
+#: src/wifi/PairableHost.cpp:290
+msgid "Pairable host could not generate a full-width SRP challenge"
+msgstr "可配对主机无法生成完整长度的 SRP 挑战"
+
+#: src/wifi/PairableHost.cpp:294
+msgid "Pairable host PIN display was cancelled"
+msgstr "可配对主机的 PIN 显示已取消"
+
+#: src/wifi/PairableHost.cpp:307
+msgid "Pairable host M3 is missing the SRP public key or proof"
+msgstr "可配对主机的 M3 缺少 SRP 公钥或证明"
+
+#: src/wifi/PairableHost.cpp:325
+msgid "Pairable host M5 is missing encrypted identity"
+msgstr "可配对主机的 M5 缺少加密身份"
 
 #: src/wifi/PairingIdentity.cpp:27
 msgid "Identity TLV decode failed: "
@@ -4411,22 +4645,47 @@ msgstr "尚未安装主密钥，无法发送加密帧"
 msgid "This stream does not support waiting for readability"
 msgstr "此数据流不支持等待可读事件"
 
-#: src/wifi/Srp.cpp:113
+#: src/wifi/Srp.cpp:118
 msgid "SRP server public key is empty or exceeds 384 bytes"
 msgstr "SRP 服务端公钥为空或超过 384 字节"
 
-#: src/wifi/Srp.cpp:119 src/wifi/Srp.cpp:143
+#: src/wifi/Srp.cpp:124 src/wifi/Srp.cpp:148 src/wifi/Srp.cpp:242
+#: src/wifi/Srp.cpp:257
 msgid ""
 "SRP private key must be a nonzero hexadecimal integer of at most 3072 bits"
 msgstr "SRP 私钥必须是非零十六进制整数，最多 3072 位"
 
-#: src/wifi/Srp.cpp:156
+#: src/wifi/Srp.cpp:161
 msgid "SRP B is a multiple of N; rejected"
 msgstr "SRP 的 B 是 N 的倍数，拒收"
 
-#: src/wifi/Srp.cpp:196
+#: src/wifi/Srp.cpp:201 src/wifi/Srp.cpp:285 src/wifi/Srp.cpp:353
 msgid "SRP cryptographic operation failed: "
 msgstr "SRP 密码运算失败："
+
+#: src/wifi/Srp.cpp:236
+msgid "SRP salt must contain 1 to 255 bytes"
+msgstr "SRP 盐值必须包含 1 至 255 字节"
+
+#: src/wifi/Srp.cpp:296
+msgid "SRP server requires a new initialized challenge"
+msgstr "SRP 服务端需要一个新初始化的挑战"
+
+#: src/wifi/Srp.cpp:303
+msgid "SRP client public key is empty or exceeds 384 bytes"
+msgstr "SRP 客户端公钥为空或超过 384 字节"
+
+#: src/wifi/Srp.cpp:308
+msgid "SRP client proof must contain 64 bytes"
+msgstr "SRP 客户端证明必须包含 64 字节"
+
+#: src/wifi/Srp.cpp:321
+msgid "SRP A is a multiple of N; rejected"
+msgstr "SRP 的 A 是 N 的倍数；已拒绝"
+
+#: src/wifi/Srp.cpp:343
+msgid "SRP client proof mismatch; pairing aborted"
+msgstr "SRP 客户端证明不匹配；配对已中止"
 
 #: src/wifi/Tlv.cpp:30
 msgid "TLV header truncated"
@@ -7013,6 +7272,9 @@ msgstr "不可用"
 #~ msgid "Create a pairing record over USB or the given Wi-Fi address"
 #~ msgstr "通过 USB 或指定的 Wi-Fi 地址建立配对记录"
 
+#~ msgid "Create or verify a remote pairing record over USB, then exit"
+#~ msgstr "通过 USB 创建或验证远程配对记录，然后退出"
+
 #~ msgid "Crop WxH+X+Y or W:H:X:Y"
 #~ msgstr "裁剪 WxH+X+Y 或 W:H:X:Y"
 
@@ -7077,6 +7339,12 @@ msgstr "不可用"
 
 #~ msgid "No device matches --udid"
 #~ msgstr "未找到与 --udid 匹配的设备"
+
+#~ msgid ""
+#~ "Open Settings > Developer > Paired Computers on the device and select "
+#~ "this scrctl computer"
+#~ msgstr ""
+#~ "请在设备上打开“设置 > 开发者 > 已配对的电脑”，然后选择这台 scrctl 电脑"
 
 #~ msgid ""
 #~ "PCM is read only to measure sample peaks; no local audio playback or "

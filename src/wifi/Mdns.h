@@ -55,7 +55,58 @@ struct BrowseResult {
 /// 超时范围是 0..60 秒；超过范围返回 warning，不进行网络操作。
 BrowseResult browse(const BrowseOptions &options = {});
 
+/// 手机主动发现并连接本机时公布的身份；identifier/authTag 只用于发现，
+/// 不代表认证结果。name/model 为 TXT 值，端口须由调用方先完成 TCP 监听。
+struct HostAdvertisement {
+    /// 同时用作 DNS instance/target 的单个 ASCII label：1..63 个字母/数字/连字符，
+    /// 首尾须为字母或数字；调用方为每次新的配对会话生成 fresh UUID。
+    std::string instance_identifier;
+    std::string name;
+    std::string model;
+    std::string auth_tag;
+    uint16_t port = 0;
+    bool advertise_ipv4 = true;
+    bool advertise_ipv6 = true;
+};
+
+/// 公告固定 _remotepairing-pairable-host._tcp.local. 服务。
+/// DNS instance 首个 label、target 首个 label 与 TXT identifier 使用同一个身份。
+/// 单线程拥有者顺序调用；不创建接收线程或 TCP 连接，不承担配对认证。
+class Advertiser {
+  public:
+    static std::unique_ptr<Advertiser> start(const HostAdvertisement &host, std::string &error);
+    /// 最多等待 timeout_ms（0..60000）；无查询也是成功。调用方用短片段检查取消。
+    /// 回应本机 PTR/SRV/TXT/A/AAAA 查询并周期刷新 TTL=120 秒的公告。
+    bool poll(int timeout_ms, std::string &error);
+    /// 最后尽力发送 TTL=0 goodbye，再关闭本对象拥有的全部 socket。
+    ~Advertiser();
+    Advertiser(const Advertiser &) = delete;
+    Advertiser &operator=(const Advertiser &) = delete;
+
+  private:
+    struct Impl;
+    explicit Advertiser(std::unique_ptr<Impl> impl);
+    std::unique_ptr<Impl> impl_;
+};
+
 namespace detail {
+
+/// 同一接口的报文输入；DNS instance/target 首 label 必须与 host identifier 一致。
+/// 公开仅用于离线验证编码/查询分派，不选择系统 endpoint。
+struct HostRecords {
+    HostAdvertisement host;
+    std::string service_instance;
+    std::string target;
+    std::vector<std::string> addresses;
+};
+struct HostReply {
+    std::vector<uint8_t> packet;
+    bool unicast = false;
+};
+std::vector<uint8_t> host_announcement(const HostRecords &records, uint32_t ttl, std::string &error);
+/// legacy 为源端口不是 5353 的查询；回应保留 query ID/问题并限制 TTL=10。
+std::vector<HostReply> host_query_reply(const HostRecords &records, std::span<const uint8_t> query,
+                                      bool legacy, std::string &error);
 
 /// 扫描器的报文聚合器；单独开放这条内部边界，方便离线验证压缩名称和跨报文关联。
 /// 不缓存到下一次扫描。now 参数只用于本次扫描的 TTL 判断。

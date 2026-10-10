@@ -15,7 +15,8 @@ struct Options {
     /// 本机需要该设备的远程配对记录，无需在无线使用时保持 USB 连接。
     std::string wifi;
     uint16_t wifi_port = 49152; ///< 手动 --wifi 地址的 RemotePairing 端口；发现模式采用 SRV 端口。
-    bool pair = false; ///< --pair：经 USB 建立或验证远程配对记录，随后退出。
+    bool pair = false; ///< USB pairing; with --wifi auto accept phone-initiated PIN pairing.
+    int pairing_timeout_ms = 120000;
     bool repair_pairing = false; ///< --repair-pairing：允许更新被拒绝或缺少设备身份的旧记录。
     std::string record; ///< .mp4 / .mkv 为容器录制，其余路径兼容裸 HEVC
     bool list_devices = false;

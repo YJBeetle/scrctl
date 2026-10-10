@@ -248,6 +248,11 @@ int main() {
               pair.pair && !pair.repair_pairing && pair.serial == "device",
           "USB remote pairing is an explicit standalone command");
     Options repair;
+    Options wifi_pair;
+    check(parse({"scrctl", "--pair", "--wifi", "auto", "--pairing-timeout", "90000"}, wifi_pair) ==
+              ParseResult::Run && wifi_pair.pair && wifi_pair.wifi == "auto" &&
+              wifi_pair.pairing_timeout_ms == 90000,
+          "wireless PIN pairing is a bounded standalone command");
     check(parse({"scrctl", "--pair", "--repair-pairing"}, repair) == ParseResult::Run &&
               repair.pair && repair.repair_pairing,
           "repair requires explicit pairing mode");
@@ -476,6 +481,10 @@ int main() {
         {"--record-orientation", "flip360"},
         {"--discovery-timeout", "10"},
         {"--pair", "--wifi", "10.0.0.1"},
+        {"--pair", "--wifi", "auto", "--repair-pairing"},
+        {"--pair", "--pairing-timeout", "0"},
+        {"--pair", "--pairing-timeout", "300001"},
+        {"--pairing-timeout", "10000"},
         {"--pair", "--list-devices"},
         {"--pair", "--play", "video.hevc"},
         {"--repair-pairing"},

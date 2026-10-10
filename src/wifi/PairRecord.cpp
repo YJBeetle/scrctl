@@ -7,6 +7,7 @@
 #ifdef _WIN32
 #include "wifi/PairRecordWindows.h"
 #else
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
@@ -93,15 +94,17 @@ std::string sanitize(const std::string &udid) {
 
 /// 随机后缀临时文件与目标位于同目录，成功关闭后通过 rename 替换。
 /// POSIX 路径不调用 fsync，成功返回不能作为断电后持久性的保证。
-bool write_file(const std::string &path, std::string_view text, std::string &err) {
+bool write_file(const std::string &path, std::string_view text, std::string &err, bool replace) {
     const auto nonce = random_bytes(8, err);
     if (!nonce) return false;
     const std::string tmp = path + ".tmp." + hex(*nonce);
 #ifdef _WIN32
-    return write_private_record(tmp, path, text, err);
+    return write_private_record(tmp, path, text, err, replace);
 #else
-    std::FILE *f = std::fopen(tmp.c_str(), "wb");
+    const int fd = ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0600);
+    std::FILE *f = fd < 0 ? nullptr : ::fdopen(fd, "wb");
     if (f == nullptr) {
+        if (fd >= 0) { ::close(fd); ::remove(tmp.c_str()); }
         err = SCRCTL_TR("Cannot open temporary file ") + tmp;
         return false;
     }
@@ -119,11 +122,16 @@ bool write_file(const std::string &path, std::string_view text, std::string &err
         ::remove(tmp.c_str());
         return false;
     }
-    if (std::rename(tmp.c_str(), path.c_str()) != 0) {
-        err = SCRCTL_TR("Rename failed");
+    // link publishes the finished private inode exclusively. An existing
+    // filename or symlink wins the race; only replacement mode uses rename.
+    if ((replace ? std::rename(tmp.c_str(), path.c_str()) : ::link(tmp.c_str(), path.c_str())) != 0) {
+        err = !replace && errno == EEXIST
+            ? SCRCTL_TR("Pairing record already exists; Wi-Fi pairing will not replace it")
+            : SCRCTL_TR("Rename failed");
         ::remove(tmp.c_str());
         return false;
     }
+    if (!replace) ::remove(tmp.c_str());
     return true;
 #endif
 }
@@ -274,7 +282,9 @@ std::optional<PairRecord> parse_record(std::string_view text, std::string &err) 
     return record;
 }
 
-bool save_record(const std::string &path, const PairRecord &record, std::string &err) {
+namespace {
+bool save_record_impl(const std::string &path, const PairRecord &record, std::string &err, bool replace) {
+    err.clear();
     const auto parent = std::filesystem::path(path).parent_path();
     const std::string dir = parent.string();
     if (!dir.empty()) {
@@ -299,7 +309,16 @@ bool save_record(const std::string &path, const PairRecord &record, std::string 
 #endif
         }
     }
-    return write_file(path, format_record(record), err);
+    return write_file(path, format_record(record), err, replace);
+}
+} // namespace
+
+bool save_record(const std::string &path, const PairRecord &record, std::string &err) {
+    return save_record_impl(path, record, err, true);
+}
+
+bool save_record_new(const std::string &path, const PairRecord &record, std::string &err) {
+    return save_record_impl(path, record, err, false);
 }
 
 std::optional<PairRecord> load_record(const std::string &path, std::string &err) {
