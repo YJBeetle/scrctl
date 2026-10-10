@@ -3127,3 +3127,8 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   挂在该类 DDI 的开发目录；明确未挂载条目跳过，缺状态 / 路径或错误路径拒绝。
   Classic / Personalized 各补四个负例；对应回归通过，Wi-Fi 只读已有镜像及
   挂载核验在修正后再次通过，没有重新替换设备镜像。
+- 最终代码提交 `bf7e53f12360457727ebfcb0b2e94f5387153ba5` 的
+  [CI 38076884214](https://github.com/YJBeetle/scrctl/actions/runs/38076884214)
+  四组全部通过：macOS、Ubuntu、ASan + UBSan、Windows ARM64 各 73/73。
+  四项新增 DDI 回归均实际执行；Windows 产物安装、依赖记录、打包及上传通过。
+  未下载产物或重复跑设备验证，CI 不代替旧系统及其他平台的实际新装。

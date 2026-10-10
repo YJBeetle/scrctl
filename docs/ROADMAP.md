@@ -13,9 +13,10 @@
 
 ### 1. 平台与真实网络验证
 
-提交 `80a549f` 的 [CI 38043461515](https://github.com/YJBeetle/scrctl/actions/runs/38043461515)
-四组各实际执行 65/65 项并通过；macOS 下载包 25 dylib、Windows 下载包 98 DLL
-及搬移启动已审计。这不代替设备运行或完整第三方源码交付。
+提交 `bf7e53f` 的 [CI 38076884214](https://github.com/YJBeetle/scrctl/actions/runs/38076884214)
+四组各实际执行 73/73 项并通过，包括原生 DDI 的四项新回归；Windows 安装包检查通过。
+此前提交 `80a549f` 的 macOS 下载包 25 dylib、Windows 下载包 98 DLL 及搬移启动
+已审计；本轮没有下载新包重复审计。这不代替设备运行或完整第三方源码交付。
 
 - Linux：Debian 13 / ARM64 已完成构建与离线回归；显式 Wi-Fi 软件解码、
   Wayland 软件渲染窗口、竖横屏鼠标落点、窗口缩放及关闭已通过真机短测。
