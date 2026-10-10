@@ -3005,3 +3005,40 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
 - 产品诊断提交 `30045f5` 的 CI `38057759970` 首次运行成功，macOS、Ubuntu、
   Windows ARM64、ASan/UBSan 四组全部通过；Windows 离线自检包含新的真实 PSK
   隧道断链回归，安装包检查也通过。没有重跑或下载产物作额外重复验证。
+
+## 第一百四十七轮：系统更新后的 DDI 恢复与三平台 USB 短基线
+
+- iPhone14,4 更新至 iOS 27.0.1，用户重插并解锁后，Mac USB 枚举恢复。
+  起流仍立即失败，但原因是 RSD 缺 displayservice：旧 Xcode 26.2 的 17C52 /
+  CoreDevice 506.6 镜像仅提供 8 个 CoreDevice 服务。兼容检查成功并不表示
+  屏幕服务存在；没有把这一阶段计为 USB 媒体断流。
+- 子代理只读对照旧镜像与新版 27A5228h / CoreDevice 642.4，后者包含屏幕、
+  截图、HID、pasteboard 和 devicecontrol。主代理在临时研究环境准备 Cryptex
+  镜像、卸载旧 Personalized 镜像，并经 Apple 个性化签票安装。
+  Xcode 自动重挂旧镜像导致首次安装被拒；用户退出 Xcode 后安装成功，设备
+  确认 `com.apple.MobileAsset.DDI / 27.1.5228.8`。没有替换全局 Xcode、关闭
+  系统保护或给产品增加 Python 依赖，准备步骤见协议记录 §34。
+- 当前产品代码均为 `30045f5`。主代理串行协调单台设备；子代理分别完成 Debian
+  和 Windows 的隔离 Release 产品构建，没有并发手机连接或重复离线回归。
+  三轮均由纯 USB 枚举门控，使用空 XDG_DATA_HOME 排除无线记录回退，无窗口、
+  无音频、无控制，裸 HEVC 录制时限 30 秒。
+- Mac 退出 0，录制 1200537 字节，ffprobe 读取 706 帧；结束后 USB 可枚举。
+  产品末次统计 assembled 695，没有序列缺口、丢片或重启。
+- 首次交给 Windows 时，USB 复合设备代码 10 / ProblemStatus 0xc0000001，
+  纯 usbmux 为空；一次定向 PnP 重启及用户重启 VM 后仍未恢复。Debian 随后的
+  归属切换在 scrctl 启动前发生 RX/TX STALL，虽然 lsusb 和 mux 接口仍存在。
+  这些轮次均未启动媒体，不能计为产品断流或通过。
+- 用户物理重插并直接接入 Debian 后，原 usbmuxd 正常枚举。普通 uid 1000 的
+  当前产品录制退出 0，31.468 秒、2561481 字节，末次 assembled 970；没有
+  序列缺口、丢片、重启或新增 STALL，结束后 USB 可枚举。
+- 从该正常连接切换至 Windows 后枚举恢复。当前产品录制退出 0，3043584 字节，
+  末次 assembled 1268，没有序列缺口、丢片或重启；结束后仍可枚举，Apple
+  composite / mux 驱动均正常。新的 runner 通过持有 Process handle 取得
+  实际退出码，解决旧 runner 返回 null 导致无法判断的问题。
+- 三平台短基线已通过；归属切换异常的根因、长期连接及物理断线自动恢复仍未
+  建立。没有依据本轮通过宣称 transport 恢复策略修复或所有 USB 问题消失。
+  手机最后交回 Mac，纯 USB 可枚举，所有媒体进程已结束。
+- 34 份安全文本已归档至外部 fixture 的 `usb-post-update-20261010`，106683
+  字节；逐文件核对副本摘要，清单 SHA256 为
+  `7571af60b9cf56c319c660f3bc9dbe6d930f8109daf117648d04424aa29a918d`。
+  手机媒体、截图、配对记录和 TSS 票据均未归档。

@@ -3859,3 +3859,50 @@ OrientationControl 现在每次 RPC 独占服务连接：首连接预建，其�
 仅在原来允许自动转屏时 thaw；原来锁定时保留锁定。当前 scrctl 用法应提示先
 关闭竖排方向锁，而非保证完全相同的锁定行为。该结论限定本设备、系统和应用。
 Android 实现依据为本日复核的 [scrcpy Device.rotateDevice](https://github.com/Genymobile/scrcpy/blob/master/server/src/main/java/com/genymobile/scrcpy/device/Device.java)。
+
+## 34. iOS 27.0.1 更新后的开发镜像准备
+
+2026-10-10，iPhone14,4 更新至 iOS 27.0.1，重新插线并解锁后 Mac 纯 USB 枚举、
+lockdown 版本查询和 CoreDevice 隧道均正常。产品的首次起流却立即失败：RSD 有
+76 个服务，其中 8 个 CoreDevice 服务，不包含 displayservice、截图、HID 和
+pasteboard。此时尚未启动媒体，不能把服务缺失当作 USB 断流。
+
+Xcode 26.2 / devicectl 506.6 启用的 DDI 为 17C52，报告 usable / compatible，
+但再次连接仍缺屏幕服务。只读检查该设备对应的镜像后，确认其中恰好只有上述
+8 个 CoreDevice 服务；工具的兼容判断不能证明镜像包含产品需要的能力。
+
+临时研究环境使用 pymobiledevice3 11.26.0，准备 27A5228h / CoreDevice 642.4
+的 Cryptex DDI。其镜像实际包含 17 个 CoreDevice 服务，屏幕、截图、HID、
+pasteboard 和 devicecontrol 的名称与产品使用的一致。所有下载与研究缓存位于
+任务临时目录，没有替换全局 Xcode 镜像，也未给产品增加 Python 依赖。
+
+### 检查和替换
+
+先在研究环境检查已挂镜像与 Cryptex，显式选择设备：
+
+```sh
+pymobiledevice3 mounter list --udid <UDID>
+PYMOBILEDEVICE3_UDID=<UDID> pymobiledevice3 cryptex list --userspace
+```
+
+本次前者显示 Personalized / 17C52 / 506.6，后者为空。先准备新版镜像的
+BuildManifest 和四个 payload，确认完整且能解析，再退出旧 Xcode，避免它在
+卸载后立即重挂旧镜像。只有确认旧挂载类型后才移除对应 DDI：
+
+```sh
+pymobiledevice3 mounter umount-personalized --udid <UDID>
+PYMOBILEDEVICE3_UDID=<UDID> pymobiledevice3 cryptex auto-install \
+    --userspace --restore-dir <已准备的Cryptex镜像目录>
+PYMOBILEDEVICE3_UDID=<UDID> pymobiledevice3 cryptex list --userspace
+```
+
+若已安装的是 Cryptex，按实际 identifier/version 处理；不要套用上述旧镜像卸载
+步骤。`auto-mount` 遇到旧镜像已挂可能直接成功返回，不能把退出 0 当作更新完成。
+下载和安装机制依据为 [固定版本 Cryptex 实现](https://github.com/doronz88/pymobiledevice3/blob/v11.26.0/pymobiledevice3/services/cryptexd.py)
+及 [镜像挂载 CLI](https://github.com/doronz88/pymobiledevice3/blob/v11.26.0/pymobiledevice3/cli/mounter.py)。
+
+本次安装后设备确认 `com.apple.MobileAsset.DDI / 27.1.5228.8`。Mac 的新产品
+连接恢复起流，30 秒纯 USB、无窗口/音频/控制的裸 HEVC 录制退出 0，文件
+1200537 字节，ffprobe 读取 706 帧，1136×2464；结束后纯 USB 仍可枚举。
+产品统计没有序列缺口、丢片或重启。这是更新后的一次短基线，不证明此前故障
+由系统更新造成，也不证明长期稳定或虚拟机转发已经恢复。

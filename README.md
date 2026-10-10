@@ -17,7 +17,7 @@ MP4 / MKV（HEVC 和 AAC-ELD）及裸 Annex-B HEVC。
 | 平台 | 当前范围 |
 | --- | --- |
 | macOS | 有真机连接、镜像、输入和音频记录；本轮验证结果见重构记录 |
-| Linux | Debian ARM64 的构建、离线回归及 Wi-Fi 软件解码、Wayland 窗口、竖横屏鼠标落点、缩放、键盘、Unicode 粘贴、设备按钮和音频路由短测已通过；USB 发生端点 STALL，尚未通过；DDI 初始安装与物理断线仍待验证 |
+| Linux | Debian ARM64 的构建、离线回归及 Wi-Fi 软件解码、Wayland 窗口、竖横屏鼠标落点、缩放、键盘、Unicode 粘贴、设备按钮和音频路由短测已通过；直接重插接入 VM 后 USB 30 秒录制通过，归属切换仍曾出现 STALL；DDI 初始安装与物理断线恢复仍待验证 |
 | Windows | ARM64 构建与离线测试、USB / Wi-Fi 镜像、截图切换及竖横屏鼠标触摸已验证；FFmpeg 真实音乐解码、短时 USB 播放及新版 Wi-Fi 默认、双端、无音频三种行为已确认；无线首次 PIN 配对和独立重连已通过，实际长暂停恢复、USB 持续连接与 USB 初始配对准备待验证，见 [安装说明](docs/WINDOWS.md) |
 
 音频在 macOS 使用 AudioToolbox，Windows / Linux 使用 FFmpeg 的原生 AAC-ELD
@@ -312,6 +312,10 @@ USB 连接通常需要以下设备准备：
 2. 插线后在设备上信任这台电脑。
 3. 挂载与系统版本匹配的个性化开发者磁盘镜像（DDI）。可用 Xcode 的设备管理界面，
    或研究环境中的 `pymobiledevice3 mounter auto-mount`；scrctl 当前不负责挂载。
+
+系统更新后需要重新检查 DDI。iOS 27.0.1 实测中，旧 Xcode 26.2 的 17C52
+镜像仍被报告为可用，但不提供屏幕、截图和 HID 服务。改用新版 Cryptex DDI 后
+恢复起流；具体检查和替换步骤见 [开发镜像准备](docs/coredevice.md#34-ios-2701-更新后的开发镜像准备)。
 
 DDI 会影响 `com.apple.coredevice.*` 服务是否出现在目录中。服务已出现也不保证某个
 feature 可用：已有 iPadOS 18.7.8 记录中，设备拒绝实时媒体流并要求 iOS 27.0，

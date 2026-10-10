@@ -409,3 +409,20 @@ KeyQ 按下、最终文本 `q` 和 KeyQ 抬起，HTTP 与截图一致；Mac 辅�
 全程手机 USB 保留在 Mac，Windows 使用 Wi-Fi；未做拔线对照或改变防火墙规则。
 Windows USB 初始配对、DDI 准备、持续 USB 连接及长暂停音频恢复仍保留原验证边界。
 安全文本收录于第七份 fixture 归档，详见 [重构记录](REFACTOR.md)。
+
+## iOS 27.0.1 更新后的 USB 短测（2026-10-10）
+
+手机更新后由 Mac 准备新版 Cryptex DDI，见
+[开发镜像准备](coredevice.md#34-ios-2701-更新后的开发镜像准备)。第一次转交 Windows
+出现 USB 复合设备代码 10，ProblemStatus 为 0xc0000001；此时 usbmux 枚举为空，
+没有启动 scrctl 媒体。定向 PnP 重新初始化和用户重启 VM 均未立即恢复。
+
+用户物理重插、直接接入 Debian 并完成正常 USB 录制后，再转交 Windows，USB
+枚举与 Apple composite / mux 驱动恢复正常。隔离构建的当前 `30045f5` 产品使用
+空 XDG_DATA_HOME 排除无线记录回退，进行一次 30 秒裸 HEVC 录制，无窗口、
+无音频、无控制。退出码 0，3043584 字节；末次 assembled 1268，序列缺口、
+丢片和重启均为 0。结束后纯 USB 仍可枚举，手机随后交回 Mac。
+
+这次通过的是更新后的一轮 USB 短基线。尚未确定归属切换故障的根因，也未覆盖
+长期运行、物理断线自动恢复或 Windows 独立完成 DDI 初始准备；不再把驱动
+“设备重启成功”的返回值当作连接恢复证据。
