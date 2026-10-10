@@ -339,8 +339,9 @@ void epoch_and_terminal(const Directory& directory, bool terminal) {
     ++sequence; script.enqueue(rtp(sequence, 2400, Bytes{0x02,0x01,0x80,0x00}, true));
     check(wait([&] { return script.start_count() >= 2; }), "loss wait rebuilds the actual video session");
     if (terminal) {
-        check(wait([&] { return !pump->capture_error().empty(); }) && !pump->wait_ready(0) &&
-              pump->video_unusable() && !pump->reviving(),
+        // 错误与恢复标记由 worker 分阶段发布；在原两秒预算内等待完整终态。
+        check(wait([&] { return !pump->capture_error().empty() && !pump->wait_ready(0) &&
+                               pump->video_unusable() && !pump->reviving(); }),
               "accepted-invalid recovery exposes a sticky terminal error instead of waiting forever");
         std::this_thread::sleep_for(1150ms);
         check(script.start_count() == 2, "accepted-invalid worker stops and never performs the ordinary one-second retry");
