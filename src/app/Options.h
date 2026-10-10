@@ -23,10 +23,13 @@ struct Options {
     std::optional<RecordFormat> record_format; ///< 显式格式覆盖扩展名；只用于录制。
     bool list_devices = false;
     bool download_ddi = false; ///< 下载镜像；显式选择设备时只读型号/系统，不安装。
+    bool install_ddi = false; ///< 读取实际设备型号/系统，下载并原生安装 DDI。
+    bool replace_ddi = false; ///< 显式允许替换目标设备当前挂载的 DDI。
     std::string ddi_directory; ///< 缓存根目录；镜像按固定版本存入子目录。
     std::string ddi_system_version; ///< 显式 ProductVersion；不连接设备。
     std::string ddi_product_type; ///< 显式产品型号，用于 manifest 身份预筛。
     int ddi_download_timeout = 300; ///< 整次下载预算，单位秒。
+    int ddi_install_timeout = 300; ///< 整次设备安装预算，单位秒。
     int discovery_timeout_ms = 3000; ///< --list-devices 的无线扫描时限；0 只列 usbmux
     bool no_control = false; ///< --no-control：关闭输入控制
     /// 任意一个选定的修饰键按下时启用窗口快捷键；默认与 scrcpy 一致。

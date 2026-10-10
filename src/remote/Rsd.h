@@ -92,6 +92,7 @@ public:
 
     [[nodiscard]] net::TcpStream &tcp() { return *tcp_; }
     [[nodiscard]] bool is_xpc() const { return channel_ != nullptr; }
+    [[nodiscard]] Channel *channel() { return channel_.get(); }
 
     /// 处理 HTTP/2 PING、WINDOW_UPDATE 等控制帧；读超时仍返回 true。
     /// false 表示连接或协议处理失败，不表示本轮没有业务更新。

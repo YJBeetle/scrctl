@@ -277,6 +277,130 @@ std::optional<Usbmux> Usbmux::open(std::string &err) {
 #endif
 }
 
+std::optional<Usbmux> Usbmux::open_for_service(std::chrono::milliseconds timeout,
+        const std::function<bool()> &cancelled, std::string &err) {
+    err.clear();
+    DiscoveryBudget budget(timeout, cancelled);
+    auto fail = [&]() -> std::optional<Usbmux> {
+        if (budget.status == UsbmuxDiscoveryStatus::cancelled) err = SCRCTL_TR("DDI service connection was cancelled");
+        else if (budget.status == UsbmuxDiscoveryStatus::timed_out) err = SCRCTL_TR("DDI service connection timed out");
+        return {};
+    };
+    if (!budget.active() || !initialize_sockets(err)) return fail();
+#ifdef _WIN32
+    sockaddr_in address{};
+    address.sin_family = AF_INET; address.sin_addr.s_addr = htonl(INADDR_LOOPBACK); address.sin_port = htons(27015);
+    Socket socket(::socket(AF_INET, SOCK_STREAM, 0));
+    u_long mode = 1;
+    if (!socket.valid() || ::ioctlsocket(socket.fd(), FIONBIO, &mode) != 0) {
+#else
+    sockaddr_un address{}; address.sun_family = AF_UNIX;
+    std::strncpy(address.sun_path, socket_path().c_str(), sizeof(address.sun_path) - 1);
+    Socket socket(::socket(AF_UNIX, SOCK_STREAM, 0));
+    const int flags = socket.valid() ? ::fcntl(socket.fd(), F_GETFL, 0) : -1;
+    if (flags < 0 || ::fcntl(socket.fd(), F_SETFL, flags | O_NONBLOCK) != 0) {
+#endif
+        err = SCRCTL_TR("Cannot create nonblocking DDI usbmux connection"); return fail();
+    }
+    const auto fd = socket.fd();
+    if (::connect(fd, reinterpret_cast<sockaddr *>(&address), sizeof(address)) != 0) {
+        const auto code = socket_error();
+        if (!socket_connect_pending(code) && code != kSocketInterrupted) {
+            err = socket_error_message(code); return fail();
+        }
+        if (!budget.wait(fd, true, err)) return fail();
+        int code2 = 0; socklen_t length = sizeof(code2);
+        if (::getsockopt(fd, SOL_SOCKET, SO_ERROR, reinterpret_cast<char *>(&code2), &length) != 0 || code2) {
+            err = socket_error_message(code2 == 0 ? socket_error() : code2); return fail();
+        }
+    }
+    if (!budget.active()) return fail();
+#ifdef _WIN32
+    mode = 0;
+    if (::ioctlsocket(fd, FIONBIO, &mode) != 0) {
+#else
+    if (::fcntl(fd, F_SETFL, flags) != 0) {
+#endif
+        err = SCRCTL_TR("Cannot restore blocking DDI usbmux connection"); return fail();
+    }
+    Usbmux mux; mux.sock_ = std::move(socket); return mux;
+}
+
+bool Usbmux::round_trip_for_service(const plist::Value &req, plist::Value &reply,
+        std::chrono::milliseconds timeout, const std::function<bool()> &cancelled, std::string &err) {
+    err.clear();
+    DiscoveryBudget budget(timeout, cancelled);
+    auto fail = [&]() -> bool {
+        if (budget.status == UsbmuxDiscoveryStatus::cancelled) err = SCRCTL_TR("DDI service connection was cancelled");
+        else if (budget.status == UsbmuxDiscoveryStatus::timed_out) err = SCRCTL_TR("DDI service connection timed out");
+        sock_.close(); return false;
+    };
+    if (!budget.active() || !sock_.valid()) return fail();
+    const auto fd = sock_.fd();
+#ifdef _WIN32
+    u_long mode = 1;
+    if (::ioctlsocket(fd, FIONBIO, &mode) != 0) {
+#else
+    const int flags = ::fcntl(fd, F_GETFL, 0);
+    if (flags < 0 || ::fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0) {
+#endif
+        err = SCRCTL_TR("Cannot configure nonblocking DDI usbmux connection"); return fail();
+    }
+    auto body = plist::write(req); body += '\0';
+    uint8_t header[kHeaderLen];
+    put_u32_le(header, static_cast<uint32_t>(kHeaderLen + body.size()));
+    put_u32_le(header + 4, kProtoVersion); put_u32_le(header + 8, kMsgPlist); put_u32_le(header + 12, tag_++);
+    if (!budget.transfer(fd, header, sizeof(header), true, err) ||
+        !budget.transfer(fd, body.data(), body.size(), true, err) ||
+        !budget.transfer(fd, header, sizeof(header), false, err)) return fail();
+    const auto total = get_u32_le(header);
+    if (total < kHeaderLen || total - kHeaderLen > kMaxPayload) {
+        err = SCRCTL_TR("Invalid mux frame length: ") + std::to_string(total); return fail();
+    }
+    std::vector<uint8_t> payload(total - kHeaderLen);
+    if (!budget.transfer(fd, payload.data(), payload.size(), false, err)) return fail();
+    while (!payload.empty() && payload.back() == 0) payload.pop_back();
+    auto parsed = plist::parse(std::string_view(reinterpret_cast<const char *>(payload.data()), payload.size()));
+    if (!parsed || !parsed->is_dict()) { err = SCRCTL_TR("DDI usbmux response is not a plist dictionary"); return fail(); }
+    reply = std::move(*parsed);
+    if (!budget.active()) return fail();
+#ifdef _WIN32
+    mode = 0;
+    if (::ioctlsocket(fd, FIONBIO, &mode) != 0) {
+#else
+    if (::fcntl(fd, F_SETFL, flags) != 0) {
+#endif
+        err = SCRCTL_TR("Cannot restore blocking DDI usbmux connection"); return fail();
+    }
+    return true;
+}
+
+std::optional<Socket> Usbmux::connect_for_service(uint32_t device_id, uint16_t port,
+        std::chrono::milliseconds timeout, const std::function<bool()> &cancelled, std::string &err) {
+    if (!port) { err = SCRCTL_TR("DDI usbmux service port is invalid"); return {}; }
+    auto req = base_request("Connect"); req.set("DeviceID", plist::Value::Int(device_id));
+    req.set("PortNumber", plist::Value::Int(htons(port)));
+    plist::Value reply;
+    if (!round_trip_for_service(req, reply, timeout, cancelled, err)) return {};
+    const auto *number = reply.find("Number");
+    if (!number || !number->is_int() || number->integer != 0) {
+        err = SCRCTL_TR("DDI usbmux Connect was rejected"); sock_.close(); return {};
+    }
+    return Socket(sock_.release());
+}
+
+bool Usbmux::read_pair_record_for_service(std::string_view udid, std::vector<uint8_t> &out,
+        std::chrono::milliseconds timeout, const std::function<bool()> &cancelled, std::string &err) {
+    auto req = base_request("ReadPairRecord"); req.set("PairRecordID", plist::Value::Str(std::string(udid)));
+    plist::Value reply;
+    if (!round_trip_for_service(req, reply, timeout, cancelled, err)) return false;
+    const auto *data = reply.find("PairRecordData");
+    if (!data || data->kind != plist::Kind::Data || data->data.empty()) {
+        err = SCRCTL_TR("ReadPairRecord response missing PairRecordData"); return false;
+    }
+    out = data->data; return true;
+}
+
 Usbmux::Usbmux(Usbmux &&other) noexcept : sock_(std::move(other.sock_)), tag_(other.tag_) {
     other.tag_ = 0;
 }

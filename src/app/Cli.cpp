@@ -87,6 +87,15 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.add_flag("--download-ddi", o.download_ddi,
                  SCRCTL_N_("Download and verify a DDI; -s or --wifi reads the target OS/model; does not install"))
         ->disable_flag_override();
+    app.add_flag("--install-ddi", o.install_ddi,
+                 SCRCTL_N_("Detect the selected device, download its DDI and install it natively"))
+        ->disable_flag_override()->excludes("--download-ddi");
+    app.add_flag("--replace-ddi", o.replace_ddi,
+                 SCRCTL_N_("Explicitly replace the selected device's mounted DDI; requires --install-ddi"))
+        ->disable_flag_override()->needs("--install-ddi");
+    app.add_option("--ddi-install-timeout", o.ddi_install_timeout,
+                   SCRCTL_N_("Total DDI install timeout in seconds (1..3600); default: 300"))
+        ->check(CLI::Range(1, 3600))->needs("--install-ddi");
     app.add_option("--ddi-system-version", o.ddi_system_version,
                    SCRCTL_N_("Target iOS/iPadOS ProductVersion for an offline DDI download, e.g. 18.7.8"))
         ->needs("--download-ddi");
@@ -94,11 +103,10 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
                    SCRCTL_N_("Target product model for manifest checking, e.g. iPad11,2; requires --ddi-system-version"))
         ->needs("--ddi-system-version");
     app.add_option("--ddi-directory", o.ddi_directory,
-                   SCRCTL_N_("DDI cache root directory; defaults to the platform user cache"))
-        ->needs("--download-ddi");
+                   SCRCTL_N_("DDI cache root directory; defaults to the platform user cache"));
     app.add_option("--ddi-download-timeout", o.ddi_download_timeout,
                    SCRCTL_N_("Total DDI download timeout in seconds (1..3600); default: 300"))
-        ->check(CLI::Range(1, 3600))->needs("--download-ddi");
+        ->check(CLI::Range(1, 3600));
     app.add_option("--discovery-timeout", o.discovery_timeout_ms,
                    SCRCTL_N_("Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"))
         ->check(CLI::Range(0, 60000))->needs("--list-devices");
@@ -192,17 +200,23 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         if (o.wifi == "auto" && app.count("--wifi-port")) {
             throw CLI::ValidationError("--wifi-port", SCRCTL_TR("Use a manual LAN address; auto uses discovered SRV ports"));
         }
-        if (o.download_ddi) {
-            // 独立下载可只读检测目标设备，不接受会被静默忽略的媒体、输入或配对参数。
+        if (!o.download_ddi && !o.install_ddi &&
+            (app.count("--ddi-directory") || app.count("--ddi-download-timeout"))) {
+            throw CLI::ValidationError("--ddi-directory/--ddi-download-timeout", SCRCTL_TR(
+                "Requires --download-ddi or --install-ddi"));
+        }
+        if (o.download_ddi || o.install_ddi) {
+            // DDI 是独立命令，不接受会被静默忽略的媒体、输入或配对参数。
             for (const auto *option : app.get_options()) {
                 if (option->count() == 0) continue;
                 const auto &name = option->get_name();
                 if (name != "--download-ddi" && name != "--ddi-directory" &&
+                    name != "--install-ddi" && name != "--replace-ddi" && name != "--ddi-install-timeout" &&
                     name != "--ddi-download-timeout" && name != "--lang" &&
                     name != "--ddi-system-version" && name != "--ddi-product-type" &&
                     name != "--serial" && name != "--wifi" && name != "--wifi-port") {
-                    throw CLI::ValidationError("--download-ddi", SCRCTL_TR(
-                        "Use only DDI download, device selection and language options with this standalone command"));
+                    throw CLI::ValidationError(o.install_ddi ? "--install-ddi" : "--download-ddi", SCRCTL_TR(
+                        "Use only DDI, device selection and language options with this standalone command"));
                 }
             }
             if (app.count("--ddi-system-version")) {

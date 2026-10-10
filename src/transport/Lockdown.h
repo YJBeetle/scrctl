@@ -30,9 +30,13 @@ public:
     /// 完整建立：连 usbmuxd -> 读配对记录 -> Connect(62078) -> StartSession -> TLS。
     static std::optional<Lockdown> establish(uint32_t device_id, std::string_view udid,
                                              std::string &err);
+    static std::optional<Lockdown> establish_bounded(uint32_t device_id, std::string_view udid,
+        std::chrono::milliseconds timeout, const std::function<bool()> &cancelled, std::string &err);
 
     /// 发一个 lockdown 请求并等回复。自动补 Label 字段。
     bool request(const plist::Value &req, plist::Value &reply, std::string &err);
+    bool request_bounded(const plist::Value &, plist::Value &, std::chrono::milliseconds timeout,
+        const std::function<bool()> &cancelled, std::string &err);
 
     /// 起服务并返回可 Connect 的端口。
     ///
@@ -56,6 +60,9 @@ public:
 
     [[nodiscard]] bool secure() const { return tls_.valid(); }
     [[nodiscard]] const std::string &session_id() const { return session_id_; }
+    // Interrupt an in-flight I/O without transferring ownership. The caller
+    // must join its watchdog before moving or destroying this session.
+    void interrupt();
 
 private:
     Socket sock_;
@@ -64,6 +71,7 @@ private:
     std::string host_id_;
     std::string system_buid_;
     std::string session_id_;
+    bool bounded_io_ = false;
 };
 
 }  // namespace scrctl::transport

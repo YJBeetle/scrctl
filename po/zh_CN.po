@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-11 01:07+0800\n"
+"POT-Creation-Date: 2026-10-11 02:20+0800\n"
 "PO-Revision-Date: 2026-10-09 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -19,7 +19,8 @@ msgid ""
 "table)\n"
 msgstr "可见区 %ux%u -> %dx%d（设备未报告尺寸，使用机型表）\n"
 
-#: src/app/Application.cpp:82 src/app/Commands.cpp:139 src/app/Commands.cpp:253
+#: src/app/Application.cpp:82 src/app/Commands.cpp:140 src/app/Commands.cpp:149
+#: src/app/Commands.cpp:263
 #, c-format
 msgid "SDL initialization failed: %s\n"
 msgstr "SDL 初始化失败: %s\n"
@@ -405,117 +406,130 @@ msgid ""
 msgstr "下载并校验 DDI；-s 或 --wifi 读取目标系统和机型；不执行安装"
 
 #: src/app/Cli.cpp:91
+msgid "Detect the selected device, download its DDI and install it natively"
+msgstr "检测选定设备、下载适用 DDI 并原生安装"
+
+#: src/app/Cli.cpp:94
+msgid ""
+"Explicitly replace the selected device's mounted DDI; requires --install-ddi"
+msgstr "显式替换选定设备已挂载的 DDI；需要 --install-ddi"
+
+#: src/app/Cli.cpp:97
+msgid "Total DDI install timeout in seconds (1..3600); default: 300"
+msgstr "DDI 安装总超时秒数（1..3600）；默认：300"
+
+#: src/app/Cli.cpp:100
 msgid ""
 "Target iOS/iPadOS ProductVersion for an offline DDI download, e.g. 18.7.8"
 msgstr "离线下载 DDI 的目标 iOS/iPadOS 系统版本，例如 18.7.8"
 
-#: src/app/Cli.cpp:94
+#: src/app/Cli.cpp:103
 msgid ""
 "Target product model for manifest checking, e.g. iPad11,2; requires --ddi-"
 "system-version"
 msgstr "用于清单校验的目标机型，例如 iPad11,2；需要 --ddi-system-version"
 
-#: src/app/Cli.cpp:97
+#: src/app/Cli.cpp:106
 msgid "DDI cache root directory; defaults to the platform user cache"
 msgstr "DDI 缓存根目录；默认使用平台用户缓存"
 
-#: src/app/Cli.cpp:100
+#: src/app/Cli.cpp:108
 msgid "Total DDI download timeout in seconds (1..3600); default: 300"
 msgstr "DDI 下载总超时秒数（1..3600）；默认 300"
 
-#: src/app/Cli.cpp:103
+#: src/app/Cli.cpp:111
 msgid ""
 "Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"
 msgstr "无线设备扫描时间，单位毫秒（0..60000）；0 表示只列出 usbmux 设备"
 
-#: src/app/Cli.cpp:105
+#: src/app/Cli.cpp:113
 msgid "Disable input control"
 msgstr "关闭输入控制"
 
-#: src/app/Cli.cpp:108
+#: src/app/Cli.cpp:116
 msgid "List device apps"
 msgstr "列出设备 App"
 
-#: src/app/Cli.cpp:109
+#: src/app/Cli.cpp:117
 msgid "Show version"
 msgstr "显示版本"
 
-#: src/app/Cli.cpp:110
+#: src/app/Cli.cpp:118
 msgid "Desktop fullscreen"
 msgstr "桌面全屏"
 
-#: src/app/Cli.cpp:111
+#: src/app/Cli.cpp:119
 msgid "Keep window on top"
 msgstr "窗口置顶"
 
-#: src/app/Cli.cpp:112
+#: src/app/Cli.cpp:120
 msgid "Borderless window"
 msgstr "无边框窗口"
 
-#: src/app/Cli.cpp:113
+#: src/app/Cli.cpp:121
 msgid "Prevent local screen sleep while running"
 msgstr "运行期间禁止本机息屏"
 
-#: src/app/Cli.cpp:114
+#: src/app/Cli.cpp:122
 msgid "Do not start audio stream"
 msgstr "不启动音频流"
 
-#: src/app/Cli.cpp:116
+#: src/app/Cli.cpp:124
 msgid "Keep audio playing on the phone while forwarding it to the computer"
 msgstr "转发音频到电脑，同时保留手机播放"
 
-#: src/app/Cli.cpp:119
+#: src/app/Cli.cpp:127
 msgid ""
 "Disable computer audio playback; capture audio only when recording to MP4 or "
 "MKV"
 msgstr "关闭电脑音频播放；仅录制 MP4 或 MKV 时采集音频"
 
-#: src/app/Cli.cpp:120
+#: src/app/Cli.cpp:128
 msgid "Do not start video stream"
 msgstr "不采集视频"
 
-#: src/app/Cli.cpp:122
+#: src/app/Cli.cpp:130
 msgid "Disable video display; keep encoded video when recording"
 msgstr "不显示视频；录制时仍接收编码视频"
 
-#: src/app/Cli.cpp:125
+#: src/app/Cli.cpp:133
 msgid ""
 "Disable computer video and audio playback; keep selected recording tracks"
 msgstr "不在电脑播放视频或音频；录制时保留所选轨道"
 
-#: src/app/Cli.cpp:126
+#: src/app/Cli.cpp:134
 msgid "Run without a window"
 msgstr "无窗口运行"
 
-#: src/app/Cli.cpp:127
+#: src/app/Cli.cpp:135
 msgid "Use platform hardware decoder; default: software"
 msgstr "使用平台硬件解码，默认软件解码"
 
-#: src/app/Cli.cpp:128
+#: src/app/Cli.cpp:136
 msgid "Print input coordinates"
 msgstr "打印输入坐标"
 
-#: src/app/Cli.cpp:129
+#: src/app/Cli.cpp:137
 msgid "Add tunnel diagnostics to --stats"
 msgstr "在 --stats 中增加隧道网络诊断"
 
-#: src/app/Cli.cpp:130
+#: src/app/Cli.cpp:138
 msgid "Print statistics every second"
 msgstr "每秒打印统计"
 
-#: src/app/Cli.cpp:131
+#: src/app/Cli.cpp:139
 msgid "Read device clipboard; with --copy, read back after writing"
 msgstr "读取设备剪贴板；与 --copy 同用时写后读回"
 
-#: src/app/Cli.cpp:134
+#: src/app/Cli.cpp:142
 msgid "Window horizontal position; integer or auto (default)"
 msgstr "窗口横坐标：整数或 auto（默认）"
 
-#: src/app/Cli.cpp:136
+#: src/app/Cli.cpp:144
 msgid "Window vertical position; integer or auto (default)"
 msgstr "窗口纵坐标：整数或 auto（默认）"
 
-#: src/app/Cli.cpp:138
+#: src/app/Cli.cpp:146
 msgid ""
 "Shortcut modifiers, separated by commas: lctrl, rctrl, lalt, ralt, lsuper, "
 "rsuper; default: lalt,lsuper"
@@ -523,31 +537,31 @@ msgstr ""
 "快捷键修饰键，用逗号分隔：lctrl、rctrl、lalt、ralt、lsuper、rsuper；默认 "
 "lalt,lsuper"
 
-#: src/app/Cli.cpp:139
+#: src/app/Cli.cpp:147
 msgid "Window width; 0 for automatic"
 msgstr "窗口宽度，0 为自动"
 
-#: src/app/Cli.cpp:140
+#: src/app/Cli.cpp:148
 msgid "Window height; 0 for automatic"
 msgstr "窗口高度，0 为自动"
 
-#: src/app/Cli.cpp:141
+#: src/app/Cli.cpp:149
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr "运行秒数，0 为不限"
 
-#: src/app/Cli.cpp:143
+#: src/app/Cli.cpp:151
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr "音频缓冲毫秒数，默认 50，上限 1000"
 
-#: src/app/Cli.cpp:145
+#: src/app/Cli.cpp:153
 msgid "Exit after N frames; 0 for unlimited"
 msgstr "处理 N 帧后退出，0 为不限"
 
-#: src/app/Cli.cpp:147
+#: src/app/Cli.cpp:155
 msgid "Finite positive scale; default: fit screen"
 msgstr "有限正数缩放比例，默认自动适应屏幕"
 
-#: src/app/Cli.cpp:165
+#: src/app/Cli.cpp:173
 msgid ""
 "Display and recording orientation: 0/90/180/270 or flip0/flip90/flip180/"
 "flip270; recording cannot flip; auto changes display only"
@@ -555,7 +569,7 @@ msgstr ""
 "显示和录制方向：0/90/180/270 或 flip0/flip90/flip180/flip270；录制不支持翻"
 "转，auto 只设置显示"
 
-#: src/app/Cli.cpp:169
+#: src/app/Cli.cpp:177
 msgid ""
 "Display orientation: auto, 0/90/180/270 or flip0/flip90/flip180/flip270; "
 "flip horizontally before clockwise rotation"
@@ -563,92 +577,96 @@ msgstr ""
 "显示方向：auto、0/90/180/270 或 flip0/flip90/flip180/flip270；先水平翻转，再"
 "顺时针旋转"
 
-#: src/app/Cli.cpp:173
+#: src/app/Cli.cpp:181
 msgid ""
 "Clockwise MP4/MKV recording rotation: 0/90/180/270; default: 0; display is "
 "unchanged"
 msgstr "顺时针旋转 MP4/MKV 录制：0/90/180/270，默认 0；不改变显示"
 
-#: src/app/Cli.cpp:176
+#: src/app/Cli.cpp:184
 msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
 msgstr "裁剪显示像素：WxH+X+Y 或 W:H:X:Y；不改变录制内容"
 
-#: src/app/Cli.cpp:178
+#: src/app/Cli.cpp:186
 msgid "Background color: RGB or RRGGBB, with optional #"
 msgstr "背景色：RGB 或 RRGGBB，可带 # 前缀"
 
-#: src/app/Cli.cpp:179
+#: src/app/Cli.cpp:187
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr "第 N 帧回读窗口为 BMP：N FILE（需要窗口）"
 
-#: src/app/Cli.cpp:190
+#: src/app/Cli.cpp:198
 msgid "Requires a nonempty LAN address or auto"
 msgstr "需要非空局域网地址或 auto"
 
-#: src/app/Cli.cpp:193
+#: src/app/Cli.cpp:201
 msgid "Use a manual LAN address; auto uses discovered SRV ports"
 msgstr "用于手动指定的局域网地址；auto 使用广播的 SRV 端口"
 
-#: src/app/Cli.cpp:205
-msgid ""
-"Use only DDI download, device selection and language options with this "
-"standalone command"
-msgstr "此独立命令只能使用 DDI 下载、设备选择和语言选项"
+#: src/app/Cli.cpp:206
+msgid "Requires --download-ddi or --install-ddi"
+msgstr "需要 --download-ddi 或 --install-ddi"
 
-#: src/app/Cli.cpp:211
+#: src/app/Cli.cpp:219
+msgid ""
+"Use only DDI, device selection and language options with this standalone "
+"command"
+msgstr "此独立命令只接受 DDI、设备选择和语言选项"
+
+#: src/app/Cli.cpp:225
 msgid ""
 "Choose device detection with -s/--wifi or an explicit OS/model; do not "
 "combine them"
 msgstr "请选择 -s/--wifi 设备检测或显式系统版本与机型，不能同时使用"
 
-#: src/app/Cli.cpp:221
+#: src/app/Cli.cpp:235
 msgid "Requires a nonempty device identifier"
 msgstr "需要非空设备标识"
 
-#: src/app/Cli.cpp:227
+#: src/app/Cli.cpp:241
 msgid "Requires a nonempty directory path"
 msgstr "需要非空目录路径"
 
-#: src/app/Cli.cpp:232 src/app/LiveSource.cpp:82
+#: src/app/Cli.cpp:246 src/app/LiveSource.cpp:82
 msgid "Requires a nonempty recording file"
 msgstr "需要非空的录制文件路径"
 
-#: src/app/Cli.cpp:241
+#: src/app/Cli.cpp:255
 msgid ""
 "Audio capture is disabled; --audio-dup requires playback or MP4/MKV recording"
 msgstr "音频采集已关闭；--audio-dup 需要电脑播放或 MP4/MKV 音轨录制"
 
-#: src/app/Cli.cpp:247
+#: src/app/Cli.cpp:261
 msgid ""
 "File playback requires video; incompatible with video playback disable "
 "options"
 msgstr "文件播放需要视频，不能同时指定关闭视频播放的选项"
 
-#: src/app/Cli.cpp:255
+#: src/app/Cli.cpp:269
 msgid "Audio-only recording requires MP4 or MKV; raw HEVC cannot contain audio"
 msgstr "仅录音频需要使用 MP4 或 MKV；裸 HEVC 无法保存音频"
 
-#: src/app/Cli.cpp:258
+#: src/app/Cli.cpp:272
 msgid "Recording requires at least one enabled audio or video track"
 msgstr "录制需要至少启用音频或视频中的一项"
 
-#: src/app/Cli.cpp:261 src/app/LiveSource.cpp:97
+#: src/app/Cli.cpp:275 src/app/LiveSource.cpp:97
 msgid "Recording orientation requires a video track"
 msgstr "录制方向需要视频轨道"
 
-#: src/app/Cli.cpp:266
+#: src/app/Cli.cpp:280
 msgid ""
 "Frame counting, hardware decoding, fallback tests and screenshots require "
 "video capture"
 msgstr "按帧计数、硬件解码、降级测试和截图需要采集视频"
 
-#: src/app/Cli.cpp:270 src/app/LiveSource.cpp:119
+#: src/app/Cli.cpp:284 src/app/LiveSource.cpp:119
 msgid ""
 "Container recording requires live video; screenshot polling cannot be "
 "recorded"
 msgstr "容器录制需要实时视频流，不能录制截图轮询"
 
-#: src/app/Cli.cpp:274
+#: src/app/Cli.cpp:288
 msgid ""
 "Recording does not support flipping; use --display-orientation for display-"
 "only flipping or reset --record-orientation to a rotation"
@@ -656,239 +674,289 @@ msgstr ""
 "录制不支持翻转；只翻转显示请使用 --display-orientation，或在后面用 --record-"
 "orientation 指定旋转角度"
 
-#: src/app/Cli.cpp:278 src/app/LiveSource.cpp:129
+#: src/app/Cli.cpp:292 src/app/LiveSource.cpp:129
 msgid ""
 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate "
 "only the display"
 msgstr "录制旋转需要 MP4 或 MKV；只旋转显示请使用 --display-orientation"
 
-#: src/app/Cli.cpp:282
+#: src/app/Cli.cpp:296
 msgid ""
 "Wireless first pairing requires --wifi auto; existing records cannot be "
 "repaired wirelessly"
 msgstr "首次无线配对需要 --wifi auto；已有配对记录无法通过无线方式修复"
 
-#: src/app/Cli.cpp:293
+#: src/app/Cli.cpp:307
 msgid "Expected an integer or auto"
 msgstr "请使用整数或 auto"
 
-#: src/app/Cli.cpp:313
+#: src/app/Cli.cpp:327
 msgid ""
 "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
 msgstr "请使用 lctrl、rctrl、lalt、ralt、lsuper 或 rsuper，以逗号分隔"
 
-#: src/app/Cli.cpp:324
+#: src/app/Cli.cpp:338
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr "坐标必须是 [0, 1] 内的有限数"
 
-#: src/app/Cli.cpp:331
+#: src/app/Cli.cpp:345
 msgid "Requires a finite positive number"
 msgstr "需要有限正数"
 
-#: src/app/Cli.cpp:346
+#: src/app/Cli.cpp:360
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr "格式应为 WxH+X+Y 或 W:H:X:Y，尺寸为正、偏移非负"
 
-#: src/app/Cli.cpp:355
+#: src/app/Cli.cpp:369
 msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
 msgstr "请使用 3 位或 6 位十六进制颜色，可带 # 前缀"
 
-#: src/app/Cli.cpp:369
+#: src/app/Cli.cpp:383
 msgid "Frame number must be a positive integer"
 msgstr "帧号需要正整数"
 
-#: src/app/Cli.cpp:374
+#: src/app/Cli.cpp:388
 msgid "Requires a window; incompatible with --no-window"
 msgstr "需要窗口，不能与 --no-window 同用"
 
-#: src/app/Cli.cpp:377
+#: src/app/Cli.cpp:391
 msgid "Window readback requires video playback"
 msgstr "回读窗口画面需要开启视频播放"
 
-#: src/app/Cli.cpp:385
+#: src/app/Cli.cpp:399
 msgid "Nothing to do: enable media, recording or device control"
 msgstr "没有可执行的操作：请开启音视频、录制或设备控制"
 
-#: src/app/Commands.cpp:43
+#: src/app/Commands.cpp:44
 msgid "pairing record available"
 msgstr "本机已有配对记录"
 
-#: src/app/Commands.cpp:45
+#: src/app/Commands.cpp:46
 msgid "pair again over USB"
 msgstr "请通过 USB 重新配对"
 
-#: src/app/Commands.cpp:47
+#: src/app/Commands.cpp:48
 msgid "old record hint; pair again over USB"
 msgstr "发现旧配对记录线索；请通过 USB 重新配对"
 
-#: src/app/Commands.cpp:49
+#: src/app/Commands.cpp:50
 msgid "multiple matching pairing records"
 msgstr "有多份匹配的配对记录"
 
-#: src/app/Commands.cpp:51
+#: src/app/Commands.cpp:52
 msgid "invalid discovery identity"
 msgstr "设备广播的身份信息无效"
 
-#: src/app/Commands.cpp:53
+#: src/app/Commands.cpp:54
 msgid "identity matching failed"
 msgstr "匹配设备身份失败"
 
-#: src/app/Commands.cpp:55 src/app/Commands.cpp:57
+#: src/app/Commands.cpp:56 src/app/Commands.cpp:58
 msgid "no matching pairing record"
 msgstr "没有匹配的配对记录"
 
-#: src/app/Commands.cpp:64 src/app/Commands.cpp:119 src/app/Commands.cpp:159
+#: src/app/Commands.cpp:65 src/app/Commands.cpp:120 src/app/Commands.cpp:169
 #: src/ddi/Download.cpp:355
 msgid "DDI download cancelled"
 msgstr "DDI 下载已取消"
 
-#: src/app/Commands.cpp:86
+#: src/app/Commands.cpp:87
 msgid "Cannot enumerate the target USB device for DDI selection"
 msgstr "无法枚举用于选择 DDI 的目标 USB 设备"
 
-#: src/app/Commands.cpp:100 src/app/Commands.cpp:121
+#: src/app/Commands.cpp:101 src/app/Commands.cpp:122 src/app/DdiInstall.cpp:53
+#: src/app/DdiInstall.cpp:79
 msgid "DDI target metadata is missing its OS version or product model"
 msgstr "DDI 目标信息缺少系统版本或机型"
 
-#: src/app/Commands.cpp:148 src/app/Commands.cpp:160 src/app/Commands.cpp:169
-#: src/app/Commands.cpp:188
+#: src/app/Commands.cpp:158 src/app/Commands.cpp:170 src/app/Commands.cpp:179
+#: src/app/Commands.cpp:198
 #, c-format
 msgid "DDI download failed: %s\n"
 msgstr "DDI 下载失败：%s\n"
 
-#: src/app/Commands.cpp:172
+#: src/app/Commands.cpp:182 src/app/DdiInstall.cpp:82
 #, c-format
 msgid "DDI target: OS %s, model %s, image type %s\n"
 msgstr "DDI 目标：系统 %s，机型 %s，镜像类型 %s\n"
 
-#: src/app/Commands.cpp:179
+#: src/app/Commands.cpp:189
 #, c-format
 msgid "Downloading DDI: %s (%llu/%llu bytes)\n"
 msgstr "正在下载 DDI：%s（%llu/%llu 字节）\n"
 
-#: src/app/Commands.cpp:193
+#: src/app/Commands.cpp:203
 #, c-format
 msgid "Verified cached DDI %s: %s\n"
 msgstr "已校验缓存的 DDI %s：%s\n"
 
-#: src/app/Commands.cpp:194
+#: src/app/Commands.cpp:204
 #, c-format
 msgid "Downloaded and verified DDI %s: %s\n"
 msgstr "已下载并校验 DDI %s：%s\n"
 
-#: src/app/Commands.cpp:196
+#: src/app/Commands.cpp:206
 #, c-format
 msgid "DDI source: %s\n"
 msgstr "DDI 来源：%s\n"
 
-#: src/app/Commands.cpp:197
+#: src/app/Commands.cpp:207
 #, c-format
 msgid ""
 "Download complete; device installation is a separate step. See docs/DDI.md.\n"
 msgstr "下载完成；设备安装是独立步骤，见 docs/DDI.md。\n"
 
-#: src/app/Commands.cpp:206 src/app/DeviceConnection.cpp:237
+#: src/app/Commands.cpp:216 src/app/DeviceConnection.cpp:237
 #, c-format
 msgid "Discovery warning: %s\n"
 msgstr "设备发现提示：%s\n"
 
-#: src/app/Commands.cpp:210
+#: src/app/Commands.cpp:220
 msgid "Wireless device (UDID unknown)"
 msgstr "无线设备（UDID 未知）"
 
-#: src/app/Commands.cpp:222
+#: src/app/Commands.cpp:232
 msgid "address unresolved"
 msgstr "尚未取得地址"
 
-#: src/app/Commands.cpp:238
+#: src/app/Commands.cpp:248
 #, c-format
 msgid "No devices found\n"
 msgstr "未发现设备\n"
 
-#: src/app/Commands.cpp:262
+#: src/app/Commands.cpp:272
 #, c-format
 msgid "Enter this one-use pairing code on the device: %s\n"
 msgstr "请在设备上输入此一次性配对码：%s\n"
 
-#: src/app/Commands.cpp:276
+#: src/app/Commands.cpp:286
 #, c-format
 msgid "Remote pairing failed: %s\n"
 msgstr "远程配对失败：%s\n"
 
-#: src/app/Commands.cpp:280
+#: src/app/Commands.cpp:290
 #, c-format
 msgid "Remote pairing verified for %s\n"
 msgstr "已验证 %s 的远程配对记录\n"
 
-#: src/app/Commands.cpp:281
+#: src/app/Commands.cpp:291
 #, c-format
 msgid "Remote pairing saved for %s\n"
 msgstr "已保存 %s 的远程配对记录\n"
 
-#: src/app/Commands.cpp:290 src/app/Commands.cpp:313
+#: src/app/Commands.cpp:300 src/app/Commands.cpp:323
 #, c-format
 msgid "Failed to establish session: %s\n"
 msgstr "建立会话失败: %s\n"
 
-#: src/app/Commands.cpp:295
+#: src/app/Commands.cpp:305
 #, c-format
 msgid "Failed to list apps: %s\n"
 msgstr "列 App 失败: %s\n"
 
-#: src/app/Commands.cpp:301
+#: src/app/Commands.cpp:311
 #, c-format
 msgid "Total: %zu\n"
 msgstr "共 %zu 个\n"
 
-#: src/app/Commands.cpp:319
+#: src/app/Commands.cpp:329
 #, c-format
 msgid "Wrote %zu bytes to device clipboard\n"
 msgstr "已写入设备剪贴板：%zu 字节\n"
 
-#: src/app/Commands.cpp:321
+#: src/app/Commands.cpp:331
 #, c-format
 msgid "--copy failed: %s\n"
 msgstr "--copy 写入失败: %s\n"
 
-#: src/app/Commands.cpp:328
+#: src/app/Commands.cpp:338
 #, c-format
 msgid "Device clipboard (%zu bytes): "
 msgstr "设备剪贴板（%zu 字节）： "
 
-#: src/app/Commands.cpp:332
+#: src/app/Commands.cpp:342
 #, c-format
 msgid "--paste failed: %s\n"
 msgstr "--paste 读取失败: %s\n"
 
-#: src/app/Commands.cpp:358
+#: src/app/Commands.cpp:368
 #, c-format
 msgid "--start-app requires a nonempty app name\n"
 msgstr "--start-app 的名字是空的\n"
 
-#: src/app/Commands.cpp:368
+#: src/app/Commands.cpp:378
 #, c-format
 msgid "Failed to find app by name: %s\n"
 msgstr "按名字找 App 失败: %s\n"
 
-#: src/app/Commands.cpp:386
+#: src/app/Commands.cpp:396
 #, c-format
 msgid "No app name starts with %s\n"
 msgstr "没有名字以 %s 开头的 App\n"
 
-#: src/app/Commands.cpp:394 tools/app_launch_probe.cpp:89
+#: src/app/Commands.cpp:404 tools/app_launch_probe.cpp:89
 #, c-format
 msgid "Failed to launch %s: %s\n"
 msgstr "启动 %s 失败: %s\n"
 
-#: src/app/Commands.cpp:397
+#: src/app/Commands.cpp:407
 msgid " (previous instance terminated)"
 msgstr "（已先终止原实例）"
 
-#: src/app/Commands.cpp:397
+#: src/app/Commands.cpp:407
 #, c-format
 msgid "Launched %s%s\n"
 msgstr "已启动 %s%s\n"
+
+#: src/app/DdiInstall.cpp:30
+#, c-format
+msgid "DDI installation failed: %s\n"
+msgstr "DDI 安装失败：%s\n"
+
+#: src/app/DdiInstall.cpp:31
+#, c-format
+msgid ""
+"An interrupted installation may already have taken effect; check device "
+"state before replacing again.\n"
+msgstr "中断的安装可能已生效；再次替换前请检查设备状态。\n"
+
+#: src/app/DdiInstall.cpp:78 src/app/DdiInstall.cpp:110
+msgid "DDI installation cancelled"
+msgstr "DDI 安装已取消"
+
+#: src/app/DdiInstall.cpp:96
+#, c-format
+msgid "DDI transfer: %s (%llu/%llu bytes)\n"
+msgstr "DDI 传输：%s（%llu/%llu 字节）\n"
+
+#: src/app/DdiInstall.cpp:146
+msgid "DDI Cryptex is installed but its developer image is not mounted"
+msgstr "DDI Cryptex 已安装，但开发镜像未挂载"
+
+#: src/app/DdiInstall.cpp:149
+#, c-format
+msgid "DDI already installed: %s %s (no new installation)\n"
+msgstr "DDI 已安装：%s %s（未进行新的安装）\n"
+
+#: src/app/DdiInstall.cpp:150
+#, c-format
+msgid "DDI installed and verified: %s %s\n"
+msgstr "DDI 已安装并验证：%s %s\n"
+
+#: src/app/DdiInstall.cpp:154
+msgid "DDI installation requires the device ECID"
+msgstr "DDI 安装需要设备的 ECID"
+
+#: src/app/DdiInstall.cpp:170
+#, c-format
+msgid "DDI already mounted: %s (no new installation)\n"
+msgstr "DDI 已挂载：%s（未进行新的安装）\n"
+
+#: src/app/DdiInstall.cpp:171
+#, c-format
+msgid "DDI mounted and verified: %s\n"
+msgstr "DDI 已挂载并验证：%s\n"
 
 #: src/app/DeviceConnection.cpp:15 src/app/DeviceConnection.cpp:52
 #: src/app/DeviceConnection.cpp:69 src/app/DeviceConnection.cpp:187
@@ -1561,6 +1629,173 @@ msgstr "存在无效字符：\""
 msgid "Schedule requires at least one time"
 msgstr "时刻表至少需要一个时刻"
 
+#: src/ddi/Cryptex.cpp:21
+msgid "Cryptex manifest is missing a required field"
+msgstr "Cryptex 清单缺少必需字段"
+
+#: src/ddi/Cryptex.cpp:27
+msgid "Cryptex manifest has an invalid integer"
+msgstr "Cryptex 清单中的整数无效"
+
+#: src/ddi/Cryptex.cpp:32
+msgid "Cryptex manifest has an invalid string"
+msgstr "Cryptex 清单中的字符串无效"
+
+#: src/ddi/Cryptex.cpp:38 src/ddi/Cryptex.cpp:40
+msgid "Cryptex asset is not a bounded regular file"
+msgstr "Cryptex 资产不是大小符合限制的普通文件"
+
+#: src/ddi/Cryptex.cpp:45
+msgid "Cannot read the complete Cryptex asset"
+msgstr "无法完整读取 Cryptex 资产"
+
+#: src/ddi/Cryptex.cpp:52
+msgid "Unknown pinned Cryptex asset"
+msgstr "未知的固定版本 Cryptex 资产"
+
+#: src/ddi/Cryptex.cpp:58
+msgid "Cryptex asset snapshot checksum failed"
+msgstr "Cryptex 资产快照摘要校验失败"
+
+#: src/ddi/Cryptex.cpp:63
+msgid "Cryptex asset changed before installation"
+msgstr "Cryptex 资产在安装前发生变化"
+
+#: src/ddi/Cryptex.cpp:67
+msgid "Cryptex identifiers exceed the nesting limit"
+msgstr "Cryptex 身份信息超过嵌套深度限制"
+
+#: src/ddi/Cryptex.cpp:79
+msgid "Cryptex identifiers contain an unsupported value"
+msgstr "Cryptex 身份信息包含不支持的值"
+
+#: src/ddi/Cryptex.cpp:99 src/ddi/Cryptex.cpp:102
+msgid "Cryptex installation cancelled or timed out"
+msgstr "Cryptex 安装已取消或超时"
+
+#: src/ddi/Cryptex.cpp:109
+msgid "Cryptex service does not use RemoteXPC"
+msgstr "Cryptex 服务未使用 RemoteXPC"
+
+#: src/ddi/Cryptex.cpp:129 src/ddi/Cryptex.cpp:132 src/ddi/Cryptex.cpp:134
+#: src/ddi/Cryptex.cpp:138
+msgid "Cryptex installed state is malformed"
+msgstr "Cryptex 已安装状态格式错误"
+
+#: src/ddi/Cryptex.cpp:141
+msgid "Multiple DDI Cryptex installations require manual resolution"
+msgstr "存在多个 DDI Cryptex 安装，需要手动处理"
+
+#: src/ddi/Cryptex.cpp:155
+msgid "Cryptex manifest identities are invalid"
+msgstr "Cryptex 清单身份信息无效"
+
+#: src/ddi/Cryptex.cpp:161
+msgid "Cryptex manifest has ambiguous identities"
+msgstr "Cryptex 清单中存在多个匹配身份"
+
+#: src/ddi/Cryptex.cpp:165
+msgid "Cryptex manifest lacks its generic identity"
+msgstr "Cryptex 清单缺少通用身份"
+
+#: src/ddi/Cryptex.cpp:171
+msgid "Cryptex asset is not a Developer Disk Image"
+msgstr "Cryptex 资产不是开发者磁盘镜像"
+
+#: src/ddi/Cryptex.cpp:174
+msgid "Cryptex DDI nonce-domain handle is unsupported"
+msgstr "不支持此 Cryptex DDI nonce 域句柄"
+
+#: src/ddi/Cryptex.cpp:176
+msgid "Cryptex product-class flag is invalid"
+msgstr "Cryptex 产品类别标志无效"
+
+#: src/ddi/Cryptex.cpp:190
+msgid "Cryptex reply is not a dictionary"
+msgstr "Cryptex 回复不是字典"
+
+#: src/ddi/Cryptex.cpp:192
+msgid "Cryptex device error"
+msgstr "Cryptex 设备错误"
+
+#: src/ddi/Cryptex.cpp:209
+msgid "Cryptex device returned a nonzero or malformed error"
+msgstr "Cryptex 设备返回非零错误码或错误格式无效"
+
+#: src/ddi/Cryptex.cpp:212
+msgid "Cryptex reply lacks status and payload"
+msgstr "Cryptex 回复缺少状态和数据"
+
+#: src/ddi/Cryptex.cpp:220
+msgid "Cryptex nonce structure has an invalid size"
+msgstr "Cryptex nonce 结构大小无效"
+
+#: src/ddi/Cryptex.cpp:223
+msgid "Cryptex nonce length is invalid"
+msgstr "Cryptex nonce 长度无效"
+
+#: src/ddi/Cryptex.cpp:248 src/ddi/Cryptex.cpp:270
+msgid "Cryptex installation timeout is invalid"
+msgstr "Cryptex 安装超时无效"
+
+#: src/ddi/Cryptex.cpp:252
+msgid "Cryptex installed-state query failed: "
+msgstr "Cryptex 已安装状态查询失败： "
+
+#: src/ddi/Cryptex.cpp:266
+msgid "Cryptex installation requires a supported Cryptex OS target"
+msgstr "Cryptex 安装需要支持的 Cryptex 系统版本"
+
+#: src/ddi/Cryptex.cpp:275
+msgid "Device does not advertise CryptexInstall"
+msgstr "设备未声明 CryptexInstall"
+
+#: src/ddi/Cryptex.cpp:287
+msgid "A different DDI Cryptex is installed; explicit replacement is required"
+msgstr "已安装另一版本的 DDI Cryptex；需要显式允许替换"
+
+#: src/ddi/Cryptex.cpp:294
+msgid ""
+"Personalized DDI mount inspection is required before Cryptex installation"
+msgstr "安装 Cryptex 前必须检查 Personalized DDI 的挂载状态"
+
+#: src/ddi/Cryptex.cpp:302
+msgid "A Personalized DDI is mounted; explicit replacement is required"
+msgstr "已挂载 Personalized DDI；需要显式允许替换"
+
+#: src/ddi/Cryptex.cpp:305
+msgid "Device does not advertise Cryptex ReadIdentifiers"
+msgstr "设备未声明 Cryptex ReadIdentifiers"
+
+#: src/ddi/Cryptex.cpp:309
+msgid "Cryptex personalization identifiers are invalid"
+msgstr "Cryptex 个性化身份信息无效"
+
+#: src/ddi/Cryptex.cpp:315 src/ddi/Cryptex.cpp:349
+msgid "Cryptex nonce reply is invalid"
+msgstr "Cryptex nonce 回复无效"
+
+#: src/ddi/Cryptex.cpp:327
+msgid "Cryptex ticket size is invalid"
+msgstr "Cryptex 票据大小无效"
+
+#: src/ddi/Cryptex.cpp:354
+msgid "Cryptex personalization nonce changed before installation"
+msgstr "安装前 Cryptex 个性化随机数已变化"
+
+#: src/ddi/Cryptex.cpp:383
+msgid "Cryptex final installation reply failed: "
+msgstr "Cryptex 最终安装回复失败： "
+
+#: src/ddi/Cryptex.cpp:389
+msgid "Cryptex post-installation verification failed: "
+msgstr "Cryptex 安装后验证失败： "
+
+#: src/ddi/Cryptex.cpp:393
+msgid ""
+"Cryptex installation reply succeeded but the expected DDI is not installed"
+msgstr "Cryptex 安装回复成功，但预期的 DDI 未安装"
+
 #: src/ddi/Download.cpp:26
 msgid "DDI cache contains a nonregular file"
 msgstr "DDI 缓存包含非普通文件"
@@ -1673,7 +1908,7 @@ msgstr "DDI 下载需要 HTTPS"
 msgid "Cannot configure HTTPS downloader"
 msgstr "无法配置 HTTPS 下载器"
 
-#: src/ddi/Download.cpp:293
+#: src/ddi/Download.cpp:293 src/ddi/Tss.cpp:318
 msgid "This Windows libcurl cannot use the native certificate store"
 msgstr "此 Windows libcurl 无法使用系统证书库"
 
@@ -1779,6 +2014,170 @@ msgstr "没有可用的平台缓存绝对路径；请指定 --ddi-directory"
 msgid "No pinned Classic DDI exists for the requested OS major.minor version"
 msgstr "没有对应指定系统主版本和次版本的固定 Classic DDI"
 
+#: src/ddi/Mounter.cpp:42
+msgid "DDI install timeout must be positive and at most 24 hours"
+msgstr "DDI 安装超时必须为正数且不超过 24 小时"
+
+#: src/ddi/Mounter.cpp:46
+msgid "DDI install cancelled"
+msgstr "DDI 安装已取消"
+
+#: src/ddi/Mounter.cpp:48
+msgid "DDI install timed out"
+msgstr "DDI 安装超时"
+
+#: src/ddi/Mounter.cpp:53
+msgid "DDI service disconnected without a reply"
+msgstr "DDI 服务断开连接且未返回回复"
+
+#: src/ddi/Mounter.cpp:56
+msgid "Invalid or oversized DDI service reply"
+msgstr "DDI 服务回复无效或超过大小限制"
+
+#: src/ddi/Mounter.cpp:60
+msgid "DDI service request callback is missing"
+msgstr "缺少 DDI 服务请求回调"
+
+#: src/ddi/Mounter.cpp:65
+msgid "DDI service reconnect callback is missing"
+msgstr "缺少 DDI 服务重连回调"
+
+#: src/ddi/Mounter.cpp:67
+msgid "Cannot reconnect DDI service"
+msgstr "无法重新连接 DDI 服务"
+
+#: src/ddi/Mounter.cpp:75
+msgid "Invalid DDI service error field"
+msgstr "DDI 服务错误字段无效"
+
+#: src/ddi/Mounter.cpp:85
+msgid "Unexpected DDI service status; expected "
+msgstr "DDI 服务状态不符合预期；应为 "
+
+#: src/ddi/Mounter.cpp:93
+msgid "Invalid DDI ImagePresent field"
+msgstr "DDI ImagePresent 字段无效"
+
+#: src/ddi/Mounter.cpp:96
+msgid "Too many mounted DDI signatures"
+msgstr "已挂载的 DDI 签名数量过多"
+
+#: src/ddi/Mounter.cpp:99 src/ddi/Mounter.cpp:104
+msgid "Invalid mounted DDI signature"
+msgstr "已挂载的 DDI 签名无效"
+
+#: src/ddi/Mounter.cpp:106
+msgid "Contradictory DDI lookup reply"
+msgstr "DDI 查询回复自相矛盾"
+
+#: src/ddi/Mounter.cpp:121
+msgid "Invalid DDI CopyDevices reply"
+msgstr "DDI CopyDevices 回复无效"
+
+#: src/ddi/Mounter.cpp:123
+msgid "Invalid DDI mounted image entry"
+msgstr "DDI 已挂载镜像条目无效"
+
+#: src/ddi/Mounter.cpp:131
+msgid "DDI lookup claims presence without verifiable mounted image"
+msgstr "DDI 查询声称镜像存在，但无法验证挂载状态"
+
+#: src/ddi/Mounter.cpp:141
+msgid "Cannot verify device Developer Mode"
+msgstr "无法确认设备开发者模式状态"
+
+#: src/ddi/Mounter.cpp:142
+msgid "Enable Developer Mode on the device before installing DDI"
+msgstr "安装 DDI 前请在设备上开启开发者模式"
+
+#: src/ddi/Mounter.cpp:149
+msgid "DDI remains mounted after unmount request"
+msgstr "发送卸载请求后 DDI 仍处于挂载状态"
+
+#: src/ddi/Mounter.cpp:153 src/ddi/Mounter.cpp:156 src/ddi/Mounter.cpp:160
+msgid "Cannot hash DDI asset"
+msgstr "无法计算 DDI 资产摘要"
+
+#: src/ddi/Mounter.cpp:172
+msgid "DDI asset exceeds install size limit"
+msgstr "DDI 资产超过安装大小限制"
+
+#: src/ddi/Mounter.cpp:176
+msgid "Cannot read complete DDI install asset"
+msgstr "无法完整读取 DDI 安装资产"
+
+#: src/ddi/Mounter.cpp:181
+msgid "DDI install asset changed after cache validation"
+msgstr "DDI 安装资产在缓存校验后发生变化"
+
+#: src/ddi/Mounter.cpp:207
+msgid "Cryptex DDI requires the cryptexd installer"
+msgstr "Cryptex DDI 需要使用 cryptexd 安装器"
+
+#: src/ddi/Mounter.cpp:209
+msgid "DDI install result does not match its catalog"
+msgstr "DDI 安装结果与固定目录不一致"
+
+#: src/ddi/Mounter.cpp:212
+msgid "DDI install category does not match device OS"
+msgstr "DDI 安装类别与设备系统不一致"
+
+#: src/ddi/Mounter.cpp:225
+msgid "DDI personalization requires a ticket callback and device ECID"
+msgstr "DDI 个性化需要票据回调和设备 ECID"
+
+#: src/ddi/Mounter.cpp:232
+msgid "Invalid DDI personalization identifiers"
+msgstr "DDI 个性化身份信息无效"
+
+#: src/ddi/Mounter.cpp:234
+msgid "DDI device hardware identity changed"
+msgstr "DDI 设备硬件身份发生变化"
+
+#: src/ddi/Mounter.cpp:242
+msgid "Invalid DDI personalization nonce"
+msgstr "DDI 个性化 nonce 无效"
+
+#: src/ddi/Mounter.cpp:245
+msgid "Cannot parse DDI install manifest"
+msgstr "无法解析 DDI 安装清单"
+
+#: src/ddi/Mounter.cpp:248
+msgid "DDI personalization did not return a ticket"
+msgstr "DDI 个性化未返回票据"
+
+#: src/ddi/Mounter.cpp:255
+msgid "DDI personalization nonce changed before upload"
+msgstr "DDI 个性化 nonce 在上传前发生变化"
+
+#: src/ddi/Mounter.cpp:257
+msgid "Invalid DDI install signature or ticket"
+msgstr "DDI 安装签名或票据无效"
+
+#: src/ddi/Mounter.cpp:262
+msgid "DDI image transfer callbacks are missing"
+msgstr "缺少 DDI 镜像传输回调"
+
+#: src/ddi/Mounter.cpp:266
+msgid "DDI image upload failed"
+msgstr "DDI 镜像上传失败"
+
+#: src/ddi/Mounter.cpp:273
+msgid "Another DDI became mounted during upload"
+msgstr "上传过程中另一份 DDI 被挂载"
+
+#: src/ddi/Mounter.cpp:279
+msgid "DDI mount completed without a verifiable mounted image"
+msgstr "DDI 挂载请求已完成，但无法验证镜像已挂载"
+
+#: src/ddi/Mounter.cpp:281
+msgid "Mounted DDI signature differs from the uploaded image"
+msgstr "已挂载 DDI 的签名与上传镜像不同"
+
+#: src/ddi/Mounter.cpp:294
+msgid "No pinned DDI catalog matches this installation target"
+msgstr "没有匹配此安装目标的固定版本 DDI 目录"
+
 #: src/ddi/Selection.cpp:20 src/ddi/Selection.cpp:27 src/ddi/Selection.cpp:33
 #: src/ddi/Selection.cpp:39 src/ddi/Selection.cpp:66
 msgid "Invalid numeric Apple ProductVersion"
@@ -1791,6 +2190,230 @@ msgstr "DDI 类型必须是 classic、personalized 或 cryptex"
 #: src/ddi/Selection.cpp:70
 msgid "DDI selection is not defined for this future Apple OS major version"
 msgstr "尚未定义此未来 Apple 系统主版本的 DDI 选择规则"
+
+#: src/ddi/ServiceTransport.cpp:51
+msgid "DDI service operation timed out"
+msgstr "DDI 服务操作超时"
+
+#: src/ddi/ServiceTransport.cpp:52
+msgid "DDI service operation was cancelled"
+msgstr "DDI 服务操作已取消"
+
+#: src/ddi/ServiceTransport.cpp:53
+msgid "DDI service cancellation callback failed"
+msgstr "DDI 服务取消回调失败"
+
+#: src/ddi/ServiceTransport.cpp:116
+msgid "Cannot write DDI service TLS data"
+msgstr "无法写入 DDI 服务 TLS 数据"
+
+#: src/ddi/ServiceTransport.cpp:137
+msgid "DDI service closed the connection"
+msgstr "DDI 服务关闭了连接"
+
+#: src/ddi/ServiceTransport.cpp:152
+msgid "Cannot read DDI service TLS data"
+msgstr "无法读取 DDI 服务 TLS 数据"
+
+#: src/ddi/ServiceTransport.cpp:158
+msgid "DDI service request exceeds its frame limit"
+msgstr "DDI 服务请求超过帧大小限制"
+
+#: src/ddi/ServiceTransport.cpp:167
+msgid "DDI service response has an invalid frame length"
+msgstr "DDI 服务回复的帧长度无效"
+
+#: src/ddi/ServiceTransport.cpp:170
+msgid "DDI service response is not a plist dictionary"
+msgstr "DDI 服务回复不是 plist 字典"
+
+#: src/ddi/ServiceTransport.cpp:196
+msgid "DDI remote session is unavailable"
+msgstr "DDI 远程会话不可用"
+
+#: src/ddi/ServiceTransport.cpp:198
+msgid "DDI remote image-mounter service is unavailable"
+msgstr "DDI 远程镜像挂载服务不可用"
+
+#: src/ddi/ServiceTransport.cpp:200
+msgid "DDI remote image-mounter service uses an unsupported transport"
+msgstr "DDI 远程镜像挂载服务使用了不支持的传输方式"
+
+#: src/ddi/ServiceTransport.cpp:218
+msgid "DDI remote image-mounter check-in was rejected"
+msgstr "DDI 远程镜像挂载服务拒绝了 check-in"
+
+#: src/ddi/ServiceTransport.cpp:269
+msgid "DDI service raw upload data is missing"
+msgstr "缺少 DDI 服务原始上传数据"
+
+#: src/ddi/Tss.cpp:44
+msgid "DDI signing metadata contains an invalid numeric identifier"
+msgstr "DDI 签票元数据包含无效的数字身份标识"
+
+#: src/ddi/Tss.cpp:57
+msgid "Cannot generate DDI signing request identifier"
+msgstr "无法生成 DDI 签票请求标识"
+
+#: src/ddi/Tss.cpp:72
+msgid "DDI signing manifest component is malformed"
+msgstr "DDI 签票清单组件格式错误"
+
+#: src/ddi/Tss.cpp:80 src/ddi/Tss.cpp:85
+msgid "DDI restore request rules are malformed"
+msgstr "DDI 恢复请求规则格式错误"
+
+#: src/ddi/Tss.cpp:106
+msgid "DDI signing nonce has an invalid length"
+msgstr "DDI 签票 nonce 长度无效"
+
+#: src/ddi/Tss.cpp:136 src/ddi/Tss.cpp:190 src/ddi/Tss.cpp:281
+msgid "DDI signing metadata is malformed"
+msgstr "DDI 签票元数据格式错误"
+
+#: src/ddi/Tss.cpp:138
+msgid "DDI signing device identifiers are missing"
+msgstr "缺少 DDI 签票设备身份信息"
+
+#: src/ddi/Tss.cpp:141
+msgid "DDI signing build identities are missing"
+msgstr "缺少 DDI 签票构建身份信息"
+
+#: src/ddi/Tss.cpp:148
+msgid "DDI signing hardware identity is ambiguous"
+msgstr "DDI 签票硬件身份存在歧义"
+
+#: src/ddi/Tss.cpp:151
+msgid "DDI signing manifest has no matching hardware identity"
+msgstr "DDI 签票清单没有匹配的硬件身份"
+
+#: src/ddi/Tss.cpp:153
+msgid "DDI signing component manifest is missing"
+msgstr "缺少 DDI 签票组件清单"
+
+#: src/ddi/Tss.cpp:175
+msgid "DDI signing component digest is malformed"
+msgstr "DDI 签票组件摘要格式错误"
+
+#: src/ddi/Tss.cpp:181
+msgid "DDI signing manifest lacks trusted image components"
+msgstr "DDI 签票清单缺少受信任镜像组件"
+
+#: src/ddi/Tss.cpp:192
+msgid "Cryptex signing identifiers are missing"
+msgstr "缺少 Cryptex 签票身份信息"
+
+#: src/ddi/Tss.cpp:200
+msgid "Cryptex signing build identity is incomplete"
+msgstr "Cryptex 签票构建身份信息不完整"
+
+#: src/ddi/Tss.cpp:205
+msgid "Cryptex signing device ECID is missing"
+msgstr "缺少 Cryptex 签票设备 ECID"
+
+#: src/ddi/Tss.cpp:207
+msgid "Cryptex signing production mode is missing"
+msgstr "缺少 Cryptex 签票生产模式"
+
+#: src/ddi/Tss.cpp:215
+msgid "Cryptex signing component manifest is missing"
+msgstr "缺少 Cryptex 签票组件清单"
+
+#: src/ddi/Tss.cpp:224
+msgid "Cryptex signing component digest is missing"
+msgstr "缺少 Cryptex 签票组件摘要"
+
+#: src/ddi/Tss.cpp:228
+msgid "Cryptex signing manifest has no personalized components"
+msgstr "Cryptex 签票清单没有个性化组件"
+
+#: src/ddi/Tss.cpp:236
+msgid "DDI signing response has an invalid length"
+msgstr "DDI 签票回复长度无效"
+
+#: src/ddi/Tss.cpp:248
+msgid "DDI signing response status is malformed"
+msgstr "DDI 签票回复状态格式错误"
+
+#: src/ddi/Tss.cpp:251
+msgid "DDI signing response message is malformed"
+msgstr "DDI 签票回复消息格式错误"
+
+#: src/ddi/Tss.cpp:253
+msgid "DDI signing response envelope is malformed"
+msgstr "DDI 签票回复封装格式错误"
+
+#: src/ddi/Tss.cpp:257
+msgid "DDI signing response envelope is incomplete"
+msgstr "DDI 签票回复封装不完整"
+
+#: src/ddi/Tss.cpp:260
+msgid "Apple rejected DDI signing; status "
+msgstr "Apple 拒绝了 DDI 签票；状态 "
+
+#: src/ddi/Tss.cpp:263
+msgid "DDI signing response has no ticket plist"
+msgstr "DDI 签票回复没有票据 plist"
+
+#: src/ddi/Tss.cpp:268
+msgid "DDI signing ticket plist is invalid"
+msgstr "DDI 签票票据 plist 无效"
+
+#: src/ddi/Tss.cpp:272
+msgid "DDI signing response contains no valid ticket"
+msgstr "DDI 签票回复不包含有效票据"
+
+#: src/ddi/Tss.cpp:282
+msgid "DDI signing request is not a dictionary"
+msgstr "DDI 签票请求不是字典"
+
+#: src/ddi/Tss.cpp:284
+msgid "DDI signing request ticket type is ambiguous"
+msgstr "DDI 签票请求的票据类型存在歧义"
+
+#: src/ddi/Tss.cpp:285 src/ddi/Tss.cpp:334
+msgid "DDI signing timed out"
+msgstr "DDI 签票超时"
+
+#: src/ddi/Tss.cpp:286 src/ddi/Tss.cpp:333
+msgid "DDI signing was cancelled"
+msgstr "DDI 签票已取消"
+
+#: src/ddi/Tss.cpp:288
+msgid "DDI signing request exceeds its size limit"
+msgstr "DDI 签票请求超过大小限制"
+
+#: src/ddi/Tss.cpp:290
+msgid "Cannot initialize DDI signing HTTPS transport"
+msgstr "无法初始化 DDI 签票 HTTPS 传输"
+
+#: src/ddi/Tss.cpp:292
+msgid "Cannot create DDI signing HTTPS transport"
+msgstr "无法创建 DDI 签票 HTTPS 传输"
+
+#: src/ddi/Tss.cpp:297
+msgid "Cannot create DDI signing HTTPS headers"
+msgstr "无法创建 DDI 签票 HTTPS 请求头"
+
+#: src/ddi/Tss.cpp:302
+msgid "Cannot configure DDI signing HTTPS transport"
+msgstr "无法配置 DDI 签票 HTTPS 传输"
+
+#: src/ddi/Tss.cpp:331
+msgid "DDI signing response exceeds its size limit"
+msgstr "DDI 签票回复超过大小限制"
+
+#: src/ddi/Tss.cpp:332
+msgid "DDI signing callback failed"
+msgstr "DDI 签票回调失败"
+
+#: src/ddi/Tss.cpp:335
+msgid "DDI signing HTTPS request failed: "
+msgstr "DDI 签票 HTTPS 请求失败： "
+
+#: src/ddi/Tss.cpp:340
+msgid "DDI signing server did not return HTTP 200"
+msgstr "DDI 签票服务器未返回 HTTP 200"
 
 #: src/decode/AudioDecoder.h:52
 msgid ""
@@ -1933,8 +2556,8 @@ msgstr "帧头不足 9 字节"
 msgid "Frame length too large: "
 msgstr "帧长过大: "
 
-#: src/http2/Framing.cpp:155 src/remote/RemoteXpc.cpp:580
-#: src/remote/RemoteXpc.cpp:666 src/xpc/XpcValue.cpp:633
+#: src/http2/Framing.cpp:155 src/remote/RemoteXpc.cpp:590
+#: src/remote/RemoteXpc.cpp:727 src/xpc/XpcValue.cpp:633
 msgid " bytes"
 msgstr " 字节"
 
@@ -3090,43 +3713,43 @@ msgstr "data 不是合法 base64: "
 msgid "Numeric value is empty"
 msgstr "数值内容为空"
 
-#: src/plist/Plist.cpp:92
+#: src/plist/Plist.cpp:97
 msgid "Real must be finite"
 msgstr "real 必须是有限数"
 
-#: src/plist/Plist.cpp:95
+#: src/plist/Plist.cpp:100
 msgid "Trailing content in numeric value"
 msgstr "数值尾部有多余内容"
 
-#: src/plist/Plist.cpp:98
+#: src/plist/Plist.cpp:103
 msgid "Unsupported element "
 msgstr "不支持的元素 "
 
-#: src/plist/Plist.cpp:103
+#: src/plist/Plist.cpp:108
 msgid "XML text cannot contain NUL"
 msgstr "XML 文本不能包含 NUL"
 
-#: src/plist/Plist.cpp:110
+#: src/plist/Plist.cpp:115
 msgid "plist nesting too deep"
 msgstr "plist 嵌套过深"
 
-#: src/plist/Plist.cpp:120
+#: src/plist/Plist.cpp:128
 msgid "plist real must be finite"
 msgstr "plist real 必须是有限数"
 
-#: src/plist/Plist.cpp:137
+#: src/plist/Plist.cpp:145
 msgid "plist dictionary key/value count mismatch"
 msgstr "plist dict 键值数量不一致"
 
-#: src/plist/Plist.cpp:154
+#: src/plist/Plist.cpp:162
 msgid "XML input too large or contains NUL"
 msgstr "XML 输入过大或含 NUL"
 
-#: src/plist/Plist.cpp:167
+#: src/plist/Plist.cpp:175
 msgid "Root must be a single <plist> element"
 msgstr "根元素必须是单个 <plist>"
 
-#: src/plist/Plist.cpp:170
+#: src/plist/Plist.cpp:178
 msgid "plist root must contain a single value"
 msgstr "plist 根必须包含单个值"
 
@@ -3675,8 +4298,8 @@ msgstr "发送 RemoteXPC 身份信息失败："
 msgid "Failed to read peer_info: "
 msgstr "读取 peer_info 失败："
 
-#: src/remote/RemoteXpc.cpp:258 src/remote/RemoteXpc.cpp:608
-#: src/remote/RemoteXpc.cpp:778 src/remote/RemoteXpc.cpp:794
+#: src/remote/RemoteXpc.cpp:258 src/remote/RemoteXpc.cpp:669
+#: src/remote/RemoteXpc.cpp:846 src/remote/RemoteXpc.cpp:862
 msgid "Connection terminated"
 msgstr "连接已终止"
 
@@ -3691,7 +4314,7 @@ msgstr ""
 "64 字节：\n"
 "      "
 
-#: src/remote/RemoteXpc.cpp:322 src/remote/RemoteXpc.cpp:520
+#: src/remote/RemoteXpc.cpp:322 src/remote/RemoteXpc.cpp:523
 msgid "RemoteXPC connection input exceeds 64 MiB"
 msgstr "RemoteXPC 连接的输入缓冲超过 64 MiB"
 
@@ -3721,116 +4344,133 @@ msgstr "设备发来 GOAWAY "
 msgid "RST_STREAM must use a nonzero stream"
 msgstr "RST_STREAM 必须使用非零流号"
 
-#: src/remote/RemoteXpc.cpp:458
+#: src/remote/RemoteXpc.cpp:459
 msgid "RemoteXPC stream reset: "
 msgstr "RemoteXPC 流被重置："
 
-#: src/remote/RemoteXpc.cpp:464
+#: src/remote/RemoteXpc.cpp:465
 msgid "DATA must use a nonzero stream"
 msgstr "DATA 必须使用非零流号"
 
-#: src/remote/RemoteXpc.cpp:477 src/remote/RemoteXpc.cpp:687
-#: src/remote/RemoteXpc.cpp:703
+#: src/remote/RemoteXpc.cpp:478 src/remote/RemoteXpc.cpp:748
+#: src/remote/RemoteXpc.cpp:764
 msgid "RemoteXPC file stream limit exceeded (100)"
 msgstr "RemoteXPC 文件流数量超过上限（100）"
 
-#: src/remote/RemoteXpc.cpp:492 src/remote/RemoteXpc.cpp:711
+#: src/remote/RemoteXpc.cpp:493 src/remote/RemoteXpc.cpp:772
 msgid "RemoteXPC file stream cannot be reused: "
 msgstr "RemoteXPC 文件流不能重复使用："
 
-#: src/remote/RemoteXpc.cpp:498 src/remote/RemoteXpc.cpp:715
+#: src/remote/RemoteXpc.cpp:499 src/remote/RemoteXpc.cpp:776
 msgid "RemoteXPC file data exceeds declared size or 32 MiB limit"
 msgstr "RemoteXPC 文件数据超过声明大小或 32 MiB 上限"
 
-#: src/remote/RemoteXpc.cpp:504 src/remote/RemoteXpc.cpp:660
-#: src/remote/RemoteXpc.cpp:719
+#: src/remote/RemoteXpc.cpp:505 src/remote/RemoteXpc.cpp:721
+#: src/remote/RemoteXpc.cpp:780
 msgid "RemoteXPC file ended before its declared size"
 msgstr "RemoteXPC 文件流提前结束，数据未达到声明大小"
 
-#: src/remote/RemoteXpc.cpp:510
+#: src/remote/RemoteXpc.cpp:512
 msgid "Unsupported RemoteXPC message stream: "
 msgstr "不支持的 RemoteXPC 消息流："
 
-#: src/remote/RemoteXpc.cpp:515
+#: src/remote/RemoteXpc.cpp:518
 msgid "RemoteXPC message stream input exceeds 32 MiB plus wrapper"
 msgstr "RemoteXPC 消息流的输入超过 32 MiB 加封装头的上限"
 
-#: src/remote/RemoteXpc.cpp:533
+#: src/remote/RemoteXpc.cpp:536
 msgid "Device set END_STREAM on message channel; connection ended"
 msgstr "设备通过 END_STREAM 结束消息通道，连接已终止"
 
-#: src/remote/RemoteXpc.cpp:549
+#: src/remote/RemoteXpc.cpp:552
 msgid "Failed to replenish connection receive window: "
 msgstr "连接接收窗口补充失败："
 
-#: src/remote/RemoteXpc.cpp:558
+#: src/remote/RemoteXpc.cpp:561
 msgid "Failed to replenish stream receive window: "
 msgstr "流接收窗口补充失败："
 
-#: src/remote/RemoteXpc.cpp:579
+#: src/remote/RemoteXpc.cpp:577 src/remote/RemoteXpc.cpp:628
+#: src/remote/RemoteXpc.cpp:655
+msgid "RemoteXPC upload cancelled or timed out"
+msgstr "RemoteXPC 上传已取消或超时"
+
+#: src/remote/RemoteXpc.cpp:589
 msgid "Peer did not replenish flow-control window; sent "
 msgstr "对端未补充流控窗口，已发送 "
 
-#: src/remote/RemoteXpc.cpp:584
+#: src/remote/RemoteXpc.cpp:594
 msgid "Disconnected while waiting for flow-control window: "
 msgstr "等待流控窗口时连接断开："
 
-#: src/remote/RemoteXpc.cpp:595
+#: src/remote/RemoteXpc.cpp:605
 msgid "Failed to send DATA: "
 msgstr "发送 DATA 失败："
 
-#: src/remote/RemoteXpc.cpp:614
+#: src/remote/RemoteXpc.cpp:623
+msgid "Invalid or reused RemoteXPC upload attachment"
+msgstr "RemoteXPC 上传附件无效或已使用"
+
+#: src/remote/RemoteXpc.cpp:646
+msgid "RemoteXPC upload file ended before its declared size"
+msgstr "RemoteXPC 上传文件在达到声明大小前已结束"
+
+#: src/remote/RemoteXpc.cpp:675
 msgid "XPC encoding failed (depth or length limit exceeded)"
 msgstr "XPC 编码失败（深度或长度超限）"
 
-#: src/remote/RemoteXpc.cpp:654
+#: src/remote/RemoteXpc.cpp:715
 msgid "Failed to accept file stream: "
 msgstr "接受文件流失败："
 
-#: src/remote/RemoteXpc.cpp:665
+#: src/remote/RemoteXpc.cpp:726
 msgid " has received "
 msgstr " 已收到 "
 
-#: src/remote/RemoteXpc.cpp:665
+#: src/remote/RemoteXpc.cpp:726
 msgid "File receive timed out: stream "
 msgstr "接收文件超时：流 "
 
-#: src/remote/RemoteXpc.cpp:670
+#: src/remote/RemoteXpc.cpp:731
 msgid "Disconnected while receiving file: "
 msgstr "接收文件时连接断开："
 
-#: src/remote/RemoteXpc.cpp:695
+#: src/remote/RemoteXpc.cpp:756
 msgid "RemoteXPC reply attachments exceed 32 MiB"
 msgstr "RemoteXPC 回复的附件总大小超过 32 MiB"
 
-#: src/remote/RemoteXpc.cpp:729
+#: src/remote/RemoteXpc.cpp:790
 #, c-format
 msgid "    Receiving file: %llu bytes on stream %u\n"
 msgstr "    接收文件：%llu 字节，流 %u\n"
 
-#: src/remote/RemoteXpc.cpp:746
+#: src/remote/RemoteXpc.cpp:807
 msgid " contains malformed message: "
 msgstr " 的消息格式无效："
 
-#: src/remote/RemoteXpc.cpp:746
+#: src/remote/RemoteXpc.cpp:807
 msgid "Stream "
 msgstr "流 "
 
-#: src/remote/RemoteXpc.cpp:753
+#: src/remote/RemoteXpc.cpp:814
 #, c-format
 msgid "    Stream %u message incomplete: %s\n"
 msgstr "    流 %u 的消息尚未完整：%s\n"
 
-#: src/remote/RemoteXpc.cpp:761
+#: src/remote/RemoteXpc.cpp:821
+msgid "Invalid RemoteXPC upload acknowledgement"
+msgstr "RemoteXPC 上传确认无效"
+
+#: src/remote/RemoteXpc.cpp:829
 #, c-format
 msgid "    => stream %u id=%llu %s\n"
 msgstr "    => 流%u id=%llu %s\n"
 
-#: src/remote/RemoteXpc.cpp:790
+#: src/remote/RemoteXpc.cpp:858
 msgid "Timed out waiting for device reply"
 msgstr "等待设备回复超时"
 
-#: src/remote/RemoteXpc.cpp:799
+#: src/remote/RemoteXpc.cpp:867
 msgid "Disconnected while waiting for device reply: "
 msgstr "等待设备回复时连接断开："
 
@@ -4067,47 +4707,59 @@ msgstr "正在重新连接以验证新 Wi-Fi 配对记录"
 msgid "Not an RTP packet"
 msgstr "不是 RTP 包"
 
-#: src/transport/Lockdown.cpp:21
+#: src/transport/Lockdown.cpp:42
+msgid "Bounded lockdown operation timed out"
+msgstr "限时 lockdown 操作超时"
+
+#: src/transport/Lockdown.cpp:43
+msgid "Bounded lockdown operation was cancelled"
+msgstr "限时 lockdown 操作已取消"
+
+#: src/transport/Lockdown.cpp:44
+msgid "Lockdown cancellation callback failed"
+msgstr "Lockdown 取消回调失败"
+
+#: src/transport/Lockdown.cpp:86
 msgid "Failed to write TLS header"
 msgstr "TLS 写头失败"
 
-#: src/transport/Lockdown.cpp:25
+#: src/transport/Lockdown.cpp:89
 msgid "Failed to write TLS body"
 msgstr "TLS 写体失败"
 
-#: src/transport/Lockdown.cpp:36
+#: src/transport/Lockdown.cpp:100
 msgid "Failed to read TLS header"
 msgstr "TLS 读头失败"
 
-#: src/transport/Lockdown.cpp:44 src/transport/Socket.cpp:185
+#: src/transport/Lockdown.cpp:108 src/transport/Socket.cpp:185
 msgid "Invalid lockdown frame length: "
 msgstr "lockdown 帧长度异常: "
 
-#: src/transport/Lockdown.cpp:54
+#: src/transport/Lockdown.cpp:118
 msgid "Failed to read TLS body"
 msgstr "TLS 读体失败"
 
-#: src/transport/Lockdown.cpp:84
+#: src/transport/Lockdown.cpp:149
 msgid "lockdown response is not a valid plist"
 msgstr "lockdown 回复不是合法 plist"
 
-#: src/transport/Lockdown.cpp:105
+#: src/transport/Lockdown.cpp:172 src/transport/Lockdown.cpp:221
 msgid "Cannot parse pairing record"
 msgstr "配对记录无法解析"
 
-#: src/transport/Lockdown.cpp:123
+#: src/transport/Lockdown.cpp:182 src/transport/Lockdown.cpp:239
 msgid "Pairing record missing required fields"
 msgstr "配对记录缺少必要字段"
 
-#: src/transport/Lockdown.cpp:146
+#: src/transport/Lockdown.cpp:193 src/transport/Lockdown.cpp:262
 msgid "StartSession rejected: "
 msgstr "StartSession 被拒: "
 
-#: src/transport/Lockdown.cpp:170
+#: src/transport/Lockdown.cpp:286
 msgid ") rejected: "
 msgstr ") 被拒: "
 
-#: src/transport/Lockdown.cpp:175
+#: src/transport/Lockdown.cpp:291
 msgid "StartService response missing Port"
 msgstr "StartService 回复里没有 Port"
 
@@ -4278,27 +4930,64 @@ msgstr "隧道内不是 IPv6 包: version nibble="
 msgid "socket failed: "
 msgstr "socket 失败: "
 
-#: src/transport/Usbmux.cpp:209 src/transport/Usbmux.cpp:319
+#: src/transport/Usbmux.cpp:209 src/transport/Usbmux.cpp:358
+#: src/transport/Usbmux.cpp:443
 msgid "Invalid mux frame length: "
 msgstr "mux 帧长度异常: "
 
-#: src/transport/Usbmux.cpp:218 src/transport/Usbmux.cpp:332
+#: src/transport/Usbmux.cpp:218 src/transport/Usbmux.cpp:456
 msgid "mux response is not a valid plist"
 msgstr "mux 回复不是合法 plist"
 
-#: src/transport/Usbmux.cpp:223 src/transport/Usbmux.cpp:346
+#: src/transport/Usbmux.cpp:223 src/transport/Usbmux.cpp:470
 msgid "ListDevices response missing DeviceList"
 msgstr "ListDevices 回复里没有 DeviceList"
 
-#: src/transport/Usbmux.cpp:368
+#: src/transport/Usbmux.cpp:285 src/transport/Usbmux.cpp:334
+msgid "DDI service connection was cancelled"
+msgstr "DDI 服务连接已取消"
+
+#: src/transport/Usbmux.cpp:286 src/transport/Usbmux.cpp:335
+msgid "DDI service connection timed out"
+msgstr "DDI 服务连接超时"
+
+#: src/transport/Usbmux.cpp:303
+msgid "Cannot create nonblocking DDI usbmux connection"
+msgstr "无法创建非阻塞 DDI usbmux 连接"
+
+#: src/transport/Usbmux.cpp:324 src/transport/Usbmux.cpp:373
+msgid "Cannot restore blocking DDI usbmux connection"
+msgstr "无法恢复 DDI usbmux 连接的阻塞模式"
+
+#: src/transport/Usbmux.cpp:347
+msgid "Cannot configure nonblocking DDI usbmux connection"
+msgstr "无法配置非阻塞 DDI usbmux 连接"
+
+#: src/transport/Usbmux.cpp:364
+msgid "DDI usbmux response is not a plist dictionary"
+msgstr "DDI usbmux 回复不是 plist 字典"
+
+#: src/transport/Usbmux.cpp:380
+msgid "DDI usbmux service port is invalid"
+msgstr "DDI usbmux 服务端口无效"
+
+#: src/transport/Usbmux.cpp:387
+msgid "DDI usbmux Connect was rejected"
+msgstr "DDI usbmux Connect 被拒绝"
+
+#: src/transport/Usbmux.cpp:399
+msgid "ReadPairRecord response missing PairRecordData"
+msgstr "ReadPairRecord 回复缺少 PairRecordData"
+
+#: src/transport/Usbmux.cpp:492
 msgid "Connect failed, usbmuxd returned Number="
 msgstr "Connect 失败，usbmuxd 返回 Number="
 
-#: src/transport/Usbmux.cpp:389
+#: src/transport/Usbmux.cpp:513
 msgid "ReadPairRecord response missing PairRecordData (response "
 msgstr "ReadPairRecord 没有返回 PairRecordData（回复 "
 
-#: src/transport/Usbmux.cpp:390
+#: src/transport/Usbmux.cpp:514
 msgid "); device may not trust this computer yet"
 msgstr "）；设备可能尚未信任本机"
 
@@ -7843,6 +8532,11 @@ msgstr "不可用"
 #~ "standalone command"
 #~ msgstr ""
 #~ "此独立命令仅可搭配 --ddi-directory、--ddi-download-timeout 和 --lang"
+
+#~ msgid ""
+#~ "Use only DDI download, device selection and language options with this "
+#~ "standalone command"
+#~ msgstr "此独立命令只能使用 DDI 下载、设备选择和语言选项"
 
 #, c-format
 #~ msgid "Using the only remote pairing record (device suffix %s)\n"

@@ -41,7 +41,7 @@ scrctl --download-ddi --ddi-directory ./ddi-cache --ddi-download-timeout 300
 | 目标系统 | 镜像类别 | 下载选择与限制 |
 | --- | --- | --- |
 | iOS / iPadOS 16 及以下 | Classic DDI | 按系统的主版本、次版本查找固定目录，例如 `16.6`；补丁号不单独选版。只有目录中存在的版本可下载，没有时明确报错，不回退到其他版本；没有机型 manifest，不据此保证目标机型可安装 |
-| iOS / iPadOS 17–26 | Personalized DDI | 使用固定的 Personalized 镜像；目标机型及已取得的 `HardwareModel`、板号、芯片身份必须匹配同一个安装身份，再核对该身份引用的两个 payload。安装仍需个性化签名票据 |
+| iOS / iPadOS 17–26 | Personalized DDI | 使用固定的 Personalized 镜像；目标机型及已取得的 `HardwareModel`、板号、芯片身份必须匹配同一个安装身份，再核对该身份引用的两个 payload。原生安装向 Apple TSS 请求该设备的个性化签名票据 |
 | iOS / iPadOS 27 | Cryptex DDI | 使用固定的 Cryptex 镜像 `27A5228h`；校验通用 Cryptex 身份的四个 payload，指定机型时另查 manifest 声明的型号名单。此镜像已用于 `iPhone14,4` / iOS 27.0.1 恢复屏幕服务 |
 
 当前 Classic 固定目录收录 40 个版本：`11.4`、`12.0`–`12.4`、`13.0`–`13.7`、
@@ -81,58 +81,93 @@ Classic 下载镜像及签名文件；Personalized 下载 `BuildManifest.plist`�
 manifest 可解析且资产完整后，才将临时目录发布为完整缓存。缓存复用也重新检查
 所有文件。HTTPS 校验证书，下载失败不会把半份镜像标为完成。
 
-## 安装到设备
+## 原生安装到设备
 
-**下载命令尚不负责设备安装。** Personalized / Cryptex 安装还需要设备服务及个性化签名票据；
-下载文件完整不代表设备允许安装。scrctl 运行时不会自动卸载已有镜像。
+```sh
+scrctl --install-ddi -s <UDID>
+scrctl --install-ddi --wifi auto -s <UDID>
+scrctl --install-ddi --wifi <IP地址> -s <UDID>
+scrctl --install-ddi -s <UDID> --ddi-directory ./ddi-cache \
+    --ddi-download-timeout 300 --ddi-install-timeout 300
+```
 
-当前的安装方式使用独立的 pymobiledevice3 研究工具。它不随 scrctl
-分发，也不是下载命令的运行依赖。先解锁并信任电脑、启用开发者模式；检查当前
-挂载类型及 Cryptex 状态，显式选择设备：
+安装命令直接读取实际设备的系统、机型和身份信息，再下载或复用校验过的缓存。
+只有一台 USB 设备时可省略 `-s`；多台设备时必须明确选择。USB 需要设备解锁、
+信任电脑；iOS / iPadOS 16 及以上需要开发者模式已经开启。无线安装需要已有
+RemotePairing 配对记录及可达的设备；首次配对仍使用 `--pair`，不能与安装混用。
+安装不接受 `--ddi-system-version` / `--ddi-product-type` 人工覆盖实际设备信息，
+也不同时起流、录制或发送控制输入。
+
+安装使用原生 C++、libcurl 和设备协议，不调用 Python、pymobiledevice3 或 Xcode。
+Classic 使用下载的签名文件；Personalized / Cryptex 根据设备实时返回的身份、
+ECID 和 nonce 向 Apple TSS 请求个性化票据，因此尚无适用票据的安装需要能访问
+Apple 签票服务。票据只用于当前设备与 nonce，不随下载缓存标为通用可安装文件。
+上传前校验所有缓存资产及实际发送内容；失败不会报告安装完成。
+
+下载与设备安装分别使用 `--ddi-download-timeout` / `--ddi-install-timeout` 的预算，
+各默认 300 秒，可设为 1–3600 秒。设备信息查询及 CoreDevice 隧道建立属于连接准备，
+安装预算从安装传输准备好后开始，包含签票、上传、替换及状态核验。连接准备
+沿用现有同步 CoreDevice 建连接口，取消可能需等待当前建连调用返回。Ctrl+C
+可取消后续操作；设备已接受的上传或
+安装不会因为本机取消自动回滚。若最终回复超时，安装可能已经生效；先重新查询
+设备状态，不能把失败退出理解为设备没有变化，也不要自动重复替换。
+
+### 已有镜像与显式替换
+
+程序先检查目标类型已有镜像。发现已挂载时单独报告已有状态，不能将其理解为
+新镜像已安装或系统更新后服务一定可用。默认不卸载设备镜像；确实要替换时运行：
+
+```sh
+scrctl --install-ddi -s <UDID> --replace-ddi
+```
+
+替换仅针对目标 DDI，不批量移除设备的其他镜像；镜像资产和签名准备失败时保留
+原有镜像。替换及安装结果需通过设备状态重新查询确认，命令成功后重新连接
+scrctl 检查服务和所需功能。Xcode 可能重新挂载自己的开发镜像；遇到这种竞争，
+先退出 Xcode 再明确执行替换。
+
+### 三种安装路径与验证边界
+
+| 系统类别 | 原生安装路径 | 本轮验证状态 |
+| --- | --- | --- |
+| iOS / iPadOS 16 及以下 | lockdown `mobile_image_mounter`：Classic 签名、ReceiveBytes 上传、MountImage，随后检查挂载签名 / 状态 | 协议离线模拟已覆盖；尚未用旧系统真机新装验收。下载 / 安装能力不表示旧系统具有 CoreDevice 镜像和控制服务 |
+| iOS / iPadOS 17–26 | USB lockdown 或无线 RSD 的 `mobile_image_mounter`：读取硬件身份与 nonce、TSS 签票、Personalized 上传与挂载，随后检查签名 / 状态 | 协议离线模拟已覆盖；之前 iPad mini 的功能记录来自历史已挂载镜像，本轮未重新执行这台设备的新装验收 |
+| iOS / iPadOS 27 | RSD `cryptexd`：通用 Cryptex manifest 个性化签票、资产上传与安装，随后检查 identifier / version 及挂载状态 | macOS USB 在 `iPhone14,4` / iOS 27.0.1 上已通过原生替换安装、identifier / version 与挂载核验，以及重新连接后的 8 秒视频录制；Wi-Fi 已有镜像及挂载核验通过。Linux / Windows 的新装尚未真机验收 |
+
+挂载状态、签名 / 版本符合预期与产品功能可用仍是不同证据。安装不会改写
+README 中具体机型和系统的功能边界，也不会解除旧系统的实时媒体版本门槛。
+
+## 独立研究工具对照
+
+以下命令保留作协议调研与故障对照，不是 scrctl 原生安装的运行依赖。
 
 ```sh
 pymobiledevice3 mounter list --udid <UDID>
 PYMOBILEDEVICE3_UDID=<UDID> pymobiledevice3 cryptex list --userspace
 ```
 
-### Personalized（包括已测试的 iPadOS 18）
-
-先用 scrctl 下载目标系统与机型对应的镜像。然后将打印出的完整目录内三个文件
-显式交给研究工具，位置参数依次是镜像、trustcache、manifest：
+历史 Personalized 安装对照将 scrctl 完整镜像目录的三个文件交给研究工具，位置
+参数依次是镜像、trustcache、manifest：
 
 ```sh
 pymobiledevice3 mounter mount-personalized --udid <UDID> \
     <完整镜像目录>/Image.dmg \
     <完整镜像目录>/Image.dmg.trustcache \
     <完整镜像目录>/BuildManifest.plist
-pymobiledevice3 mounter list --udid <UDID>
 ```
 
-上述参数依据 [pymobiledevice3 11.26.0 挂载 CLI](https://github.com/doronz88/pymobiledevice3/blob/v11.26.0/pymobiledevice3/cli/mounter.py)，
-本轮只核对下载内容与机型身份，没有用新缓存重做 iPad 的安装验收。安装之后重新
-连接 scrctl，确认服务目录与所需功能。iPad mini 5 的历史实际结果见
-[协议记录 §23、§24](coredevice.md)。也可以使用 Xcode 的设备管理界面或
-`pymobiledevice3 mounter auto-mount --udid <UDID>`，但后者使用自己的镜像下载流程，
-没有消费上面 scrctl 打印的目录。
+参数依据 [pymobiledevice3 11.26.0 挂载 CLI](https://github.com/doronz88/pymobiledevice3/blob/v11.26.0/pymobiledevice3/cli/mounter.py)。
+iPad mini 5 历史实际结果见 [协议记录 §23、§24](coredevice.md)。研究工具的
+`mounter auto-mount` 使用其自身下载流程，不消费 scrctl 打印的缓存目录。
 
-### Cryptex（iOS 27）
-
-以下替换流程已使用 pymobiledevice3 11.26.0 验证。
-
-如果存在旧 Personalized 镜像且缺少需要的服务，先退出 Xcode，避免它立即重挂旧
-镜像；确认完整下载目录已经准备好，再卸载对应旧镜像并安装：
+iOS 27.0.1 的历史修复使用 pymobiledevice3 11.26.0：旧 Personalized 镜像缺少
+屏幕服务，退出 Xcode 并明确卸载后，用以下命令安装 Cryptex：
 
 ```sh
 pymobiledevice3 mounter umount-personalized --udid <UDID>
 PYMOBILEDEVICE3_UDID=<UDID> pymobiledevice3 cryptex auto-install \
     --userspace --restore-dir <scrctl打印的完整镜像目录>
-PYMOBILEDEVICE3_UDID=<UDID> pymobiledevice3 cryptex list --userspace
 ```
 
-若已安装 Cryptex，按实际 identifier / version 处理，不套用 Personalized 卸载命令。
-Windows PowerShell 通过 `$env:PYMOBILEDEVICE3_UDID='<UDID>'` 设置同一进程环境变量，
-再运行 `pymobiledevice3 cryptex ...`。安装完成后重新连接 scrctl，检查屏幕服务是否
-恢复。曾观察到 `auto-mount` 在旧镜像已挂载时直接成功返回，因此退出码 0 不能
-单独证明镜像已更新。
-
-实测记录见 [协议记录 §34](coredevice.md#34-ios-2701-更新后的开发镜像准备)。
+该历史操作使用外部工具，不能算作新原生命令的验收。实测记录见
+[协议记录 §34](coredevice.md#34-ios-2701-更新后的开发镜像准备)。

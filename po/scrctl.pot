@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-11 01:07+0800\n"
+"POT-Creation-Date: 2026-10-11 02:20+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -24,7 +24,8 @@ msgid ""
 "table)\n"
 msgstr ""
 
-#: src/app/Application.cpp:82 src/app/Commands.cpp:139 src/app/Commands.cpp:253
+#: src/app/Application.cpp:82 src/app/Commands.cpp:140 src/app/Commands.cpp:149
+#: src/app/Commands.cpp:263
 #, c-format
 msgid "SDL initialization failed: %s\n"
 msgstr ""
@@ -385,481 +386,548 @@ msgid ""
 msgstr ""
 
 #: src/app/Cli.cpp:91
+msgid "Detect the selected device, download its DDI and install it natively"
+msgstr ""
+
+#: src/app/Cli.cpp:94
+msgid ""
+"Explicitly replace the selected device's mounted DDI; requires --install-ddi"
+msgstr ""
+
+#: src/app/Cli.cpp:97
+msgid "Total DDI install timeout in seconds (1..3600); default: 300"
+msgstr ""
+
+#: src/app/Cli.cpp:100
 msgid ""
 "Target iOS/iPadOS ProductVersion for an offline DDI download, e.g. 18.7.8"
 msgstr ""
 
-#: src/app/Cli.cpp:94
+#: src/app/Cli.cpp:103
 msgid ""
 "Target product model for manifest checking, e.g. iPad11,2; requires --ddi-"
 "system-version"
 msgstr ""
 
-#: src/app/Cli.cpp:97
+#: src/app/Cli.cpp:106
 msgid "DDI cache root directory; defaults to the platform user cache"
 msgstr ""
 
-#: src/app/Cli.cpp:100
+#: src/app/Cli.cpp:108
 msgid "Total DDI download timeout in seconds (1..3600); default: 300"
 msgstr ""
 
-#: src/app/Cli.cpp:103
+#: src/app/Cli.cpp:111
 msgid ""
 "Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"
 msgstr ""
 
-#: src/app/Cli.cpp:105
+#: src/app/Cli.cpp:113
 msgid "Disable input control"
 msgstr ""
 
-#: src/app/Cli.cpp:108
+#: src/app/Cli.cpp:116
 msgid "List device apps"
 msgstr ""
 
-#: src/app/Cli.cpp:109
+#: src/app/Cli.cpp:117
 msgid "Show version"
 msgstr ""
 
-#: src/app/Cli.cpp:110
+#: src/app/Cli.cpp:118
 msgid "Desktop fullscreen"
 msgstr ""
 
-#: src/app/Cli.cpp:111
+#: src/app/Cli.cpp:119
 msgid "Keep window on top"
 msgstr ""
 
-#: src/app/Cli.cpp:112
+#: src/app/Cli.cpp:120
 msgid "Borderless window"
 msgstr ""
 
-#: src/app/Cli.cpp:113
+#: src/app/Cli.cpp:121
 msgid "Prevent local screen sleep while running"
 msgstr ""
 
-#: src/app/Cli.cpp:114
+#: src/app/Cli.cpp:122
 msgid "Do not start audio stream"
 msgstr ""
 
-#: src/app/Cli.cpp:116
+#: src/app/Cli.cpp:124
 msgid "Keep audio playing on the phone while forwarding it to the computer"
 msgstr ""
 
-#: src/app/Cli.cpp:119
+#: src/app/Cli.cpp:127
 msgid ""
 "Disable computer audio playback; capture audio only when recording to MP4 or "
 "MKV"
 msgstr ""
 
-#: src/app/Cli.cpp:120
+#: src/app/Cli.cpp:128
 msgid "Do not start video stream"
 msgstr ""
 
-#: src/app/Cli.cpp:122
+#: src/app/Cli.cpp:130
 msgid "Disable video display; keep encoded video when recording"
 msgstr ""
 
-#: src/app/Cli.cpp:125
+#: src/app/Cli.cpp:133
 msgid ""
 "Disable computer video and audio playback; keep selected recording tracks"
 msgstr ""
 
-#: src/app/Cli.cpp:126
+#: src/app/Cli.cpp:134
 msgid "Run without a window"
 msgstr ""
 
-#: src/app/Cli.cpp:127
+#: src/app/Cli.cpp:135
 msgid "Use platform hardware decoder; default: software"
 msgstr ""
 
-#: src/app/Cli.cpp:128
+#: src/app/Cli.cpp:136
 msgid "Print input coordinates"
 msgstr ""
 
-#: src/app/Cli.cpp:129
+#: src/app/Cli.cpp:137
 msgid "Add tunnel diagnostics to --stats"
 msgstr ""
 
-#: src/app/Cli.cpp:130
+#: src/app/Cli.cpp:138
 msgid "Print statistics every second"
 msgstr ""
 
-#: src/app/Cli.cpp:131
+#: src/app/Cli.cpp:139
 msgid "Read device clipboard; with --copy, read back after writing"
 msgstr ""
 
-#: src/app/Cli.cpp:134
+#: src/app/Cli.cpp:142
 msgid "Window horizontal position; integer or auto (default)"
 msgstr ""
 
-#: src/app/Cli.cpp:136
+#: src/app/Cli.cpp:144
 msgid "Window vertical position; integer or auto (default)"
 msgstr ""
 
-#: src/app/Cli.cpp:138
+#: src/app/Cli.cpp:146
 msgid ""
 "Shortcut modifiers, separated by commas: lctrl, rctrl, lalt, ralt, lsuper, "
 "rsuper; default: lalt,lsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:139
+#: src/app/Cli.cpp:147
 msgid "Window width; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:140
+#: src/app/Cli.cpp:148
 msgid "Window height; 0 for automatic"
 msgstr ""
 
-#: src/app/Cli.cpp:141
+#: src/app/Cli.cpp:149
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:143
+#: src/app/Cli.cpp:151
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr ""
 
-#: src/app/Cli.cpp:145
+#: src/app/Cli.cpp:153
 msgid "Exit after N frames; 0 for unlimited"
 msgstr ""
 
-#: src/app/Cli.cpp:147
+#: src/app/Cli.cpp:155
 msgid "Finite positive scale; default: fit screen"
 msgstr ""
 
-#: src/app/Cli.cpp:165
+#: src/app/Cli.cpp:173
 msgid ""
 "Display and recording orientation: 0/90/180/270 or flip0/flip90/flip180/"
 "flip270; recording cannot flip; auto changes display only"
 msgstr ""
 
-#: src/app/Cli.cpp:169
+#: src/app/Cli.cpp:177
 msgid ""
 "Display orientation: auto, 0/90/180/270 or flip0/flip90/flip180/flip270; "
 "flip horizontally before clockwise rotation"
 msgstr ""
 
-#: src/app/Cli.cpp:173
+#: src/app/Cli.cpp:181
 msgid ""
 "Clockwise MP4/MKV recording rotation: 0/90/180/270; default: 0; display is "
 "unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:176
+#: src/app/Cli.cpp:184
 msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
 msgstr ""
 
-#: src/app/Cli.cpp:178
+#: src/app/Cli.cpp:186
 msgid "Background color: RGB or RRGGBB, with optional #"
 msgstr ""
 
-#: src/app/Cli.cpp:179
+#: src/app/Cli.cpp:187
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr ""
 
-#: src/app/Cli.cpp:190
+#: src/app/Cli.cpp:198
 msgid "Requires a nonempty LAN address or auto"
 msgstr ""
 
-#: src/app/Cli.cpp:193
+#: src/app/Cli.cpp:201
 msgid "Use a manual LAN address; auto uses discovered SRV ports"
 msgstr ""
 
-#: src/app/Cli.cpp:205
-msgid ""
-"Use only DDI download, device selection and language options with this "
-"standalone command"
+#: src/app/Cli.cpp:206
+msgid "Requires --download-ddi or --install-ddi"
 msgstr ""
 
-#: src/app/Cli.cpp:211
+#: src/app/Cli.cpp:219
+msgid ""
+"Use only DDI, device selection and language options with this standalone "
+"command"
+msgstr ""
+
+#: src/app/Cli.cpp:225
 msgid ""
 "Choose device detection with -s/--wifi or an explicit OS/model; do not "
 "combine them"
 msgstr ""
 
-#: src/app/Cli.cpp:221
+#: src/app/Cli.cpp:235
 msgid "Requires a nonempty device identifier"
 msgstr ""
 
-#: src/app/Cli.cpp:227
+#: src/app/Cli.cpp:241
 msgid "Requires a nonempty directory path"
 msgstr ""
 
-#: src/app/Cli.cpp:232 src/app/LiveSource.cpp:82
+#: src/app/Cli.cpp:246 src/app/LiveSource.cpp:82
 msgid "Requires a nonempty recording file"
 msgstr ""
 
-#: src/app/Cli.cpp:241
+#: src/app/Cli.cpp:255
 msgid ""
 "Audio capture is disabled; --audio-dup requires playback or MP4/MKV recording"
 msgstr ""
 
-#: src/app/Cli.cpp:247
+#: src/app/Cli.cpp:261
 msgid ""
 "File playback requires video; incompatible with video playback disable "
 "options"
 msgstr ""
 
-#: src/app/Cli.cpp:255
+#: src/app/Cli.cpp:269
 msgid "Audio-only recording requires MP4 or MKV; raw HEVC cannot contain audio"
 msgstr ""
 
-#: src/app/Cli.cpp:258
+#: src/app/Cli.cpp:272
 msgid "Recording requires at least one enabled audio or video track"
 msgstr ""
 
-#: src/app/Cli.cpp:261 src/app/LiveSource.cpp:97
+#: src/app/Cli.cpp:275 src/app/LiveSource.cpp:97
 msgid "Recording orientation requires a video track"
 msgstr ""
 
-#: src/app/Cli.cpp:266
+#: src/app/Cli.cpp:280
 msgid ""
 "Frame counting, hardware decoding, fallback tests and screenshots require "
 "video capture"
 msgstr ""
 
-#: src/app/Cli.cpp:270 src/app/LiveSource.cpp:119
+#: src/app/Cli.cpp:284 src/app/LiveSource.cpp:119
 msgid ""
 "Container recording requires live video; screenshot polling cannot be "
 "recorded"
 msgstr ""
 
-#: src/app/Cli.cpp:274
+#: src/app/Cli.cpp:288
 msgid ""
 "Recording does not support flipping; use --display-orientation for display-"
 "only flipping or reset --record-orientation to a rotation"
 msgstr ""
 
-#: src/app/Cli.cpp:278 src/app/LiveSource.cpp:129
+#: src/app/Cli.cpp:292 src/app/LiveSource.cpp:129
 msgid ""
 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate "
 "only the display"
 msgstr ""
 
-#: src/app/Cli.cpp:282
+#: src/app/Cli.cpp:296
 msgid ""
 "Wireless first pairing requires --wifi auto; existing records cannot be "
 "repaired wirelessly"
 msgstr ""
 
-#: src/app/Cli.cpp:293
+#: src/app/Cli.cpp:307
 msgid "Expected an integer or auto"
 msgstr ""
 
-#: src/app/Cli.cpp:313
+#: src/app/Cli.cpp:327
 msgid ""
 "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
 msgstr ""
 
-#: src/app/Cli.cpp:324
+#: src/app/Cli.cpp:338
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr ""
 
-#: src/app/Cli.cpp:331
+#: src/app/Cli.cpp:345
 msgid "Requires a finite positive number"
 msgstr ""
 
-#: src/app/Cli.cpp:346
+#: src/app/Cli.cpp:360
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr ""
 
-#: src/app/Cli.cpp:355
+#: src/app/Cli.cpp:369
 msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
 msgstr ""
 
-#: src/app/Cli.cpp:369
+#: src/app/Cli.cpp:383
 msgid "Frame number must be a positive integer"
 msgstr ""
 
-#: src/app/Cli.cpp:374
+#: src/app/Cli.cpp:388
 msgid "Requires a window; incompatible with --no-window"
 msgstr ""
 
-#: src/app/Cli.cpp:377
+#: src/app/Cli.cpp:391
 msgid "Window readback requires video playback"
 msgstr ""
 
-#: src/app/Cli.cpp:385
+#: src/app/Cli.cpp:399
 msgid "Nothing to do: enable media, recording or device control"
 msgstr ""
 
-#: src/app/Commands.cpp:43
+#: src/app/Commands.cpp:44
 msgid "pairing record available"
 msgstr ""
 
-#: src/app/Commands.cpp:45
+#: src/app/Commands.cpp:46
 msgid "pair again over USB"
 msgstr ""
 
-#: src/app/Commands.cpp:47
+#: src/app/Commands.cpp:48
 msgid "old record hint; pair again over USB"
 msgstr ""
 
-#: src/app/Commands.cpp:49
+#: src/app/Commands.cpp:50
 msgid "multiple matching pairing records"
 msgstr ""
 
-#: src/app/Commands.cpp:51
+#: src/app/Commands.cpp:52
 msgid "invalid discovery identity"
 msgstr ""
 
-#: src/app/Commands.cpp:53
+#: src/app/Commands.cpp:54
 msgid "identity matching failed"
 msgstr ""
 
-#: src/app/Commands.cpp:55 src/app/Commands.cpp:57
+#: src/app/Commands.cpp:56 src/app/Commands.cpp:58
 msgid "no matching pairing record"
 msgstr ""
 
-#: src/app/Commands.cpp:64 src/app/Commands.cpp:119 src/app/Commands.cpp:159
+#: src/app/Commands.cpp:65 src/app/Commands.cpp:120 src/app/Commands.cpp:169
 #: src/ddi/Download.cpp:355
 msgid "DDI download cancelled"
 msgstr ""
 
-#: src/app/Commands.cpp:86
+#: src/app/Commands.cpp:87
 msgid "Cannot enumerate the target USB device for DDI selection"
 msgstr ""
 
-#: src/app/Commands.cpp:100 src/app/Commands.cpp:121
+#: src/app/Commands.cpp:101 src/app/Commands.cpp:122 src/app/DdiInstall.cpp:53
+#: src/app/DdiInstall.cpp:79
 msgid "DDI target metadata is missing its OS version or product model"
 msgstr ""
 
-#: src/app/Commands.cpp:148 src/app/Commands.cpp:160 src/app/Commands.cpp:169
-#: src/app/Commands.cpp:188
+#: src/app/Commands.cpp:158 src/app/Commands.cpp:170 src/app/Commands.cpp:179
+#: src/app/Commands.cpp:198
 #, c-format
 msgid "DDI download failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:172
+#: src/app/Commands.cpp:182 src/app/DdiInstall.cpp:82
 #, c-format
 msgid "DDI target: OS %s, model %s, image type %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:179
+#: src/app/Commands.cpp:189
 #, c-format
 msgid "Downloading DDI: %s (%llu/%llu bytes)\n"
 msgstr ""
 
-#: src/app/Commands.cpp:193
+#: src/app/Commands.cpp:203
 #, c-format
 msgid "Verified cached DDI %s: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:194
+#: src/app/Commands.cpp:204
 #, c-format
 msgid "Downloaded and verified DDI %s: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:196
+#: src/app/Commands.cpp:206
 #, c-format
 msgid "DDI source: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:197
+#: src/app/Commands.cpp:207
 #, c-format
 msgid ""
 "Download complete; device installation is a separate step. See docs/DDI.md.\n"
 msgstr ""
 
-#: src/app/Commands.cpp:206 src/app/DeviceConnection.cpp:237
+#: src/app/Commands.cpp:216 src/app/DeviceConnection.cpp:237
 #, c-format
 msgid "Discovery warning: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:210
+#: src/app/Commands.cpp:220
 msgid "Wireless device (UDID unknown)"
 msgstr ""
 
-#: src/app/Commands.cpp:222
+#: src/app/Commands.cpp:232
 msgid "address unresolved"
 msgstr ""
 
-#: src/app/Commands.cpp:238
+#: src/app/Commands.cpp:248
 #, c-format
 msgid "No devices found\n"
 msgstr ""
 
-#: src/app/Commands.cpp:262
+#: src/app/Commands.cpp:272
 #, c-format
 msgid "Enter this one-use pairing code on the device: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:276
+#: src/app/Commands.cpp:286
 #, c-format
 msgid "Remote pairing failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:280
+#: src/app/Commands.cpp:290
 #, c-format
 msgid "Remote pairing verified for %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:281
+#: src/app/Commands.cpp:291
 #, c-format
 msgid "Remote pairing saved for %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:290 src/app/Commands.cpp:313
+#: src/app/Commands.cpp:300 src/app/Commands.cpp:323
 #, c-format
 msgid "Failed to establish session: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:295
+#: src/app/Commands.cpp:305
 #, c-format
 msgid "Failed to list apps: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:301
+#: src/app/Commands.cpp:311
 #, c-format
 msgid "Total: %zu\n"
 msgstr ""
 
-#: src/app/Commands.cpp:319
+#: src/app/Commands.cpp:329
 #, c-format
 msgid "Wrote %zu bytes to device clipboard\n"
 msgstr ""
 
-#: src/app/Commands.cpp:321
+#: src/app/Commands.cpp:331
 #, c-format
 msgid "--copy failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:328
+#: src/app/Commands.cpp:338
 #, c-format
 msgid "Device clipboard (%zu bytes): "
 msgstr ""
 
-#: src/app/Commands.cpp:332
+#: src/app/Commands.cpp:342
 #, c-format
 msgid "--paste failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:358
+#: src/app/Commands.cpp:368
 #, c-format
 msgid "--start-app requires a nonempty app name\n"
 msgstr ""
 
-#: src/app/Commands.cpp:368
+#: src/app/Commands.cpp:378
 #, c-format
 msgid "Failed to find app by name: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:386
+#: src/app/Commands.cpp:396
 #, c-format
 msgid "No app name starts with %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:394 tools/app_launch_probe.cpp:89
+#: src/app/Commands.cpp:404 tools/app_launch_probe.cpp:89
 #, c-format
 msgid "Failed to launch %s: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:397
+#: src/app/Commands.cpp:407
 msgid " (previous instance terminated)"
 msgstr ""
 
-#: src/app/Commands.cpp:397
+#: src/app/Commands.cpp:407
 #, c-format
 msgid "Launched %s%s\n"
+msgstr ""
+
+#: src/app/DdiInstall.cpp:30
+#, c-format
+msgid "DDI installation failed: %s\n"
+msgstr ""
+
+#: src/app/DdiInstall.cpp:31
+#, c-format
+msgid ""
+"An interrupted installation may already have taken effect; check device "
+"state before replacing again.\n"
+msgstr ""
+
+#: src/app/DdiInstall.cpp:78 src/app/DdiInstall.cpp:110
+msgid "DDI installation cancelled"
+msgstr ""
+
+#: src/app/DdiInstall.cpp:96
+#, c-format
+msgid "DDI transfer: %s (%llu/%llu bytes)\n"
+msgstr ""
+
+#: src/app/DdiInstall.cpp:146
+msgid "DDI Cryptex is installed but its developer image is not mounted"
+msgstr ""
+
+#: src/app/DdiInstall.cpp:149
+#, c-format
+msgid "DDI already installed: %s %s (no new installation)\n"
+msgstr ""
+
+#: src/app/DdiInstall.cpp:150
+#, c-format
+msgid "DDI installed and verified: %s %s\n"
+msgstr ""
+
+#: src/app/DdiInstall.cpp:154
+msgid "DDI installation requires the device ECID"
+msgstr ""
+
+#: src/app/DdiInstall.cpp:170
+#, c-format
+msgid "DDI already mounted: %s (no new installation)\n"
+msgstr ""
+
+#: src/app/DdiInstall.cpp:171
+#, c-format
+msgid "DDI mounted and verified: %s\n"
 msgstr ""
 
 #: src/app/DeviceConnection.cpp:15 src/app/DeviceConnection.cpp:52
@@ -1510,6 +1578,173 @@ msgstr ""
 msgid "Schedule requires at least one time"
 msgstr ""
 
+#: src/ddi/Cryptex.cpp:21
+msgid "Cryptex manifest is missing a required field"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:27
+msgid "Cryptex manifest has an invalid integer"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:32
+msgid "Cryptex manifest has an invalid string"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:38 src/ddi/Cryptex.cpp:40
+msgid "Cryptex asset is not a bounded regular file"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:45
+msgid "Cannot read the complete Cryptex asset"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:52
+msgid "Unknown pinned Cryptex asset"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:58
+msgid "Cryptex asset snapshot checksum failed"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:63
+msgid "Cryptex asset changed before installation"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:67
+msgid "Cryptex identifiers exceed the nesting limit"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:79
+msgid "Cryptex identifiers contain an unsupported value"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:99 src/ddi/Cryptex.cpp:102
+msgid "Cryptex installation cancelled or timed out"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:109
+msgid "Cryptex service does not use RemoteXPC"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:129 src/ddi/Cryptex.cpp:132 src/ddi/Cryptex.cpp:134
+#: src/ddi/Cryptex.cpp:138
+msgid "Cryptex installed state is malformed"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:141
+msgid "Multiple DDI Cryptex installations require manual resolution"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:155
+msgid "Cryptex manifest identities are invalid"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:161
+msgid "Cryptex manifest has ambiguous identities"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:165
+msgid "Cryptex manifest lacks its generic identity"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:171
+msgid "Cryptex asset is not a Developer Disk Image"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:174
+msgid "Cryptex DDI nonce-domain handle is unsupported"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:176
+msgid "Cryptex product-class flag is invalid"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:190
+msgid "Cryptex reply is not a dictionary"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:192
+msgid "Cryptex device error"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:209
+msgid "Cryptex device returned a nonzero or malformed error"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:212
+msgid "Cryptex reply lacks status and payload"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:220
+msgid "Cryptex nonce structure has an invalid size"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:223
+msgid "Cryptex nonce length is invalid"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:248 src/ddi/Cryptex.cpp:270
+msgid "Cryptex installation timeout is invalid"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:252
+msgid "Cryptex installed-state query failed: "
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:266
+msgid "Cryptex installation requires a supported Cryptex OS target"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:275
+msgid "Device does not advertise CryptexInstall"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:287
+msgid "A different DDI Cryptex is installed; explicit replacement is required"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:294
+msgid ""
+"Personalized DDI mount inspection is required before Cryptex installation"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:302
+msgid "A Personalized DDI is mounted; explicit replacement is required"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:305
+msgid "Device does not advertise Cryptex ReadIdentifiers"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:309
+msgid "Cryptex personalization identifiers are invalid"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:315 src/ddi/Cryptex.cpp:349
+msgid "Cryptex nonce reply is invalid"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:327
+msgid "Cryptex ticket size is invalid"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:354
+msgid "Cryptex personalization nonce changed before installation"
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:383
+msgid "Cryptex final installation reply failed: "
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:389
+msgid "Cryptex post-installation verification failed: "
+msgstr ""
+
+#: src/ddi/Cryptex.cpp:393
+msgid ""
+"Cryptex installation reply succeeded but the expected DDI is not installed"
+msgstr ""
+
 #: src/ddi/Download.cpp:26
 msgid "DDI cache contains a nonregular file"
 msgstr ""
@@ -1622,7 +1857,7 @@ msgstr ""
 msgid "Cannot configure HTTPS downloader"
 msgstr ""
 
-#: src/ddi/Download.cpp:293
+#: src/ddi/Download.cpp:293 src/ddi/Tss.cpp:318
 msgid "This Windows libcurl cannot use the native certificate store"
 msgstr ""
 
@@ -1727,6 +1962,170 @@ msgstr ""
 msgid "No pinned Classic DDI exists for the requested OS major.minor version"
 msgstr ""
 
+#: src/ddi/Mounter.cpp:42
+msgid "DDI install timeout must be positive and at most 24 hours"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:46
+msgid "DDI install cancelled"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:48
+msgid "DDI install timed out"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:53
+msgid "DDI service disconnected without a reply"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:56
+msgid "Invalid or oversized DDI service reply"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:60
+msgid "DDI service request callback is missing"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:65
+msgid "DDI service reconnect callback is missing"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:67
+msgid "Cannot reconnect DDI service"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:75
+msgid "Invalid DDI service error field"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:85
+msgid "Unexpected DDI service status; expected "
+msgstr ""
+
+#: src/ddi/Mounter.cpp:93
+msgid "Invalid DDI ImagePresent field"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:96
+msgid "Too many mounted DDI signatures"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:99 src/ddi/Mounter.cpp:104
+msgid "Invalid mounted DDI signature"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:106
+msgid "Contradictory DDI lookup reply"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:121
+msgid "Invalid DDI CopyDevices reply"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:123
+msgid "Invalid DDI mounted image entry"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:131
+msgid "DDI lookup claims presence without verifiable mounted image"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:141
+msgid "Cannot verify device Developer Mode"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:142
+msgid "Enable Developer Mode on the device before installing DDI"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:149
+msgid "DDI remains mounted after unmount request"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:153 src/ddi/Mounter.cpp:156 src/ddi/Mounter.cpp:160
+msgid "Cannot hash DDI asset"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:172
+msgid "DDI asset exceeds install size limit"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:176
+msgid "Cannot read complete DDI install asset"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:181
+msgid "DDI install asset changed after cache validation"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:207
+msgid "Cryptex DDI requires the cryptexd installer"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:209
+msgid "DDI install result does not match its catalog"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:212
+msgid "DDI install category does not match device OS"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:225
+msgid "DDI personalization requires a ticket callback and device ECID"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:232
+msgid "Invalid DDI personalization identifiers"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:234
+msgid "DDI device hardware identity changed"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:242
+msgid "Invalid DDI personalization nonce"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:245
+msgid "Cannot parse DDI install manifest"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:248
+msgid "DDI personalization did not return a ticket"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:255
+msgid "DDI personalization nonce changed before upload"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:257
+msgid "Invalid DDI install signature or ticket"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:262
+msgid "DDI image transfer callbacks are missing"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:266
+msgid "DDI image upload failed"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:273
+msgid "Another DDI became mounted during upload"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:279
+msgid "DDI mount completed without a verifiable mounted image"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:281
+msgid "Mounted DDI signature differs from the uploaded image"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:294
+msgid "No pinned DDI catalog matches this installation target"
+msgstr ""
+
 #: src/ddi/Selection.cpp:20 src/ddi/Selection.cpp:27 src/ddi/Selection.cpp:33
 #: src/ddi/Selection.cpp:39 src/ddi/Selection.cpp:66
 msgid "Invalid numeric Apple ProductVersion"
@@ -1738,6 +2137,230 @@ msgstr ""
 
 #: src/ddi/Selection.cpp:70
 msgid "DDI selection is not defined for this future Apple OS major version"
+msgstr ""
+
+#: src/ddi/ServiceTransport.cpp:51
+msgid "DDI service operation timed out"
+msgstr ""
+
+#: src/ddi/ServiceTransport.cpp:52
+msgid "DDI service operation was cancelled"
+msgstr ""
+
+#: src/ddi/ServiceTransport.cpp:53
+msgid "DDI service cancellation callback failed"
+msgstr ""
+
+#: src/ddi/ServiceTransport.cpp:116
+msgid "Cannot write DDI service TLS data"
+msgstr ""
+
+#: src/ddi/ServiceTransport.cpp:137
+msgid "DDI service closed the connection"
+msgstr ""
+
+#: src/ddi/ServiceTransport.cpp:152
+msgid "Cannot read DDI service TLS data"
+msgstr ""
+
+#: src/ddi/ServiceTransport.cpp:158
+msgid "DDI service request exceeds its frame limit"
+msgstr ""
+
+#: src/ddi/ServiceTransport.cpp:167
+msgid "DDI service response has an invalid frame length"
+msgstr ""
+
+#: src/ddi/ServiceTransport.cpp:170
+msgid "DDI service response is not a plist dictionary"
+msgstr ""
+
+#: src/ddi/ServiceTransport.cpp:196
+msgid "DDI remote session is unavailable"
+msgstr ""
+
+#: src/ddi/ServiceTransport.cpp:198
+msgid "DDI remote image-mounter service is unavailable"
+msgstr ""
+
+#: src/ddi/ServiceTransport.cpp:200
+msgid "DDI remote image-mounter service uses an unsupported transport"
+msgstr ""
+
+#: src/ddi/ServiceTransport.cpp:218
+msgid "DDI remote image-mounter check-in was rejected"
+msgstr ""
+
+#: src/ddi/ServiceTransport.cpp:269
+msgid "DDI service raw upload data is missing"
+msgstr ""
+
+#: src/ddi/Tss.cpp:44
+msgid "DDI signing metadata contains an invalid numeric identifier"
+msgstr ""
+
+#: src/ddi/Tss.cpp:57
+msgid "Cannot generate DDI signing request identifier"
+msgstr ""
+
+#: src/ddi/Tss.cpp:72
+msgid "DDI signing manifest component is malformed"
+msgstr ""
+
+#: src/ddi/Tss.cpp:80 src/ddi/Tss.cpp:85
+msgid "DDI restore request rules are malformed"
+msgstr ""
+
+#: src/ddi/Tss.cpp:106
+msgid "DDI signing nonce has an invalid length"
+msgstr ""
+
+#: src/ddi/Tss.cpp:136 src/ddi/Tss.cpp:190 src/ddi/Tss.cpp:281
+msgid "DDI signing metadata is malformed"
+msgstr ""
+
+#: src/ddi/Tss.cpp:138
+msgid "DDI signing device identifiers are missing"
+msgstr ""
+
+#: src/ddi/Tss.cpp:141
+msgid "DDI signing build identities are missing"
+msgstr ""
+
+#: src/ddi/Tss.cpp:148
+msgid "DDI signing hardware identity is ambiguous"
+msgstr ""
+
+#: src/ddi/Tss.cpp:151
+msgid "DDI signing manifest has no matching hardware identity"
+msgstr ""
+
+#: src/ddi/Tss.cpp:153
+msgid "DDI signing component manifest is missing"
+msgstr ""
+
+#: src/ddi/Tss.cpp:175
+msgid "DDI signing component digest is malformed"
+msgstr ""
+
+#: src/ddi/Tss.cpp:181
+msgid "DDI signing manifest lacks trusted image components"
+msgstr ""
+
+#: src/ddi/Tss.cpp:192
+msgid "Cryptex signing identifiers are missing"
+msgstr ""
+
+#: src/ddi/Tss.cpp:200
+msgid "Cryptex signing build identity is incomplete"
+msgstr ""
+
+#: src/ddi/Tss.cpp:205
+msgid "Cryptex signing device ECID is missing"
+msgstr ""
+
+#: src/ddi/Tss.cpp:207
+msgid "Cryptex signing production mode is missing"
+msgstr ""
+
+#: src/ddi/Tss.cpp:215
+msgid "Cryptex signing component manifest is missing"
+msgstr ""
+
+#: src/ddi/Tss.cpp:224
+msgid "Cryptex signing component digest is missing"
+msgstr ""
+
+#: src/ddi/Tss.cpp:228
+msgid "Cryptex signing manifest has no personalized components"
+msgstr ""
+
+#: src/ddi/Tss.cpp:236
+msgid "DDI signing response has an invalid length"
+msgstr ""
+
+#: src/ddi/Tss.cpp:248
+msgid "DDI signing response status is malformed"
+msgstr ""
+
+#: src/ddi/Tss.cpp:251
+msgid "DDI signing response message is malformed"
+msgstr ""
+
+#: src/ddi/Tss.cpp:253
+msgid "DDI signing response envelope is malformed"
+msgstr ""
+
+#: src/ddi/Tss.cpp:257
+msgid "DDI signing response envelope is incomplete"
+msgstr ""
+
+#: src/ddi/Tss.cpp:260
+msgid "Apple rejected DDI signing; status "
+msgstr ""
+
+#: src/ddi/Tss.cpp:263
+msgid "DDI signing response has no ticket plist"
+msgstr ""
+
+#: src/ddi/Tss.cpp:268
+msgid "DDI signing ticket plist is invalid"
+msgstr ""
+
+#: src/ddi/Tss.cpp:272
+msgid "DDI signing response contains no valid ticket"
+msgstr ""
+
+#: src/ddi/Tss.cpp:282
+msgid "DDI signing request is not a dictionary"
+msgstr ""
+
+#: src/ddi/Tss.cpp:284
+msgid "DDI signing request ticket type is ambiguous"
+msgstr ""
+
+#: src/ddi/Tss.cpp:285 src/ddi/Tss.cpp:334
+msgid "DDI signing timed out"
+msgstr ""
+
+#: src/ddi/Tss.cpp:286 src/ddi/Tss.cpp:333
+msgid "DDI signing was cancelled"
+msgstr ""
+
+#: src/ddi/Tss.cpp:288
+msgid "DDI signing request exceeds its size limit"
+msgstr ""
+
+#: src/ddi/Tss.cpp:290
+msgid "Cannot initialize DDI signing HTTPS transport"
+msgstr ""
+
+#: src/ddi/Tss.cpp:292
+msgid "Cannot create DDI signing HTTPS transport"
+msgstr ""
+
+#: src/ddi/Tss.cpp:297
+msgid "Cannot create DDI signing HTTPS headers"
+msgstr ""
+
+#: src/ddi/Tss.cpp:302
+msgid "Cannot configure DDI signing HTTPS transport"
+msgstr ""
+
+#: src/ddi/Tss.cpp:331
+msgid "DDI signing response exceeds its size limit"
+msgstr ""
+
+#: src/ddi/Tss.cpp:332
+msgid "DDI signing callback failed"
+msgstr ""
+
+#: src/ddi/Tss.cpp:335
+msgid "DDI signing HTTPS request failed: "
+msgstr ""
+
+#: src/ddi/Tss.cpp:340
+msgid "DDI signing server did not return HTTP 200"
 msgstr ""
 
 #: src/decode/AudioDecoder.h:52
@@ -1877,8 +2500,8 @@ msgstr ""
 msgid "Frame length too large: "
 msgstr ""
 
-#: src/http2/Framing.cpp:155 src/remote/RemoteXpc.cpp:580
-#: src/remote/RemoteXpc.cpp:666 src/xpc/XpcValue.cpp:633
+#: src/http2/Framing.cpp:155 src/remote/RemoteXpc.cpp:590
+#: src/remote/RemoteXpc.cpp:727 src/xpc/XpcValue.cpp:633
 msgid " bytes"
 msgstr ""
 
@@ -3020,43 +3643,43 @@ msgstr ""
 msgid "Numeric value is empty"
 msgstr ""
 
-#: src/plist/Plist.cpp:92
+#: src/plist/Plist.cpp:97
 msgid "Real must be finite"
 msgstr ""
 
-#: src/plist/Plist.cpp:95
+#: src/plist/Plist.cpp:100
 msgid "Trailing content in numeric value"
 msgstr ""
 
-#: src/plist/Plist.cpp:98
+#: src/plist/Plist.cpp:103
 msgid "Unsupported element "
 msgstr ""
 
-#: src/plist/Plist.cpp:103
+#: src/plist/Plist.cpp:108
 msgid "XML text cannot contain NUL"
 msgstr ""
 
-#: src/plist/Plist.cpp:110
+#: src/plist/Plist.cpp:115
 msgid "plist nesting too deep"
 msgstr ""
 
-#: src/plist/Plist.cpp:120
+#: src/plist/Plist.cpp:128
 msgid "plist real must be finite"
 msgstr ""
 
-#: src/plist/Plist.cpp:137
+#: src/plist/Plist.cpp:145
 msgid "plist dictionary key/value count mismatch"
 msgstr ""
 
-#: src/plist/Plist.cpp:154
+#: src/plist/Plist.cpp:162
 msgid "XML input too large or contains NUL"
 msgstr ""
 
-#: src/plist/Plist.cpp:167
+#: src/plist/Plist.cpp:175
 msgid "Root must be a single <plist> element"
 msgstr ""
 
-#: src/plist/Plist.cpp:170
+#: src/plist/Plist.cpp:178
 msgid "plist root must contain a single value"
 msgstr ""
 
@@ -3601,8 +4224,8 @@ msgstr ""
 msgid "Failed to read peer_info: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:258 src/remote/RemoteXpc.cpp:608
-#: src/remote/RemoteXpc.cpp:778 src/remote/RemoteXpc.cpp:794
+#: src/remote/RemoteXpc.cpp:258 src/remote/RemoteXpc.cpp:669
+#: src/remote/RemoteXpc.cpp:846 src/remote/RemoteXpc.cpp:862
 msgid "Connection terminated"
 msgstr ""
 
@@ -3614,7 +4237,7 @@ msgid ""
 "      "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:322 src/remote/RemoteXpc.cpp:520
+#: src/remote/RemoteXpc.cpp:322 src/remote/RemoteXpc.cpp:523
 msgid "RemoteXPC connection input exceeds 64 MiB"
 msgstr ""
 
@@ -3644,116 +4267,133 @@ msgstr ""
 msgid "RST_STREAM must use a nonzero stream"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:458
+#: src/remote/RemoteXpc.cpp:459
 msgid "RemoteXPC stream reset: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:464
+#: src/remote/RemoteXpc.cpp:465
 msgid "DATA must use a nonzero stream"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:477 src/remote/RemoteXpc.cpp:687
-#: src/remote/RemoteXpc.cpp:703
+#: src/remote/RemoteXpc.cpp:478 src/remote/RemoteXpc.cpp:748
+#: src/remote/RemoteXpc.cpp:764
 msgid "RemoteXPC file stream limit exceeded (100)"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:492 src/remote/RemoteXpc.cpp:711
+#: src/remote/RemoteXpc.cpp:493 src/remote/RemoteXpc.cpp:772
 msgid "RemoteXPC file stream cannot be reused: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:498 src/remote/RemoteXpc.cpp:715
+#: src/remote/RemoteXpc.cpp:499 src/remote/RemoteXpc.cpp:776
 msgid "RemoteXPC file data exceeds declared size or 32 MiB limit"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:504 src/remote/RemoteXpc.cpp:660
-#: src/remote/RemoteXpc.cpp:719
+#: src/remote/RemoteXpc.cpp:505 src/remote/RemoteXpc.cpp:721
+#: src/remote/RemoteXpc.cpp:780
 msgid "RemoteXPC file ended before its declared size"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:510
+#: src/remote/RemoteXpc.cpp:512
 msgid "Unsupported RemoteXPC message stream: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:515
+#: src/remote/RemoteXpc.cpp:518
 msgid "RemoteXPC message stream input exceeds 32 MiB plus wrapper"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:533
+#: src/remote/RemoteXpc.cpp:536
 msgid "Device set END_STREAM on message channel; connection ended"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:549
+#: src/remote/RemoteXpc.cpp:552
 msgid "Failed to replenish connection receive window: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:558
+#: src/remote/RemoteXpc.cpp:561
 msgid "Failed to replenish stream receive window: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:579
+#: src/remote/RemoteXpc.cpp:577 src/remote/RemoteXpc.cpp:628
+#: src/remote/RemoteXpc.cpp:655
+msgid "RemoteXPC upload cancelled or timed out"
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:589
 msgid "Peer did not replenish flow-control window; sent "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:584
+#: src/remote/RemoteXpc.cpp:594
 msgid "Disconnected while waiting for flow-control window: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:595
+#: src/remote/RemoteXpc.cpp:605
 msgid "Failed to send DATA: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:614
+#: src/remote/RemoteXpc.cpp:623
+msgid "Invalid or reused RemoteXPC upload attachment"
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:646
+msgid "RemoteXPC upload file ended before its declared size"
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:675
 msgid "XPC encoding failed (depth or length limit exceeded)"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:654
+#: src/remote/RemoteXpc.cpp:715
 msgid "Failed to accept file stream: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:665
+#: src/remote/RemoteXpc.cpp:726
 msgid " has received "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:665
+#: src/remote/RemoteXpc.cpp:726
 msgid "File receive timed out: stream "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:670
+#: src/remote/RemoteXpc.cpp:731
 msgid "Disconnected while receiving file: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:695
+#: src/remote/RemoteXpc.cpp:756
 msgid "RemoteXPC reply attachments exceed 32 MiB"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:729
+#: src/remote/RemoteXpc.cpp:790
 #, c-format
 msgid "    Receiving file: %llu bytes on stream %u\n"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:746
+#: src/remote/RemoteXpc.cpp:807
 msgid " contains malformed message: "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:746
+#: src/remote/RemoteXpc.cpp:807
 msgid "Stream "
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:753
+#: src/remote/RemoteXpc.cpp:814
 #, c-format
 msgid "    Stream %u message incomplete: %s\n"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:761
+#: src/remote/RemoteXpc.cpp:821
+msgid "Invalid RemoteXPC upload acknowledgement"
+msgstr ""
+
+#: src/remote/RemoteXpc.cpp:829
 #, c-format
 msgid "    => stream %u id=%llu %s\n"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:790
+#: src/remote/RemoteXpc.cpp:858
 msgid "Timed out waiting for device reply"
 msgstr ""
 
-#: src/remote/RemoteXpc.cpp:799
+#: src/remote/RemoteXpc.cpp:867
 msgid "Disconnected while waiting for device reply: "
 msgstr ""
 
@@ -3978,47 +4618,59 @@ msgstr ""
 msgid "Not an RTP packet"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:21
+#: src/transport/Lockdown.cpp:42
+msgid "Bounded lockdown operation timed out"
+msgstr ""
+
+#: src/transport/Lockdown.cpp:43
+msgid "Bounded lockdown operation was cancelled"
+msgstr ""
+
+#: src/transport/Lockdown.cpp:44
+msgid "Lockdown cancellation callback failed"
+msgstr ""
+
+#: src/transport/Lockdown.cpp:86
 msgid "Failed to write TLS header"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:25
+#: src/transport/Lockdown.cpp:89
 msgid "Failed to write TLS body"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:36
+#: src/transport/Lockdown.cpp:100
 msgid "Failed to read TLS header"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:44 src/transport/Socket.cpp:185
+#: src/transport/Lockdown.cpp:108 src/transport/Socket.cpp:185
 msgid "Invalid lockdown frame length: "
 msgstr ""
 
-#: src/transport/Lockdown.cpp:54
+#: src/transport/Lockdown.cpp:118
 msgid "Failed to read TLS body"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:84
+#: src/transport/Lockdown.cpp:149
 msgid "lockdown response is not a valid plist"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:105
+#: src/transport/Lockdown.cpp:172 src/transport/Lockdown.cpp:221
 msgid "Cannot parse pairing record"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:123
+#: src/transport/Lockdown.cpp:182 src/transport/Lockdown.cpp:239
 msgid "Pairing record missing required fields"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:146
+#: src/transport/Lockdown.cpp:193 src/transport/Lockdown.cpp:262
 msgid "StartSession rejected: "
 msgstr ""
 
-#: src/transport/Lockdown.cpp:170
+#: src/transport/Lockdown.cpp:286
 msgid ") rejected: "
 msgstr ""
 
-#: src/transport/Lockdown.cpp:175
+#: src/transport/Lockdown.cpp:291
 msgid "StartService response missing Port"
 msgstr ""
 
@@ -4189,27 +4841,64 @@ msgstr ""
 msgid "socket failed: "
 msgstr ""
 
-#: src/transport/Usbmux.cpp:209 src/transport/Usbmux.cpp:319
+#: src/transport/Usbmux.cpp:209 src/transport/Usbmux.cpp:358
+#: src/transport/Usbmux.cpp:443
 msgid "Invalid mux frame length: "
 msgstr ""
 
-#: src/transport/Usbmux.cpp:218 src/transport/Usbmux.cpp:332
+#: src/transport/Usbmux.cpp:218 src/transport/Usbmux.cpp:456
 msgid "mux response is not a valid plist"
 msgstr ""
 
-#: src/transport/Usbmux.cpp:223 src/transport/Usbmux.cpp:346
+#: src/transport/Usbmux.cpp:223 src/transport/Usbmux.cpp:470
 msgid "ListDevices response missing DeviceList"
 msgstr ""
 
-#: src/transport/Usbmux.cpp:368
+#: src/transport/Usbmux.cpp:285 src/transport/Usbmux.cpp:334
+msgid "DDI service connection was cancelled"
+msgstr ""
+
+#: src/transport/Usbmux.cpp:286 src/transport/Usbmux.cpp:335
+msgid "DDI service connection timed out"
+msgstr ""
+
+#: src/transport/Usbmux.cpp:303
+msgid "Cannot create nonblocking DDI usbmux connection"
+msgstr ""
+
+#: src/transport/Usbmux.cpp:324 src/transport/Usbmux.cpp:373
+msgid "Cannot restore blocking DDI usbmux connection"
+msgstr ""
+
+#: src/transport/Usbmux.cpp:347
+msgid "Cannot configure nonblocking DDI usbmux connection"
+msgstr ""
+
+#: src/transport/Usbmux.cpp:364
+msgid "DDI usbmux response is not a plist dictionary"
+msgstr ""
+
+#: src/transport/Usbmux.cpp:380
+msgid "DDI usbmux service port is invalid"
+msgstr ""
+
+#: src/transport/Usbmux.cpp:387
+msgid "DDI usbmux Connect was rejected"
+msgstr ""
+
+#: src/transport/Usbmux.cpp:399
+msgid "ReadPairRecord response missing PairRecordData"
+msgstr ""
+
+#: src/transport/Usbmux.cpp:492
 msgid "Connect failed, usbmuxd returned Number="
 msgstr ""
 
-#: src/transport/Usbmux.cpp:389
+#: src/transport/Usbmux.cpp:513
 msgid "ReadPairRecord response missing PairRecordData (response "
 msgstr ""
 
-#: src/transport/Usbmux.cpp:390
+#: src/transport/Usbmux.cpp:514
 msgid "); device may not trust this computer yet"
 msgstr ""
 

@@ -175,6 +175,10 @@ add_library(scrctl_core STATIC
         src/ddi/Download.cpp
         src/ddi/Selection.cpp
         src/ddi/Catalog.cpp
+        src/ddi/Tss.cpp
+        src/ddi/Mounter.cpp
+        src/ddi/Cryptex.cpp
+        src/ddi/ServiceTransport.cpp
         src/json/Json.cpp
         src/plist/Plist.cpp
         src/plist/PlistValue.cpp
@@ -280,6 +284,7 @@ endif()
 add_library(scrctl_app STATIC
     src/app/Application.cpp
     src/app/Commands.cpp
+    src/app/DdiInstall.cpp
         src/app/SdlRuntime.cpp
         src/app/Presenter.cpp
         src/app/KeyboardState.cpp
@@ -388,6 +393,13 @@ if(SCRCTL_BUILD_TESTS)
     scrctl_add_test_executable(ddi_selection_test tests/ddi_selection_test.cpp)
     target_link_libraries(ddi_selection_test PRIVATE scrctl_core)
     add_test(NAME ddi_selection COMMAND ddi_selection_test)
+
+    foreach(ddi_part IN ITEMS tss mounter cryptex service_transport)
+        scrctl_add_test_executable(ddi_${ddi_part}_test tests/ddi_${ddi_part}_test.cpp)
+        target_link_libraries(ddi_${ddi_part}_test PRIVATE scrctl_core)
+        add_test(NAME ddi_${ddi_part} COMMAND ddi_${ddi_part}_test)
+        set_tests_properties(ddi_${ddi_part} PROPERTIES TIMEOUT 30)
+    endforeach()
 
     scrctl_add_test_executable(keyboard_state_test tests/keyboard_state_test.cpp
         src/app/KeyboardState.cpp)

@@ -42,6 +42,14 @@ public:
 
     /// 连接 usbmux 服务：macOS/Linux 为 /var/run/usbmuxd，Windows 为 127.0.0.1:27015。
     static std::optional<Usbmux> open(std::string &err);
+    // Dedicated deadline/cancellation-aware connection for installation.
+    // Existing discovery/pairing/media open/connect semantics are unchanged.
+    static std::optional<Usbmux> open_for_service(
+        std::chrono::milliseconds timeout, const std::function<bool()> &cancelled,
+        std::string &err);
+    std::optional<Socket> connect_for_service(
+        uint32_t device_id, uint16_t port, std::chrono::milliseconds timeout,
+        const std::function<bool()> &cancelled, std::string &err);
 
     bool list_devices(std::vector<DeviceRecord> &out, std::string &err);
 
@@ -61,11 +69,15 @@ public:
     /// 必须走 usbmuxd 而不是直接读文件：macOS 上 /var/db/lockdown 是 root-only，
     /// 而 usbmuxd 有权限代读。返回的 blob 里含私钥与证书，**绝不可写进日志**。
     bool read_pair_record(std::string_view udid, std::vector<uint8_t> &out, std::string &err);
+    bool read_pair_record_for_service(std::string_view udid, std::vector<uint8_t> &out,
+        std::chrono::milliseconds timeout, const std::function<bool()> &cancelled, std::string &err);
 
     [[nodiscard]] static std::string socket_path();
 
 private:
     bool round_trip(const plist::Value &request, plist::Value &reply, std::string &err);
+    bool round_trip_for_service(const plist::Value &, plist::Value &,
+        std::chrono::milliseconds, const std::function<bool()> &, std::string &);
 
     Socket sock_;
     uint32_t tag_ = 1;

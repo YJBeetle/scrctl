@@ -67,6 +67,38 @@ int main() {
     Options wifi_ddi;
     check(parse({"scrctl", "--download-ddi", "--wifi", "auto", "-s", "device"}, wifi_ddi) == ParseResult::Run &&
               wifi_ddi.wifi == "auto", "DDI selection can read a paired wireless device");
+    Options install_ddi;
+    check(parse({"scrctl", "--install-ddi", "-s", "device", "--replace-ddi",
+                 "--ddi-directory", "cache with spaces", "--ddi-download-timeout", "120",
+                 "--ddi-install-timeout", "600", "--lang", "en"}, install_ddi) == ParseResult::Run &&
+              install_ddi.install_ddi && install_ddi.replace_ddi && !install_ddi.download_ddi &&
+              install_ddi.serial == "device" && install_ddi.ddi_install_timeout == 600 &&
+              install_ddi.ddi_download_timeout == 120 && install_ddi.ddi_directory == "cache with spaces",
+          "native DDI install accepts actual USB target, explicit replacement and separate budgets");
+    Options wireless_install;
+    check(parse({"scrctl", "--install-ddi", "--wifi", "auto", "-s", "device"}, wireless_install) == ParseResult::Run &&
+              wireless_install.install_ddi && wireless_install.wifi == "auto" && !wireless_install.replace_ddi,
+          "native DDI install accepts paired wireless detection without implicit replacement");
+    Options default_install;
+    check(parse({"scrctl", "--install-ddi"}, default_install) == ParseResult::Run && default_install.install_ddi,
+          "native DDI install can select the sole USB device");
+    for (const auto &args : std::vector<std::vector<std::string>>{
+             {"--install-ddi", "--download-ddi"}, {"--replace-ddi"}, {"--ddi-install-timeout", "120"},
+             {"--download-ddi", "--replace-ddi"}, {"--download-ddi", "--ddi-install-timeout", "120"},
+             {"--install-ddi=false"}, {"--install-ddi", "--replace-ddi=false"},
+             {"--install-ddi", "--ddi-install-timeout", "0"}, {"--install-ddi", "--ddi-install-timeout", "3601"},
+             {"--install-ddi", "--ddi-download-timeout", "0"}, {"--install-ddi", "--ddi-directory", " "},
+             {"--install-ddi", "--ddi-system-version", "18.7.8"},
+             {"--install-ddi", "--ddi-product-type", "iPad11,2"},
+             {"--install-ddi", "-s", " "}, {"--install-ddi", "--wifi="},
+             {"--install-ddi", "--wifi", "auto", "--wifi-port", "49152"},
+             {"--install-ddi", "--record", "capture.mkv"}, {"--install-ddi", "--pair"},
+             {"--install-ddi", "--list-devices"}, {"--install-ddi", "--version"},
+             {"--install-ddi", "--no-audio"}, {"--install-ddi", "--test-button", "home"}}) {
+        auto command = args; command.insert(command.begin(), "scrctl"); Options rejected;
+        check(parse(std::move(command), rejected) == ParseResult::Error,
+              "native DDI install rejects conflicting commands, manual profile overrides and ignored options before I/O");
+    }
     Options o;
     check(parse({"scrctl", "-s", "device", "--scale=0.5", "--title=a=b", "--window-x", "-30",
                  "--orientation", "270", "--crop", "100:200:3:4", "--background-color=#aB10fF",

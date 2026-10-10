@@ -3093,3 +3093,33 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   范围，并区分镜像选择、安装接受和产品功能。旧 iPad 的实时媒体要求
   iOS 27，不因增加下载目录而宣布支持；Classic 也未验证 CoreDevice 功能。
   原生个性化签票、安装与挂载继续作为独立待办。
+
+
+## 第一百五十轮：原生设备 DDI 安装与个性化签票
+
+- 增加独立 `--install-ddi`、`--replace-ddi`、`--ddi-install-timeout`。从实际 USB
+  lockdown / Wi-Fi RSD 属性选择目标；下载与安装分开计时，不允许手填机型覆盖
+  安装设备。已有镜像单独报告；只有显式替换才移除目标 DDI，不移除无关镜像。
+  CoreDevice 连接准备仍沿用同步接口，取消可能等该调用返回；安装预算及其服务
+  传输有截止时间。这一建连层限制不与已验证的安装协议混淆。
+- Classic / Personalized 经原生 image-mounter 上传、挂载和状态核验；USB 支持
+  lockdown / TLS，Wi-Fi 支持 RSD plist check-in。Personalized / Cryptex 用
+  libcurl 向 Apple TSS 个性化签票，产品不调用 Python、pymobiledevice3 或 Xcode。
+  XML plist 补齐无符号 64 位整数，避免设备 ECID 溢出。
+- Cryptex 经原生 RemoteXPC 上传五份资产，接收安装回复，再核对 identifier /
+  version 和 image-mounter 挂载状态。上传遵守 HTTP/2 连接与流窗口；签票后
+  再核对实时 nonce，实际发送内容使用重新校验过的内存快照。票据不持久化为
+  通用缓存，不输出 nonce、ECID 或票据。取消与超时不自动回滚设备已接受的操作。
+- macOS USB / iPhone14,4 / iOS 27.0.1：原生识别已有 DDI；首次显式替换上传
+  完成后等待回复超时，独立只读查询随后也曾超时。未立即重复替换、重启或批量
+  卸载；只读查询恢复后确认 `com.apple.MobileAsset.DDI / 27.1.5228.8` 已安装
+  且 `/System/Developer` 已挂载。首次超时根因尚未确定，不能据此声称设备没有变化。
+- 第二次带设备日志的原生显式替换成功退出：Apple 签票、五份上传、最终安装回复、
+  identifier / version 与挂载核验全部通过。新连接的 8 秒 USB HEVC 录制正常
+  完成；无电脑窗口或音频播放，也未发送输入。Wi-Fi 的已有 DDI 查询及 RSD
+  image-mounter 挂载核验通过，没有重复进行所有平台的媒体、按键或长稳测试。
+- 离线覆盖 Classic / Personalized 挂载顺序、TSS 请求与响应、Cryptex 请求 /
+  nonce / 资产身份、服务 TLS / 分帧 / 取消 / 超时和 RemoteXPC 附件流。相关
+  本地回归 11/11 通过；录制文件经 ffprobe 确认为 HEVC、1136×2464、373 个
+  视频包。提交 CI 状态另行记录。旧系统真机新装、Linux / Windows
+  新装尚未验证；历史旧 iPad 功能与实时媒体版本限制不因新增安装能力改变。

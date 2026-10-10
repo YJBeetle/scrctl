@@ -15,6 +15,12 @@ Value Value::Int(int64_t i) {
     v.integer = i;
     return v;
 }
+Value Value::UInt(uint64_t i) {
+    Value v;
+    v.kind = Kind::UInt;
+    v.unsigned_integer = i;
+    return v;
+}
 Value Value::Str(std::string s) {
     Value v;
     v.kind = Kind::String;
@@ -75,5 +81,10 @@ int64_t Value::as_int_or(int64_t fallback) const {
     return fallback;
 }
 bool Value::as_bool_or(bool fallback) const { return kind == Kind::Bool ? boolean : fallback; }
+uint64_t Value::as_uint_or(uint64_t fallback) const {
+    if (kind == Kind::UInt) return unsigned_integer;
+    if (kind == Kind::Int && integer >= 0) return static_cast<uint64_t>(integer);
+    return fallback;
+}
 
 } // namespace scrctl::plist

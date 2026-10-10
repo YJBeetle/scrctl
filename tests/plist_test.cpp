@@ -148,6 +148,12 @@ void test_edge_cases() {
 
     auto e3 = scrctl::plist::parse("<plist><integer> 0x1F </integer></plist>");
     check(e3.has_value() && e3->as_int_or(0) == 31, "integer 支持 0x 形式与空白");
+    for (const auto *number : {"9223372036854775808", "18446744073709551615", "0xffffffffffffffff"}) {
+        auto value = scrctl::plist::parse(std::string("<plist><integer>") + number + "</integer></plist>");
+        auto back = value ? scrctl::plist::parse(scrctl::plist::write(*value)) : std::nullopt;
+        check(value && value->is_uint() && back && back->as_uint_or() == value->as_uint_or(),
+              "全宽无符号整数往返无损");
+    }
 
     auto e4 = scrctl::plist::parse("<plist><dict><key>k</key><string>v</string></dict></plist");
     check(!e4.has_value(), "缺少 </plist> 被拒绝");
@@ -192,7 +198,7 @@ void test_edge_cases() {
           "<plist><dict><key>x</key></dict></plist>",
           "<plist><string><true/></string></plist>",
           "<plist><integer>42oops</integer></plist>",
-          "<plist><integer>9223372036854775808</integer></plist>",
+          "<plist><integer>18446744073709551616</integer></plist>",
           "<plist><real>nan</real></plist>", "<plist><real>inf</real></plist>",
           "<plist><true>no</true></plist>"}) {
       check(!scrctl::plist::parse(invalid, &err) && !err.empty(),

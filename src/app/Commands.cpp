@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "app/DeviceConnection.h"
+#include "app/DdiInstall.h"
 #include "app/Options.h"
 #include "app/SdlRuntime.h"
 #include "ddi/Download.h"
@@ -131,6 +132,15 @@ std::optional<int> run_standalone_command(const Options &o) {
         // 版本号由 CMake 的 project(VERSION) 生成，供二进制输出和问题报告使用。
         std::printf("scrctl %s\n", SCRCTL_VERSION_STRING);
         return 0;
+    }
+
+    if (o.install_ddi) {
+        SdlRuntime runtime;
+        if (!runtime.initialize(SDL_INIT_TIMER)) {
+            std::fprintf(stderr, SCRCTL_TR("SDL initialization failed: %s\n"), SDL_GetError());
+            return 1;
+        }
+        return run_ddi_install(o, [&] { return runtime.stop_requested(); });
     }
 
     if (o.download_ddi) {

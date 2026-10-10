@@ -8,7 +8,7 @@
 
 namespace scrctl::plist {
 
-enum class Kind { Bool, Int, Real, String, Data, Array, Dict };
+enum class Kind { Bool, Int, Real, String, Data, Array, Dict, UInt };
 
 /// XML plist 的协议值类型，编解码使用 pugixml。
 ///
@@ -18,6 +18,7 @@ struct Value {
     Kind kind = Kind::Bool;
     bool boolean = false;
     int64_t integer = 0;
+    uint64_t unsigned_integer = 0;
     double real = 0;
     std::string string;
     std::vector<uint8_t> data;
@@ -27,6 +28,7 @@ struct Value {
 
     static Value Bool(bool b);
     static Value Int(int64_t i);
+    static Value UInt(uint64_t i);
     static Value Str(std::string s);
     static Value OfData(std::vector<uint8_t> d);
     static Value Array();
@@ -36,6 +38,7 @@ struct Value {
     [[nodiscard]] bool is_array() const { return kind == Kind::Array; }
     [[nodiscard]] bool is_string() const { return kind == Kind::String; }
     [[nodiscard]] bool is_int() const { return kind == Kind::Int; }
+    [[nodiscard]] bool is_uint() const { return kind == Kind::UInt; }
     [[nodiscard]] bool is_bool() const { return kind == Kind::Bool; }
 
     /// 返回 nullptr 表示键不存在。
@@ -45,6 +48,7 @@ struct Value {
 
     [[nodiscard]] std::string as_string_or(std::string_view fallback = {}) const;
     [[nodiscard]] int64_t as_int_or(int64_t fallback = 0) const;
+    [[nodiscard]] uint64_t as_uint_or(uint64_t fallback = 0) const;
     [[nodiscard]] bool as_bool_or(bool fallback = false) const;
 };
 

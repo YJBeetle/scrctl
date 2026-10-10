@@ -83,9 +83,14 @@ Value read_value(pugi::xml_node node, int depth) {
         const auto number = content.substr(first, content.find_last_not_of(" \t\r\n") - first + 1);
         size_t end = 0;
         Value out;
-        if (name == "integer")
-            out = Value::Int(std::stoll(number, &end, 0));
-        else {
+        if (name == "integer") {
+            if (number.front() == '-') out = Value::Int(std::stoll(number, &end, 0));
+            else {
+                const auto value = std::stoull(number, &end, 0);
+                out = value <= static_cast<uint64_t>(INT64_MAX)
+                    ? Value::Int(static_cast<int64_t>(value)) : Value::UInt(value);
+            }
+        } else {
             out.kind = Kind::Real;
             out.real = std::stod(number, &end);
             if (!std::isfinite(out.real))
@@ -114,6 +119,9 @@ void write_value(pugi::xml_node parent, const Value &v, int depth) {
         break;
     case Kind::Int:
         parent.append_child("integer").text().set(std::to_string(v.integer).c_str());
+        break;
+    case Kind::UInt:
+        parent.append_child("integer").text().set(std::to_string(v.unsigned_integer).c_str());
         break;
     case Kind::Real:
         if (!std::isfinite(v.real))

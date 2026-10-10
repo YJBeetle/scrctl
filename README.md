@@ -101,7 +101,7 @@ iPad mini 的记录见 [协议记录 §23、§24](docs/coredevice.md#23-那台-i
 | `src/http2` | RemoteXPC 使用的 HTTP/2 帧子集，不消费 HPACK header block |
 | `src/xpc`、`src/remote` | XPC 编解码、服务目录、CoreDevice RPC 和设备会话 |
 | `src/wifi` | 远程配对、记录及密码运算 |
-| `src/ddi` | 固定版本开发镜像下载、完整性校验及缓存 |
+| `src/ddi` | 开发镜像选择、下载与缓存、TSS 个性化签票及原生设备安装 |
 | `src/media`、`src/rt` | 媒体协商、RTP 组帧、恢复、音频和截图源 |
 | `src/bitstream`、`src/decode` | Annex-B / NAL 与视频、音频解码后端 |
 | `src/hid` | 触摸、键盘和硬件按键报告 |
@@ -303,6 +303,15 @@ macOS 使用 gettext 的 libintl）。开启离线测试需要 Python 3。Debian
 `--ddi-directory` 指定缓存根目录。下载使用原生 libcurl；macOS 系统提供该库，
 Linux / Windows 构建需要开发包。设备安装和版本边界见 [DDI 说明](docs/DDI.md)。
 
+使用 `scrctl --install-ddi -s <UDID>` 可读取实际设备信息、复用或下载适用镜像，
+并原生安装；已有无线配对时支持 `--wifi auto` 或手动地址。Classic 使用随镜像
+下载的签名，Personalized / Cryptex 向 Apple TSS 请求该设备的个性化票据；不依赖
+Python 或 Xcode。已挂载镜像会单独报告，不当作本次更新成功；确实需要替换时
+显式加 `--replace-ddi`。macOS USB 在 `iPhone14,4` / iOS 27.0.1 上已通过原生
+Cryptex 替换安装、挂载核验及重新连接后的短视频录制；Wi-Fi 已验证已有镜像查询
+与挂载核验。Classic / Personalized 尚未用旧系统真机新装验收，旧设备的历史功能
+范围仍以上面的具体系统 / 机型表为准。
+
 JSON、命令行和 XML plist 解析分别使用 nlohmann/json（>= 3.12.0）、CLI11（>= 2.5.0）和 pugixml（>= 1.16），许可依次为 MIT、BSD-3-Clause、MIT。
 CMake 优先找系统包，缺失时下载固定版本并校验 SHA256；首次配置需要网络。
 离线构建可以安装这三个库，或通过
@@ -339,9 +348,10 @@ USB 连接通常需要以下设备准备：
 
 1. 开启开发者模式，按设备提示重启。
 2. 插线后在设备上信任这台电脑。
-3. 准备与系统和机型适配的开发者磁盘镜像（DDI）。scrctl 提供原生下载及校验，
+3. 准备与系统和机型适配的开发者磁盘镜像（DDI）。运行
+   `scrctl --install-ddi -s <UDID>` 原生下载、校验并安装；
    iOS / iPadOS 17–26 选择 Personalized，27 选择 Cryptex；16 及以下可下载已有的
-   Classic 镜像，但这些旧系统的 CoreDevice 功能尚未验证。设备安装仍是独立步骤，
+   Classic 镜像，但这些旧系统的 CoreDevice 功能尚未验证。
    见 [DDI 下载与安装](docs/DDI.md)。
 
 系统更新后需要重新检查 DDI。iOS 27.0.1 实测中，旧 Xcode 26.2 的 17C52

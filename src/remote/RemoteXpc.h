@@ -4,6 +4,9 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <functional>
+#include <istream>
+#include <set>
 #include <map>
 #include <memory>
 #include <optional>
@@ -57,6 +60,14 @@ public:
     /// 发送请求；want_reply 决定是否携带 WANTING_REPLY 标志。
     bool send_request(const xpc::Value &body, bool want_reply, std::string &err);
 
+    /// Push an announced attachment on a new client-initiated odd stream. The
+    /// FileTxRequest preamble carries transfer_id; bytes follow without waiting
+    /// for an acknowledgement. Failure makes the channel unusable; never retry.
+    bool send_file_transfer(uint64_t transfer_id, uint64_t size, std::istream &input,
+                            int timeout_ms, const std::function<bool()> &cancelled,
+                            const std::function<void(uint64_t, uint64_t)> &progress,
+                            std::string &err);
+
     /// 区分已收到消息、等待超时和连接或协议错误。
     enum class Wait { Message, Timeout, Broken };
 
@@ -94,7 +105,9 @@ public:
 
 private:
     bool start(std::string &err);
-    bool send_data(uint32_t stream_id, std::span<const uint8_t> payload, std::string &err);
+    bool send_data(uint32_t stream_id, std::span<const uint8_t> payload, std::string &err,
+                   std::optional<std::chrono::steady_clock::time_point> deadline = {},
+                   const std::function<bool()> &cancelled = {});
     /// 处理已缓冲的完整帧，或读取一批字节。连接、解析或控制帧处理失败返回 false；
     /// 读超时返回 true，由调用方使用总 deadline 判断等待是否结束。
     bool pump(int timeout_ms, std::string &err);
@@ -149,6 +162,9 @@ private:
     std::map<uint32_t, FileStream> raw_;
     std::optional<xpc::Value> peer_info_;
     uint64_t next_message_id_ = 0;
+    uint32_t next_outbound_file_stream_ = 5;
+    std::set<uint32_t> finished_outbound_files_;
+    std::set<uint64_t> outbound_transfer_ids_;
 
     // 流控：我方发出去的量受对端授权，对端发进来的量由我们授予。
     uint32_t peer_initial_window_ = http2::kDefaultInitialWindowSize;
