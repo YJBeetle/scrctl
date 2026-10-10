@@ -18,7 +18,8 @@
 - Windows：ARM64 构建、离线回归及 USB / Wi-Fi 镜像、截图切换已通过，ARM64 CI
   构建、安装检查及下载的真实 Release 包独立启动已通过；USB 竖屏下的 HID 绘图及
   SDL 窗口鼠标触摸也已通过；USB / Wi-Fi 横屏视频输入及 Wi-Fi 横屏截图回读通过。
-  日常键盘输入、硬件按键、Windows 新建配对、DDI 初始安装、
+  Wi-Fi 窗口 Unicode 粘贴已在临时隔离 Parallels 共享剪贴板、允许手机系统提示后通过。
+  普通键盘输入、硬件按键、Windows 新建配对、DDI 初始安装、
   x64 和 MSVC 待验证。FFmpeg 音频后端已接入，真实音乐解码及短时 USB 发声通过，持续连接待查，见
   [Windows 说明](WINDOWS.md)。发布产物还需完善对应第三方源码及分发材料。
 - lwIP：离线模拟已覆盖丢包、重传、多个连接 / 网络接口和取消等待；USB / Wi-Fi
@@ -56,7 +57,8 @@
   显式 MOD+V 已接入单在途 Pasteboard 作业及服务取消，Unicode 精确传递与
   窗口上下文使用离线回归；Mac USB 已确认 Safari 的 dtpasteboardd 粘贴提示，
   允许后中文和符号完整出现。Debian Wi-Fi 窗口的中文、符号和 emoji 粘贴已确认；
-  多行与 Windows 窗口粘贴继续真机验收。
+  Windows Wi-Fi 的 Unicode 粘贴在临时隔离 Parallels 共享剪贴板后也已通过；
+  多行和更多应用继续真机验收。
   主机 IME 提交文字另行设计。
   MOD+G / W、双击留边和原地转屏已接入；MOD+← / → 追加本机显示旋转，
   MOD+Shift+← / → 水平镜像，MOD+Shift+↑ / ↓ 垂直镜像，后续帧保留组合。
@@ -135,9 +137,26 @@ Linux 的异常 usbmuxd 曾阻塞扫描之前的 USB 枚举。发现专用枚举
 MKV 仍保留未知视频时长，两轨采用非负共同原点。实验背景见重构记录第九十九轮，
 正式接入及验证见后续记录。
 
-AAC-ELD 原包可直存，离线 FFmpeg 解码及本机 AVFoundation MP4 解码通过；
-其他播放器兼容性不能由这组结果代替。仍需实际音视频同步、更多设备、长时间
-录制、Windows / Wi-Fi 录制回归；容器 PTS 保留不代替物理听画同步验收。
+AAC-ELD 原包可直存，离线 FFmpeg 解码及本机 AVFoundation MP4 解码通过。
+固定 CI 源码 `a5cd2bc813164c1e3f5f733ab0728de043db7382` 的 Windows ARM64 包已完成
+三轮 Wi-Fi、40 秒、仅采集录制：默认 MP4 为 2413 HEVC / 1585 AAC 包，默认 MKV 为
+2426 HEVC / 3221 AAC 包，`--no-audio` MP4 为 2408 HEVC 包且无音频轨。
+两份双轨均为 48 kHz、双声道 AAC-ELD；三轮录制进程正常退出 0，各轨 PTS/DTS 非负且
+严格递增，实际文件在 Mac 上完整软件解码通过。MP4 的 AAC 最大相邻 PTS 间隔为
+24.119583 秒，MKV 已存在 AAC 包的最大间隔为 11 ms；不由控制夹具的截图差异推断因果。
+最初两次在 QQ 音乐暂停、AAC 包为 0 时仍因 5 秒准备门槛失败；及时恢复后的成功重试
+没有修改这一门槛，详见 [Windows 记录](WINDOWS.md#2026-10-10ci-包的-windows-wi-fi-容器录制)。
+Debian 固定生产源码 `3a1528c44b942088192b39fe7053b332b8db1920` 的 Wi-Fi、40 秒、
+仅采集 MKV / MP4 也已通过：分别为 2397 HEVC / 3230 AAC 和 2409 HEVC / 3241 AAC 包，
+音轨均为 48 kHz、双声道 AAC-ELD。两轮录制 child 正常退出 0 并写尾，每轨 PTS/DTS
+非负且严格递增，实际文件完整软件解码均退出 0、无错误输出。MKV 已存在 AAC 包的最大
+相邻间隔为 30 ms，音频包缺少 duration，不推算尾时长；MP4 AAC 范围为
+0.679–33.078416667 秒，最大相邻间隔约 10.020833 ms。
+此前两次零 AAC 的坐标 tap 尝试仍保留为准备超时失败，未确认播放器状态；后续成功
+使用 ConsumerButtons Play/Pause 实验夹具，尚未作为产品快捷键。发送完成不证明播放器
+精确恢复或暂停时刻，详见重构记录第一百三十三轮。
+其他播放器兼容性、全程连续播放、实际音视频同步、更多设备和长时间录制仍需验证；
+本轮未验证声卡或听感，也不涉及 USB 修复。容器 PTS 保留不代替物理听画同步验收。
 录制方向使用静态容器元数据：--orientation 数字角度同时设置显示和录制，
 --display-orientation / --record-orientation 分别设置单侧，按参数顺序覆盖。
 显示保留 auto、录制默认 0；裸 HEVC 不支持非零录制方向，旧版 MKV 封装器明确拒绝。

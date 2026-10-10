@@ -2598,3 +2598,104 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
 - 小日志与逐文件 SHA256 已保存到仓库外 `recording-clock-20261008/` 下的
   `usbmux-ci-b92406e-failure-20261010/`、`usbmux-closed-endpoint-71d54ef-20261010/`
   和 `usbmux-ci-a5cd2bc-20261010/`。源码/离线/CI/设备验收继续分别记录。
+
+## 第一百三十三轮：CI 真包的 Wi-Fi 录制与窗口输入边界
+
+- 使用上一轮 CI 固定源码 `a5cd2bc813164c1e3f5f733ab0728de043db7382` 的 Windows
+  ARM64 安装包，在新建独立 `C:\Workspace\scrctl\ci-artifacts\a5cd2bc-night-20261010`
+  目录核对 source-commit、98 DLL 和 exe；ZIP SHA256 为
+  `f5a94ae317ebe121885be1b65ab3bf061518e2f59ef5236493c1bd6720b32c38`，exe 为
+  `4186d7aa7bce5a855ae71daf2eaa652a288b04713f2d0118a743e7db970ac5d6`。
+  系统 PATH 下英文帮助、中文帮助及版本命令各 native exit 0；已有配对材料
+  只复制到 guest 私有 ACL 目录，不将密钥写入日志或文件审计。
+- 三轮 Wi-Fi、`--time-limit 40`、`-N --no-window --no-control` 仅采集录制
+  均达到时限、正常写尾、录制 child native exit 0、无超时。默认 MP4 实际
+  2413 HEVC / 1585 AAC 包，默认 MKV 为 2426 HEVC / 3221 AAC 包；两份音轨
+  均为 48 kHz、双声道 AAC-ELD。`--no-audio` MP4 为 2408 HEVC 包且无音频轨。
+  实际每轨 PTS/DTS 非负且严格递增；Mac FFmpeg 9.0.2 完整软件解码均 exit 0、
+  无 stderr、progress=end，视频帧数匹配包数，使用 demux 输出时间基准。
+- MP4 的最大相邻 AAC PTS 间隔为 24.119583 秒，随后仍有音频包；MKV 已存在
+  AAC 包最大间隔为 11 ms，音频末包早于视频末包。控制请求与容器 PTS 没有
+  共同时间基准，不能由两轮截图动作差异推断空档原因。仅采集的成功不证明
+  全程连续播放、声卡或听感、物理音画同步，也不涉及 USB 稳定性修复。
+  Windows 最初两次默认 MP4 在 QQ 音乐暂停、零 AAC 时准备超时退出 1；
+  后续成功没有更改记录器启动后的 5 秒首包与可信时钟准备门槛。
+- 同一包的 Windows 窗口两轮 native exit 0；第二轮到达 600 秒应用时限，
+  实际约 602.922 秒正常结束，外层控制器等待超时与 child 结果分别记录。
+  首轮 Q 系统注入 2/2，粘贴在注入前失败。第二轮分离按下/抬起并保持 80 ms，
+  Q 2/2、粘贴 4/4 个系统事件插入成功，且建立了设备输入连接；两轮手机
+  HTTP 只有空值 load / focus，没有最终 input。尚不能确认文本落地，
+  不将 OS 注入成功计为产品通过，也不从此次自动化未闭环判定产品失败。
+- 后续 Windows 粘贴对照观察到 Safari 的系统确认；Parallels 共享剪贴板开启时
+  出现 CoreDevice `PULL_REPLY` 26006 remote-clipboard 错误。临时关闭共享剪贴板后，
+  写入/读回完成，手机自有测试页收到 MetaLeft/V 按下，但没有最终文字输入。
+  Windows 运行结束后，Mac 辅助 HID 重发组合键并允许 dtpasteboardd 提示，才收到
+  完整 Unicode 文本，因此不把该文字归因于 Windows 窗口。共享剪贴板已恢复开启。
+  目标线程仅有中文输入布局；既有英文布局对照未满足前置条件。临时 IME 关闭请求
+  也未获确认，没有发出 Q，原 IME 开启状态已恢复并核对；不将夹具拒绝计为产品失败。
+- 独立最后一轮 KeyboardPasteConfirmed 从空白 Safari 自有测试框开始，临时隔离
+  Parallels 共享剪贴板，Windows 窗口只发送一次左 Alt+V。手机收到 Meta/V 按下与
+  dtpasteboardd 提示；root 只点击允许，没有从 Mac 补发组合键。HTTP input sequence 6
+  和截图均确认中文、符号、emoji 完整出现，实际 input 早于 Windows 进程正常退出。
+  窗口约 332.280 秒退出 0，控制器退出 0；全部主机剪贴板格式在内存中保存/恢复，
+  共享剪贴板恢复原 on 并核对。该 Windows Wi-Fi 窗口 Unicode 粘贴通过受限环境验收，
+  不替代普通 Q、IME、共享剪贴板开启时互操作或更多应用的验证。
+- Debian 仍使用固定生产源码 `3a1528c44b942088192b39fe7053b332b8db1920`，
+  实际 binary SHA256 为
+  `efc41d0050c5910ef38120bde9da54cf39335dd9d9952113abdb46b5c2076bb0`。
+  两次 Wi-Fi 默认音频、仅采集 MKV 尝试均已启动音频接收（`backend=none`），但所有
+  音频统计区间均为零 AAC；分别约 5.957、5.598 秒以准备超时退出 1，未达到
+  40 秒时限或完成录制。辅助 HID 的恢复请求不证明播放器实际进入播放状态，
+  无 AAC 的原因仍未确定，这两次坐标 tap 尝试本身未通过；不能将 PCM 解码为零
+  单独当作故障，因为仅采集路径不解码 PCM。
+- 后续使用同一 Linux 生产源码及 binary，改用 ConsumerButtons Play/Pause
+  实验夹具发送请求。MKV 和 MP4 两轮 helper 均退出 0，录制 child 均达到
+  40 秒时限、正常 finalized、退出 0；没有修改生产录制器或扩宽准备期限。
+  MKV 为 2397 HEVC / 3230 AAC 包，MP4 为 2409 HEVC / 3241 AAC 包，音轨
+  均为 48 kHz、双声道 AAC-ELD。实际每轨 PTS/DTS 非负且严格递增，完整
+  软件解码均 exit 0、stderr 空、progress=end；视频帧数匹配实际包数。
+  Linux 的这两份仅采集容器回归已通过，不能由此反推两次早期失败的原因。
+- Linux MKV 已存在 AAC 包最大相邻 PTS 间隔为 30 ms，所有音频包缺少 duration，
+  不根据采样率或固定帧长编造末包结束时刻。MP4 AAC 首末 PTS 为
+  0.679–33.078416667 秒，最大相邻间隔约 10.020833 ms；两份音轨末包均早于视频。
+  helper 只证明实验 ConsumerButtons 请求完成，控制 gate 与容器 PTS 尚无
+  已验证共同原点，不证明播放器精确恢复/暂停时刻、全程连续播放、听感或
+  物理音画同步。该 Play/Pause 夹具尚未接入产品快捷键，也不涉及 USB 修复。
+- 小日志、夹具源码及五份实际文件的独立审计已保存到仓库兄弟目录
+  `scrctl-fixtures/recording-clock-20261008/night-multiplatform-a5cd2bc-20261010/`。
+  冻结清单包含 376 个小文本（9654323 bytes），实际归档 379 文件、根 SHA256
+  校验 378 条全部通过；manifest SHA256 为
+  `caba2c0e7a487719e266608789fdd33f0397d36f15891f3defeea387370b4590`。
+  旧失败及新成功分别保留，媒体、二进制、配对密钥与原系统剪贴板内容未进入归档。
+
+## 第一百三十四轮：Windows 安装包逐 DLL 来源校验
+
+- 新工具 `record_windows_package.py` 在安装后逐个核对包内 DLL 与工具链同名原文件的
+  SHA256，并用真实本地 pacman / cygpath 记录所属包、精确版本、原始 `-Qi` 信息与
+  许可声明。所有 DLL 校验完成后生成 TSV / JSON；未知来源、字节不同或包信息冲突
+  直接失败。CI 接入这项门禁及十项独立 Python 回归。
+- 本地 Windows 实测：旧 a5 CI 包的 98 DLL 与当前 `C:\opt\msys64\clangarm64\bin`
+  有 89 项一致、9 项不同，不将旧包冒认为当前工具链来源。独立的真实 OpenSSL DLL
+  副本完成来源生成（`mingw-w64-clang-aarch64-openssl` 3.6.5-1），CI 差异副本和追加
+  一个字节的副本均被拒绝；原安装包和工具链没有改动。
+- 提交 `4c13d5bfbaaa0f6daa14157172a58a6c19db89d7` 的
+  [CI 38020739611](https://github.com/YJBeetle/scrctl/actions/runs/38020739611)
+  四作业全部 success，各实际 LastTest 为 60/60；Windows 来源回归另为 10/10。
+  四平台 `audio_pause_recovery` 各 3621 checks、0 failures。Windows 新包包含
+  98 DLL、76 所属包，搬移安装及系统 PATH 下中英文帮助/版本门禁通过。
+- 独立下载新 artifact 11658287555：ZIP SHA256 为
+  `30c6be38e35ada065572715957c985c110353e87d291fbfe9c6811de892dfba7`，与 API digest
+  一致；exe SHA256 为 `8de8f70c51eaabd21aa37f7471c36c2e7b667e3045c2470b1801acbc78d52c1a`。
+  实际 98 DLL 与 TSV / JSON 的条目集合及每份字节 SHA 全部对应；owner 的精确版本与
+  pacman `-Q` / `-Qi` 一致，源码字段及内置源码归档 commit 也匹配该提交。
+- 此步骤不下载或交付第三方源码、构建配方和补丁；来源追溯不能替代这些分发材料。
+  CI、包文件和启动门禁不证明设备音频听感、Windows 首次配对或 Linux USB 稳定性。
+  另用临时 HID 夹具发送与产品相同的 GUI → GUI+V → empty（0 ms 保持），允许手机
+  系统提示后自有测试框完整接收 Unicode；60 ms 对照未发送（等待 gate 超时）。
+  这组结果不支持给产品粘贴凭空增加保持延迟，产品输入代码保持原样。
+- 来源校验、精确 CI 包审计、最终 Windows 粘贴与 0 ms HID 对照的小证据已保存到
+  仓库兄弟目录 `scrctl-fixtures/recording-clock-20261008/night-provenance-paste-20261010/`。
+  冻结清单包含 120 个小文本（2646829 bytes），实际创建 123 文件，根 SHA256
+  校验 122 条全部通过；manifest SHA256 为
+  `90d9387e202bd9db19e676921666bee85cffe33926d72a09cdc25762548b834e`。
+  完整 VM 配置、媒体、安装 ZIP、执行文件、配对密钥和原系统剪贴板内容未进入归档。
