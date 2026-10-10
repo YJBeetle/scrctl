@@ -254,6 +254,8 @@ int main() {
         check(denied.find("Trust") != std::string::npos, "UserDenied -> 点信任: " + denied);
         const auto nosvc = proxy_failure_hint("StartService(x) 被拒: InvalidService");
         check(nosvc.find("DDI") != std::string::npos, "InvalidService -> 查 DDI: " + nosvc);
+        check(nosvc.find("--download-ddi") != std::string::npos,
+              "服务缺失提供正式镜像下载入口: " + nosvc);
         check(proxy_failure_hint("连接被重置").find("DDI") != std::string::npos,
               "认不出的错误保留原来那句兜底提问（不能一个都不给）");
 
@@ -285,6 +287,12 @@ int main() {
         check(no_cd.find("none found") != std::string::npos &&
                   no_cd.find("Xcode") != std::string::npos,
               "coredevice 族为空 -> 直接指向「没挂 DDI，用 Xcode 连一次」: " + no_cd);
+        const auto partial_ddi = Rsd::missing_service_message(
+            "com.apple.coredevice.displayservice",
+            {{"com.apple.coredevice.deviceinfo", 60100, false, true, "", {}}});
+        check(partial_ddi.find("mounted DDI may still lack") != std::string::npos &&
+                  partial_ddi.find("--download-ddi") != std::string::npos,
+              "部分开发服务存在时仍指出镜像能力差异，不把目录存在当成媒体可用: " + partial_ddi);
         // iOS 18 的设备会按版本拒掉媒体流（code 9021）。只转述设备原话的话，用户会照着
         // 去查 DDI 与配对——而这两样都是好的，门槛在设备系统版本上。
         const auto gate = scrctl::remote::Rsd::remote_control_version_hint(

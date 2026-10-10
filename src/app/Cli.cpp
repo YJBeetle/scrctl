@@ -83,6 +83,15 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.add_option("--copy", o.copy_text, SCRCTL_N_("Write device clipboard and exit (supports Unicode)"));
     app.add_flag("--list-devices", o.list_devices,
                  SCRCTL_N_("List USB and RemotePairing devices; wireless scan defaults to 3 seconds"));
+    app.add_flag("--download-ddi", o.download_ddi,
+                 SCRCTL_N_("Download and verify the supported Cryptex DDI, then exit; does not install on a device"))
+        ->disable_flag_override();
+    app.add_option("--ddi-directory", o.ddi_directory,
+                   SCRCTL_N_("DDI cache root directory; defaults to the platform user cache"))
+        ->needs("--download-ddi");
+    app.add_option("--ddi-download-timeout", o.ddi_download_timeout,
+                   SCRCTL_N_("Total DDI download timeout in seconds (1..3600); default: 300"))
+        ->check(CLI::Range(1, 3600))->needs("--download-ddi");
     app.add_option("--discovery-timeout", o.discovery_timeout_ms,
                    SCRCTL_N_("Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"))
         ->check(CLI::Range(0, 60000))->needs("--list-devices");
@@ -168,6 +177,25 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     try {
         app.parse(argc, argv);
         if (!language.select()) return ParseResult::Error;
+        if (o.download_ddi) {
+            // 独立下载不连接设备，也不接受会被静默忽略的镜像、输入或配对参数。
+            for (const auto *option : app.get_options()) {
+                if (option->count() == 0) continue;
+                const auto &name = option->get_name();
+                if (name != "--download-ddi" && name != "--ddi-directory" &&
+                    name != "--ddi-download-timeout" && name != "--lang") {
+                    throw CLI::ValidationError("--download-ddi", SCRCTL_TR(
+                        "Use only --ddi-directory, --ddi-download-timeout and --lang with this standalone command"));
+                }
+            }
+            if (app.count("--ddi-directory") && (o.ddi_directory.empty() ||
+                std::all_of(o.ddi_directory.begin(), o.ddi_directory.end(), [](unsigned char c) {
+                    return std::isspace(c);
+                }))) {
+                throw CLI::ValidationError("--ddi-directory", SCRCTL_TR("Requires a nonempty directory path"));
+            }
+            return ParseResult::Run;
+        }
         if (o.record_format && o.record.empty()) {
             throw CLI::ValidationError("--record-format", SCRCTL_TR("Requires a nonempty recording file"));
         }

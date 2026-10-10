@@ -88,6 +88,52 @@ endif()
 # 本项目通过 usbmuxd 获取配对材料，避免要求读取受保护的 /var/db/lockdown。
 # OpenSSL 是 Apache-2.0，与本项目许可兼容。
 find_package(OpenSSL REQUIRED)
+find_package(PkgConfig QUIET)
+add_library(ScrctlCurl INTERFACE)
+if(APPLE)
+    # 固定系统 HTTPS 后端和系统证书库，避免 pkg-config 选择构建机的 brew curl。
+    if(IS_ABSOLUTE "${CMAKE_OSX_SYSROOT}")
+        set(scrctl_curl_sdk "${CMAKE_OSX_SYSROOT}")
+    else()
+        set(scrctl_curl_sdk_name "${CMAKE_OSX_SYSROOT}")
+        if(NOT scrctl_curl_sdk_name)
+            set(scrctl_curl_sdk_name macosx)
+        endif()
+        execute_process(COMMAND xcrun --sdk "${scrctl_curl_sdk_name}" --show-sdk-path
+                OUTPUT_VARIABLE scrctl_curl_sdk OUTPUT_STRIP_TRAILING_WHITESPACE
+                COMMAND_ERROR_IS_FATAL ANY)
+    endif()
+    if(NOT EXISTS "${scrctl_curl_sdk}/usr/lib/libcurl.tbd" OR
+            NOT EXISTS "${scrctl_curl_sdk}/usr/include/curl/curl.h")
+        message(FATAL_ERROR "macOS SDK 缺少系统 libcurl；请安装 Xcode 或 Command Line Tools。")
+    endif()
+    # SDK 头文件已在编译器默认搜索路径；显式 -isystem usr/include 会破坏 libc++ 顺序。
+    target_link_libraries(ScrctlCurl INTERFACE "${scrctl_curl_sdk}/usr/lib/libcurl.tbd")
+else()
+    find_package(CURL REQUIRED)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(SCRCTL_CURL QUIET IMPORTED_TARGET libcurl)
+    endif()
+    if(TARGET PkgConfig::SCRCTL_CURL)
+        target_link_libraries(ScrctlCurl INTERFACE PkgConfig::SCRCTL_CURL)
+        foreach(scrctl_curl_library IN LISTS SCRCTL_CURL_LINK_LIBRARIES)
+            # Ubuntu runner 的 /usr/local 可能只有 libcurl.a；普通 pkg-config
+            # 目标没有 Libs.private 的压缩/TLS/PSL 依赖。Windows 的 .dll.a
+            # 是动态导入库，不能按静态库处理；只为实际静态 curl 追加闭包。
+            if(scrctl_curl_library MATCHES "(^|[/\\\\])libcurl\\.a$")
+                # FindPkgConfig 3.20 不保证生成 STATIC_LINK_LIBRARIES；使用
+                # 有文档保证的库名、搜索目录和其他选项，经接口目标传到最终链接。
+                target_link_directories(ScrctlCurl INTERFACE ${SCRCTL_CURL_STATIC_LIBRARY_DIRS})
+                target_link_libraries(ScrctlCurl INTERFACE ${SCRCTL_CURL_STATIC_LIBRARIES})
+                target_link_options(ScrctlCurl INTERFACE ${SCRCTL_CURL_STATIC_LDFLAGS_OTHER})
+                target_compile_options(ScrctlCurl INTERFACE ${SCRCTL_CURL_STATIC_CFLAGS_OTHER})
+                break()
+            endif()
+        endforeach()
+    else()
+        target_link_libraries(ScrctlCurl INTERFACE CURL::libcurl)
+    endif()
+endif()
 
 # ---------------------------------------------------------------- 解码后端 ---
 # 当前 VideoToolbox 适配器使用 2 字节 NAL 长度前缀，单个 NAL 最大为 65535 字节；
@@ -126,6 +172,7 @@ endif()
 # ------------------------------------------------------------- core lib -----
 add_library(scrctl_core STATIC
         src/i18n/Translation.cpp
+        src/ddi/Download.cpp
         src/json/Json.cpp
         src/plist/Plist.cpp
         src/plist/PlistValue.cpp
@@ -188,6 +235,7 @@ add_library(scrctl_core STATIC
 target_include_directories(scrctl_core PUBLIC src)
 target_link_libraries(scrctl_core PUBLIC ScrctlAppleFrameworks OpenSSL::SSL OpenSSL::Crypto nlohmann_json::nlohmann_json)
 target_link_libraries(scrctl_core PRIVATE pugixml::pugixml scrctl_lwip Scrctl::Mdns)
+target_link_libraries(scrctl_core PRIVATE ScrctlCurl)
 target_link_libraries(scrctl_core PRIVATE Intl::Intl)
 target_link_libraries(scrctl_core PUBLIC Scrctl::Threading)
 if(WIN32)
@@ -329,6 +377,11 @@ if(SCRCTL_BUILD_TESTS)
     scrctl_add_test_executable(cli_test tests/cli_test.cpp)
     target_link_libraries(cli_test PRIVATE scrctl_app)
     add_test(NAME cli COMMAND cli_test)
+
+    scrctl_add_test_executable(ddi_download_test tests/ddi_download_test.cpp)
+    target_link_libraries(ddi_download_test PRIVATE scrctl_core)
+    add_test(NAME ddi_download COMMAND ddi_download_test)
+    set_tests_properties(ddi_download PROPERTIES TIMEOUT 30)
 
     scrctl_add_test_executable(keyboard_state_test tests/keyboard_state_test.cpp
         src/app/KeyboardState.cpp)
@@ -594,6 +647,7 @@ else()
     install(TARGETS scrctl RUNTIME DESTINATION bin)
 endif()
 install(FILES LICENSE THIRD_PARTY_NOTICES.md DESTINATION share/doc/scrctl)
+install(FILES docs/DDI.md DESTINATION share/doc/scrctl)
 if(WIN32)
     install(FILES docs/WINDOWS.md DESTINATION share/doc/scrctl)
 elseif(APPLE)

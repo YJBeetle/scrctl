@@ -4,6 +4,23 @@ This file records the licenses of the dependencies added during the application 
 Existing SDL2, OpenSSL and optional FFmpeg dependencies retain their own licenses
 and distribution requirements.
 
+## libcurl (curl license)
+
+Source: https://curl.se/libcurl/
+
+The native DDI downloader links libcurl. macOS may use the system library; Linux
+and Windows use the configured system or toolchain package. HTTPS peer and host
+verification remain enabled. Windows uses the native certificate store, so an
+installed scrctl package does not depend on the build machine's CA bundle path.
+Bundled libcurl and its runtime dependencies are recorded by the existing package
+provenance tools and retain their applicable license files.
+
+License text: https://curl.se/docs/copyright.html
+
+DDI payloads are downloaded separately by the user and are not part of the scrctl
+binary package. The fixed third-party download source and verification scope are
+documented in docs/DDI.md.
+
 ## nlohmann/json 3.12.0 (MIT)
 
 Source: https://github.com/nlohmann/json/tree/v3.12.0

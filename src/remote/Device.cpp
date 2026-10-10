@@ -36,7 +36,7 @@ std::string proxy_failure_hint(const std::string_view lockdown_error) {
         return SCRCTL_TR(" (computer not trusted; unlock the device and confirm Trust)");
     }
     if (e.find("InvalidService") != std::string::npos) {
-        return SCRCTL_TR(" (service unavailable; check Developer Mode and DDI mounting through Xcode)");
+        return SCRCTL_TR(" (service unavailable; check Developer Mode and a compatible DDI; download: scrctl --download-ddi, installation: docs/DDI.md)");
     }
     return SCRCTL_TR(" (check DDI mounting and Developer Mode)");
 }

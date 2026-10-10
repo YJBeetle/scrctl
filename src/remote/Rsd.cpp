@@ -495,6 +495,7 @@ std::string Rsd::missing_service_message(const std::string_view name,
     std::string out = SCRCTL_TR("Device directory missing service ") + std::string(name) + SCRCTL_TR(".");
     if (seen.empty()) {
         out += SCRCTL_TR("Directory is empty; check tunnel setup and DDI mounting.");
+        out += SCRCTL_TR("\nDownload a supported DDI with scrctl --download-ddi; installation and compatibility guidance: docs/DDI.md.\n");
         return out;
     }
     std::vector<std::string> cd;
@@ -513,6 +514,7 @@ std::string Rsd::missing_service_message(const std::string_view name,
     for (const auto &n : cd) {
         out += "  · " + n + "\n";
     }
+    out += SCRCTL_TR("A mounted DDI may still lack this service. Check its version and capabilities; download a supported DDI with scrctl --download-ddi. Installation guidance: docs/DDI.md.\n");
     out += SCRCTL_TR(
         "Include this diagnostic when reporting the issue. For the full directory and "
         "feature lists, run feature_probe --all to print all ") +

@@ -3,12 +3,14 @@
 #include <cctype>
 #include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <vector>
 
 #include "app/DeviceConnection.h"
 #include "app/Options.h"
 #include "app/SdlRuntime.h"
+#include "ddi/Download.h"
 #include "i18n/Translation.h"
 #include "remote/App.h"
 #include "remote/Discovery.h"
@@ -61,6 +63,52 @@ std::optional<int> run_standalone_command(const Options &o) {
     if (o.show_version) {
         // 版本号由 CMake 的 project(VERSION) 生成，供二进制输出和问题报告使用。
         std::printf("scrctl %s\n", SCRCTL_VERSION_STRING);
+        return 0;
+    }
+
+    if (o.download_ddi) {
+        SdlRuntime runtime;
+        if (!runtime.initialize(SDL_INIT_TIMER)) {
+            std::fprintf(stderr, SCRCTL_TR("SDL initialization failed: %s\n"), SDL_GetError());
+            return 1;
+        }
+        ddi::DownloadOptions options;
+        if (!o.ddi_directory.empty()) {
+            std::error_code ec;
+            const std::u8string utf8_directory(o.ddi_directory.begin(), o.ddi_directory.end());
+            options.cache_root = std::filesystem::absolute(std::filesystem::path(utf8_directory), ec);
+            if (ec) {
+                std::fprintf(stderr, SCRCTL_TR("DDI download failed: %s\n"),
+                             terminal_text(ec.message()).c_str());
+                return 1;
+            }
+        }
+        options.timeout = std::chrono::seconds(o.ddi_download_timeout);
+        options.cancelled = [&] { return runtime.stop_requested(); };
+        std::string last_file;
+        uint64_t last_bytes = 0;
+        options.progress = [&](const std::string &file, uint64_t received, uint64_t total) {
+            if (last_file != file || received == total || received >= last_bytes + 1024 * 1024) {
+                std::fprintf(stderr, SCRCTL_TR("Downloading DDI: %s (%llu/%llu bytes)\n"),
+                             terminal_text(file).c_str(), static_cast<unsigned long long>(received),
+                             static_cast<unsigned long long>(total));
+                last_file = file;
+                last_bytes = received;
+            }
+        };
+        std::string error;
+        const auto result = ddi::download_cryptex(options, error);
+        if (!result) {
+            std::fprintf(stderr, SCRCTL_TR("DDI download failed: %s\n"), terminal_text(error).c_str());
+            return 1;
+        }
+        const auto utf8_path = result->directory.u8string();
+        const std::string path(utf8_path.begin(), utf8_path.end());
+        std::printf(result->cache_hit ? SCRCTL_TR("Verified cached DDI %s: %s\n")
+                                     : SCRCTL_TR("Downloaded and verified DDI %s: %s\n"),
+                    terminal_text(result->build).c_str(), terminal_text(path).c_str());
+        std::printf(SCRCTL_TR("DDI source: %s\n"), result->source_url.c_str());
+        std::printf(SCRCTL_TR("Download complete; device installation is a separate step. See docs/DDI.md.\n"));
         return 0;
     }
 

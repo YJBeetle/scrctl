@@ -26,6 +26,28 @@ void check(bool ok, const char *message) {
 } // namespace
 
 int main() {
+    Options ddi;
+    check(parse({"scrctl", "--download-ddi", "--ddi-directory", "cache with spaces",
+                 "--ddi-download-timeout", "120", "--lang", "en"}, ddi) == ParseResult::Run &&
+              ddi.download_ddi && ddi.ddi_directory == "cache with spaces" && ddi.ddi_download_timeout == 120,
+          "standalone DDI download accepts cache directory and bounded budget");
+    for (const auto &args : std::vector<std::vector<std::string>>{
+             {"--ddi-directory", "cache"}, {"--ddi-download-timeout", "120"},
+             {"--download-ddi", "--ddi-directory", ""},
+             {"--download-ddi", "--ddi-directory", "  "},
+             {"--download-ddi", "--ddi-download-timeout", "0"},
+             {"--download-ddi", "--ddi-download-timeout", "3601"},
+             {"--download-ddi=false"},
+             {"--download-ddi", "--pair"}, {"--download-ddi", "--list-devices"},
+             {"--download-ddi", "--wifi", "auto"}, {"--download-ddi", "-s", "device"},
+             {"--download-ddi", "--record", "capture.hevc"}, {"--download-ddi", "--version"},
+             {"--download-ddi", "--play", "file.hevc"}, {"--download-ddi", "--test-button", "home"}}) {
+        auto command = args;
+        command.insert(command.begin(), "scrctl");
+        Options rejected;
+        check(parse(std::move(command), rejected) == ParseResult::Error,
+              "DDI download rejects invalid budget and ignored device/media commands before side effects");
+    }
     Options o;
     check(parse({"scrctl", "-s", "device", "--scale=0.5", "--title=a=b", "--window-x", "-30",
                  "--orientation", "270", "--crop", "100:200:3:4", "--background-color=#aB10fF",

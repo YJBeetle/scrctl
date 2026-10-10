@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-10 20:47+0800\n"
+"POT-Creation-Date: 2026-10-11 00:07+0800\n"
 "PO-Revision-Date: 2026-10-09 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -19,7 +19,7 @@ msgid ""
 "table)\n"
 msgstr "可见区 %ux%u -> %dx%d（设备未报告尺寸，使用机型表）\n"
 
-#: src/app/Application.cpp:82 src/app/Commands.cpp:119
+#: src/app/Application.cpp:82 src/app/Commands.cpp:72 src/app/Commands.cpp:166
 #, c-format
 msgid "SDL initialization failed: %s\n"
 msgstr "SDL 初始化失败: %s\n"
@@ -285,7 +285,24 @@ msgid ""
 "extension.\n"
 "Wireless use requires pairing. --help / --version do not connect to the "
 "device."
-msgstr "不指定参数时，镜像已连接的设备。\n鼠标左键映射为触摸。普通按键使用设备的键盘布局和输入法。\n退出：MOD+Q。全屏：MOD+F 或 F11。MOD 默认是左 Alt 或左 Super，可用 --shortcut-mod 更改。\n粘贴电脑剪贴板：MOD+V（支持 Unicode）。\n主屏：MOD+H 或鼠标中键。音量：MOD+上/下。侧键：MOD+P。\n恢复原尺寸：MOD+G。去掉画面留边：MOD+W 或双击空白留边。\n向左/右旋转显示：MOD+左/右（不改变录制）。\n切换手机横竖屏：MOD+R（需启用设备控制且应用支持转屏）。\n暂停或刷新冻结画面：MOD+Z。恢复显示：MOD+Shift+Z（采集、音频和录制继续）。\n水平镜像：MOD+Shift+左/右。垂直镜像：MOD+Shift+上/下。\n默认将音频转到电脑；--audio-dup 保留手机播放。切换路由可能暂停手机播放器，请按需继续播放。\n设备决定编码尺寸、码率和帧率。显示裁剪及 --display-orientation 不改变录制；--orientation 同时旋转显示与容器录制。所选轨道可录制为 .mp4 或 .mkv，裸视频请用 .hevc；--record-format 可覆盖文件扩展名。\n无线使用需要配对。--help / --version 不连接设备。"
+msgstr ""
+"不指定参数时，镜像已连接的设备。\n"
+"鼠标左键映射为触摸。普通按键使用设备的键盘布局和输入法。\n"
+"退出：MOD+Q。全屏：MOD+F 或 F11。MOD 默认是左 Alt 或左 Super，可用 --"
+"shortcut-mod 更改。\n"
+"粘贴电脑剪贴板：MOD+V（支持 Unicode）。\n"
+"主屏：MOD+H 或鼠标中键。音量：MOD+上/下。侧键：MOD+P。\n"
+"恢复原尺寸：MOD+G。去掉画面留边：MOD+W 或双击空白留边。\n"
+"向左/右旋转显示：MOD+左/右（不改变录制）。\n"
+"切换手机横竖屏：MOD+R（需启用设备控制且应用支持转屏）。\n"
+"暂停或刷新冻结画面：MOD+Z。恢复显示：MOD+Shift+Z（采集、音频和录制继续）。\n"
+"水平镜像：MOD+Shift+左/右。垂直镜像：MOD+Shift+上/下。\n"
+"默认将音频转到电脑；--audio-dup 保留手机播放。切换路由可能暂停手机播放器，请"
+"按需继续播放。\n"
+"设备决定编码尺寸、码率和帧率。显示裁剪及 --display-orientation 不改变录制；--"
+"orientation 同时旋转显示与容器录制。所选轨道可录制为 .mp4 或 .mkv，裸视频请"
+"用 .hevc；--record-format 可覆盖文件扩展名。\n"
+"无线使用需要配对。--help / --version 不连接设备。"
 
 #: src/app/Cli.cpp:38 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
 #: tools/audio_decode_probe.cpp:193 tools/audio_pump_probe.cpp:85
@@ -383,97 +400,111 @@ msgstr "列出 USB 与 RemotePairing 设备；默认扫描无线设备 3 秒"
 
 #: src/app/Cli.cpp:87
 msgid ""
+"Download and verify the supported Cryptex DDI, then exit; does not install "
+"on a device"
+msgstr "下载并校验支持的 Cryptex DDI 后退出；不安装到设备"
+
+#: src/app/Cli.cpp:89
+msgid "DDI cache root directory; defaults to the platform user cache"
+msgstr "DDI 缓存根目录；默认使用平台用户缓存"
+
+#: src/app/Cli.cpp:92
+msgid "Total DDI download timeout in seconds (1..3600); default: 300"
+msgstr "DDI 下载总超时秒数（1..3600）；默认 300"
+
+#: src/app/Cli.cpp:95
+msgid ""
 "Wireless discovery timeout in milliseconds (0..60000); 0 lists usbmux only"
 msgstr "无线设备扫描时间，单位毫秒（0..60000）；0 表示只列出 usbmux 设备"
 
-#: src/app/Cli.cpp:89
+#: src/app/Cli.cpp:97
 msgid "Disable input control"
 msgstr "关闭输入控制"
 
-#: src/app/Cli.cpp:92
+#: src/app/Cli.cpp:100
 msgid "List device apps"
 msgstr "列出设备 App"
 
-#: src/app/Cli.cpp:93
+#: src/app/Cli.cpp:101
 msgid "Show version"
 msgstr "显示版本"
 
-#: src/app/Cli.cpp:94
+#: src/app/Cli.cpp:102
 msgid "Desktop fullscreen"
 msgstr "桌面全屏"
 
-#: src/app/Cli.cpp:95
+#: src/app/Cli.cpp:103
 msgid "Keep window on top"
 msgstr "窗口置顶"
 
-#: src/app/Cli.cpp:96
+#: src/app/Cli.cpp:104
 msgid "Borderless window"
 msgstr "无边框窗口"
 
-#: src/app/Cli.cpp:97
+#: src/app/Cli.cpp:105
 msgid "Prevent local screen sleep while running"
 msgstr "运行期间禁止本机息屏"
 
-#: src/app/Cli.cpp:98
+#: src/app/Cli.cpp:106
 msgid "Do not start audio stream"
 msgstr "不启动音频流"
 
-#: src/app/Cli.cpp:100
+#: src/app/Cli.cpp:108
 msgid "Keep audio playing on the phone while forwarding it to the computer"
 msgstr "转发音频到电脑，同时保留手机播放"
 
-#: src/app/Cli.cpp:103
+#: src/app/Cli.cpp:111
 msgid ""
 "Disable computer audio playback; capture audio only when recording to MP4 or "
 "MKV"
 msgstr "关闭电脑音频播放；仅录制 MP4 或 MKV 时采集音频"
 
-#: src/app/Cli.cpp:104
+#: src/app/Cli.cpp:112
 msgid "Do not start video stream"
 msgstr "不采集视频"
 
-#: src/app/Cli.cpp:106
+#: src/app/Cli.cpp:114
 msgid "Disable video display; keep encoded video when recording"
 msgstr "不显示视频；录制时仍接收编码视频"
 
-#: src/app/Cli.cpp:109
+#: src/app/Cli.cpp:117
 msgid ""
 "Disable computer video and audio playback; keep selected recording tracks"
 msgstr "不在电脑播放视频或音频；录制时保留所选轨道"
 
-#: src/app/Cli.cpp:110
+#: src/app/Cli.cpp:118
 msgid "Run without a window"
 msgstr "无窗口运行"
 
-#: src/app/Cli.cpp:111
+#: src/app/Cli.cpp:119
 msgid "Use platform hardware decoder; default: software"
 msgstr "使用平台硬件解码，默认软件解码"
 
-#: src/app/Cli.cpp:112
+#: src/app/Cli.cpp:120
 msgid "Print input coordinates"
 msgstr "打印输入坐标"
 
-#: src/app/Cli.cpp:113
+#: src/app/Cli.cpp:121
 msgid "Add tunnel diagnostics to --stats"
 msgstr "在 --stats 中增加隧道网络诊断"
 
-#: src/app/Cli.cpp:114
+#: src/app/Cli.cpp:122
 msgid "Print statistics every second"
 msgstr "每秒打印统计"
 
-#: src/app/Cli.cpp:115
+#: src/app/Cli.cpp:123
 msgid "Read device clipboard; with --copy, read back after writing"
 msgstr "读取设备剪贴板；与 --copy 同用时写后读回"
 
-#: src/app/Cli.cpp:118
+#: src/app/Cli.cpp:126
 msgid "Window horizontal position; integer or auto (default)"
 msgstr "窗口横坐标：整数或 auto（默认）"
 
-#: src/app/Cli.cpp:120
+#: src/app/Cli.cpp:128
 msgid "Window vertical position; integer or auto (default)"
 msgstr "窗口纵坐标：整数或 auto（默认）"
 
-#: src/app/Cli.cpp:122
+#: src/app/Cli.cpp:130
 msgid ""
 "Shortcut modifiers, separated by commas: lctrl, rctrl, lalt, ralt, lsuper, "
 "rsuper; default: lalt,lsuper"
@@ -481,31 +512,31 @@ msgstr ""
 "快捷键修饰键，用逗号分隔：lctrl、rctrl、lalt、ralt、lsuper、rsuper；默认 "
 "lalt,lsuper"
 
-#: src/app/Cli.cpp:123
+#: src/app/Cli.cpp:131
 msgid "Window width; 0 for automatic"
 msgstr "窗口宽度，0 为自动"
 
-#: src/app/Cli.cpp:124
+#: src/app/Cli.cpp:132
 msgid "Window height; 0 for automatic"
 msgstr "窗口高度，0 为自动"
 
-#: src/app/Cli.cpp:125
+#: src/app/Cli.cpp:133
 msgid "Run duration in seconds; 0 for unlimited"
 msgstr "运行秒数，0 为不限"
 
-#: src/app/Cli.cpp:127
+#: src/app/Cli.cpp:135
 msgid "Audio buffer in milliseconds; default: 50, maximum: 1000"
 msgstr "音频缓冲毫秒数，默认 50，上限 1000"
 
-#: src/app/Cli.cpp:129
+#: src/app/Cli.cpp:137
 msgid "Exit after N frames; 0 for unlimited"
 msgstr "处理 N 帧后退出，0 为不限"
 
-#: src/app/Cli.cpp:131
+#: src/app/Cli.cpp:139
 msgid "Finite positive scale; default: fit screen"
 msgstr "有限正数缩放比例，默认自动适应屏幕"
 
-#: src/app/Cli.cpp:149
+#: src/app/Cli.cpp:157
 msgid ""
 "Display and recording orientation: 0/90/180/270 or flip0/flip90/flip180/"
 "flip270; recording cannot flip; auto changes display only"
@@ -513,7 +544,7 @@ msgstr ""
 "显示和录制方向：0/90/180/270 或 flip0/flip90/flip180/flip270；录制不支持翻"
 "转，auto 只设置显示"
 
-#: src/app/Cli.cpp:153
+#: src/app/Cli.cpp:161
 msgid ""
 "Display orientation: auto, 0/90/180/270 or flip0/flip90/flip180/flip270; "
 "flip horizontally before clockwise rotation"
@@ -521,64 +552,74 @@ msgstr ""
 "显示方向：auto、0/90/180/270 或 flip0/flip90/flip180/flip270；先水平翻转，再"
 "顺时针旋转"
 
-#: src/app/Cli.cpp:157
+#: src/app/Cli.cpp:165
 msgid ""
 "Clockwise MP4/MKV recording rotation: 0/90/180/270; default: 0; display is "
 "unchanged"
 msgstr "顺时针旋转 MP4/MKV 录制：0/90/180/270，默认 0；不改变显示"
 
-#: src/app/Cli.cpp:160
+#: src/app/Cli.cpp:168
 msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
 msgstr "裁剪显示像素：WxH+X+Y 或 W:H:X:Y；不改变录制内容"
 
-#: src/app/Cli.cpp:162
+#: src/app/Cli.cpp:170
 msgid "Background color: RGB or RRGGBB, with optional #"
 msgstr "背景色：RGB 或 RRGGBB，可带 # 前缀"
 
-#: src/app/Cli.cpp:163
+#: src/app/Cli.cpp:171
 msgid "Read window at frame N into BMP: N FILE (requires a window)"
 msgstr "第 N 帧回读窗口为 BMP：N FILE（需要窗口）"
 
-#: src/app/Cli.cpp:172 src/app/LiveSource.cpp:82
+#: src/app/Cli.cpp:187
+msgid ""
+"Use only --ddi-directory, --ddi-download-timeout and --lang with this "
+"standalone command"
+msgstr "此独立命令仅可搭配 --ddi-directory、--ddi-download-timeout 和 --lang"
+
+#: src/app/Cli.cpp:194
+msgid "Requires a nonempty directory path"
+msgstr "需要非空目录路径"
+
+#: src/app/Cli.cpp:199 src/app/LiveSource.cpp:82
 msgid "Requires a nonempty recording file"
 msgstr "需要非空的录制文件路径"
 
-#: src/app/Cli.cpp:181
+#: src/app/Cli.cpp:208
 msgid ""
 "Audio capture is disabled; --audio-dup requires playback or MP4/MKV recording"
 msgstr "音频采集已关闭；--audio-dup 需要电脑播放或 MP4/MKV 音轨录制"
 
-#: src/app/Cli.cpp:187
+#: src/app/Cli.cpp:214
 msgid ""
 "File playback requires video; incompatible with video playback disable "
 "options"
 msgstr "文件播放需要视频，不能同时指定关闭视频播放的选项"
 
-#: src/app/Cli.cpp:195
+#: src/app/Cli.cpp:222
 msgid "Audio-only recording requires MP4 or MKV; raw HEVC cannot contain audio"
 msgstr "仅录音频需要使用 MP4 或 MKV；裸 HEVC 无法保存音频"
 
-#: src/app/Cli.cpp:198
+#: src/app/Cli.cpp:225
 msgid "Recording requires at least one enabled audio or video track"
 msgstr "录制需要至少启用音频或视频中的一项"
 
-#: src/app/Cli.cpp:201 src/app/LiveSource.cpp:97
+#: src/app/Cli.cpp:228 src/app/LiveSource.cpp:97
 msgid "Recording orientation requires a video track"
 msgstr "录制方向需要视频轨道"
 
-#: src/app/Cli.cpp:206
+#: src/app/Cli.cpp:233
 msgid ""
 "Frame counting, hardware decoding, fallback tests and screenshots require "
 "video capture"
 msgstr "按帧计数、硬件解码、降级测试和截图需要采集视频"
 
-#: src/app/Cli.cpp:210 src/app/LiveSource.cpp:119
+#: src/app/Cli.cpp:237 src/app/LiveSource.cpp:119
 msgid ""
 "Container recording requires live video; screenshot polling cannot be "
 "recorded"
 msgstr "容器录制需要实时视频流，不能录制截图轮询"
 
-#: src/app/Cli.cpp:214
+#: src/app/Cli.cpp:241
 msgid ""
 "Recording does not support flipping; use --display-orientation for display-"
 "only flipping or reset --record-orientation to a rotation"
@@ -586,194 +627,225 @@ msgstr ""
 "录制不支持翻转；只翻转显示请使用 --display-orientation，或在后面用 --record-"
 "orientation 指定旋转角度"
 
-#: src/app/Cli.cpp:218 src/app/LiveSource.cpp:129
+#: src/app/Cli.cpp:245 src/app/LiveSource.cpp:129
 msgid ""
 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate "
 "only the display"
 msgstr "录制旋转需要 MP4 或 MKV；只旋转显示请使用 --display-orientation"
 
-#: src/app/Cli.cpp:223
+#: src/app/Cli.cpp:250
 msgid "Requires a nonempty LAN address or auto"
 msgstr "需要非空局域网地址或 auto"
 
-#: src/app/Cli.cpp:226
+#: src/app/Cli.cpp:253
 msgid "Use a manual LAN address; auto uses discovered SRV ports"
 msgstr "用于手动指定的局域网地址；auto 使用广播的 SRV 端口"
 
-#: src/app/Cli.cpp:230
+#: src/app/Cli.cpp:257
 msgid ""
 "Wireless first pairing requires --wifi auto; existing records cannot be "
 "repaired wirelessly"
 msgstr "首次无线配对需要 --wifi auto；已有配对记录无法通过无线方式修复"
 
-#: src/app/Cli.cpp:241
+#: src/app/Cli.cpp:268
 msgid "Expected an integer or auto"
 msgstr "请使用整数或 auto"
 
-#: src/app/Cli.cpp:261
+#: src/app/Cli.cpp:288
 msgid ""
 "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
 msgstr "请使用 lctrl、rctrl、lalt、ralt、lsuper 或 rsuper，以逗号分隔"
 
-#: src/app/Cli.cpp:272
+#: src/app/Cli.cpp:299
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr "坐标必须是 [0, 1] 内的有限数"
 
-#: src/app/Cli.cpp:279
+#: src/app/Cli.cpp:306
 msgid "Requires a finite positive number"
 msgstr "需要有限正数"
 
-#: src/app/Cli.cpp:294
+#: src/app/Cli.cpp:321
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr "格式应为 WxH+X+Y 或 W:H:X:Y，尺寸为正、偏移非负"
 
-#: src/app/Cli.cpp:303
+#: src/app/Cli.cpp:330
 msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
 msgstr "请使用 3 位或 6 位十六进制颜色，可带 # 前缀"
 
-#: src/app/Cli.cpp:317
+#: src/app/Cli.cpp:344
 msgid "Frame number must be a positive integer"
 msgstr "帧号需要正整数"
 
-#: src/app/Cli.cpp:322
+#: src/app/Cli.cpp:349
 msgid "Requires a window; incompatible with --no-window"
 msgstr "需要窗口，不能与 --no-window 同用"
 
-#: src/app/Cli.cpp:325
+#: src/app/Cli.cpp:352
 msgid "Window readback requires video playback"
 msgstr "回读窗口画面需要开启视频播放"
 
-#: src/app/Cli.cpp:333
+#: src/app/Cli.cpp:360
 msgid "Nothing to do: enable media, recording or device control"
 msgstr "没有可执行的操作：请开启音视频、录制或设备控制"
 
-#: src/app/Commands.cpp:41
+#: src/app/Commands.cpp:43
 msgid "pairing record available"
 msgstr "本机已有配对记录"
 
-#: src/app/Commands.cpp:43
+#: src/app/Commands.cpp:45
 msgid "pair again over USB"
 msgstr "请通过 USB 重新配对"
 
-#: src/app/Commands.cpp:45
+#: src/app/Commands.cpp:47
 msgid "old record hint; pair again over USB"
 msgstr "发现旧配对记录线索；请通过 USB 重新配对"
 
-#: src/app/Commands.cpp:47
+#: src/app/Commands.cpp:49
 msgid "multiple matching pairing records"
 msgstr "有多份匹配的配对记录"
 
-#: src/app/Commands.cpp:49
+#: src/app/Commands.cpp:51
 msgid "invalid discovery identity"
 msgstr "设备广播的身份信息无效"
 
-#: src/app/Commands.cpp:51
+#: src/app/Commands.cpp:53
 msgid "identity matching failed"
 msgstr "匹配设备身份失败"
 
-#: src/app/Commands.cpp:53 src/app/Commands.cpp:55
+#: src/app/Commands.cpp:55 src/app/Commands.cpp:57
 msgid "no matching pairing record"
 msgstr "没有匹配的配对记录"
 
-#: src/app/Commands.cpp:72 src/app/DeviceConnection.cpp:237
+#: src/app/Commands.cpp:80 src/app/Commands.cpp:101
+#, c-format
+msgid "DDI download failed: %s\n"
+msgstr "DDI 下载失败：%s\n"
+
+#: src/app/Commands.cpp:91
+#, c-format
+msgid "Downloading DDI: %s (%llu/%llu bytes)\n"
+msgstr "正在下载 DDI：%s（%llu/%llu 字节）\n"
+
+#: src/app/Commands.cpp:106
+#, c-format
+msgid "Verified cached DDI %s: %s\n"
+msgstr "已校验缓存的 DDI %s：%s\n"
+
+#: src/app/Commands.cpp:107
+#, c-format
+msgid "Downloaded and verified DDI %s: %s\n"
+msgstr "已下载并校验 DDI %s：%s\n"
+
+#: src/app/Commands.cpp:109
+#, c-format
+msgid "DDI source: %s\n"
+msgstr "DDI 来源：%s\n"
+
+#: src/app/Commands.cpp:110
+#, c-format
+msgid ""
+"Download complete; device installation is a separate step. See docs/DDI.md.\n"
+msgstr "下载完成；设备安装是独立步骤，见 docs/DDI.md。\n"
+
+#: src/app/Commands.cpp:119 src/app/DeviceConnection.cpp:237
 #, c-format
 msgid "Discovery warning: %s\n"
 msgstr "设备发现提示：%s\n"
 
-#: src/app/Commands.cpp:76
+#: src/app/Commands.cpp:123
 msgid "Wireless device (UDID unknown)"
 msgstr "无线设备（UDID 未知）"
 
-#: src/app/Commands.cpp:88
+#: src/app/Commands.cpp:135
 msgid "address unresolved"
 msgstr "尚未取得地址"
 
-#: src/app/Commands.cpp:104
+#: src/app/Commands.cpp:151
 #, c-format
 msgid "No devices found\n"
 msgstr "未发现设备\n"
 
-#: src/app/Commands.cpp:128
+#: src/app/Commands.cpp:175
 #, c-format
 msgid "Enter this one-use pairing code on the device: %s\n"
 msgstr "请在设备上输入此一次性配对码：%s\n"
 
-#: src/app/Commands.cpp:142
+#: src/app/Commands.cpp:189
 #, c-format
 msgid "Remote pairing failed: %s\n"
 msgstr "远程配对失败：%s\n"
 
-#: src/app/Commands.cpp:146
+#: src/app/Commands.cpp:193
 #, c-format
 msgid "Remote pairing verified for %s\n"
 msgstr "已验证 %s 的远程配对记录\n"
 
-#: src/app/Commands.cpp:147
+#: src/app/Commands.cpp:194
 #, c-format
 msgid "Remote pairing saved for %s\n"
 msgstr "已保存 %s 的远程配对记录\n"
 
-#: src/app/Commands.cpp:156 src/app/Commands.cpp:179
+#: src/app/Commands.cpp:203 src/app/Commands.cpp:226
 #, c-format
 msgid "Failed to establish session: %s\n"
 msgstr "建立会话失败: %s\n"
 
-#: src/app/Commands.cpp:161
+#: src/app/Commands.cpp:208
 #, c-format
 msgid "Failed to list apps: %s\n"
 msgstr "列 App 失败: %s\n"
 
-#: src/app/Commands.cpp:167
+#: src/app/Commands.cpp:214
 #, c-format
 msgid "Total: %zu\n"
 msgstr "共 %zu 个\n"
 
-#: src/app/Commands.cpp:185
+#: src/app/Commands.cpp:232
 #, c-format
 msgid "Wrote %zu bytes to device clipboard\n"
 msgstr "已写入设备剪贴板：%zu 字节\n"
 
-#: src/app/Commands.cpp:187
+#: src/app/Commands.cpp:234
 #, c-format
 msgid "--copy failed: %s\n"
 msgstr "--copy 写入失败: %s\n"
 
-#: src/app/Commands.cpp:194
+#: src/app/Commands.cpp:241
 #, c-format
 msgid "Device clipboard (%zu bytes): "
 msgstr "设备剪贴板（%zu 字节）： "
 
-#: src/app/Commands.cpp:198
+#: src/app/Commands.cpp:245
 #, c-format
 msgid "--paste failed: %s\n"
 msgstr "--paste 读取失败: %s\n"
 
-#: src/app/Commands.cpp:224
+#: src/app/Commands.cpp:271
 #, c-format
 msgid "--start-app requires a nonempty app name\n"
 msgstr "--start-app 的名字是空的\n"
 
-#: src/app/Commands.cpp:234
+#: src/app/Commands.cpp:281
 #, c-format
 msgid "Failed to find app by name: %s\n"
 msgstr "按名字找 App 失败: %s\n"
 
-#: src/app/Commands.cpp:252
+#: src/app/Commands.cpp:299
 #, c-format
 msgid "No app name starts with %s\n"
 msgstr "没有名字以 %s 开头的 App\n"
 
-#: src/app/Commands.cpp:260 tools/app_launch_probe.cpp:89
+#: src/app/Commands.cpp:307 tools/app_launch_probe.cpp:89
 #, c-format
 msgid "Failed to launch %s: %s\n"
 msgstr "启动 %s 失败: %s\n"
 
-#: src/app/Commands.cpp:263
+#: src/app/Commands.cpp:310
 msgid " (previous instance terminated)"
 msgstr "（已先终止原实例）"
 
-#: src/app/Commands.cpp:263
+#: src/app/Commands.cpp:310
 #, c-format
 msgid "Launched %s%s\n"
 msgstr "已启动 %s%s\n"
@@ -1449,6 +1521,207 @@ msgstr "存在无效字符：\""
 msgid "Schedule requires at least one time"
 msgstr "时刻表至少需要一个时刻"
 
+#: src/ddi/Download.cpp:25
+msgid "DDI cache contains a nonregular file"
+msgstr "DDI 缓存包含非普通文件"
+
+#: src/ddi/Download.cpp:27
+msgid "DDI file exceeds its size limit"
+msgstr "DDI 文件超过大小限制"
+
+#: src/ddi/Download.cpp:29
+msgid "Cannot open DDI file"
+msgstr "无法打开 DDI 文件"
+
+#: src/ddi/Download.cpp:33
+msgid "Cannot read complete DDI file"
+msgstr "无法完整读取 DDI 文件"
+
+#: src/ddi/Download.cpp:39
+msgid "Cannot open DDI file for checksum"
+msgstr "无法打开 DDI 文件进行校验"
+
+#: src/ddi/Download.cpp:42
+msgid "Cannot initialize DDI checksum"
+msgstr "无法初始化 DDI 校验"
+
+#: src/ddi/Download.cpp:47
+msgid "Cannot calculate DDI checksum"
+msgstr "无法计算 DDI 校验值"
+
+#: src/ddi/Download.cpp:49
+msgid "Cannot read DDI checksum input"
+msgstr "无法读取 DDI 校验输入"
+
+#: src/ddi/Download.cpp:53
+msgid "Cannot finalize DDI checksum"
+msgstr "无法完成 DDI 校验"
+
+#: src/ddi/Download.cpp:70
+msgid "Invalid DDI BuildManifest plist"
+msgstr "DDI BuildManifest plist 无效"
+
+#: src/ddi/Download.cpp:74
+msgid "DDI BuildManifest does not match the pinned build"
+msgstr "DDI BuildManifest 与固定构建不符"
+
+#: src/ddi/Download.cpp:87
+msgid "DDI Cryptex manifest entries missing"
+msgstr "缺少 DDI Cryptex 清单条目"
+
+#: src/ddi/Download.cpp:96
+msgid "DDI Cryptex manifest digest mismatch: "
+msgstr "DDI Cryptex 清单摘要不符："
+
+#: src/ddi/Download.cpp:100
+msgid "DDI BuildManifest lacks a Cryptex identity"
+msgstr "DDI BuildManifest 缺少 Cryptex 身份"
+
+#: src/ddi/Download.cpp:106
+msgid "DDI cache directory is missing or is a symbolic link"
+msgstr "DDI 缓存目录不存在或为符号链接"
+
+#: src/ddi/Download.cpp:110
+msgid "DDI cache size or file type mismatch: "
+msgstr "DDI 缓存大小或文件类型不符："
+
+#: src/ddi/Download.cpp:112
+msgid "DDI cache SHA-256 mismatch: "
+msgstr "DDI 缓存 SHA-256 不符："
+
+#: src/ddi/Download.cpp:116
+msgid "DDI cache completion marker mismatch"
+msgstr "DDI 缓存完成标记不符"
+
+#: src/ddi/Download.cpp:150
+msgid "Cannot initialize HTTPS downloader"
+msgstr "无法初始化 HTTPS 下载器"
+
+#: src/ddi/Download.cpp:152
+msgid "Cannot create HTTPS downloader"
+msgstr "无法创建 HTTPS 下载器"
+
+#: src/ddi/Download.cpp:153
+msgid "DDI downloads require HTTPS"
+msgstr "DDI 下载需要 HTTPS"
+
+#: src/ddi/Download.cpp:157
+msgid "Cannot configure HTTPS downloader"
+msgstr "无法配置 HTTPS 下载器"
+
+#: src/ddi/Download.cpp:178
+msgid "This Windows libcurl cannot use the native certificate store"
+msgstr "此 Windows libcurl 无法使用系统证书库"
+
+#: src/ddi/Download.cpp:197
+msgid "DDI download callback failed"
+msgstr "DDI 下载回调失败"
+
+#: src/ddi/Download.cpp:198
+msgid "HTTPS DDI download failed: "
+msgstr "HTTPS DDI 下载失败："
+
+#: src/ddi/Download.cpp:203
+msgid "DDI download did not return HTTP 200"
+msgstr "DDI 下载未返回 HTTP 200"
+
+#: src/ddi/Download.cpp:234
+msgid "DDI download timeout must be positive"
+msgstr "DDI 下载超时必须为正数"
+
+#: src/ddi/Download.cpp:237
+msgid "DDI download timeout exceeds 24 hours"
+msgstr "DDI 下载超时超过 24 小时"
+
+#: src/ddi/Download.cpp:240
+msgid "DDI download cancelled"
+msgstr "DDI 下载已取消"
+
+#: src/ddi/Download.cpp:241 src/ddi/Download.cpp:295
+msgid "DDI download timed out"
+msgstr "DDI 下载超时"
+
+#: src/ddi/Download.cpp:247
+msgid "DDI cache root must be an absolute path"
+msgstr "DDI 缓存根目录必须为绝对路径"
+
+#: src/ddi/Download.cpp:251
+msgid "Invalid DDI download catalog"
+msgstr "DDI 下载目录清单无效"
+
+#: src/ddi/Download.cpp:255
+msgid "Invalid DDI download asset"
+msgstr "DDI 下载资产无效"
+
+#: src/ddi/Download.cpp:258
+msgid "DDI cache root must not be a symbolic link"
+msgstr "DDI 缓存根目录不能为符号链接"
+
+#: src/ddi/Download.cpp:262
+msgid ""
+"Existing DDI cache is invalid; remove this version directory and retry: "
+msgstr "已有 DDI 缓存无效；移除该版本目录后重试："
+
+#: src/ddi/Download.cpp:267
+msgid ""
+"Another DDI download owns this version lock; retry after it finishes (remove "
+"the lock only if that process has exited)"
+msgstr "另一个 DDI 下载正在使用该版本锁；等待其完成后重试（仅在该进程已退出时移除锁）"
+
+#: src/ddi/Download.cpp:274
+msgid "Cannot generate DDI staging directory name"
+msgstr "无法生成 DDI 临时目录名"
+
+#: src/ddi/Download.cpp:276
+msgid "Cannot create unique DDI staging directory"
+msgstr "无法创建唯一的 DDI 临时目录"
+
+#: src/ddi/Download.cpp:282
+msgid "Cannot create DDI download file: "
+msgstr "无法创建 DDI 下载文件："
+
+#: src/ddi/Download.cpp:286
+msgid "DDI download exceeds pinned file size: "
+msgstr "DDI 下载超过固定文件大小："
+
+#: src/ddi/Download.cpp:288
+msgid "Cannot write DDI download file: "
+msgstr "无法写入 DDI 下载文件："
+
+#: src/ddi/Download.cpp:298
+msgid "DDI download failed"
+msgstr "DDI 下载失败"
+
+#: src/ddi/Download.cpp:302
+msgid "Cannot flush DDI download file: "
+msgstr "无法刷新 DDI 下载文件："
+
+#: src/ddi/Download.cpp:304
+msgid "Cannot close DDI download file: "
+msgstr "无法关闭 DDI 下载文件："
+
+#: src/ddi/Download.cpp:305
+msgid "Incomplete DDI download: "
+msgstr "DDI 下载不完整："
+
+#: src/ddi/Download.cpp:311
+msgid "Cannot write DDI completion marker"
+msgstr "无法写入 DDI 完成标记"
+
+#: src/ddi/Download.cpp:313
+msgid ""
+"DDI version directory appeared during download; refusing to overwrite it"
+msgstr "下载期间出现了 DDI 版本目录；拒绝覆盖"
+
+#: src/ddi/Download.cpp:335
+msgid "XDG_CACHE_HOME must be an absolute path"
+msgstr "XDG_CACHE_HOME 必须为绝对路径"
+
+#: src/ddi/Download.cpp:348
+msgid ""
+"No absolute platform cache directory is available; specify --ddi-directory"
+msgstr "没有可用的平台缓存绝对路径；请指定 --ddi-directory"
+
 #: src/decode/AudioDecoder.h:52
 msgid ""
 "AAC-ELD decoding is unavailable in this build. Video can continue without "
@@ -1958,7 +2231,7 @@ msgid "device session ended"
 msgstr "设备会话已结束"
 
 #: src/media/FramePump.cpp:754 src/media/ScreenshotSource.cpp:72
-#: src/net/Stack.cpp:359 src/net/TcpStream.cpp:44 src/net/TcpStream.cpp:128
+#: src/net/Stack.cpp:364 src/net/TcpStream.cpp:44 src/net/TcpStream.cpp:128
 #: src/net/TcpStream.cpp:132 src/net/UdpSocket.cpp:109
 #: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:281
 #: src/transport/Socket.cpp:114 src/transport/Usbmux.cpp:126
@@ -2591,79 +2864,79 @@ msgstr "无法注册 lwIP 隧道接口"
 msgid "Failed to start tunnel thread: "
 msgstr "无法启动隧道线程："
 
-#: src/net/Stack.cpp:190
+#: src/net/Stack.cpp:192
 msgid "Tunnel stopped"
 msgstr "隧道已停止"
 
-#: src/net/Stack.cpp:235
+#: src/net/Stack.cpp:237
 msgid "Tunnel stopped or send queue full"
 msgstr "隧道已停止或发送队列已满"
 
-#: src/net/Stack.cpp:292
+#: src/net/Stack.cpp:294
 msgid "Tunnel processing failed: "
 msgstr "隧道处理失败："
 
-#: src/net/Stack.cpp:297
+#: src/net/Stack.cpp:299
 msgid "Tunnel read failed"
 msgstr "隧道读取失败"
 
-#: src/net/Stack.cpp:353
+#: src/net/Stack.cpp:358
 msgid "beyond source address scope"
 msgstr "超出源地址的范围"
 
-#: src/net/Stack.cpp:353
+#: src/net/Stack.cpp:358
 msgid "communication administratively prohibited"
 msgstr "与管理策略禁止通信"
 
-#: src/net/Stack.cpp:353
+#: src/net/Stack.cpp:358
 msgid "no route to destination"
 msgstr "没有路由到目的"
 
-#: src/net/Stack.cpp:354
+#: src/net/Stack.cpp:359
 msgid "address unreachable"
 msgstr "地址不可达"
 
-#: src/net/Stack.cpp:354
+#: src/net/Stack.cpp:359
 msgid "port unreachable"
 msgstr "端口不可达"
 
-#: src/net/Stack.cpp:354
+#: src/net/Stack.cpp:359
 msgid "source address failed ingress/egress policy"
 msgstr "源地址被入/出站策略禁止"
 
-#: src/net/Stack.cpp:355
+#: src/net/Stack.cpp:360
 msgid "route to destination rejected"
 msgstr "到目的的路由被拒绝"
 
-#: src/net/Stack.cpp:359
+#: src/net/Stack.cpp:364
 msgid "("
 msgstr "（"
 
-#: src/net/Stack.cpp:361
+#: src/net/Stack.cpp:366
 msgid " (packet too big)"
 msgstr "（包太大）"
 
-#: src/net/Stack.cpp:363
+#: src/net/Stack.cpp:368
 msgid " (hop limit exceeded)"
 msgstr "（TTL 耗尽）"
 
-#: src/net/Stack.cpp:365
+#: src/net/Stack.cpp:370
 msgid " (parameter problem)"
 msgstr "（参数问题）"
 
-#: src/net/Stack.cpp:367
+#: src/net/Stack.cpp:372
 msgid " (echo reply)"
 msgstr "（回音应答）"
 
-#: src/net/Stack.cpp:367
+#: src/net/Stack.cpp:372
 msgid " (echo request)"
 msgstr "（回音请求）"
 
-#: src/net/Stack.cpp:380
+#: src/net/Stack.cpp:385
 msgid " inner nh="
 msgstr " 内层 nh="
 
-#: src/net/Stack.cpp:384
+#: src/net/Stack.cpp:389
 msgid " ports "
 msgstr " 端口 "
 
@@ -2843,8 +3116,9 @@ msgstr "（电脑尚未受信任；请解锁设备并确认信任）"
 
 #: src/remote/Device.cpp:39
 msgid ""
-" (service unavailable; check Developer Mode and DDI mounting through Xcode)"
-msgstr "（服务不可用；请检查开发者模式及 Xcode 的 DDI 挂载）"
+" (service unavailable; check Developer Mode and a compatible DDI; download: "
+"scrctl --download-ddi, installation: docs/DDI.md)"
+msgstr "（服务不可用；请检查开发者模式与兼容的 DDI；下载：scrctl --download-ddi，安装：docs/DDI.md）"
 
 #: src/remote/Device.cpp:41
 msgid " (check DDI mounting and Developer Mode)"
@@ -3576,19 +3850,26 @@ msgstr "设备目录里没有服务 "
 msgid "Directory is empty; check tunnel setup and DDI mounting."
 msgstr "目录为空；请检查隧道建立及 DDI 挂载。"
 
-#: src/remote/Rsd.cpp:506
+#: src/remote/Rsd.cpp:498
+msgid ""
+"\n"
+"Download a supported DDI with scrctl --download-ddi; installation and "
+"compatibility guidance: docs/DDI.md.\n"
+msgstr "\n使用 scrctl --download-ddi 下载支持的 DDI；安装与兼容说明：docs/DDI.md。\n"
+
+#: src/remote/Rsd.cpp:507
 msgid " services, including "
 msgstr " 条服务，其中 "
 
-#: src/remote/Rsd.cpp:506
+#: src/remote/Rsd.cpp:507
 msgid "Device directory contains "
 msgstr "设备目录包含 "
 
-#: src/remote/Rsd.cpp:507
+#: src/remote/Rsd.cpp:508
 msgid " com.apple.coredevice.* services:\n"
 msgstr " 条为 com.apple.coredevice.*：\n"
 
-#: src/remote/Rsd.cpp:510
+#: src/remote/Rsd.cpp:511
 msgid ""
 "  (none found; check DDI mounting through Xcode and the CoreDevice services "
 "available on this device)\n"
@@ -3598,17 +3879,24 @@ msgstr ""
 
 #: src/remote/Rsd.cpp:517
 msgid ""
+"A mounted DDI may still lack this service. Check its version and "
+"capabilities; download a supported DDI with scrctl --download-ddi. "
+"Installation guidance: docs/DDI.md.\n"
+msgstr "已挂载的 DDI 仍可能缺少此服务。请检查版本和能力；使用 scrctl --download-ddi 下载支持的 DDI。安装说明：docs/DDI.md。\n"
+
+#: src/remote/Rsd.cpp:519
+msgid ""
 "Include this diagnostic when reporting the issue. For the full directory and "
 "feature lists, run feature_probe --all to print all "
 msgstr ""
 "报告问题时请附上这段诊断。完整目录及 feature 列表可通过 feature_probe --all "
 "打印，共 "
 
-#: src/remote/Rsd.cpp:519
+#: src/remote/Rsd.cpp:521
 msgid " services.\n"
 msgstr " 条。\n"
 
-#: src/remote/Rsd.cpp:529
+#: src/remote/Rsd.cpp:531
 msgid ""
 " (device rejected the system version: live media worked on tested iOS 27 "
 "devices and was rejected on tested iOS 18 devices. Screenshot fallback and "
@@ -3882,31 +4170,31 @@ msgid ""
 " (device tunnel listener rejected the PSK; check pair-verify key derivation)"
 msgstr "（设备隧道监听器拒绝 PSK；请检查 pair-verify 密钥派生）"
 
-#: src/transport/Tunnel.cpp:34
+#: src/transport/Tunnel.cpp:84
 msgid "Tunnel TLS write failed"
 msgstr "隧道 TLS 写失败"
 
-#: src/transport/Tunnel.cpp:48
+#: src/transport/Tunnel.cpp:103
 msgid "Tunnel TLS read failed"
 msgstr "隧道 TLS 读失败"
 
-#: src/transport/Tunnel.cpp:112
+#: src/transport/Tunnel.cpp:168
 msgid "Tunnel handshake response has incorrect magic"
 msgstr "隧道握手回复的 magic 不对"
 
-#: src/transport/Tunnel.cpp:124
+#: src/transport/Tunnel.cpp:180
 msgid "Tunnel handshake response is not valid JSON"
 msgstr "隧道握手回复不是合法 JSON"
 
-#: src/transport/Tunnel.cpp:140
+#: src/transport/Tunnel.cpp:196
 msgid "Tunnel handshake response missing required fields"
 msgstr "隧道握手回复缺少必要字段"
 
-#: src/transport/Tunnel.cpp:158 src/transport/Tunnel.cpp:167
+#: src/transport/Tunnel.cpp:214 src/transport/Tunnel.cpp:223
 msgid "Tunnel not connected"
 msgstr "隧道未连接"
 
-#: src/transport/Tunnel.cpp:175
+#: src/transport/Tunnel.cpp:231
 msgid "Tunnel packet is not IPv6: version nibble="
 msgstr "隧道内不是 IPv6 包: version nibble="
 
@@ -7259,6 +7547,11 @@ msgstr "不可用"
 
 #~ msgid "  Pair-verify completed; device accepted the host key\n"
 #~ msgstr "  pair-verify 已完成，设备已接受主机密钥\n"
+
+#~ msgid ""
+#~ " (service unavailable; check Developer Mode and DDI mounting through "
+#~ "Xcode)"
+#~ msgstr "（服务不可用；请检查开发者模式及 Xcode 的 DDI 挂载）"
 
 #~ msgid " contains "
 #~ msgstr " 里有 "

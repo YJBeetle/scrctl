@@ -23,6 +23,7 @@ winget install --id MSYS2.MSYS2 --exact --source winget --silent `
 pacman -S --needed \
   mingw-w64-clang-aarch64-clang mingw-w64-clang-aarch64-cmake \
   mingw-w64-clang-aarch64-ninja mingw-w64-clang-aarch64-openssl \
+  mingw-w64-clang-aarch64-curl \
   mingw-w64-clang-aarch64-gettext-tools mingw-w64-clang-aarch64-SDL2 \
   mingw-w64-clang-aarch64-python mingw-w64-clang-aarch64-pkgconf \
   mingw-w64-clang-aarch64-ffmpeg mingw-w64-clang-aarch64-nlohmann-json \

@@ -80,6 +80,7 @@ MP4 / MKV（HEVC 和 AAC-ELD）及裸 Annex-B HEVC。
 | `src/http2` | RemoteXPC 使用的 HTTP/2 帧子集，不消费 HPACK header block |
 | `src/xpc`、`src/remote` | XPC 编解码、服务目录、CoreDevice RPC 和设备会话 |
 | `src/wifi` | 远程配对、记录及密码运算 |
+| `src/ddi` | 固定版本开发镜像下载、完整性校验及缓存 |
 | `src/media`、`src/rt` | 媒体协商、RTP 组帧、恢复、音频和截图源 |
 | `src/bitstream`、`src/decode` | Annex-B / NAL 与视频、音频解码后端 |
 | `src/hid` | 触摸、键盘和硬件按键报告 |
@@ -272,7 +273,11 @@ ctest --test-dir build-cmake              # 离线自检，不需要真机（项
 
 构建还需要 GNU gettext 工具（`msgfmt`）及消息运行库（Linux glibc 通常已内置；
 macOS 使用 gettext 的 libintl）。开启离线测试需要 Python 3。Debian/Ubuntu 可安装
-`gettext python3 libsdl2-dev libssl-dev libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev`。
+`gettext python3 libsdl2-dev libssl-dev libcurl4-openssl-dev libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev`。
+
+开发镜像可使用 `scrctl --download-ddi` 下载并校验，重复运行复用缓存；可用
+`--ddi-directory` 指定缓存根目录。下载使用原生 libcurl；macOS 系统提供该库，
+Linux / Windows 构建需要开发包。设备安装和版本边界见 [DDI 说明](docs/DDI.md)。
 
 JSON、命令行和 XML plist 解析分别使用 nlohmann/json（>= 3.12.0）、CLI11（>= 2.5.0）和 pugixml（>= 1.16），许可依次为 MIT、BSD-3-Clause、MIT。
 CMake 优先找系统包，缺失时下载固定版本并校验 SHA256；首次配置需要网络。
