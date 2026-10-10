@@ -214,7 +214,8 @@ std::optional<PairableHostResult> device_identity(const Bytes &key, const Bytes 
 
 std::optional<PairableHostResult> accept_pairable_host(
     EnvelopeCarrier &carrier, const PairableHostOptions &options,
-    const PairablePinCallback &display_pin, std::string &err) {
+    const PairablePinCallback &display_pin, std::string &err,
+    const PairableAdmissionCallback &admit) {
     err.clear();
     if (!label_valid(options.host_identifier) || !label_valid(options.host_name) ||
         !label_valid(options.host_model) || !label_valid(options.host_udid, true) ||
@@ -232,6 +233,8 @@ std::optional<PairableHostResult> accept_pairable_host(
         err = SCRCTL_TR("Pairable host public key does not match its private key");
         return std::nullopt;
     }
+    const auto metadata = host_metadata(options.host_identifier, err);
+    if (!metadata) return std::nullopt;
     Conversation conversation(carrier);
     const auto request = conversation.receive(err);
     if (!request) return std::nullopt;
@@ -330,6 +333,13 @@ std::optional<PairableHostResult> accept_pairable_host(
     if (!plain) return std::nullopt;
     auto result = device_identity(server.session_key(), *plain, err);
     if (!result) return std::nullopt;
+    // Persistence checks after this function returns are too late to prevent a
+    // duplicate or unexpected peer from receiving this host's M6 trust identity.
+    // Unauthenticated M5 data must never reach a filesystem admission callback.
+    if (admit && !admit(*result, err)) {
+        if (err.empty()) err = SCRCTL_TR("Wi-Fi pairing returned an incomplete or unexpected device identity");
+        return std::nullopt;
+    }
     const auto prefix = hkdf_sha512(server.session_key(), "Pair-Setup-Accessory-Sign-Salt",
                                     "Pair-Setup-Accessory-Sign-Info", 32, err);
     if (!prefix) return std::nullopt;
@@ -353,7 +363,7 @@ std::optional<PairableHostResult> accept_pairable_host(
                  {OpackValue::of_string("model"), OpackValue::of_string(options.host_model)},
                  {OpackValue::of_string("mac"), OpackValue::of_bytes(*mac)},
                  {OpackValue::of_string("btAddr"), OpackValue::of_string(mac_text)},
-                 {OpackValue::of_string("remotepairing_serial_number"), OpackValue::of_string("AAAAAAAAAAAA")}};
+                 {OpackValue::of_string("remotepairing_serial_number"), OpackValue::of_string(metadata->serial_number)}};
     Bytes encoded_info;
     if (!opack_encode(info, encoded_info, err)) return std::nullopt;
     const auto identity = tlv_build({{TlvType::Identifier, host_id}, {TlvType::PublicKey, options.host_public_key},

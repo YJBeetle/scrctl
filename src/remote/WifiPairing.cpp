@@ -222,38 +222,70 @@ std::string pin(std::string &error) {
 void progress(const WifiPairingOptions &options, std::string_view message) {
     if (options.progress) options.progress(message);
 }
+
+bool record_text_valid(std::string_view value) {
+    return value.size() <= 255 && (value.empty() || (value.front() != ' ' && value.back() != ' ')) &&
+        std::none_of(value.begin(), value.end(),
+        [](unsigned char ch) { return ch < 0x20 || ch == 0x7f; });
+}
+
+std::string pairing_record_path(const std::string &udid, const WifiPairingOptions &options) {
+    return wifi::record_path(options.pairing_directory.empty() ? wifi::default_record_dir()
+                                                             : options.pairing_directory, udid);
+}
+
+bool pairing_target_available(const std::string &path, std::string &err) {
+    std::error_code ec;
+    const auto status = std::filesystem::symlink_status(path, ec);
+    if (std::filesystem::exists(status)) {
+        err = SCRCTL_TR("Pairing record already exists; Wi-Fi pairing will not replace it");
+        return false;
+    }
+    if (ec && ec != std::errc::no_such_file_or_directory) {
+        err = SCRCTL_TR("Cannot inspect the Wi-Fi pairing record path");
+        return false;
+    }
+    return true;
+}
 } // namespace
+
+bool detail::admit_wifi_pairing(const wifi::PairRecord &record,
+                              const WifiPairingOptions &options, std::string &err) {
+    err.clear();
+    // Only peer fields are available here: M5 has authenticated the Identifier
+    // and public key, but the responder has not yet emitted its M6 identity.
+    if (record.udid.empty() || !record_text_valid(record.udid) || !record.has_peer_identity() ||
+        record.peer_alt_irk.size() != 16 || (!options.udid.empty() && options.udid != record.udid)) {
+        err = SCRCTL_TR("Wi-Fi pairing returned an incomplete or unexpected device identity");
+        return false;
+    }
+    try {
+        if (options.should_cancel && options.should_cancel()) {
+            err = SCRCTL_TR("Wi-Fi pairing cancelled");
+            return false;
+        }
+        return pairing_target_available(pairing_record_path(record.udid, options), err);
+    } catch (const std::exception &) {
+        err = SCRCTL_TR("Wi-Fi pairing workflow failed before completion");
+        return false;
+    }
+}
 
 PairingResult detail::save_wifi_pairing(const wifi::PairRecord &record,
     const WifiPairingOptions &options,
     const std::function<wifi::PairVerifyResult(const wifi::PairRecord &, std::string &)> &verify) {
     PairingResult result;
     result.udid = record.udid;
-    const auto text_field = [](std::string_view value) {
-        return value.size() <= 255 && (value.empty() || (value.front() != ' ' && value.back() != ' ')) &&
-            std::none_of(value.begin(), value.end(),
-            [](unsigned char ch) { return ch < 0x20 || ch == 0x7f; });
-    };
     if (!record.complete() || !record.has_peer_identity() || record.peer_alt_irk.size() != 16 ||
-        !text_field(record.udid) || !text_field(record.host_identifier) ||
-        !text_field(record.advertised_identifier) || !text_field(record.remote_unlock_host_key) ||
+        !record_text_valid(record.udid) || !record_text_valid(record.host_identifier) ||
+        !record_text_valid(record.advertised_identifier) || !record_text_valid(record.remote_unlock_host_key) ||
         (!options.udid.empty() && options.udid != record.udid)) {
         result.error = SCRCTL_TR("Wi-Fi pairing returned an incomplete or unexpected device identity");
         return result;
     }
-    result.path = wifi::record_path(options.pairing_directory.empty() ? wifi::default_record_dir()
-                                                                   : options.pairing_directory, record.udid);
+    result.path = pairing_record_path(record.udid, options);
     try {
-        std::error_code ec;
-        const auto status = std::filesystem::symlink_status(result.path, ec);
-        if (std::filesystem::exists(status)) {
-            result.error = SCRCTL_TR("Pairing record already exists; Wi-Fi pairing will not replace it");
-            return result;
-        }
-        if (ec && ec != std::errc::no_such_file_or_directory) {
-            result.error = SCRCTL_TR("Cannot inspect the Wi-Fi pairing record path");
-            return result;
-        }
+        if (!pairing_target_available(result.path, result.error)) return result;
         if (options.should_cancel && options.should_cancel()) {
             result.error = SCRCTL_TR("Wi-Fi pairing cancelled"); return result;
         }
@@ -288,17 +320,7 @@ PairingResult pair_wifi_remote(const WifiPairingOptions &options) {
     try {
         if (!deadline.active(result.error) || !transport::initialize_sockets(result.error)) return result;
         if (!options.udid.empty()) {
-            const auto path = wifi::record_path(options.pairing_directory.empty() ? wifi::default_record_dir()
-                                                                                : options.pairing_directory,
-                                                options.udid);
-            std::error_code ec;
-            if (std::filesystem::exists(std::filesystem::symlink_status(path, ec))) {
-                result.error = SCRCTL_TR("Pairing record already exists; Wi-Fi pairing will not replace it");
-                return result;
-            }
-            if (ec && ec != std::errc::no_such_file_or_directory) {
-                result.error = SCRCTL_TR("Cannot inspect the Wi-Fi pairing record path"); return result;
-            }
+            if (!pairing_target_available(pairing_record_path(options.udid, options), result.error)) return result;
         }
         wifi::PairableHostOptions host;
         host.host_identifier = uuid(result.error);
@@ -364,7 +386,13 @@ PairingResult pair_wifi_remote(const WifiPairingOptions &options) {
         PairingStream stream(accepted, deadline,
             [&](std::string &error) { return advertised->poll(0, error); });
         wifi::FramedCarrier carrier(stream);
-        const auto setup = wifi::accept_pairable_host(carrier, host, options.display_pin, result.error);
+        const auto setup = wifi::accept_pairable_host(carrier, host, options.display_pin, result.error,
+            [&](const wifi::PairableHostResult &peer, std::string &error) {
+                // The peer UDID is now authenticated. Refuse duplicates and an
+                // unexpected device before sending M6, not only before saving.
+                return deadline.active(error) && detail::admit_wifi_pairing(peer.record, options, error) &&
+                       deadline.active(error);
+            });
         if (!setup || !deadline.active(result.error)) return result;
         accepted.close();
         advertised.reset();

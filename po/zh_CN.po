@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-10 16:34+0800\n"
+"POT-Creation-Date: 2026-10-10 17:34+0800\n"
 "PO-Revision-Date: 2026-10-09 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -266,14 +266,18 @@ msgid ""
 msgstr ""
 "不指定参数时，镜像显示已连接的设备。\n"
 "鼠标左键对应触摸。普通按键使用设备的键盘布局和输入法。\n"
-"退出：MOD+Q。全屏：MOD+F 或 F11。MOD 默认为左 Alt 或左 Super，可用 --shortcut-mod 修改。\n"
+"退出：MOD+Q。全屏：MOD+F 或 F11。MOD 默认为左 Alt 或左 Super，可用 --"
+"shortcut-mod 修改。\n"
 "粘贴电脑剪贴板：MOD+V（支持 Unicode）。\n"
 "主屏幕：MOD+H 或鼠标中键。音量：MOD+Up/Down。锁屏键：MOD+P。\n"
 "显示实际大小：MOD+G。去除画面留边：MOD+W，或双击空白留边。\n"
 "向左 / 右旋转电脑画面：MOD+Left / Right（不改变录制）。\n"
 "水平镜像电脑画面：MOD+Shift+Left/Right。垂直镜像：MOD+Shift+Up/Down。\n"
-"默认将音频转到电脑；--audio-dup 保留手机播放。切换路由可能暂停手机播放器，需要时请继续播放。\n"
-"编码尺寸、码率和帧率由设备决定。显示裁剪和 --display-orientation 不改变录制；--orientation 同时旋转显示和容器录制。使用 .mp4 或 .mkv 保存所选音视频轨道，或使用 .hevc 保存裸视频；--record-format 覆盖文件扩展名。\n"
+"默认将音频转到电脑；--audio-dup 保留手机播放。切换路由可能暂停手机播放器，需"
+"要时请继续播放。\n"
+"编码尺寸、码率和帧率由设备决定。显示裁剪和 --display-orientation 不改变录"
+"制；--orientation 同时旋转显示和容器录制。使用 .mp4 或 .mkv 保存所选音视频轨"
+"道，或使用 .hevc 保存裸视频；--record-format 覆盖文件扩展名。\n"
 "无线使用需要配对。--help / --version 不连接设备。"
 
 #: src/app/Cli.cpp:36 tools/app_launch_probe.cpp:31 tools/applist_probe.cpp:34
@@ -318,7 +322,8 @@ msgstr "允许替换不完整或被设备拒绝的配对记录；需要 --pair"
 msgid ""
 "Record selected tracks; format follows .mp4/.mkv or raw HEVC, unless --"
 "record-format is specified"
-msgstr "录制所选轨道；默认按 .mp4/.mkv 或裸 HEVC 选择格式，可用 --record-format 覆盖"
+msgstr ""
+"录制所选轨道；默认按 .mp4/.mkv 或裸 HEVC 选择格式，可用 --record-format 覆盖"
 
 #: src/app/Cli.cpp:62
 msgid ""
@@ -3573,8 +3578,8 @@ msgstr ""
 "（设备拒绝此系统版本：已测试 iOS 27 设备支持实时媒体，已测试 iOS 18 设备拒"
 "绝；截图回退和按键输入可能仍可用，见 docs/coredevice.md §23）"
 
-#: src/remote/WifiPairing.cpp:33 src/remote/WifiPairing.cpp:258
-#: src/remote/WifiPairing.cpp:268
+#: src/remote/WifiPairing.cpp:33 src/remote/WifiPairing.cpp:264
+#: src/remote/WifiPairing.cpp:290 src/remote/WifiPairing.cpp:300
 msgid "Wi-Fi pairing cancelled"
 msgstr "Wi-Fi 配对已取消"
 
@@ -3602,38 +3607,40 @@ msgstr "Wi-Fi 配对连接已关闭"
 msgid "Invalid numeric Wi-Fi pairing endpoint"
 msgstr "Wi-Fi 配对端点的数字地址无效"
 
-#: src/remote/WifiPairing.cpp:241
-msgid "Wi-Fi pairing returned an incomplete or unexpected device identity"
-msgstr "Wi-Fi 配对返回的设备身份不完整或与预期不符"
-
-#: src/remote/WifiPairing.cpp:250 src/remote/WifiPairing.cpp:296
-#: src/wifi/PairRecord.cpp:129 src/wifi/PairRecordWindows.cpp:110
+#: src/remote/WifiPairing.cpp:241 src/wifi/PairRecord.cpp:129
+#: src/wifi/PairRecordWindows.cpp:110
 msgid "Pairing record already exists; Wi-Fi pairing will not replace it"
 msgstr "配对记录已存在；Wi-Fi 配对不会替换该记录"
 
-#: src/remote/WifiPairing.cpp:254 src/remote/WifiPairing.cpp:300
+#: src/remote/WifiPairing.cpp:245
 msgid "Cannot inspect the Wi-Fi pairing record path"
 msgstr "无法检查 Wi-Fi 配对记录路径"
 
-#: src/remote/WifiPairing.cpp:263
-msgid "New Wi-Fi pairing record verification failed: "
-msgstr "新 Wi-Fi 配对记录验证失败："
+#: src/remote/WifiPairing.cpp:259 src/remote/WifiPairing.cpp:283
+#: src/wifi/PairableHost.cpp:340
+msgid "Wi-Fi pairing returned an incomplete or unexpected device identity"
+msgstr "Wi-Fi 配对返回的设备身份不完整或与预期不符"
 
-#: src/remote/WifiPairing.cpp:271
-msgid "Cannot save the verified Wi-Fi pairing record: "
-msgstr "无法保存已验证的 Wi-Fi 配对记录："
-
-#: src/remote/WifiPairing.cpp:276 src/remote/WifiPairing.cpp:409
+#: src/remote/WifiPairing.cpp:269 src/remote/WifiPairing.cpp:308
+#: src/remote/WifiPairing.cpp:437
 msgid "Wi-Fi pairing workflow failed before completion"
 msgstr "Wi-Fi 配对流程尚未完成便失败"
 
-#: src/remote/WifiPairing.cpp:284
+#: src/remote/WifiPairing.cpp:295
+msgid "New Wi-Fi pairing record verification failed: "
+msgstr "新 Wi-Fi 配对记录验证失败："
+
+#: src/remote/WifiPairing.cpp:303
+msgid "Cannot save the verified Wi-Fi pairing record: "
+msgstr "无法保存已验证的 Wi-Fi 配对记录："
+
+#: src/remote/WifiPairing.cpp:316
 msgid ""
 "Wi-Fi pairing requires a PIN display callback and a timeout between 1 and "
 "300000 ms"
 msgstr "Wi-Fi 配对需要 PIN 显示回调，且超时须在 1 至 300000 毫秒之间"
 
-#: src/remote/WifiPairing.cpp:332
+#: src/remote/WifiPairing.cpp:354
 msgid ""
 "Open Settings > Privacy & Security > Developer Mode on the device and select "
 "Pair with this scrctl computer"
@@ -3641,15 +3648,15 @@ msgstr ""
 "请在设备上打开“设置 > 隐私与安全性 > 开发者模式”，然后选择与这台 scrctl 电脑"
 "配对"
 
-#: src/remote/WifiPairing.cpp:345
+#: src/remote/WifiPairing.cpp:367
 msgid "Cannot accept Wi-Fi pairing connection: "
 msgstr "无法接受 Wi-Fi 配对连接："
 
-#: src/remote/WifiPairing.cpp:352
+#: src/remote/WifiPairing.cpp:374
 msgid "Cannot identify the Wi-Fi pairing peer address"
 msgstr "无法识别 Wi-Fi 配对对端的地址"
 
-#: src/remote/WifiPairing.cpp:371
+#: src/remote/WifiPairing.cpp:399
 msgid "Reconnecting to verify the new Wi-Fi pairing record"
 msgstr "正在重新连接以验证新 Wi-Fi 配对记录"
 
@@ -4053,6 +4060,14 @@ msgstr "mDNS identifier 无效"
 msgid "Invalid mDNS authTag (expected 8 Base64 characters)"
 msgstr "mDNS authTag 无效（应为 8 个 Base64 字符）"
 
+#: src/wifi/HostMetadata.cpp:168
+msgid "Host display metadata requires a platform identifier or host identifier"
+msgstr "主机显示资料需要平台标识或主机标识"
+
+#: src/wifi/HostMetadata.cpp:183
+msgid "Cannot hash the host display serial number"
+msgstr "无法计算主机显示序列号的哈希"
+
 #: src/wifi/Mdns.cpp:140
 msgid "mDNS service limit reached"
 msgstr "mDNS 服务数量已达到上限"
@@ -4308,27 +4323,27 @@ msgstr "创建目录失败："
 msgid "Reading directory "
 msgstr "读取目录 "
 
-#: src/wifi/PairSetup.cpp:46
+#: src/wifi/PairSetup.cpp:47
 msgid "MD5 unavailable; check OpenSSL algorithm providers"
 msgstr "MD5 不可用；请检查 OpenSSL 算法 provider"
 
-#: src/wifi/PairSetup.cpp:70
+#: src/wifi/PairSetup.cpp:71
 msgid "Handshake response missing response._1.handshake._0"
 msgstr "握手回复缺少 response._1.handshake._0 字段"
 
-#: src/wifi/PairSetup.cpp:85
+#: src/wifi/PairSetup.cpp:86
 msgid " TLV decode incomplete: "
 msgstr " 的 TLV 数据不完整： "
 
-#: src/wifi/PairSetup.cpp:92
+#: src/wifi/PairSetup.cpp:93
 msgid " returned error code 0x"
 msgstr " 带错误码 0x"
 
-#: src/wifi/PairSetup.cpp:98
+#: src/wifi/PairSetup.cpp:99
 msgid " reply must contain a one-byte State equal to "
 msgstr " 回复必须包含一个字节的 State，值为 "
 
-#: src/wifi/PairSetup.cpp:114
+#: src/wifi/PairSetup.cpp:115
 msgid ""
 "Control channel does not allow pair-setup "
 "(deviceOptions.allowsPairSetup=false). Tested iOS 27 devices require the "
@@ -4337,56 +4352,56 @@ msgstr ""
 "此控制通道不允许 pair-setup（deviceOptions.allowsPairSetup=false）。已测试 "
 "iOS 27 设备需使用 RemoteXPC 入口（wifi_probe --pair-setup-xpc）"
 
-#: src/wifi/PairSetup.cpp:158
+#: src/wifi/PairSetup.cpp:159
 msgid "Host identifier missing; provide one if hostname lookup is unavailable"
 msgstr "缺少 host identifier；主机名查询不可用时请显式提供"
 
-#: src/wifi/PairSetup.cpp:227
+#: src/wifi/PairSetup.cpp:230
 msgid "Verify M2 missing 32-byte public key"
 msgstr "verify M2 缺少 32 字节公钥"
 
-#: src/wifi/PairSetup.cpp:273
+#: src/wifi/PairSetup.cpp:276
 msgid ""
 "Device accepted this identifier; already paired, pair-setup is unnecessary"
 msgstr "设备已接受此 identifier，已配对，无需 pair-setup"
 
-#: src/wifi/PairSetup.cpp:278
+#: src/wifi/PairSetup.cpp:281
 msgid "Verify completed without accepting this key; sending upgrade M1"
 msgstr "验证完成但未接受此密钥，发送 upgrade M1"
 
-#: src/wifi/PairSetup.cpp:296
+#: src/wifi/PairSetup.cpp:299
 msgid "Handshake (attemptPairVerify=false) completed; sending M1"
 msgstr "handshake（attemptPairVerify=false）完成，发送 M1"
 
-#: src/wifi/PairSetup.cpp:314
+#: src/wifi/PairSetup.cpp:317
 msgid "M2 missing PUBLIC_KEY or SALT"
 msgstr "M2 缺少 PUBLIC_KEY 或 SALT 字段"
 
-#: src/wifi/PairSetup.cpp:340
+#: src/wifi/PairSetup.cpp:343
 msgid "M4 missing PROOF"
 msgstr "M4 缺少 PROOF 字段"
 
-#: src/wifi/PairSetup.cpp:346
+#: src/wifi/PairSetup.cpp:349
 msgid "Device SRP proof mismatch; pairing aborted. Check PIN and peer identity"
 msgstr "设备 SRP 证明不匹配，已中止配对；请检查 PIN 和对端身份"
 
-#: src/wifi/PairSetup.cpp:350
+#: src/wifi/PairSetup.cpp:353
 msgid "SRP mutual verification passed; registering host key on device (M5)"
 msgstr "SRP 双向验证通过，正在注册主机密钥（M5）"
 
-#: src/wifi/PairSetup.cpp:432
+#: src/wifi/PairSetup.cpp:435
 msgid "PairSetup M6 missing encrypted device identity"
 msgstr "PairSetup M6 未提供设备身份密文"
 
-#: src/wifi/PairSetup.cpp:441
+#: src/wifi/PairSetup.cpp:444
 msgid "Cannot decrypt M6: "
 msgstr "无法解密 M6："
 
-#: src/wifi/PairSetup.cpp:502
+#: src/wifi/PairSetup.cpp:505
 msgid "); pairing itself succeeded"
 msgstr "），配对本身已成功"
 
-#: src/wifi/PairSetup.cpp:502
+#: src/wifi/PairSetup.cpp:505
 msgid "createRemoteUnlockKey failed ("
 msgstr "createRemoteUnlockKey 失败（"
 
@@ -4467,35 +4482,35 @@ msgstr ""
 msgid "Pairable host M5 INFO has invalid device labels"
 msgstr "可配对主机的 M5 INFO 含无效的设备标签"
 
-#: src/wifi/PairableHost.cpp:227
+#: src/wifi/PairableHost.cpp:228
 msgid "Pairable host configuration is incomplete or invalid"
 msgstr "可配对主机的配置不完整或无效"
 
-#: src/wifi/PairableHost.cpp:232
+#: src/wifi/PairableHost.cpp:233
 msgid "Pairable host public key does not match its private key"
 msgstr "可配对主机的公钥与私钥不匹配"
 
-#: src/wifi/PairableHost.cpp:254
+#: src/wifi/PairableHost.cpp:257
 msgid "Pairable host rejected an incompatible or pair-verify handshake"
 msgstr "可配对主机拒绝了不兼容的握手或配对验证握手"
 
-#: src/wifi/PairableHost.cpp:272
+#: src/wifi/PairableHost.cpp:275
 msgid "Pairable host M1 has an unsupported setup method"
 msgstr "可配对主机的 M1 使用了不支持的配对设置方式"
 
-#: src/wifi/PairableHost.cpp:290
+#: src/wifi/PairableHost.cpp:293
 msgid "Pairable host could not generate a full-width SRP challenge"
 msgstr "可配对主机无法生成完整长度的 SRP 挑战"
 
-#: src/wifi/PairableHost.cpp:294
+#: src/wifi/PairableHost.cpp:297
 msgid "Pairable host PIN display was cancelled"
 msgstr "可配对主机的 PIN 显示已取消"
 
-#: src/wifi/PairableHost.cpp:307
+#: src/wifi/PairableHost.cpp:310
 msgid "Pairable host M3 is missing the SRP public key or proof"
 msgstr "可配对主机的 M3 缺少 SRP 公钥或证明"
 
-#: src/wifi/PairableHost.cpp:325
+#: src/wifi/PairableHost.cpp:328
 msgid "Pairable host M5 is missing encrypted identity"
 msgstr "可配对主机的 M5 缺少加密身份"
 

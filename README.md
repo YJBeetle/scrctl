@@ -325,11 +325,20 @@ Wi-Fi 需要设备可达和已有 RemotePairing 记录。使用 `scrctl --pair -
 请重新通过 USB 配对。探针的 `--pmd3-record` 当前只导入主机密钥，因此也不能直接用于
 设备身份验证。也可用 `scrctl --pair --wifi auto` 完成手机发起的首次无线 PIN 配对：
 在手机“设置 → 隐私与安全性 → 开发者模式”中选择与 scrctl 电脑配对，输入电脑显示的 PIN。
-本台 iOS 27 iPhone 已在 Mac 上完成首次无线配对及新进程 `--wifi auto -s` 重连；
-测试记录保存于独立私有目录，默认旧记录未替换。Windows / Linux 的首次无线配对仍待验证，
+本台 iOS 27 iPhone 已在 Mac 和 Debian ARM64 上完成首次无线配对及新进程
+`--wifi auto -s` 重连；测试记录保存于独立私有目录，默认旧记录未替换。
+Windows 的首次无线配对仍待验证，
 无线流程不覆盖已有记录；USB 配对仍可使用。
 `--pairing-timeout=300000` 可将配对预算增加到五分钟，默认两分钟；无线预算包含发现、
-输入 PIN 和独立验证。`-s` 在首次无线配对时可省略；指定时会在保存前核对设备 UDID。
+输入 PIN 和独立验证。`-s` 在首次无线配对时可省略；指定时会在身份验证后、
+发送成功配对答复前核对设备 UDID。同一记录目录中已有该设备记录时，也在成功答复前拒绝；
+最终保存仍采用独占创建，防止覆盖已有记录。
+手机中的电脑型号显示为 `scrctl-macos`、`scrctl-linux` 或 `scrctl-windows`，
+显示序列号为 `SCRCTL-` 加 16 位大写十六进制。后缀使用应用专属 SHA-256：
+优先机器 UUID，读取不到时使用 Linux machine-id / Windows MachineGuid，
+最后才使用当前配对身份。它是稳定的显示标识；虚拟机克隆或系统重装可能改变或重复，
+不保证硬件唯一。原始机器标识不发送给手机；配对认证仍使用身份和密钥，
+已有手机条目不会通过普通重连自动改名。
 `wifi_probe --pair-setup --address <IP> --no-save` 仍仅用于协议实验。
 
 ```bash

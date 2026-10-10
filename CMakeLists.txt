@@ -78,6 +78,7 @@ if(APPLE)
             "-framework CoreMedia"
             "-framework CoreVideo"
             "-framework CoreFoundation"
+            "-framework IOKit"
             "-framework AudioToolbox"
             "-framework CoreAudio")
 endif()
@@ -168,6 +169,7 @@ add_library(scrctl_core STATIC
         src/bitstream/AnnexB.cpp
         src/hid/Hid.cpp
         src/wifi/Crypto.cpp
+        src/wifi/HostMetadata.cpp
         src/wifi/Srp.cpp
         src/wifi/Opack.cpp
         src/wifi/Tlv.cpp
@@ -466,7 +468,7 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(pairing_workflow_test PRIVATE scrctl_core)
     add_test(NAME pairing_workflow COMMAND pairing_workflow_test)
 
-    foreach(pairing_test IN ITEMS srp_server pairable_host mdns_advertiser wifi_pairing_workflow)
+    foreach(pairing_test IN ITEMS host_metadata srp_server pairable_host mdns_advertiser wifi_pairing_workflow)
         scrctl_add_test_executable(${pairing_test}_test tests/${pairing_test}_test.cpp)
         target_link_libraries(${pairing_test}_test PRIVATE scrctl_core)
         add_test(NAME ${pairing_test} COMMAND ${pairing_test}_test)

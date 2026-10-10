@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-10 16:34+0800\n"
+"POT-Creation-Date: 2026-10-10 17:34+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -3500,8 +3500,8 @@ msgid ""
 "button input may still be available; see docs/coredevice.md section 23)"
 msgstr ""
 
-#: src/remote/WifiPairing.cpp:33 src/remote/WifiPairing.cpp:258
-#: src/remote/WifiPairing.cpp:268
+#: src/remote/WifiPairing.cpp:33 src/remote/WifiPairing.cpp:264
+#: src/remote/WifiPairing.cpp:290 src/remote/WifiPairing.cpp:300
 msgid "Wi-Fi pairing cancelled"
 msgstr ""
 
@@ -3529,52 +3529,54 @@ msgstr ""
 msgid "Invalid numeric Wi-Fi pairing endpoint"
 msgstr ""
 
-#: src/remote/WifiPairing.cpp:241
-msgid "Wi-Fi pairing returned an incomplete or unexpected device identity"
-msgstr ""
-
-#: src/remote/WifiPairing.cpp:250 src/remote/WifiPairing.cpp:296
-#: src/wifi/PairRecord.cpp:129 src/wifi/PairRecordWindows.cpp:110
+#: src/remote/WifiPairing.cpp:241 src/wifi/PairRecord.cpp:129
+#: src/wifi/PairRecordWindows.cpp:110
 msgid "Pairing record already exists; Wi-Fi pairing will not replace it"
 msgstr ""
 
-#: src/remote/WifiPairing.cpp:254 src/remote/WifiPairing.cpp:300
+#: src/remote/WifiPairing.cpp:245
 msgid "Cannot inspect the Wi-Fi pairing record path"
 msgstr ""
 
-#: src/remote/WifiPairing.cpp:263
-msgid "New Wi-Fi pairing record verification failed: "
+#: src/remote/WifiPairing.cpp:259 src/remote/WifiPairing.cpp:283
+#: src/wifi/PairableHost.cpp:340
+msgid "Wi-Fi pairing returned an incomplete or unexpected device identity"
 msgstr ""
 
-#: src/remote/WifiPairing.cpp:271
-msgid "Cannot save the verified Wi-Fi pairing record: "
-msgstr ""
-
-#: src/remote/WifiPairing.cpp:276 src/remote/WifiPairing.cpp:409
+#: src/remote/WifiPairing.cpp:269 src/remote/WifiPairing.cpp:308
+#: src/remote/WifiPairing.cpp:437
 msgid "Wi-Fi pairing workflow failed before completion"
 msgstr ""
 
-#: src/remote/WifiPairing.cpp:284
+#: src/remote/WifiPairing.cpp:295
+msgid "New Wi-Fi pairing record verification failed: "
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:303
+msgid "Cannot save the verified Wi-Fi pairing record: "
+msgstr ""
+
+#: src/remote/WifiPairing.cpp:316
 msgid ""
 "Wi-Fi pairing requires a PIN display callback and a timeout between 1 and "
 "300000 ms"
 msgstr ""
 
-#: src/remote/WifiPairing.cpp:332
+#: src/remote/WifiPairing.cpp:354
 msgid ""
 "Open Settings > Privacy & Security > Developer Mode on the device and select "
 "Pair with this scrctl computer"
 msgstr ""
 
-#: src/remote/WifiPairing.cpp:345
+#: src/remote/WifiPairing.cpp:367
 msgid "Cannot accept Wi-Fi pairing connection: "
 msgstr ""
 
-#: src/remote/WifiPairing.cpp:352
+#: src/remote/WifiPairing.cpp:374
 msgid "Cannot identify the Wi-Fi pairing peer address"
 msgstr ""
 
-#: src/remote/WifiPairing.cpp:371
+#: src/remote/WifiPairing.cpp:399
 msgid "Reconnecting to verify the new Wi-Fi pairing record"
 msgstr ""
 
@@ -3978,6 +3980,14 @@ msgstr ""
 msgid "Invalid mDNS authTag (expected 8 Base64 characters)"
 msgstr ""
 
+#: src/wifi/HostMetadata.cpp:168
+msgid "Host display metadata requires a platform identifier or host identifier"
+msgstr ""
+
+#: src/wifi/HostMetadata.cpp:183
+msgid "Cannot hash the host display serial number"
+msgstr ""
+
 #: src/wifi/Mdns.cpp:140
 msgid "mDNS service limit reached"
 msgstr ""
@@ -4233,83 +4243,83 @@ msgstr ""
 msgid "Reading directory "
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:46
+#: src/wifi/PairSetup.cpp:47
 msgid "MD5 unavailable; check OpenSSL algorithm providers"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:70
+#: src/wifi/PairSetup.cpp:71
 msgid "Handshake response missing response._1.handshake._0"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:85
+#: src/wifi/PairSetup.cpp:86
 msgid " TLV decode incomplete: "
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:92
+#: src/wifi/PairSetup.cpp:93
 msgid " returned error code 0x"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:98
+#: src/wifi/PairSetup.cpp:99
 msgid " reply must contain a one-byte State equal to "
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:114
+#: src/wifi/PairSetup.cpp:115
 msgid ""
 "Control channel does not allow pair-setup "
 "(deviceOptions.allowsPairSetup=false). Tested iOS 27 devices require the "
 "RemoteXPC entry point (wifi_probe --pair-setup-xpc)"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:158
+#: src/wifi/PairSetup.cpp:159
 msgid "Host identifier missing; provide one if hostname lookup is unavailable"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:227
+#: src/wifi/PairSetup.cpp:230
 msgid "Verify M2 missing 32-byte public key"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:273
+#: src/wifi/PairSetup.cpp:276
 msgid ""
 "Device accepted this identifier; already paired, pair-setup is unnecessary"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:278
+#: src/wifi/PairSetup.cpp:281
 msgid "Verify completed without accepting this key; sending upgrade M1"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:296
+#: src/wifi/PairSetup.cpp:299
 msgid "Handshake (attemptPairVerify=false) completed; sending M1"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:314
+#: src/wifi/PairSetup.cpp:317
 msgid "M2 missing PUBLIC_KEY or SALT"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:340
+#: src/wifi/PairSetup.cpp:343
 msgid "M4 missing PROOF"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:346
+#: src/wifi/PairSetup.cpp:349
 msgid "Device SRP proof mismatch; pairing aborted. Check PIN and peer identity"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:350
+#: src/wifi/PairSetup.cpp:353
 msgid "SRP mutual verification passed; registering host key on device (M5)"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:432
+#: src/wifi/PairSetup.cpp:435
 msgid "PairSetup M6 missing encrypted device identity"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:441
+#: src/wifi/PairSetup.cpp:444
 msgid "Cannot decrypt M6: "
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:502
+#: src/wifi/PairSetup.cpp:505
 msgid "); pairing itself succeeded"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:502
+#: src/wifi/PairSetup.cpp:505
 msgid "createRemoteUnlockKey failed ("
 msgstr ""
 
@@ -4389,35 +4399,35 @@ msgstr ""
 msgid "Pairable host M5 INFO has invalid device labels"
 msgstr ""
 
-#: src/wifi/PairableHost.cpp:227
+#: src/wifi/PairableHost.cpp:228
 msgid "Pairable host configuration is incomplete or invalid"
 msgstr ""
 
-#: src/wifi/PairableHost.cpp:232
+#: src/wifi/PairableHost.cpp:233
 msgid "Pairable host public key does not match its private key"
 msgstr ""
 
-#: src/wifi/PairableHost.cpp:254
+#: src/wifi/PairableHost.cpp:257
 msgid "Pairable host rejected an incompatible or pair-verify handshake"
 msgstr ""
 
-#: src/wifi/PairableHost.cpp:272
+#: src/wifi/PairableHost.cpp:275
 msgid "Pairable host M1 has an unsupported setup method"
 msgstr ""
 
-#: src/wifi/PairableHost.cpp:290
+#: src/wifi/PairableHost.cpp:293
 msgid "Pairable host could not generate a full-width SRP challenge"
 msgstr ""
 
-#: src/wifi/PairableHost.cpp:294
+#: src/wifi/PairableHost.cpp:297
 msgid "Pairable host PIN display was cancelled"
 msgstr ""
 
-#: src/wifi/PairableHost.cpp:307
+#: src/wifi/PairableHost.cpp:310
 msgid "Pairable host M3 is missing the SRP public key or proof"
 msgstr ""
 
-#: src/wifi/PairableHost.cpp:325
+#: src/wifi/PairableHost.cpp:328
 msgid "Pairable host M5 is missing encrypted identity"
 msgstr ""
 

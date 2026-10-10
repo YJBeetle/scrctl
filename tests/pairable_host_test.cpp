@@ -1,7 +1,11 @@
 #include "wifi/PairableHost.h"
+#include "remote/WifiPairing.h"
 
+#include <chrono>
 #include <cstdio>
 #include <exception>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <map>
 #include <stdexcept>
@@ -183,10 +187,13 @@ public:
 Value &handshake(Value &value) { return value["message"]["plain"]["_0"]["request"]["_0"]["handshake"]["_0"]; }
 Value &data(Value &value) { return value["message"]["plain"]["_0"]["event"]["_0"]["pairingData"]["_0"]; }
 
-void reject(Client &client, const char *label) {
+void reject(Client &client, const char *label, int expected_admissions = 0) {
     std::string err;
-    const auto result = accept_pairable_host(client, options(), [](std::string_view, std::string &) { return true; }, err);
-    check(!result && !err.empty() && !client.authenticated_host && client.responses.size() <= 3, label);
+    int admissions = 0;
+    const auto result = accept_pairable_host(client, options(), [](std::string_view, std::string &) { return true; }, err,
+        [&](const PairableHostResult &, std::string &) { ++admissions; return true; });
+    check(!result && !err.empty() && !client.authenticated_host && client.responses.size() <= 3 &&
+              admissions == expected_admissions, label);
 }
 
 void test_complete_crypto_exchange() {
@@ -224,6 +231,25 @@ void test_complete_crypto_exchange() {
     check(opack_decode(client.received_host_info, info, err) && info.find("altIRK") != nullptr &&
               info.find("altIRK")->bytes == options().host_alt_irk,
           "M6 carries the same stable advertised host altIRK");
+    const auto metadata = host_metadata(options().host_identifier, err);
+    check(metadata && info.find("model") && info.find("model")->str == host_model() &&
+              reply.at("peerDeviceInfo").at("model") == host_model() && options().host_model == host_model() &&
+              info.find("remotepairing_serial_number") &&
+              info.find("remotepairing_serial_number")->str == metadata->serial_number,
+          "real authenticated M6 and handshake share platform model and stable SCRCTL serial");
+    check(info.find("accountID") && info.find("accountID")->str == options().host_identifier &&
+              info.find("name") && info.find("name")->str == options().host_name,
+          "display metadata preserves existing signed host account and display name");
+
+    Client overridden;
+    auto custom = options();
+    custom.host_model = "OWNED-EXPLICIT-MODEL";
+    const auto custom_result = accept_pairable_host(overridden, custom,
+        [](std::string_view, std::string &) { return true; }, err);
+    OpackValue custom_info;
+    check(custom_result && opack_decode(overridden.received_host_info, custom_info, err) &&
+              custom_info.find("model") && custom_info.find("model")->str == custom.host_model,
+          "explicit caller model override remains supported");
 }
 
 void test_envelope_and_phase_rejections() {
@@ -247,7 +273,62 @@ void test_envelope_and_phase_rejections() {
     for (const auto &[label, mutation] : cases) { Client client; client.mutate_envelope = mutation; reject(client, label); }
     Client wrong_pin("271828"); reject(wrong_pin, "real wrong-PIN SRP proof never publishes a record");
     Client damaged; damaged.corrupt_aead = true; reject(damaged, "damaged M5 AEAD never publishes a record");
-    Client failed_write; failed_write.fail_m6_write = true; reject(failed_write, "M6 write failure never publishes a record");
+    Client failed_write; failed_write.fail_m6_write = true;
+    reject(failed_write, "M6 write failure never publishes a record after admission", 1);
+}
+
+void test_admission_before_m6() {
+    struct Directory {
+        std::filesystem::path path = std::filesystem::temp_directory_path() /
+            ("scrctl-pairable-admission-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        ~Directory() { std::error_code ignored; std::filesystem::remove_all(path, ignored); }
+    };
+    for (const int scenario : {0, 1, 2, 3}) {
+        Directory directory;
+        scrctl::remote::WifiPairingOptions workflow;
+        workflow.pairing_directory = directory.path.string();
+        const auto path = record_path(workflow.pairing_directory, "OWNED-DEVICE-UDID");
+        if (scenario == 0) {
+            std::filesystem::create_directories(directory.path);
+            std::ofstream(path) << "preexisting trust bytes";
+        }
+        if (scenario == 1) workflow.udid = "ANOTHER-DEVICE";
+        Client client;
+        std::string error;
+        int admissions = 0;
+        const auto result = accept_pairable_host(client, options(),
+            [](std::string_view, std::string &) { return true; }, error,
+            [&](const PairableHostResult &peer, std::string &err) {
+                ++admissions;
+                check(client.reads == 4 && client.responses.size() == 3 && !client.authenticated_host &&
+                          peer.record.udid == "OWNED-DEVICE-UDID" &&
+                          peer.record.peer_identifier == client.device_identifier &&
+                          peer.record.peer_public_key == client.device_public,
+                      "admission receives authenticated M5 identity before any successful M6 is written");
+                if (scenario == 2) return false; // Empty callback errors still get a useful failure.
+                return scrctl::remote::detail::admit_wifi_pairing(peer.record, workflow, err);
+            });
+        if (scenario == 3) {
+            check(result && error.empty() && admissions == 1 && client.responses.size() == 4 &&
+                      client.authenticated_host && !std::filesystem::exists(directory.path),
+                  "read-only admission of a new peer permits the real M6 without creating a record");
+        } else {
+            const char *expected = scenario == 0 ? "already exists" : "unexpected device identity";
+            check(!result && error.find(expected) != std::string::npos && admissions == 1 &&
+                      client.responses.size() == 3 && !client.authenticated_host,
+                  "duplicate, unexpected peer or rejected admission cannot receive the host M6 identity");
+            if (scenario == 0) {
+                std::ifstream file(path);
+                std::string contents;
+                std::getline(file, contents);
+                check(workflow.udid.empty() && contents == "preexisting trust bytes",
+                      "no-s duplicate rejection after authenticated M5 preserves the existing record");
+            } else {
+                check(!std::filesystem::exists(directory.path),
+                      "pre-M6 rejection creates no pairing record or directory");
+            }
+        }
+    }
 }
 
 void test_identity_rejections() {
@@ -309,6 +390,7 @@ int main() {
         test_complete_crypto_exchange();
         test_envelope_and_phase_rejections();
         test_identity_rejections();
+        test_admission_before_m6();
         test_local_preconditions_and_cancel();
     } catch (const std::exception &e) {
         ++failures; std::printf("Fixture exception: %s\n", e.what());

@@ -33,6 +33,9 @@ struct Fixture {
     }
     ~Fixture() { std::error_code error; std::filesystem::remove_all(root, error); }
     std::string path() const { return wifi::record_path(root.string(), record.udid); }
+    bool admit(std::string &err) {
+        return remote::detail::admit_wifi_pairing(record, options, err);
+    }
     remote::PairingResult run() {
         return remote::detail::save_wifi_pairing(record, options,
             [&](const wifi::PairRecord &actual, std::string &) {
@@ -55,6 +58,80 @@ struct Fixture {
 } // namespace
 
 int main() {
+    {
+        Fixture f;
+        f.record.host_identifier.clear();
+        f.record.host_private_key.clear();
+        f.record.host_public_key.clear();
+        std::string error = "old error";
+        check(f.admit(error) && error.empty() && f.verifies == 0 && !std::filesystem::exists(f.root),
+              "authenticated M5 peer is admitted without host M6 fields, verification, or file creation");
+        f.options.udid = f.record.udid;
+        check(f.admit(error), "admission accepts the explicitly expected authenticated device");
+        f.options.udid = "different-device";
+        check(!f.admit(error) && error.find("unexpected device identity") != std::string::npos &&
+                  !std::filesystem::exists(f.root),
+              "wrong authenticated device is refused before successful M6 without creating a directory");
+    }
+    {
+        Fixture f;
+        std::filesystem::create_directories(f.root);
+        std::ofstream(f.path()) << "preexisting trust bytes";
+        std::string error;
+        check(f.options.udid.empty() && !f.admit(error) &&
+                  error.find("already exists") != std::string::npos && f.verifies == 0 &&
+                  f.contents() == "preexisting trust bytes",
+              "omitting -s still rejects an existing authenticated device record before successful M6");
+    }
+#ifndef _WIN32
+    for (const bool dangling : {false, true}) {
+        Fixture f;
+        std::filesystem::create_directories(f.root);
+        const auto target = f.root / "symlink-target";
+        if (!dangling) std::ofstream(target) << "external trust bytes";
+        std::filesystem::create_symlink(target, f.path());
+        std::string error;
+        check(!f.admit(error) && error.find("already exists") != std::string::npos &&
+                  std::filesystem::is_symlink(std::filesystem::symlink_status(f.path())) &&
+                  f.verifies == 0 && (dangling ? !std::filesystem::exists(target) :
+                                     f.contents() == "external trust bytes"),
+              "admission rejects existing and dangling symlinks without following or changing trust");
+    }
+    {
+        Fixture f;
+        std::ofstream(f.root) << "not a directory";
+        std::string error;
+        check(!f.admit(error) && error.find("Cannot inspect") != std::string::npos && f.verifies == 0,
+              "target inspection I/O failure refuses successful M6 rather than treating it as an absent record");
+    }
+#endif
+    {
+        Fixture f;
+        f.options.should_cancel = [] { return true; };
+        std::string error;
+        check(!f.admit(error) && error.find("cancelled") != std::string::npos &&
+                  !std::filesystem::exists(f.root) && f.verifies == 0,
+              "pre-M6 admission cancellation has no verification or file side effects");
+    }
+    for (int missing = 0; missing < 4; ++missing) {
+        Fixture f;
+        if (missing == 0) f.record.udid.clear();
+        if (missing == 1) f.record.peer_identifier.clear();
+        if (missing == 2) f.record.peer_public_key.clear();
+        if (missing == 3) f.record.peer_alt_irk.clear();
+        std::string error;
+        check(!f.admit(error) && error.find("incomplete") != std::string::npos &&
+                  !std::filesystem::exists(f.root),
+              "admission refuses incomplete peer identity before touching a record path");
+    }
+    for (const char *udid : {" device", "device ", "device\nmetadata=injected"}) {
+        Fixture f;
+        f.record.udid = udid;
+        std::string error;
+        check(!f.admit(error) && error.find("unexpected device identity") != std::string::npos &&
+                  !std::filesystem::exists(f.root),
+              "admission rejects non-roundtrippable device metadata before successful M6");
+    }
     {
         Fixture f;
         auto result = f.run();

@@ -13,6 +13,7 @@
 #include <map>
 
 #include "wifi/Opack.h"
+#include "wifi/HostMetadata.h"
 #include "wifi/PairingIdentity.h"
 #include "wifi/PairVerify.h"
 #include "wifi/Srp.h"
@@ -158,6 +159,8 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
         err = SCRCTL_TR("Host identifier missing; provide one if hostname lookup is unavailable");
         return fail();
     }
+    const auto metadata = host_metadata(host_identifier, err);
+    if (!metadata) return fail();
     // 本次 setup 生成一组 Ed25519 主机密钥，verify 探测签名与 M5 注册共用此密钥。
     // 记录保存同一密钥的种子及公钥，供后续连接签名。
     const std::optional<Ed25519KeyPair> host_key = ed25519_keypair(err);
@@ -393,9 +396,9 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
         {OpackValue::of_string("btAddr"), OpackValue::of_string(mac_text)},
         {OpackValue::of_string("mac"), OpackValue::of_bytes(*fake_mac)},
         {OpackValue::of_string("remotepairing_serial_number"),
-         OpackValue::of_string("AAAAAAAAAAAA")},
+         OpackValue::of_string(metadata->serial_number)},
         {OpackValue::of_string("accountID"), OpackValue::of_string(std::string(host_identifier))},
-        {OpackValue::of_string("model"), OpackValue::of_string("computer-model")},
+        {OpackValue::of_string("model"), OpackValue::of_string(metadata->model)},
         {OpackValue::of_string("name"), OpackValue::of_string(host_label)},
     };
     Bytes info_bytes;

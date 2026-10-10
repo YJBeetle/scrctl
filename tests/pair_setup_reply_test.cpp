@@ -1,5 +1,6 @@
 // 经真实 RPPairing 字节流测试 setup/verify 探测的阶段与错误分支，不需要设备。
 #include "wifi/PairSetup.h"
+#include "wifi/HostMetadata.h"
 #include "wifi/Opack.h"
 #include "wifi/Rppairing.h"
 #include "wifi/Tlv.h"
@@ -124,6 +125,7 @@ public:
     int verify_m1 = 0, verify_m3 = 0, setup_m1 = 0, setup_m3 = 0, setup_m5 = 0;
     int notifications = 0, encrypted = 0;
     bool host_signature_valid = false;
+    Bytes host_info;
     Bytes device_identifier = bytes_of("SYNTHETIC-DEVICE");
     Bytes device_public_key;
     explicit MemStream(Phase p, Form f) : phase(p), form(f) {}
@@ -220,7 +222,10 @@ private:
         const auto *identifier = tlv_get(inner, TlvType::Identifier);
         const auto *public_key = tlv_get(inner, TlvType::PublicKey);
         const auto *signature = tlv_get(inner, TlvType::Signature);
+        const auto *info = tlv_get(inner, TlvType::Info);
         require(err.empty() && identifier && public_key && signature);
+        require(info != nullptr);
+        host_info = *info;
         const auto prefix = hkdf_sha512(srp_->session_key, "Pair-Setup-Controller-Sign-Salt",
                                         "Pair-Setup-Controller-Sign-Info", 32, err);
         require(prefix.has_value());
@@ -406,6 +411,17 @@ void run_pair_setup_reply_tests(void (*check)(bool, const char *)) {
                   "合法 setup State 2/4/6、真实 SRP 证明与设备身份签名通过");
             check(io.setup_m1 == 1 && io.setup_m3 == 1 && io.setup_m5 == 1 && io.host_signature_valid &&
                   io.encrypted == 1, "正常 setup 验证双方身份签名后仍尝试可选解锁请求");
+            OpackValue info;
+            const auto metadata = host_metadata("HOST-IDENTIFIER", err);
+            check(metadata && opack_decode(io.host_info, info, err) &&
+                      info.find("model") && info.find("model")->str == host_model() &&
+                      info.find("remotepairing_serial_number") &&
+                      info.find("remotepairing_serial_number")->str == metadata->serial_number,
+                  "真实 M5 密文携带平台型号与稳定 SCRCTL 显示序列号");
+            check(info.find("accountID") && info.find("accountID")->str == "HOST-IDENTIFIER" &&
+                      info.find("name") && info.find("name")->str == "host" &&
+                      result.record.host_identifier == "HOST-IDENTIFIER",
+                  "显示 metadata 不改变已签名 Identifier、accountID 或原显示名称");
         }
         {
             MemStream io(Phase::VerifyM4, Form::Normal);

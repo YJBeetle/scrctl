@@ -7,7 +7,7 @@
 namespace scrctl::remote {
 
 struct WifiPairingOptions {
-    std::string udid;  ///< Optional expected device UDID; checked before saving.
+    std::string udid;  ///< Optional expected device UDID; checked after authenticated M5, before M6.
     std::string pairing_directory;
     /// Cooperative total deadline including discovery, PIN and verification.
     /// Socket waits check it every 50ms; callbacks must return promptly.
@@ -28,6 +28,13 @@ struct WifiPairingOptions {
 PairingResult pair_wifi_remote(const WifiPairingOptions &options = {});
 
 namespace detail {
+/// Read-only admission after authenticated M5, before successful M6 is sent.
+/// Checks the expected peer and target-file availability; never creates or writes
+/// records. Host keys need not be populated yet. Call only after M5 authentication.
+/// The final exclusive save remains necessary for concurrent record creation.
+bool admit_wifi_pairing(const wifi::PairRecord &record,
+                       const WifiPairingOptions &options, std::string &err);
+
 /// Persistence gate used by the production listener after authenticated M5/M6.
 /// Verification is deliberately a new connection, not the setup carrier.
 PairingResult save_wifi_pairing(const wifi::PairRecord &record,

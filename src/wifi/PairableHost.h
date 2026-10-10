@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "wifi/PairRecord.h"
+#include "wifi/HostMetadata.h"
 #include "wifi/Rppairing.h"
 
 namespace scrctl::wifi {
@@ -13,7 +14,7 @@ namespace scrctl::wifi {
 struct PairableHostOptions {
     std::string host_identifier;
     std::string host_name;
-    std::string host_model = "Mac17,7";
+    std::string host_model = std::string(wifi::host_model());
     std::string host_udid;
     Bytes host_alt_irk;       ///< Stable 16-byte identity advertised by the listener.
     Bytes host_private_key;   ///< Ed25519 seed, 32 bytes; must match host_public_key.
@@ -33,6 +34,11 @@ struct PairableHostResult {
     std::string peer_model;
 };
 
+/// Called only after M5 authentication, before emitting a successful M6.
+/// Read-only admission may reject the authenticated peer with an error; it must
+/// not publish a record. Host M6 identity fields need not be populated yet.
+using PairableAdmissionCallback = std::function<bool(const PairableHostResult &, std::string &err)>;
+
 /// Accept exactly one device-initiated handshake and SRP M1..M6 over an already
 /// connected carrier. The phone is the protocol "host"; this responder is
 /// "device". No sockets, advertisement, record writes, retries or rollback.
@@ -44,6 +50,7 @@ struct PairableHostResult {
 /// must reconnect normally, strictly PairVerify, and prevent old-record overwrite.
 std::optional<PairableHostResult> accept_pairable_host(
     EnvelopeCarrier &carrier, const PairableHostOptions &options,
-    const PairablePinCallback &display_pin, std::string &err);
+    const PairablePinCallback &display_pin, std::string &err,
+    const PairableAdmissionCallback &admit = {});
 
 }  // namespace scrctl::wifi

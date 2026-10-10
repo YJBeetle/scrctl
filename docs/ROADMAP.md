@@ -86,7 +86,7 @@ Windows 下载包的 98 DLL / 76 所属包来源已审计；这不代替设备�
 - 远程配对：`--pair` 经 USB 验证/新建记录，旧记录重配须显式 `--repair-pairing`；
   新记录验证后才保存。macOS 正式命令的确认、新建及复用已通过，更多设备和 Windows 待验证。
   `--pair --wifi auto` 的手机发起 PIN 配对已在 Mac / 本台 iOS 27 iPhone 上完成首次记录
-  创建、fresh PairVerify 和独立新进程无线重连；Windows / Linux 首次无线配对仍待验证。
+  创建、fresh PairVerify 和独立新进程无线重连；Debian ARM64 的同一流程亦已通过，Windows 待验证。
 - 音频：macOS 使用 AudioToolbox，Windows / Linux 使用 FFmpeg AAC-ELD 与 libswresample。
   已修正旧 ASC 配置错误，真实音乐双后端对照通过；Windows USB 已实际发声，
   Mac USB / Wi-Fi 的平滑时钟补偿及 200 ms 缓冲已通过短时听感对照。
@@ -123,7 +123,8 @@ Linux 的异常 usbmuxd 曾阻塞扫描之前的 USB 枚举。发现专用枚举
 与 scrctl 电脑配对入口发起一次性 PIN 配对；新连接验证签名身份后才独占保存，不覆盖已有记录。
 本台 iOS 27 iPhone 已在 Mac 上完成 M1–M6、fresh PairVerify 与独立新进程 `--wifi auto -s`
 五秒视频录制重连，均退出 0。测试使用无旧记录的独立私有目录，默认旧记录未替换。
-配对与重连均走 Wi-Fi，测试期间物理 USB 仍插着；Windows / Linux 首次无线配对仍待验证。
+Debian ARM64 也完成了首次 PIN、fresh PairVerify 与独立新进程五秒重连录制（314 个 HEVC 包）。
+配对与重连均走 Wi-Fi，测试期间物理 USB 仍插着；Windows 首次无线配对仍待验证。
 此前直接连接设备网络入口的 PairSetup 被拒绝，与这条手机发起流程分别记录。
 
 ## 容器录制与后续工作
