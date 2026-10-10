@@ -99,6 +99,9 @@ class Presenter {
     void begin_physical_keyboard_mode();
     bool draw_background();
     bool draw_uploaded(const char *readback_path = nullptr);
+    bool refresh_display(bool resume,
+                         const std::function<void(double, double, bool)> &on_touch,
+                         const KeyboardHandler &on_keyboard, const ButtonHandler &on_button);
     /// 将 SDL 鼠标的窗口点坐标转换为设备整屏的 0..1 坐标。
     /// renderer 固定 logical size=0、scale=1 和完整绘制面视口。
     /// SDL_RenderWindowToLogical 先负责点到物理像素的 DPI 换算，再按与绘制
@@ -155,6 +158,13 @@ class Presenter {
     bool video_playback_ = true;
     bool texture_uploaded_ = false;
     bool render_failed_ = false;
+    // 冻结帧保留在 GPU；暂停期间只缓存一个最新来源帧，恢复后释放 CPU 缓冲。
+    bool display_paused_ = false;
+    bool paused_input_stale_ = false;
+    Frame latest_frame_{};
+    Crop latest_crop_{};
+    int source_degrees_ = 0;
+    int latest_base_degrees_ = 0;
     int texture_w_ = 0, texture_h_ = 0;
     Crop src_{};
     /// 窗口对源像素施加的顺时针角度，以及视口尺寸（90/270 时宽高对调）。

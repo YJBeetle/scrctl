@@ -163,6 +163,7 @@ add_library(scrctl_core STATIC
         src/remote/Device.cpp
         src/remote/Discovery.cpp
         src/remote/Pasteboard.cpp
+        src/remote/OrientationControl.cpp
         src/remote/DisplayInfo.cpp
         src/remote/App.cpp
         src/remote/PairingChannel.cpp
@@ -385,6 +386,10 @@ if(SCRCTL_BUILD_TESTS)
     scrctl_add_test_executable(pasteboard_test tests/pasteboard_test.cpp)
     target_link_libraries(pasteboard_test PRIVATE scrctl_core)
     add_test(NAME pasteboard COMMAND pasteboard_test)
+
+    scrctl_add_test_executable(orientation_control_test tests/orientation_control_test.cpp)
+    target_link_libraries(orientation_control_test PRIVATE scrctl_core)
+    add_test(NAME orientation_control COMMAND orientation_control_test)
 
     scrctl_add_test_executable(displayinfo_test tests/displayinfo_test.cpp)
     target_link_libraries(displayinfo_test PRIVATE scrctl_core)

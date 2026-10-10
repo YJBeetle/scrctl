@@ -1124,6 +1124,182 @@ struct ButtonFixture : KeyboardFixture {
     }
 };
 
+// 暂停仅针对本机显示；以实际上传/回读像素区分 pause、re-pause 和 unpause，
+// 不借助生产状态 getter，也不构造停止 FrameSource 的替代实现。
+void presenter_display_pause() {
+    const Palette first{kTopLeft, kTopRight, kBottomRight, kBottomLeft};
+    const Palette second{kBottomRight, kBottomLeft, kTopLeft, kTopRight};
+    const Palette third{kTopRight, kTopLeft, kBottomLeft, kBottomRight};
+    const Palette fourth{kBottomLeft, kBottomRight, kTopRight, kTopLeft};
+    const auto pixels_are = [&](KeyboardFixture &f, const Palette &colors, const char *what) {
+        auto *renderer = SDL_GetRenderer(SDL_GetWindowFromID(f.window_id));
+        int width = 0, height = 0;
+        const bool output = renderer && SDL_GetRendererOutputSize(renderer, &width, &height) == 0 &&
+                            width > 0 && height > 0 && width <= 1024 && height <= 1024;
+        if (!output) { check(false, what); return; }
+        std::vector<Uint32> pixels(static_cast<std::size_t>(width) * height);
+        const SDL_Rect full{0, 0, width, height};
+        const bool read = SDL_RenderReadPixels(renderer, &full, SDL_PIXELFORMAT_ARGB8888,
+                                               pixels.data(), width * 4) == 0;
+        const Point points[] = {{width / 8, height / 8}, {width - width / 8, height / 8},
+                                {width - width / 8, height - height / 8},
+                                {width / 8, height - height / 8}};
+        bool same = read;
+        if (read) for (unsigned i = 0; i < 4; ++i)
+            same &= close(at(pixels.data(), width, points[i].x, points[i].y), colors[i]);
+        check(same, what);
+    };
+    const auto press = [&](KeyboardFixture &f, Uint16 mods) {
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_Z, mods);
+        f.key(SDL_KEYUP, SDL_SCANCODE_Z);
+        check(!f.pump(), "显示暂停快捷键不退出窗口");
+    };
+    {
+        KeyboardFixture f("Presenter display pause pixels");
+        if (!f.window_id) return;
+        check(f.presenter.draw(f.frame) && !f.pump(), "建立暂停前实际纹理");
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_Z, KMOD_LALT);
+        check(!f.pump(), "首次 MOD+Z 冻结显示并保持本地按键归属");
+        auto next = colored_frame(64, 96, f.crop, second, 0);
+        check(f.presenter.draw(next, f.crop), "暂停仍消费后续有效帧");
+        pixels_are(f, first, "新帧抵达不覆盖被冻结的显示纹理");
+        // repeat 与未标 repeat 的重复 DOWN 都不能更新暂停快照。
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_Z, KMOD_LALT, 1);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_Z, KMOD_LALT);
+        f.pump(); pixels_are(f, first, "重复 DOWN 不 re-pause 到新帧");
+        f.key(SDL_KEYUP, SDL_SCANCODE_Z, KMOD_RSHIFT);
+        f.pump(); f.expect({}, "暂停键及修饰键先松后的 UP 不泄漏设备键盘");
+        press(f, KMOD_LALT); pixels_are(f, second, "新的 MOD+Z 抓取最新帧并继续暂停");
+        next = colored_frame(64, 96, f.crop, fourth, 0);
+        check(f.presenter.draw(next, f.crop), "暂停继续消费中间帧");
+        next = colored_frame(64, 96, f.crop, third, 16);
+        check(f.presenter.draw(next, f.crop), "暂停缓存接受带行填充的新帧并替换上一帧");
+        auto invalid = next;
+        invalid.pixels.clear();
+        check(!f.presenter.draw(invalid, f.crop), "暂停仍拒绝无效缓冲，不以消费状态掩盖错误");
+        pixels_are(f, second, "re-pause 不是恢复播放的 toggle");
+        press(f, KMOD_LALT | KMOD_LSHIFT);
+        pixels_are(f, third, "MOD+Shift+Z 不等待下一帧，立即显示最新帧");
+        next = colored_frame(64, 96, f.crop, fourth, 0);
+        check(f.presenter.draw(next, f.crop), "恢复后下一帧继续正常上传");
+        pixels_are(f, fourth, "unpause 恢复连续显示");
+        f.expect({}, "pause/re-pause/unpause 全部由本地消费");
+        press(f, KMOD_NONE);
+        f.expect({{29}, {}}, "普通 z 保留物理键盘输入");
+        check(f.presenter.draw(f.frame), "普通 z 后消费下一帧");
+        pixels_are(f, first, "普通 z 不冻结显示");
+    }
+    {
+        ButtonFixture f("Presenter paused held controls");
+        if (!f.window_id) return;
+        check(f.presenter.draw(f.frame) && !f.pump(), "建立同几何持续按住回归的实际纹理");
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_Z, KMOD_LALT); f.key(SDL_KEYUP, SDL_SCANCODE_Z);
+        f.pump();
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_UP, KMOD_LALT);
+        f.mouse(SDL_MOUSEBUTTONDOWN, 16, 24); f.pump();
+        f.expect({{4}}, "暂停时设备普通键按住可正常交付");
+        f.expect_buttons({{0x0C, 0xE9, true}}, "暂停时设备音量按钮按住可正常交付");
+        auto next = colored_frame(64, 96, f.crop, second, 0);
+        check(f.presenter.draw(next, f.crop), "保持设备输入时继续接受同几何新帧");
+        f.mouse(SDL_MOUSEMOTION, 32, 48);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_Z, KMOD_LALT); f.key(SDL_KEYUP, SDL_SCANCODE_Z);
+        check(!f.pump(), "同几何 re-pause 保持所有输入原有归属");
+        pixels_are(f, second, "按住控制的 re-pause 仍采用最新帧");
+        check(f.touches.size() == 2 && f.touches[0].down && f.touches[1].down &&
+                  f.touches[1].x == .5 && f.touches[1].y == .5,
+              "同几何 re-pause 保留当前拖动和同轮待发移动");
+        f.expect({}, "同几何 re-pause 不提前松开设备普通键");
+        f.expect_buttons({}, "同几何 re-pause 不提前松开 Consumer");
+        next = colored_frame(64, 96, f.crop, third, 0);
+        check(f.presenter.draw(next, f.crop), "持续按住时缓存下一个同几何帧");
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_Z, KMOD_LALT | KMOD_LSHIFT);
+        f.key(SDL_KEYUP, SDL_SCANCODE_Z); check(!f.pump(), "同几何恢复不终止设备输入");
+        pixels_are(f, third, "持续按住时恢复最新帧");
+        check(f.touches.size() == 2, "同几何 unpause 不提前抬起设备触点");
+        f.expect({}, "同几何 unpause 不提前松开设备普通键");
+        f.expect_buttons({}, "同几何 unpause 不提前松开 Consumer");
+        f.key(SDL_KEYUP, SDL_SCANCODE_A); f.key(SDL_KEYUP, SDL_SCANCODE_UP);
+        f.mouse(SDL_MOUSEBUTTONUP, 32, 48); f.pump();
+        f.expect({{}}, "真实普通键 UP 才结束保持状态");
+        f.expect_buttons({{0x0C, 0xE9, false}}, "真实 Consumer UP 才结束保持状态");
+        check(f.touches.size() == 3 && !f.touches[2].down && f.touches[2].x == .5 &&
+                  f.touches[2].y == .5, "真实鼠标 UP 才结束拖动，沿用最后已交付位置");
+    }
+    {
+        KeyboardFixture f("Presenter paused geometry and redraw");
+        if (!f.window_id) return;
+        check(f.presenter.draw(f.frame) && !f.pump(), "建立源几何变更前纹理");
+        press(f, KMOD_LALT);
+        f.mouse(SDL_MOUSEBUTTONDOWN, 16, 24); f.pump();
+        check(f.touches.size() == 1 && f.touches[0].down,
+              "暂停时同一来源几何仍可控制设备触摸");
+        const scrctl::app::Crop landscape{0, 0, 96, 64, 96, 64};
+        auto next = colored_frame(96, 64, landscape, second, 0);
+        check(f.presenter.update_content(landscape, 0, f.on_touch(), f.on_keyboard()) &&
+                  f.presenter.draw(next, landscape) && !f.pump(),
+              "暂停时设备尺寸变化继续消费帧，延后本地布局切换");
+        int width = 0, height = 0;
+        auto *window = SDL_GetWindowFromID(f.window_id);
+        SDL_GetWindowSize(window, &width, &height);
+        check(width == 64 && height == 96, "暂停保留旧显示的窗口比例");
+        check(f.touches.size() == 2 && !f.touches[1].down &&
+                  f.touches[1].x == .25 && f.touches[1].y == .25,
+              "源几何失效仅在已交付旧点抬起一次");
+        f.mouse(SDL_MOUSEBUTTONDOWN, 16, 24);
+        f.mouse(SDL_MOUSEMOTION, 32, 48);
+        f.mouse(SDL_MOUSEBUTTONUP, 32, 48);
+        f.key(SDL_KEYDOWN, SDL_SCANCODE_A); f.key(SDL_KEYUP, SDL_SCANCODE_A);
+        f.pump();
+        check(f.touches.size() == 2, "旧冻结画面不能向新设备几何派发触摸");
+        f.expect({{4}, {}}, "源触摸几何失效不禁用键盘");
+        SDL_SetWindowSize(window, 80, 120);
+        f.window(SDL_WINDOWEVENT_SIZE_CHANGED); f.window(SDL_WINDOWEVENT_EXPOSED);
+        check(!f.pump(), "暂停画面窗口缩放与 expose 仍可重绘");
+        pixels_are(f, first, "缩放/expose 重绘冻结帧，不显示缓存的新方向");
+        press(f, KMOD_LALT);
+        SDL_GetWindowSize(window, &width, &height);
+        check(width == 120 && height == 80, "re-pause 采用最新内容比例并保留用户显示尺度");
+        pixels_are(f, second, "re-pause 同时采用最新帧与新来源布局");
+        f.mouse(SDL_MOUSEBUTTONDOWN, width / 4, height / 4);
+        f.mouse(SDL_MOUSEBUTTONUP, width / 4, height / 4); f.pump();
+        check(f.touches.size() == 4 && f.touches[2].down && !f.touches[3].down &&
+                  f.touches[2].x == .25 && f.touches[2].y == .25,
+              "采用最新布局后新触摸按手机当前尺寸映射");
+        // 方位变化不一定交换宽高；最新源方位必须与缓存的像素一同恢复。
+        next = colored_frame(96, 64, landscape, third, 0);
+        check(f.presenter.update_content(landscape, 180, f.on_touch(), f.on_keyboard()) &&
+                  f.presenter.draw(next, landscape) && !f.pump(),
+              "暂停缓存保存同尺寸来源方向更新");
+        pixels_are(f, second, "来源方向更新不旋转旧快照");
+        press(f, KMOD_LALT | KMOD_LSHIFT);
+        const Palette rotated{third[2], third[3], third[0], third[1]};
+        pixels_are(f, rotated, "unpause 立即按最新来源方向显示最新帧");
+        check(!f.presenter.render_failed(), "源尺寸方向切换、暂停重绘和恢复没有渲染失败");
+    }
+    {
+        KeyboardFixture f("Presenter configurable pause modifier", 64, 96, 0, KMOD_RCTRL);
+        if (!f.window_id) return;
+        check(f.presenter.draw(f.frame) && !f.pump(), "建立自定义 MOD 的暂停纹理");
+        press(f, KMOD_RCTRL);
+        auto next = colored_frame(64, 96, f.crop, second, 0);
+        check(f.presenter.draw(next, f.crop), "自定义 MOD 暂停后继续消费帧");
+        pixels_are(f, first, "自定义右 Ctrl+Z 冻结显示");
+        press(f, KMOD_RCTRL | KMOD_RSHIFT);
+        pixels_are(f, second, "自定义右 Ctrl+Shift+Z 恢复最新帧");
+        f.expect({}, "自定义暂停组合没有设备键盘报告");
+    }
+    {
+        KeyboardFixture f("Presenter no-video pause shortcut", 160, 112, 0,
+                          KMOD_LALT | KMOD_LGUI, true);
+        if (!f.window_id) return;
+        press(f, KMOD_LALT); press(f, KMOD_LALT | KMOD_LSHIFT);
+        f.expect({}, "背景窗口的 MOD+Z 组合仍本地消费且不制造设备输入");
+        check(!f.presenter.render_failed() && f.touches.empty(),
+              "背景窗口无帧可暂停，不创建伪视频或触点");
+    }
+}
+
 void presenter_device_buttons() {
     std::printf("== 主窗口 Consumer 按钮真实 DOWN/UP ==\n");
     constexpr uint16_t page = 0x0C, home = 0x40, lock = 0x30, volup = 0xE9, voldown = 0xEA;
@@ -3396,6 +3572,7 @@ int main() {
     presenter_window_actions();
     presenter_display_rotation();
     presenter_display_flips();
+    presenter_display_pause();
     presenter_background_windows();
     presenter_background_input();
     presenter_device_buttons();

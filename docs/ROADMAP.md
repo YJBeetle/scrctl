@@ -8,9 +8,9 @@
 
 ### 1. 平台与真实网络验证
 
-提交 `2af7308` 的 [CI 38035181355](https://github.com/YJBeetle/scrctl/actions/runs/38035181355)
-四平台各实际执行 64/64 项并通过。此前提交 `8a905f9` 的 macOS 下载包 25 dylib、本机搬移启动和
-Windows 下载包的 98 DLL / 76 所属包来源已审计；这不代替设备运行或完整第三方源码交付。
+提交 `80a549f` 的 [CI 38043461515](https://github.com/YJBeetle/scrctl/actions/runs/38043461515)
+四组各实际执行 65/65 项并通过；macOS 下载包 25 dylib、Windows 下载包 98 DLL
+及搬移启动已审计。这不代替设备运行或完整第三方源码交付。
 
 - Linux：Debian 13 / ARM64 已完成构建与离线回归；显式 Wi-Fi 软件解码、
   Wayland 软件渲染窗口、竖横屏鼠标落点、窗口缩放及关闭已通过真机短测。
@@ -70,6 +70,7 @@ Windows 下载包的 98 DLL / 76 所属包来源已审计；这不代替设备�
   MOD+G / W、双击留边和原地转屏已接入；MOD+← / → 追加本机显示旋转，
   MOD+Shift+← / → 水平镜像，MOD+Shift+↑ / ↓ 垂直镜像，后续帧保留组合。
   显示变换不改变采集或录制；原生窗口、真实键盘和手机落点继续验收，
+  MOD+Z / MOD+Shift+Z 已接入暂停、刷新冻结帧和恢复显示；采集、音频和录制继续。
   MOD+R 设备转屏快捷键仍待办。Apple 客户端的真实方向请求已静态解析，
   同设备 Wi-Fi 只读查询取得方向和锁定字段；setter 与方向锁定保持语义
   仍需验证，见协议记录 §33。
@@ -86,7 +87,8 @@ Windows 下载包的 98 DLL / 76 所属包来源已审计；这不代替设备�
 - 远程配对：`--pair` 经 USB 验证/新建记录，旧记录重配须显式 `--repair-pairing`；
   新记录验证后才保存。macOS 正式命令的确认、新建及复用已通过，更多设备和 Windows 待验证。
   `--pair --wifi auto` 的手机发起 PIN 配对已在 Mac / 本台 iOS 27 iPhone 上完成首次记录
-  创建、fresh PairVerify 和独立新进程无线重连；Debian ARM64 的同一流程亦已通过，Windows 待验证。
+  创建、fresh PairVerify 和独立新进程无线重连；Debian ARM64 与 Windows ARM64
+  的同一流程亦已通过。更多设备、版本和网络仍待验证。
 - 音频：macOS 使用 AudioToolbox，Windows / Linux 使用 FFmpeg AAC-ELD 与 libswresample。
   已修正旧 ASC 配置错误，真实音乐双后端对照通过；Windows USB 已实际发声，
   Mac USB / Wi-Fi 的平滑时钟补偿及 200 ms 缓冲已通过短时听感对照。
