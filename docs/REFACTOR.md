@@ -2793,12 +2793,37 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
 - 小证据分别保留在 `/private/tmp/scrctl-frame-terminal-ci-8a905f9-20261010`、
   `/private/tmp/scrctl-macos-ci-8a905f9-20261010`、
   `/private/tmp/scrctl-windows-package-8a905f9-audit-20261010`，三模式路径见 [Windows 记录](WINDOWS.md#2026-10-10新版-wi-fi-音频三种行为)。
-- 当前工作实现另完成 Mac / 本台 iOS 27 iPhone 的首次纯 Wi-Fi 配对：同一 identity 广播，
+- 第五批小证据已归档到仓库兄弟目录
+  `scrctl-fixtures/recording-clock-20261008/night-selection-audio-ci-20261010/`。
+  214 项精选文本共 7395311 bytes，实际 218 文件；复制后独立核对 217 条根 SHA 全部通过。
+  来源 manifest SHA256 为 `fcbb8455dd9fc4a91d32c283ccc9d90da8f092c7e981a4957cbc26e6ca82eb1e`。
+  包含下轮 Mac 配对的限定小日志；配对记录、PIN、手机密码、媒体和完整安装包未归档。
+
+## 第一百三十八轮：手机发起的无线 PIN 首次配对
+
+- 提交 `2af73082e55856fb11f8b544de51c76778624266` 接入 `--pair --wifi auto`：临时广播
+  `_remotepairing-pairable-host._tcp.local.`，接受手机发起的 SRP / M1–M6 配对。
+  `--pairing-timeout` 默认两分钟、最多五分钟，预算覆盖发现、输入 PIN 和独立验证。
+  `-s` 可省略；指定时核对签名绑定的设备 UDID。新记录独占发布，不覆盖已有记录。
+- 初次手机在进入 PIN 界面时立即报连接失败；原实现于 TCP accept 后撤销广播。
+  现在持续公告并响应查询至 M6，同时统一 DNS 实例、目标和 TXT 的主机标识。
+  后续 PIN 界面保持连接并完成配对；另一次等待人工输入超过总预算的失败独立保留。
+- Mac / 本台 iOS 27 iPhone 已完成首次无线配对：同一 identity 广播，
   广告保留至 M6；手机在“设置 → 隐私与安全性 → 开发者模式”选择与 scrctl 电脑配对。
   无旧记录的独立 `XDG_DATA_HOME` 下，M1–M6 完成后关闭 setup 连接，fresh outgoing
   PairVerify 签名验证成功、退出 0，保存设备 UDID；目录 0700、文件 0600，默认旧记录未替换。
   随后独立新进程 `--wifi auto -s`、无窗口 / 无音频的五秒 HEVC 录制正常写尾并退出 0，
   没有 USB 配对或 fallback；另一新连接用新记录显式连接 `10.24.24.7:49152` 并取得截图，
   宿主路由确认经过 LAN `en0`。测试期间物理 USB 仍插着，首次 setup 未记录入站地址。
-  小日志在 `/private/tmp/scrctl-wifi-first-pairing-20261010/fresh-connection.txt`，私有记录不归档。
-  Windows / Linux 首次无线配对仍待验证；此新功能不属于上述 `8a905f9` CI 结果。
+  小日志已随第五批归档，私有记录不归档。Windows / Linux 首次无线配对仍待验证。
+- 最终本地完整 CTest 52/52 通过（54.62 秒），翻译目录检查通过。
+  最终离线测试二进制包含随后整理的翻译和注释，不声称该确切二进制已用于此前真机测试。
+- 同提交的 [CI 38035181355](https://github.com/YJBeetle/scrctl/actions/runs/38035181355)
+  首次执行四作业全部 success；macOS、Ubuntu、Windows ARM64 和 ASan/UBSan
+  各实际执行 64/64 项并通过，包含新增的 SRP 服务端、配对响应方、mDNS 广告和无线配对流程测试。
+  Windows 的依赖来源离线回归另为 10/10；Mac 与 Windows 的搬移安装、启动和语言门禁通过。
+  本轮只下载测试小日志，未重复下载安装包。跨平台离线结果不代替 Windows / Linux 首次无线真机配对。
+- 该次 CI 的四份 LastTest、原 job 日志及最终元数据已归档到
+  `scrctl-fixtures/recording-clock-20261008/night-wifi-pairing-ci-2af7308-20261010/`。
+  15 文件、14 条根 SHA 独立核对全部通过；来源 manifest SHA256 为
+  `274595d06442c4e8bd747e406ab6a05cfdb7b8367301109d0a639a4f4e8a660e`。

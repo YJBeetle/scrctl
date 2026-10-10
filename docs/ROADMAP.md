@@ -8,8 +8,8 @@
 
 ### 1. 平台与真实网络验证
 
-提交 `8a905f9` 的 [CI 38030341817](https://github.com/YJBeetle/scrctl/actions/runs/38030341817)
-四平台各实际执行 60/60 项并通过。同提交 macOS 下载包的 25 dylib、本机搬移启动和
+提交 `2af7308` 的 [CI 38035181355](https://github.com/YJBeetle/scrctl/actions/runs/38035181355)
+四平台各实际执行 64/64 项并通过。此前提交 `8a905f9` 的 macOS 下载包 25 dylib、本机搬移启动和
 Windows 下载包的 98 DLL / 76 所属包来源已审计；这不代替设备运行或完整第三方源码交付。
 
 - Linux：Debian 13 / ARM64 已完成构建与离线回归；显式 Wi-Fi 软件解码、

@@ -1,7 +1,7 @@
 # scrctl
 
 基于 CoreDevice 开发者服务的 iOS 镜像与控制工具，提供原生窗口和命令行接口。
-支持 USB 和已配对的 Wi-Fi 连接；镜像时设备仍可直接操作。命令行设计参考 scrcpy。
+支持 USB、Wi-Fi 连接与手机发起的无线 PIN 配对；镜像时设备仍可直接操作。命令行设计参考 scrcpy。
 
 ## 功能与验证范围
 
@@ -65,9 +65,9 @@ MP4 / MKV（HEVC 和 AAC-ELD）及裸 Annex-B HEVC。
 [协议调研记录](docs/coredevice.md) 保留原始观察与实验过程；
 [重构记录](docs/REFACTOR.md) 说明当前实现及验证边界；
 [路线图](docs/ROADMAP.md) 列出剩余工作。
-提交 `8a905f9` 的 [GitHub Actions](https://github.com/YJBeetle/scrctl/actions/runs/38030341817)
-中，macOS、Ubuntu、Windows ARM64 和 ASan / UBSan 各实际执行 60/60 项离线测试并通过。
-下载的同提交 macOS 包已完成 25 dylib 与本机搬移启动审计，Windows 包已核对
+提交 `2af7308` 的 [GitHub Actions](https://github.com/YJBeetle/scrctl/actions/runs/38035181355)
+中，macOS、Ubuntu、Windows ARM64 和 ASan / UBSan 各实际执行 64/64 项离线测试并通过。
+此前提交 `8a905f9` 的 macOS 下载包已完成 25 dylib 与本机搬移启动审计，Windows 包已核对
 98 DLL 的字节及 76 所属包来源。包审计不代替真机测试或完整第三方源码分发。
 
 ## 实现结构
