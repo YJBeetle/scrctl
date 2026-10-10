@@ -216,8 +216,14 @@ Project translation files retain the scrctl project license.
 The MSYS2 CLANGARM64 FFmpeg package used by the current development build enables
 GPL and version3 components (GPL-3.0-or-later). It is not an LGPL-only FFmpeg build.
 The CI artifact records the installed package versions and FFmpeg configuration
-and includes the toolchain's dependency license files. These records are build
-provenance; they do not replace corresponding source and redistribution requirements.
+and includes the toolchain's dependency license files. Its runtime-origins.tsv and
+package-metadata.json map each installed DLL to a same-name toolchain file with an
+identical SHA256, its local pacman owner and exact installed package version. The
+metadata preserves the original package information and license declarations;
+unknown owners or mismatched DLL bytes fail this MSYS2 packaging step. These are
+build provenance records. Third-party source, build recipes and patches are not
+downloaded or delivered by this step; the records do not replace corresponding
+source and redistribution requirements.
 See docs/WINDOWS.md for the current verification and release-packaging scope.
 
 Package definitions and source retrieval instructions:

@@ -149,6 +149,8 @@ jobs:
         run: ./build-win/scrctl.exe --help > /dev/null
       - name: 离线自检
         run: ctest --test-dir build-win --output-on-failure
+      - name: Windows 依赖来源离线回归
+        run: python -m unittest discover -s tests -p test_record_windows_package.py -v
       - name: 安装产物和依赖记录
         run: |
           cmake --install build-win --prefix dist-win
@@ -158,6 +160,7 @@ jobs:
           ffmpeg -version > dist-win/share/doc/scrctl/ffmpeg-build.txt
           git rev-parse HEAD > dist-win/share/doc/scrctl/source-commit.txt
           git archive --format=tar HEAD > dist-win/share/doc/scrctl/scrctl-source.tar
+          python tools/record_windows_package.py dist-win --runtime-directory "$MINGW_PREFIX/bin" --source-commit "$GITHUB_SHA"
       - name: 检查独立安装目录
         shell: pwsh
         run: ./tools/test_windows_install.ps1 -InstallDirectory dist-win -BuildDirectory build-win
