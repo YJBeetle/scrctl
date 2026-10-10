@@ -392,3 +392,20 @@ KeyQ 按下、最终文本 `q` 和 KeyQ 抬起，HTTP 与截图一致；Mac 辅�
 `/private/tmp/scrctl-windows-audio-route-20261010`、
 `/private/tmp/scrctl-windows-audio-dup-confirm-20261010`、
 `/private/tmp/scrctl-windows-no-audio-confirm-20261010`。
+
+## 2026-10-10：正式无线首次 PIN 配对
+
+使用 `80a549f` 的最终 Windows ARM64 CI 下载包，EXE、源码标记和全部 98 DLL
+与虚拟机实际文件一致。普通用户在桥接网络和空私有记录目录运行
+`scrctl --pair --wifi auto --pairing-timeout=300000`；手机在开发者模式选择电脑并输入 PIN，
+随后产品用新连接验证设备身份并保存。第二轮 38.878 秒完成，监听及控制器均退出 0。
+第一轮临时 OCR 未识别主机名称，未点击入口并超时，失败记录保留。
+
+另一独立产品进程使用这份新记录自动发现并重连，五秒
+`--record-format=mkv` 无扩展名录制正常结束，退出 0；232255 字节输出的 EBML 头匹配，
+配对记录摘要和修改时间未变。未取得包数或容器时长，不以头检查代替完整解码。
+手机显示 `scrctl-windows` 与完整 23 字符 `SCRCTL-` 序列号。
+
+全程手机 USB 保留在 Mac，Windows 使用 Wi-Fi；未做拔线对照或改变防火墙规则。
+Windows USB 初始配对、DDI 准备、持续 USB 连接及长暂停音频恢复仍保留原验证边界。
+安全文本收录于第七份 fixture 归档，详见 [重构记录](REFACTOR.md)。
