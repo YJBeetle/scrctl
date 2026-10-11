@@ -23,8 +23,8 @@ jobs:
             # 标准 macos-15 runner 是 ARM64；固定系统，避免 latest 升到 26
             # 后把主程序和 Homebrew bottles 的最低系统要求一起提升。
             os: macos-15
-            # 最近一轮构建用了 18 分 18 秒，为测试和打包保留时间。
-            timeout_minutes: 30
+            # 下载精确版本的依赖源码；较大的 VCS/FFmpeg 依赖需要额外时间。
+            timeout_minutes: 90
             build_jobs: 3
           - name: Ubuntu
             os: ubuntu-latest
@@ -55,7 +55,11 @@ jobs:
             EXTRA="-DOPENSSL_ROOT_DIR=$(brew --prefix openssl)"
           fi
           cmake -B build -DCMAKE_BUILD_TYPE=Release \
-            -DSCRCTL_BUILD_PROBES=ON -DSCRCTL_BUILD_EXPERIMENTS=ON $EXTRA
+            -DSCRCTL_BUILD_PROBES=ON -DSCRCTL_BUILD_EXPERIMENTS=ON \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_DISABLE_FIND_PACKAGE_nlohmann_json=ON \
+            -DCMAKE_DISABLE_FIND_PACKAGE_CLI11=ON \
+            -DCMAKE_DISABLE_FIND_PACKAGE_pugixml=ON $EXTRA
 
       - name: 构建
         # Make 生成器下，无数值的 --parallel 会传入无上限的 -j。
@@ -75,6 +79,16 @@ jobs:
       - name: 离线自检
         run: ctest --test-dir build --output-on-failure
 
+      - name: 打包工具离线回归
+        run: |
+          python3 -m unittest discover -s tests -p 'test_*sources.py' -v
+          python3 -m unittest discover -s tests -p test_record_windows_package.py -v
+          python3 -m unittest discover -s tests -p test_package_source_materials.py -v
+
+      - name: Homebrew 源码收集离线回归
+        if: runner.os == 'macOS'
+        run: ruby tests/test_collect_macos_sources.rb
+
       - name: 安装 macOS 产物并记录实际依赖
         if: runner.os == 'macOS'
         run: |
@@ -82,6 +96,22 @@ jobs:
           python3 tools/record_macos_package.py dist-macos --source-commit "$GITHUB_SHA"
           ffmpeg -version > dist-macos/share/doc/scrctl/ffmpeg-build.txt
           git archive --format=tar HEAD > dist-macos/share/doc/scrctl/scrctl-source.tar
+
+      - name: 收集 macOS 对应源码和构建材料
+        if: runner.os == 'macOS'
+        run: |
+          HOMEBREW_DEVELOPER=1 HOMEBREW_NO_AUTO_UPDATE=1 brew ruby tools/collect_macos_sources.rb dist-macos sources-macos/homebrew
+          python3 tools/collect_embedded_sources.py build sources-macos/embedded
+          python3 tools/package_source_materials.py dist-macos build sources-macos --platform macos
+
+      - name: 上传 macOS 对应源码
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: scrctl-sources-macos
+          path: scrctl-sources-macos.tar
+          compression-level: 0
+          if-no-files-found: error
 
       - name: 检查搬移后的 macOS 安装包
         if: runner.os == 'macOS'
@@ -110,7 +140,7 @@ jobs:
   windows-arm64:
     name: Windows ARM64
     runs-on: windows-11-arm
-    timeout-minutes: 30
+    timeout-minutes: 90
     defaults:
       run:
         shell: msys2 {0}
@@ -140,6 +170,10 @@ jobs:
           cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
           -DSCRCTL_BUILD_PROBES=ON -DSCRCTL_BUILD_EXPERIMENTS=ON
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          -DCMAKE_DISABLE_FIND_PACKAGE_nlohmann_json=ON
+          -DCMAKE_DISABLE_FIND_PACKAGE_CLI11=ON
+          -DCMAKE_DISABLE_FIND_PACKAGE_pugixml=ON
       - name: 构建
         run: cmake --build build-win --parallel 4
       - name: 确认 FFmpeg 音频测试已注册
@@ -150,8 +184,11 @@ jobs:
         run: ./build-win/scrctl.exe --help > /dev/null
       - name: 离线自检
         run: ctest --test-dir build-win --output-on-failure
-      - name: Windows 依赖来源离线回归
-        run: python -m unittest discover -s tests -p test_record_windows_package.py -v
+      - name: 打包工具离线回归
+        run: |
+          python -m unittest discover -s tests -p 'test_*sources.py' -v
+          python -m unittest discover -s tests -p test_record_windows_package.py -v
+          python -m unittest discover -s tests -p test_package_source_materials.py -v
       - name: 安装产物和依赖记录
         run: |
           cmake --install build-win --prefix dist-win
@@ -162,6 +199,18 @@ jobs:
           git rev-parse HEAD > dist-win/share/doc/scrctl/source-commit.txt
           git archive --format=tar HEAD > dist-win/share/doc/scrctl/scrctl-source.tar
           python tools/record_windows_package.py dist-win --runtime-directory "$MINGW_PREFIX/bin" --source-commit "$GITHUB_SHA"
+      - name: 收集 Windows 对应源码和构建材料
+        run: |
+          python tools/collect_windows_sources.py dist-win/share/doc/scrctl/package-metadata.json sources-windows/msys2
+          python tools/collect_embedded_sources.py build-win sources-windows/embedded
+          python tools/package_source_materials.py dist-win build-win sources-windows --platform windows
+      - name: 上传 Windows 对应源码
+        uses: actions/upload-artifact@v4
+        with:
+          name: scrctl-sources-windows-arm64
+          path: scrctl-sources-windows.tar
+          compression-level: 0
+          if-no-files-found: error
       - name: 检查独立安装目录
         shell: pwsh
         run: ./tools/test_windows_install.ps1 -InstallDirectory dist-win -BuildDirectory build-win

@@ -64,5 +64,7 @@ install name 通过。脱离 CI 构建翻译目录后，dyld 的非系统依赖�
 receipt 与 formula，以及 keg 提供的许可正文。本项目静态依赖的许可见
 `THIRD_PARTY_NOTICES.md`；`ffmpeg-build.txt` 记录 FFmpeg 的完整构建选项。Homebrew
 FFmpeg 可能启用 GPL/version3，必须按本次构建配置与随包依赖的实际许可处理，不能
-笼统声明为 LGPL 包。上述记录与本项目源码快照用于开发验证，并不替代对应第三方
-源码、构建材料或分发条件审核。
+笼统声明为 LGPL 包。新 CI 使用这些原始配方收集对应源码、resources 和补丁，
+配套上传 `scrctl-sources-macos`；安装包内 `source-materials.json` 记录附件哈希。
+[源码材料](SOURCE_MATERIALS.md)说明内容与重建方法；历史安装包没有这份交付，
+新材料也不代替依赖组合的分发条件审核。

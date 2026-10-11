@@ -323,6 +323,8 @@ mDNS 使用 mjansson/mdns 1.4.3（Unlicense）；离线时设置 `FETCHCONTENT_S
 `-DSCRCTL_FETCH_DEPENDENCIES=OFF` 禁止下载缺失依赖。
 该选项仍允许使用上面指定的本地源码目录；目录无效时配置失败，不回退下载。
 第三方许可证位于对应依赖源码中，分发时应保留其许可声明。
+macOS / Windows 安装包配套提供同一轮 CI 的[对应源码、配方与补丁](docs/SOURCE_MATERIALS.md)，
+对外发布时应同时交付二进制和源码附件。
 
 应用模块的职责与后续替换边界见 [重构说明](docs/REFACTOR.md)。
 lwIP 的生产接入与默认关闭的独立探针，构建方式与判据见 [lwIP 验证记录](docs/LWIP_COMPATIBILITY.md)。

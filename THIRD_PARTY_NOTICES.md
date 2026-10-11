@@ -280,9 +280,11 @@ package-metadata.json map each installed DLL to a same-name toolchain file with 
 identical SHA256, its local pacman owner and exact installed package version. The
 metadata preserves the original package information and license declarations;
 unknown owners or mismatched DLL bytes fail this MSYS2 packaging step. These are
-build provenance records. Third-party source, build recipes and patches are not
-downloaded or delivered by this step; the records do not replace corresponding
-source and redistribution requirements.
+build provenance records. The separate source collection step downloads the exact
+MSYS2 source packages, verifies their signatures and declared input checksums, and
+delivers PKGBUILD, upstream sources and patches in the companion source artifact.
+See docs/SOURCE_MATERIALS.md for the binding, rebuild instructions and scope;
+provenance alone does not replace corresponding source and redistribution requirements.
 See docs/WINDOWS.md for the current verification and release-packaging scope.
 
 Package definitions and source retrieval instructions:

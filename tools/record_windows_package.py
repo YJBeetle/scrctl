@@ -56,11 +56,70 @@ def parse_package_info(raw):
 
 class MsysPackages:
     def __init__(self, pacman="pacman", cygpath="cygpath", run=checked_output,
-                 native_windows_paths=None):
+                 native_windows_paths=None, pacman_conf="pacman-conf"):
         self.pacman, self.cygpath, self.run = pacman, cygpath, run
         self.native_windows_paths = (os.name == "nt" if native_windows_paths is None
                                      else native_windows_paths)
         self.cache = {}
+        self.pacman_conf = pacman_conf
+
+    def source_identity(self, owner, version):
+        database_path = self.run([self.pacman_conf, "DBPath"]).strip()
+        if self.native_windows_paths:
+            database_path = self.run([self.cygpath, "-w", database_path]).strip()
+        directory_version = version.split(":")[-1] if self.native_windows_paths else version
+        description = Path(database_path) / "local" / f"{owner}-{directory_version}" / "desc"
+        raw = description.read_text(encoding="utf-8")
+        fields = {}
+        for block in raw.split("\n\n"):
+            lines = block.strip().splitlines()
+            if lines and re.fullmatch(r"%[A-Z]+%", lines[0]):
+                fields[lines[0][1:-1]] = lines[1:]
+        if fields.get("NAME") != [owner] or fields.get("VERSION") != [version]:
+            raise RuntimeError(f"Local package database changed or mismatched: {owner}")
+        base = fields.get("BASE", [])
+        if len(base) != 1 or not re.fullmatch(r"[A-Za-z0-9@._+\-]+", base[0]):
+            raise RuntimeError(f"Missing exact source package base for {owner}")
+        result = {"package_base": base[0], "local_database_desc": raw}
+        cache_directories = self.run([self.pacman_conf, "CacheDir"]).splitlines()
+        for directory in cache_directories:
+            if self.native_windows_paths:
+                directory = self.run([self.cygpath, "-w", directory]).strip()
+            archive_version = version.split(":")[-1]
+            candidates = sorted(Path(directory).glob(f"{owner}-{archive_version}-*.pkg.tar.*"))
+            for candidate in candidates:
+                if candidate.name.endswith(".sig"):
+                    continue
+                buildinfo = self.run(["bsdtar", "-xOf", str(candidate), ".BUILDINFO"])
+                values = {}
+                for line in buildinfo.splitlines():
+                    if " = " in line:
+                        key, value = line.split(" = ", 1)
+                        values.setdefault(key, []).append(value)
+                if (values.get("pkgname") != [owner] or values.get("pkgbase") != base
+                        or values.get("pkgver") != [version]):
+                    raise RuntimeError(f"Cached build metadata mismatched: {owner}")
+                checksum = values.get("pkgbuild_sha256sum", [])
+                if len(checksum) != 1 or not re.fullmatch(r"[0-9a-f]{64}", checksum[0]):
+                    raise RuntimeError(f"Cached build metadata has no recipe hash: {owner}")
+                result.update(pkgbuild_sha256=checksum[0], buildinfo_raw=buildinfo,
+                              cached_binary_path=str(candidate),
+                              cached_binary_sha256=digest(candidate))
+                return result
+        return result
+
+    def verify_cached_original(self, owner, original, original_sha256):
+        metadata = self.cache[owner]
+        archive = metadata.get("cached_binary_path")
+        if archive is None:
+            return
+        member = str(original)
+        if self.native_windows_paths:
+            member = self.run([self.cygpath, "-u", member]).strip()
+        member = member.lstrip("/")
+        result = subprocess.run(["bsdtar", "-xOf", archive, member], capture_output=True, timeout=120)
+        if result.returncode or hashlib.sha256(result.stdout).hexdigest() != original_sha256:
+            raise RuntimeError(f"Cached binary package differs from installed DLL: {original.name}")
 
     def owner(self, path):
         # MinGW Python 的 Path 是 Windows 路径；pacman 属于 MSYS，显式转换边界。
@@ -85,7 +144,8 @@ class MsysPackages:
                 raise RuntimeError(f"Installed package metadata changed or mismatched: {owner}")
             self.cache[owner] = {"version": version_line[1], "fields": fields,
                                  "license_declaration_text": fields.get("Licenses"),
-                                 "pacman_qi_raw": raw}
+                                 "pacman_qi_raw": raw,
+                                 **self.source_identity(owner, version_line[1])}
         return self.cache[owner]
 
 
@@ -133,6 +193,7 @@ def record_package(install_directory, runtime_directory, source_commit, database
         if not re.fullmatch(r"[A-Za-z0-9@._+\-]+", owner):
             raise RuntimeError(f"Unknown package owner for {path.name}")
         metadata = database.metadata(owner)
+        database.verify_cached_original(owner, original, original_hash)
         packages[owner] = metadata
         dependencies.append({"library": path.name, "original_path": str(original),
                              "bundled_path": path.relative_to(root).as_posix(),
