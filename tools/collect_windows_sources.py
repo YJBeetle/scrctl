@@ -66,7 +66,9 @@ def verify_signature(archive, signature):
     if os.name == "nt":
         paths = [command_output(["cygpath", "-u", path]).decode().strip() for path in paths]
         # pacman-key is a Bash script, not a PE executable accepted by CreateProcess.
-        command = ["bash", "/usr/bin/pacman-key", "--verify", *paths]
+        # Windows PATH may find the WSL launcher before MSYS2's Bash.
+        bash = command_output(["cygpath", "-w", "/usr/bin/bash.exe"]).decode().strip()
+        command = [bash, "/usr/bin/pacman-key", "--verify", *paths]
     else:
         command = ["pacman-key", "--verify", *paths]
     return command_output(command).decode("utf-8", errors="replace")

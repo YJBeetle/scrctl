@@ -90,10 +90,12 @@ class ArchiveTest(unittest.TestCase):
         calls = []
         def run(command):
             calls.append(command)
+            if command[:2] == ["cygpath", "-w"]:
+                return b"C:/msys64/usr/bin/bash.exe\n"
             return b"/c/path with spaces/source.sig\n" if command[0] == "cygpath" else b"verified\n"
         with patch.object(module.os, "name", "nt"), patch.object(module, "command_output", run):
             self.assertEqual(module.verify_signature("C:/source archive", "C:/source sig"), "verified\n")
-        self.assertEqual(calls[-1][:3], ["bash", "/usr/bin/pacman-key", "--verify"])
+        self.assertEqual(calls[-1][:3], ["C:/msys64/usr/bin/bash.exe", "/usr/bin/pacman-key", "--verify"])
         self.assertEqual(len(calls[-1]), 5)
 
 
