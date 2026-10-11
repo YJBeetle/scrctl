@@ -79,7 +79,7 @@ class SourceExportTest(unittest.TestCase):
         external.write_text("not source")
         link.symlink_to(Path("..") / "private file")
         rejected = self.root / "rejected"
-        with self.assertRaisesRegex(RuntimeError, "escapes"):
+        with self.assertRaisesRegex(RuntimeError, "escapes|cannot be resolved safely"):
             module.collect(self.build, rejected)
         self.assertFalse(rejected.exists())
 

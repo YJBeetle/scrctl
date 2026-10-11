@@ -67,8 +67,8 @@ class MsysPackages:
         database_path = self.run([self.pacman_conf, "DBPath"]).strip()
         if self.native_windows_paths:
             database_path = self.run([self.cygpath, "-w", database_path]).strip()
-        directory_version = version.split(":")[-1] if self.native_windows_paths else version
-        description = Path(database_path) / "local" / f"{owner}-{directory_version}" / "desc"
+        # MSYS2 stores the full version; its pacman uses '~' for epochs on Windows.
+        description = Path(database_path) / "local" / f"{owner}-{version}" / "desc"
         raw = description.read_text(encoding="utf-8")
         fields = {}
         for block in raw.split("\n\n"):

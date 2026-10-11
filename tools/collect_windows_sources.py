@@ -145,7 +145,9 @@ def inspect_archive(archive, base, version, expected_recipe_hash=None, reader=ar
     try:
         actual = fields["pkgver"][0] + "-" + fields["pkgrel"][0]
         if fields.get("epoch", ["0"])[0] != "0":
-            actual = fields["epoch"][0] + ":" + actual
+            # MSYS2's makepkg patch replaces Arch's ':' epoch separator with '~'.
+            separator = "~" if re.match(r"^[0-9]+~", version) else ":"
+            actual = fields["epoch"][0] + separator + actual
     except (KeyError, IndexError) as error:
         raise RuntimeError("Source package is missing exact version metadata") from error
     if fields.get("pkgbase") != [base] or actual != version:

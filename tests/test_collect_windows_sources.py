@@ -52,6 +52,16 @@ class ArchiveTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "BUILDINFO"):
             module.inspect_archive(self.path, "mingw-w64-test", "1.0-1", "0" * 64)
 
+    def test_msys2_epoch_separator_keeps_exact_version(self):
+        def reader(archive, member):
+            data = module.archive_read(archive, member)
+            if member.endswith(".SRCINFO"):
+                data = data.replace(b"\tpkgver = 1.0", b"\tepoch = 2\n\tpkgver = 1.0")
+            return data
+        module.inspect_archive(self.path, "mingw-w64-test", "2~1.0-1", reader=reader)
+        with self.assertRaisesRegex(RuntimeError, "base/version differs"):
+            module.inspect_archive(self.path, "mingw-w64-test", "3~1.0-1", reader=reader)
+
     def test_source_omission_and_checksum_corruption_fail(self):
         source_archive(self.path, omit_source=True)
         with self.assertRaisesRegex(RuntimeError, "omits declared input"):
