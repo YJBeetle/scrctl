@@ -16,7 +16,7 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 COMMIT = "a" * 40
 PACKAGE_INFO = ("Name            : mingw-test\n"
-                "Version         : 2:1.2.3-4\n"
+                "Version         : 2~1.2.3-4\n"
                 "Description     : Test package\n"
                 "URL             : https://example.invalid/source\n"
                 "Licenses        : BSD-3-Clause\n"
@@ -33,7 +33,7 @@ class PackageDatabaseTest(unittest.TestCase):
     def test_metadata_continuations_and_exact_version(self):
         fields = module.parse_package_info(PACKAGE_INFO)
         self.assertEqual(fields["Name"], "mingw-test")
-        self.assertEqual(fields["Version"], "2:1.2.3-4")
+        self.assertEqual(fields["Version"], "2~1.2.3-4")
         self.assertEqual(fields["Depends On"], "dependency-one\ndependency-two")
         self.assertEqual(fields["Licenses"], "BSD-3-Clause")
 
@@ -53,11 +53,11 @@ class PackageDatabaseTest(unittest.TestCase):
             if command[1] == "-Qqo":
                 self.assertEqual(command[2], "/clangarm64/bin/Example.dll")
                 return "mingw-test\n"
-            return PACKAGE_INFO if command[1] == "-Qi" else "mingw-test 2:1.2.3-4\n"
+            return PACKAGE_INFO if command[1] == "-Qi" else "mingw-test 2~1.2.3-4\n"
 
         database = FakePackages(run=run, native_windows_paths=True)
         self.assertEqual(database.owner(Path("C:/toolchain/bin/Example.dll")), "mingw-test")
-        self.assertEqual(database.metadata("mingw-test")["version"], "2:1.2.3-4")
+        self.assertEqual(database.metadata("mingw-test")["version"], "2~1.2.3-4")
         self.assertEqual(database.metadata("mingw-test")["pacman_qi_raw"], PACKAGE_INFO)
         self.assertEqual(sum(command[1] == "-Qi" for command in calls), 1)
 
@@ -76,35 +76,35 @@ class PackageDatabaseTest(unittest.TestCase):
     def test_source_base_is_read_from_exact_local_database(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            entry = root / "local/mingw-test-2:1.2.3-4"
+            entry = root / "local/mingw-test-2~1.2.3-4"
             entry.mkdir(parents=True)
-            (entry / "desc").write_text("%NAME%\nmingw-test\n\n%VERSION%\n2:1.2.3-4\n\n"
+            (entry / "desc").write_text("%NAME%\nmingw-test\n\n%VERSION%\n2~1.2.3-4\n\n"
                                        "%BASE%\nmingw-w64-parent\n\n")
             database = module.MsysPackages(native_windows_paths=False,
                 run=lambda command: str(root) if command[-1] == "DBPath" else "")
-            self.assertEqual(database.source_identity("mingw-test", "2:1.2.3-4")
+            self.assertEqual(database.source_identity("mingw-test", "2~1.2.3-4")
                              ["package_base"], "mingw-w64-parent")
-            (entry / "desc").write_text("%NAME%\nother\n\n%VERSION%\n2:1.2.3-4\n\n")
+            (entry / "desc").write_text("%NAME%\nother\n\n%VERSION%\n2~1.2.3-4\n\n")
             with self.assertRaisesRegex(RuntimeError, "mismatched"):
-                database.source_identity("mingw-test", "2:1.2.3-4")
+                database.source_identity("mingw-test", "2~1.2.3-4")
 
     def test_cached_buildinfo_recipe_hash_is_bound_to_installed_dll(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            entry = root / "local/mingw-test-2:1.2.3-4"
+            entry = root / "local/mingw-test-2~1.2.3-4"
             entry.mkdir(parents=True)
-            (entry / "desc").write_text("%NAME%\nmingw-test\n\n%VERSION%\n2:1.2.3-4\n\n"
+            (entry / "desc").write_text("%NAME%\nmingw-test\n\n%VERSION%\n2~1.2.3-4\n\n"
                                        "%BASE%\nmingw-w64-parent\n\n")
-            binary = root / "mingw-test-1.2.3-4-any.pkg.tar.zst"
+            binary = root / "mingw-test-2~1.2.3-4-any.pkg.tar.zst"
             binary.write_bytes(b"binary archive fixture")
             buildinfo = ("pkgname = mingw-test\npkgbase = mingw-w64-parent\n"
-                         "pkgver = 2:1.2.3-4\npkgbuild_sha256sum = " + "f" * 64 + "\n")
+                         "pkgver = 2~1.2.3-4\npkgbuild_sha256sum = " + "f" * 64 + "\n")
             def run(command):
                 if command[0] == "bsdtar":
                     return buildinfo
                 return str(root)
             database = module.MsysPackages(native_windows_paths=False, run=run)
-            identity = database.source_identity("mingw-test", "2:1.2.3-4")
+            identity = database.source_identity("mingw-test", "2~1.2.3-4")
             self.assertEqual(identity["pkgbuild_sha256"], "f" * 64)
             self.assertEqual(identity["buildinfo_raw"], buildinfo)
             database.cache["mingw-test"] = identity
@@ -137,7 +137,7 @@ class DirectoryMappingTest(unittest.TestCase):
             self.calls.append(command)
             if command[1] == "-Qqo":
                 return "mingw-test\n"
-            return PACKAGE_INFO if command[1] == "-Qi" else "mingw-test 2:1.2.3-4\n"
+            return PACKAGE_INFO if command[1] == "-Qi" else "mingw-test 2~1.2.3-4\n"
 
         self.database = FakePackages(run=run, native_windows_paths=False)
 
@@ -153,7 +153,7 @@ class DirectoryMappingTest(unittest.TestCase):
         self.assertIn("not a complete corresponding-source", result["scope"])
         for dependency in result["runtime_dependencies"]:
             self.assertEqual(Path(dependency["original_path"]).parent, self.runtime.resolve())
-            self.assertEqual(dependency["package_version"], "2:1.2.3-4")
+            self.assertEqual(dependency["package_version"], "2~1.2.3-4")
             self.assertEqual(dependency["original_sha256"], dependency["bundled_sha256"])
         doc = self.install / "share/doc/scrctl"
         self.assertEqual(json.loads((doc / "package-metadata.json").read_text()), result)
