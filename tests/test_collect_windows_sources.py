@@ -86,17 +86,30 @@ class ArchiveTest(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(RuntimeError):
                 module.archive_members(self.path)
 
-    def test_native_windows_signature_verifier_invokes_bash_with_separate_arguments(self):
+    def test_native_windows_signature_verifier_requires_pacman_keyring_trust(self):
         calls = []
+        valid = b"[GNUPG:] GOODSIG key signer\n[GNUPG:] VALIDSIG fingerprint\n[GNUPG:] TRUST_FULLY 0 pgp\n"
         def run(command):
             calls.append(command)
             if command[:2] == ["cygpath", "-w"]:
-                return b"C:/msys64/usr/bin/bash.exe\n"
-            return b"/c/path with spaces/source.sig\n" if command[0] == "cygpath" else b"verified\n"
+                return b"C:/msys64/usr/bin/gpg.exe\n"
+            if command[0] == "cygpath":
+                return ("/c/path with spaces/" + command[-1].split("/")[-1] + "\n").encode()
+            if command[0] == "pacman-conf":
+                return b"/etc/pacman.d/gnupg\n"
+            return valid
         with patch.object(module.os, "name", "nt"), patch.object(module, "command_output", run):
-            self.assertEqual(module.verify_signature("C:/source archive", "C:/source sig"), "verified\n")
-        self.assertEqual(calls[-1][:3], ["C:/msys64/usr/bin/bash.exe", "/usr/bin/pacman-key", "--verify"])
-        self.assertEqual(len(calls[-1]), 5)
+            self.assertEqual(module.verify_signature("C:/source archive", "C:/source sig"), valid.decode())
+        self.assertEqual(calls[-1][:3], ["C:/msys64/usr/bin/gpg.exe", "--homedir", "/etc/pacman.d/gnupg"])
+        self.assertEqual(calls[-1][-3:], ["--verify", "/c/path with spaces/source sig", "/c/path with spaces/source archive"])
+        for flag in ["--batch", "--lock-never", "--no-auto-check-trustdb", "--no-auto-key-retrieve"]:
+            self.assertIn(flag, calls[-1])
+        for status in [b"", valid.replace(b"TRUST_FULLY", b"TRUST_UNDEFINED"),
+                       valid.replace(b"VALIDSIG", b"EXPSIG"), valid + b"[GNUPG:] REVKEYSIG key\n"]:
+            with self.subTest(status=status), patch.object(module.os, "name", "nt"), patch.object(module, "command_output", run):
+                valid = status
+                with self.assertRaisesRegex(RuntimeError, "not fully trusted"):
+                    module.verify_signature("C:/source archive", "C:/source sig")
 
 
 class CollectionTest(unittest.TestCase):

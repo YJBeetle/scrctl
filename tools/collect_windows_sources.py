@@ -60,15 +60,31 @@ def download(url, target):
 
 
 def verify_signature(archive, signature):
-    # pacman-key uses the same MSYS2 trusted keyring as binary package installation.
-    # MinGW Python paths are native Windows paths; pacman-key is an MSYS program.
+    # Use the same trusted keyring as binary package installation.
     paths = [str(signature), str(archive)]
     if os.name == "nt":
         paths = [command_output(["cygpath", "-u", path]).decode().strip() for path in paths]
-        # pacman-key is a Bash script, not a PE executable accepted by CreateProcess.
-        # Windows PATH may find the WSL launcher before MSYS2's Bash.
-        bash = command_output(["cygpath", "-w", "/usr/bin/bash.exe"]).decode().strip()
-        command = [bash, "/usr/bin/pacman-key", "--verify", *paths]
+        # MSYS2's pacman-key wrapper requires lock-never in gpg.conf even for
+        # verification. Call its GnuPG directly with read-only verification flags,
+        # keeping the original keyring and requiring the same full/ultimate trust.
+        gpg = command_output(["cygpath", "-w", "/usr/bin/gpg.exe"]).decode().strip()
+        keyring = command_output(["pacman-conf", "GPGDir"]).decode().strip()
+        if not keyring or "\n" in keyring:
+            raise RuntimeError("Invalid pacman GPGDir")
+        command = [gpg, "--homedir", keyring, "--batch", "--lock-never",
+                   "--no-auto-check-trustdb", "--no-auto-key-retrieve",
+                   "--status-fd", "1", "--verify", *paths]
+        result = command_output(command).decode("utf-8", errors="replace")
+        statuses = {line.split()[1] for line in result.splitlines()
+                    if line.startswith("[GNUPG:] ") and len(line.split()) >= 2}
+        rejected = {"BADSIG", "ERRSIG", "EXPSIG", "EXPKEYSIG", "REVKEYSIG",
+                    "NO_PUBKEY", "NODATA", "FAILURE", "TRUST_UNDEFINED",
+                    "TRUST_NEVER", "TRUST_MARGINAL"}
+        if (not {"GOODSIG", "VALIDSIG"}.issubset(statuses)
+                or not statuses.intersection({"TRUST_FULLY", "TRUST_ULTIMATE"})
+                or statuses.intersection(rejected)):
+            raise RuntimeError("Source signature is invalid or not fully trusted by pacman keyring")
+        return result
     else:
         command = ["pacman-key", "--verify", *paths]
     return command_output(command).decode("utf-8", errors="replace")

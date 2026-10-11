@@ -49,7 +49,8 @@ Ubuntu CI 当前没有发布独立 Linux 安装包，因此不生成 Linux 分�
 
 ## 重建
 
-1. 核对安装包 `source-materials.json` 中的归档 SHA256，再解开源码归档。
+1. GitHub Actions 下载的是 artifact 外层 ZIP，先解开它，再核对内部 `.tar`
+   与安装包 `source-materials.json` 中的归档 SHA256，最后解开源码归档。
 2. 解开 `project/scrctl-source.tar` 和 `embedded/*-source.tar`。
 3. 根据平台目录的 README、原始 receipt/PKGBUILD 和 build 记录准备编译器、依赖。
    Homebrew 目录记录配方执行所用 Homebrew 版本和提交，提供缓存恢复方法；MSYS2

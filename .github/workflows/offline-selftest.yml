@@ -165,6 +165,21 @@ jobs:
             mingw-w64-clang-aarch64-ffmpeg
             mingw-w64-clang-aarch64-nlohmann-json
             mingw-w64-clang-aarch64-pugixml
+      - name: 验证 MSYS2 源码签名通路
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from tools.record_windows_package import MsysPackages
+          from tools.collect_windows_sources import collect
+          owner = 'mingw-w64-clang-aarch64-bzip2'
+          metadata = {'source_commit': os.environ['GITHUB_SHA'],
+                      'msys2_packages': {owner: MsysPackages().metadata(owner)},
+                      'runtime_dependencies': [{'msys2_package': owner}]}
+          path = Path('source-signature-preflight.json')
+          path.write_text(json.dumps(metadata), encoding='utf-8')
+          collect(path, 'source-signature-preflight', jobs=1)
+          PY
       - name: 配置
         run: >-
           cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release
