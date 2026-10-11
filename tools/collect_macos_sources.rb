@@ -35,6 +35,21 @@ module MacosSources
       "sha256" => digest(path), "size" => path.size }
   end
 
+  def fetch_resource(resource)
+    attempts = 0
+    begin
+      attempts += 1
+      resource.fetch(timeout: 300, skip_patches: true, quiet: true)
+    rescue StandardError => error
+      # curl's built-in --retry does not cover partial transfers (exit 18).
+      # Homebrew resumes its own incomplete download on the next fetch.
+      raise unless defined?(DownloadError) && error.is_a?(DownloadError) && attempts < 3
+
+      warn "Retrying incomplete Homebrew source download (#{attempts}/2): #{resource.url}"
+      retry
+    end
+  end
+
   # Homebrew warns rather than fails when a checksum is missing. Require an
   # immutable digest ourselves before calling its downloader, and verify again.
   def export_resource(resource, directory, root, label)
@@ -43,7 +58,7 @@ module MacosSources
     immutable_git = expected.nil? && revision.is_a?(String) && revision.match?(/\A[0-9a-f]{40}\z/i)
     raise "Unpinned source: #{label}: #{resource.url}" unless expected&.match?(/\A[0-9a-f]{64}\z/i) || immutable_git
 
-    cached = Pathname(resource.fetch(timeout: 300, skip_patches: true))
+    cached = Pathname(fetch_resource(resource))
     directory.mkpath
     if cached.file?
       raise "Missing checksum for archive: #{label}" unless expected
@@ -121,6 +136,8 @@ module MacosSources
     # A fetch hook can download undeclared inputs. Reject until those inputs are
     # represented explicitly; otherwise a successful export would be misleading.
     raise "Recipe fetch hook needs explicit source handling: #{name}" if formula.fetch_defined?
+
+    puts "Collecting exact Homebrew sources: #{name} #{version}"
 
     directory = root/"packages"/name/version
     directory.mkpath

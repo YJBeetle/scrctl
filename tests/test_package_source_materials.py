@@ -32,7 +32,8 @@ class SourcePackageTest(unittest.TestCase):
         self.doc.mkdir(parents=True)
         (self.install / 'bin').mkdir()
         (self.install / 'bin/test.dll').write_bytes(b'controlled library')
-        self.metadata = {'source_commit': self.commit, 'runtime_dependencies': [{'library': 'test.dll', 'msys2_package': 'test', 'bundled_sha256': module.sha256(self.install / 'bin/test.dll')}], 'msys2_packages': {'test': {'version': '1.0-1'}}}
+        (self.install / 'bin/scrctl.exe').write_bytes(b'controlled executable')
+        self.metadata = {'source_commit': self.commit, 'executable_sha256': module.sha256(self.install / 'bin/scrctl.exe'), 'runtime_dependencies': [{'library': 'test.dll', 'msys2_package': 'test', 'bundled_sha256': module.sha256(self.install / 'bin/test.dll')}], 'msys2_packages': {'test': {'version': '1.0-1'}}}
         self.write_metadata()
         for name in ('runtime-origins.tsv', 'package-versions.txt', 'ffmpeg-build.txt', 'source-commit.txt'):
             (self.doc / name).write_text(name)
@@ -84,6 +85,12 @@ class SourcePackageTest(unittest.TestCase):
             self.run_package()
         self.assertFalse((self.doc / 'source-materials.json').exists())
 
+    def test_dirty_tracked_source_rejected(self):
+        (self.repo / 'docs/SOURCE_MATERIALS.md').write_text('uncommitted source change')
+        with self.assertRaisesRegex(RuntimeError, 'Tracked project files differ'):
+            self.run_package()
+        self.assertFalse((self.doc / 'source-materials.json').exists())
+
     def test_incomplete_collector_rejected(self):
         (self.materials / 'msys2/source-manifest.json').unlink()
         with self.assertRaisesRegex(RuntimeError, 'Missing completed'):
@@ -93,6 +100,11 @@ class SourcePackageTest(unittest.TestCase):
         self.metadata['runtime_dependencies'][0]['msys2_package'] = None
         self.write_metadata()
         with self.assertRaisesRegex(RuntimeError, 'Uncovered runtime'):
+            self.run_package()
+
+    def test_changed_installed_executable_rejected(self):
+        (self.install / 'bin/scrctl.exe').write_bytes(b'changed after provenance')
+        with self.assertRaisesRegex(RuntimeError, 'executable changed'):
             self.run_package()
 
     def test_changed_installed_library_rejected(self):

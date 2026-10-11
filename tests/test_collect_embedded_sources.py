@@ -6,6 +6,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
 
 spec = importlib.util.spec_from_file_location(
@@ -23,7 +24,7 @@ class SourceExportTest(unittest.TestCase):
         self.build.mkdir()
         self.source = self.root / "actual override"
         self.source.mkdir()
-        (self.source / "LICENSE").write_text("source license\n", encoding="utf-8")
+        (self.source / "LICENSE").write_bytes(b"source license\n")
         (self.source / "library.h").write_bytes(b"actual local modified bytes\x00\xff")
         self.output = self.root / "delivery"
 
@@ -76,11 +77,33 @@ class SourceExportTest(unittest.TestCase):
         link.unlink()
         external = self.root / "private file"
         external.write_text("not source")
-        link.symlink_to("../private file")
+        link.symlink_to(Path("..") / "private file")
         rejected = self.root / "rejected"
         with self.assertRaisesRegex(RuntimeError, "escapes"):
             module.collect(self.build, rejected)
         self.assertFalse(rejected.exists())
+
+    def test_broken_and_invalid_links_fail_without_delivery(self):
+        self.manifest()
+        link = self.source / "broken.h"
+        try:
+            link.symlink_to("missing.h")
+        except OSError:
+            self.skipTest("creating symlinks requires platform privilege")
+        with self.assertRaisesRegex(RuntimeError, "cannot be resolved safely"):
+            module.collect(self.build, self.output)
+        self.assertFalse(self.output.exists())
+        original_resolve = Path.resolve
+
+        def invalid_link_resolve(path, *args, **kwargs):
+            if path == link:
+                raise OSError(123, "Invalid Windows link syntax")
+            return original_resolve(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "resolve", invalid_link_resolve):
+            with self.assertRaisesRegex(RuntimeError, "cannot be resolved safely"):
+                module.collect(self.build, self.output)
+        self.assertFalse(self.output.exists())
 
     def test_system_packages_are_not_reported_as_exported(self):
         self.manifest([{"name": "system_header", "selection": "system-package",

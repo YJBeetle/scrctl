@@ -60,10 +60,15 @@ def package(install, build, materials, platform, repository):
     doc = install / 'share/doc/scrctl'
     (doc / 'source-materials.json').unlink(missing_ok=True)
     metadata = json.loads((doc / 'package-metadata.json').read_text(encoding='utf-8'))
+    executable = install / ('bin/scrctl' if platform == 'macos' else 'bin/scrctl.exe')
+    if sha256(executable) != metadata['executable_sha256']:
+        raise RuntimeError('Installed executable changed since provenance capture')
     commit = metadata['source_commit']
     current = subprocess.check_output(['git', '-C', str(repository), 'rev-parse', 'HEAD'], text=True).strip()
     if commit != current:
         raise RuntimeError('Installed package and project source commit differ')
+    if subprocess.run(['git', '-C', str(repository), 'diff', '--quiet', 'HEAD']).returncode:
+        raise RuntimeError('Tracked project files differ from recorded source commit')
     # Both collectors must finish before anything can be labelled a source bundle.
     collector = materials / ('homebrew' if platform == 'macos' else 'msys2')
     for directory in (collector, materials / 'embedded'):

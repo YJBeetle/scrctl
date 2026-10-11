@@ -111,6 +111,7 @@ def main():
     package_minimum = max([executable_minimum, *(item["minimum_macos"] for item in dependencies)],
                           key=macos_version_tuple)
     metadata = {"source_commit": args.source_commit, "host_macos": platform.mac_ver()[0],
+                "executable_sha256": digest(root / "bin/scrctl"),
                 "architectures": output(["/usr/bin/lipo", "-archs", str(root / "bin/scrctl")]).split(),
                 "executable_minimum_macos": executable_minimum,
                 "minimum_macos": package_minimum,

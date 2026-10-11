@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 require "minitest/autorun"
 require_relative "../tools/collect_macos_sources"
+DownloadError = Class.new(StandardError) unless defined?(DownloadError)
 
 class MacosSourcesTest < Minitest::Test
   Checksum = Struct.new(:hexdigest)
@@ -178,5 +179,29 @@ class MacosSourcesTest < Minitest::Test
     patch.checksum = nil
     @formula.patchlist << External.new(patch, :p1, [])
     assert_failed(/Unpinned source: patch/)
+  end
+
+  def test_resumes_transient_native_download_errors_with_a_bounded_budget
+    attempts = 0
+    item = resource("retry")
+    item.define_singleton_method(:fetch) do |**_options|
+      attempts += 1
+      raise DownloadError, "partial transfer" if attempts < 3
+
+      path
+    end
+    assert_equal item.path, MacosSources.fetch_resource(item)
+    assert_equal 3, attempts
+  end
+
+  def test_does_not_retry_other_download_failures
+    attempts = 0
+    item = resource("failure")
+    item.define_singleton_method(:fetch) do |**_options|
+      attempts += 1
+      raise RuntimeError, "integrity mismatch"
+    end
+    assert_raises(RuntimeError) { MacosSources.fetch_resource(item) }
+    assert_equal 1, attempts
   end
 end

@@ -47,9 +47,15 @@ def archive_tree(source, destination, name):
     for path in paths:
         relative = path.relative_to(source).as_posix()
         if path.is_symlink():
-            target = path.readlink()
+            try:
+                target = path.readlink()
+                resolved = path.resolve(strict=True)
+            except (OSError, RuntimeError) as error:
+                # Invalid Windows link syntax, dangling links and cycles must
+                # all fail the export, with the same boundary error everywhere.
+                raise RuntimeError(f"source link cannot be resolved safely: {path}") from error
             # Absolute symlinks cannot be relocated to a recipient's checkout.
-            if target.is_absolute() or not path.resolve(strict=True).is_relative_to(source):
+            if target.is_absolute() or not resolved.is_relative_to(source):
                 raise RuntimeError(f"source link escapes dependency tree: {path}")
             inventory.append({"path": relative, "symlink": str(target)})
         elif path.is_file():
