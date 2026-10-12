@@ -148,6 +148,35 @@ std::optional<PacketTunnel> PacketTunnel::establish_psk(Socket &&sock,
     return t;
 }
 
+std::optional<PacketTunnel> PacketTunnel::establish_bounded(uint32_t device_id, uint16_t proxy_port,
+        const PemIdentity &identity, bool use_tls, const IoBudget &budget, std::string &err) {
+    if (!budget.check(err)) return {};
+    auto cancelled = [&budget] { return budget.stopped(); };
+    auto mux = Usbmux::open_for_service(budget.remaining(), cancelled, err);
+    if (!mux) { budget.check(err); return {}; }
+    auto socket = mux->connect_for_service(device_id, proxy_port, budget.remaining(), cancelled, err);
+    if (!socket) { budget.check(err); return {}; }
+    PacketTunnel t;
+    t.sock_ = std::move(*socket);
+    if (use_tls && !t.tls_.handshake_bounded(t.sock_, identity, budget, err)) return {};
+    SocketBudgetGuard guard(t.sock_, budget);
+    const bool ok = budget.check(err) && t.client_handshake(err);
+    if (!guard.finish(err) || !ok) { t.sock_.interrupt(); return {}; }
+    return t;
+}
+
+std::optional<PacketTunnel> PacketTunnel::establish_psk_bounded(Socket &&socket,
+        const std::vector<uint8_t> &psk, const IoBudget &budget, std::string &err) {
+    if (!budget.check(err)) return {};
+    PacketTunnel t;
+    t.sock_ = std::move(socket);
+    if (!t.tls_.handshake_psk_bounded(t.sock_, psk, budget, err)) return {};
+    SocketBudgetGuard guard(t.sock_, budget);
+    const bool ok = budget.check(err) && t.client_handshake(err);
+    if (!guard.finish(err) || !ok) { t.sock_.interrupt(); return {}; }
+    return t;
+}
+
 bool PacketTunnel::client_handshake(std::string &err) {
     const json::Value req = {{"type", "clientHandshakeRequest"}, {"mtu", kRequestedMtu}};
     const std::string body = json::write(req);

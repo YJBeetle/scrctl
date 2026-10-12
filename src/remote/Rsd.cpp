@@ -4,6 +4,9 @@
 #include <charconv>
 #include <chrono>
 #include <cstdio>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 #include <cstdlib>
 #include <random>
 #include <string>
@@ -12,6 +15,44 @@
 
 namespace scrctl::remote {
 namespace {
+
+// Channel has per-operation defaults; the watcher also closes the TCP endpoint
+// at the shared absolute deadline, including while SETTINGS/peer_info trickle in.
+// Destroy/join before the Rsd is moved or destroyed: the worker only borrows tcp.
+class TcpBudgetGuard {
+public:
+    TcpBudgetGuard(net::TcpStream &tcp, const transport::IoBudget &budget)
+        : tcp_(tcp), budget_(budget) {
+        if (budget_.stopped()) tcp_.close();
+        else worker_ = std::thread([this] {
+            std::unique_lock lock(mutex_);
+            while (!done_) {
+                cv_.wait_for(lock, std::min(budget_.remaining(), std::chrono::milliseconds(25)),
+                             [this] { return done_; });
+                if (done_) break;
+                lock.unlock();
+                const bool stopped = budget_.stopped();
+                if (stopped) tcp_.close();
+                lock.lock();
+                if (stopped) break;
+            }
+        });
+    }
+    ~TcpBudgetGuard() { stop(); }
+    bool finish(std::string &err) { stop(); return budget_.check(err); }
+private:
+    void stop() {
+        { std::lock_guard lock(mutex_); done_ = true; }
+        cv_.notify_all();
+        if (worker_.joinable()) worker_.join();
+    }
+    net::TcpStream &tcp_;
+    const transport::IoBudget &budget_;
+    std::mutex mutex_;
+    std::condition_variable cv_;
+    bool done_ = false;
+    std::thread worker_;
+};
 
 /// 当前 CoreDevice 请求使用的 DDI 协议版本和默认客户端版本声明。
 constexpr int64_t kDdiProtocolVersion = 2;
@@ -415,25 +456,40 @@ CallResult ServiceConnection::stream(std::string_view feature_identifier,
 
 std::optional<Rsd> Rsd::open(net::Stack &stack, transport::PacketTunnel &tunnel,
                              const PeerIdentity &identity, std::string &err, bool verbose) {
+    const transport::IoBudget budget;
+    return open_bounded(stack, tunnel, identity, budget, err, verbose);
+}
+
+std::optional<Rsd> Rsd::open_bounded(net::Stack &stack, transport::PacketTunnel &tunnel,
+                                     const PeerIdentity &identity,
+                                     const transport::IoBudget &budget, std::string &err,
+                                     bool verbose) {
+    if (!budget.check(err)) return std::nullopt;
     const auto &p = tunnel.params();
     std::optional<Rsd> rsd;
     rsd.emplace(stack, identity);
 
     // Rsd 持有 TcpStream 和借用它的 Channel，按成员声明逆序先释放 control_。
     rsd->tcp_ = std::make_unique<net::TcpStream>(stack);
+    TcpBudgetGuard guard(*rsd->tcp_, budget);
     if (!rsd->tcp_->connect(p.rsd_port, err)) {
+        if (!budget.check(err)) return std::nullopt;
         err = SCRCTL_TR("Connect to RSD port ") + std::to_string(p.rsd_port) + SCRCTL_TR(" failed: ") + err;
         return std::nullopt;
     }
+    if (!budget.check(err)) return std::nullopt;
     auto channel = Channel::open(*rsd->tcp_, err, verbose);
+    if (!budget.check(err)) return std::nullopt;
     if (!channel) {
         err = SCRCTL_TR("RSD control channel handshake failed: ") + err;
         return std::nullopt;
     }
     rsd->control_ = std::make_unique<Channel>(std::move(*channel));
     if (!rsd->control_->announce_device(identity, err)) {
+        budget.check(err);
         return std::nullopt;
     }
+    if (!budget.check(err)) return std::nullopt;
     const auto *info = rsd->control_->peer_info();
     const auto *services = info != nullptr ? info->find("Services") : nullptr;
     if (services == nullptr || !services->is_dict()) {
@@ -441,6 +497,7 @@ std::optional<Rsd> Rsd::open(net::Stack &stack, transport::PacketTunnel &tunnel,
         return std::nullopt;
     }
     rsd->services_ = parse_service_directory(*services);
+    if (!guard.finish(err)) return std::nullopt;
     return rsd;
 }
 

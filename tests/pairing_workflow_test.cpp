@@ -265,6 +265,42 @@ void test_early_failures() {
               !std::filesystem::exists(thrown.path()),
           "callback exception does not publish a record or leak exception contents");
 }
+void test_cancellation() {
+    Fixture before;
+    before.options.should_cancel = [] { return true; };
+    const auto early = before.run();
+    check(!early.ok && early.error.find("cancelled") != std::string::npos &&
+              before.setups == 0 && before.verifies == 0 && !std::filesystem::exists(before.path()),
+          "pre-cancelled USB workflow has no protocol or file side effects");
+    check(!remote::pair_usb_remote(before.options).ok,
+          "pre-cancelled USB pairing rejects before device enumeration");
+
+    Fixture after_setup;
+    bool stopped = false;
+    after_setup.options.should_cancel = [&] { return stopped; };
+    after_setup.mutate_setup = [&](wifi::PairSetupResult &) { stopped = true; };
+    const auto setup = after_setup.run();
+    check(!setup.ok && after_setup.verifies == 0 && !std::filesystem::exists(after_setup.path()),
+          "cancellation after setup skips reconnect and persistence");
+
+    Fixture after_verify;
+    stopped = false;
+    after_verify.options.should_cancel = [&] { return stopped; };
+    after_verify.on_verify = [&](const wifi::PairRecord &) { stopped = true; };
+    const auto verified = after_verify.run();
+    check(!verified.ok && !std::filesystem::exists(after_verify.path()),
+          "cancellation during verification prevents new record persistence");
+
+    Fixture reused;
+    reused.existing(synthetic_record());
+    const auto original = reused.contents();
+    stopped = false;
+    reused.options.should_cancel = [&] { return stopped; };
+    reused.on_verify = [&](const wifi::PairRecord &) { stopped = true; };
+    const auto existing = reused.run();
+    check(!existing.ok && reused.contents() == original,
+          "cancelled existing verification cannot report success or replace record");
+}
 } // namespace
 
 int main() {
@@ -273,6 +309,7 @@ int main() {
         test_new_pairing();
         test_existing_records();
         test_early_failures();
+        test_cancellation();
     } catch (const std::exception &error) {
         ++failures;
         std::printf("FAIL: pairing workflow fixture: %s\n", error.what());

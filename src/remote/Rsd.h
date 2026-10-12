@@ -12,6 +12,7 @@
 #include "net/Stack.h"
 #include "net/TcpStream.h"
 #include "remote/RemoteXpc.h"
+#include "transport/IoBudget.h"
 #include "xpc/XpcValue.h"
 
 namespace scrctl::remote {
@@ -122,6 +123,13 @@ public:
     static std::optional<Rsd> open(net::Stack &stack, transport::PacketTunnel &tunnel,
                                    const PeerIdentity &identity, std::string &err,
                                    bool verbose = false);
+
+    /// 初始 TCP、HTTP/2 和目录读取共用调用方的绝对预算。取消或预算到期
+    /// 只关闭这个控制端点；成功交付后解除监视，不影响会话后续的服务连接。
+    static std::optional<Rsd> open_bounded(net::Stack &stack, transport::PacketTunnel &tunnel,
+                                           const PeerIdentity &identity,
+                                           const transport::IoBudget &budget, std::string &err,
+                                           bool verbose = false);
 
     /// 目录里没有该项时返回 nullopt。
     [[nodiscard]] std::optional<ServiceInfo> service(std::string_view name) const;

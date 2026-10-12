@@ -47,7 +47,8 @@ class LiveSource final : public FrameSource {
     /// 命名选项区分设备连接、视频、音频和各自的解码需求。
     /// 无视频时跳过显示查询/订阅/媒体/截图，仍可保留音频或输入控制连接。
     /// 无视频录制仅支持包含音轨的 MP4/MKV；格式、音频需求和视频方向先于连接检查。
-    /// should_cancel 在启动步骤间检查；正在执行的底层 RPC 仍受自身超时约束。
+    /// 建连、媒体 RPC 和首帧就绪共享 30 秒总预算；should_cancel 可中断启动。
+    /// 成功交付后解除启动监视，正常会话不受已结束的启动预算影响。
     bool start(const Options &options, std::string &err);
 
     /// 打开音频输出。应用先准备 SDL 音频子系统，再调用 start() 建立媒体会话；

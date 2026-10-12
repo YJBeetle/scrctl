@@ -52,6 +52,8 @@ public:
         const std::function<bool()> &cancelled, std::string &err);
 
     bool list_devices(std::vector<DeviceRecord> &out, std::string &err);
+    bool list_devices_for_service(std::vector<DeviceRecord> &out,
+        std::chrono::milliseconds timeout, const std::function<bool()> &cancelled, std::string &err);
 
     /// 仅供设备发现使用的独立连接。connect/send/header/payload 共用绝对预算，
     /// socket 等待以最多 50 ms 切片检查取消；失败时 out 为空。err 仅用于系统或协议错误，

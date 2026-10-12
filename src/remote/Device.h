@@ -11,6 +11,7 @@
 #include "wifi/RemotePairing.h"
 #include "remote/Rsd.h"
 #include "transport/Lockdown.h"
+#include "transport/IoBudget.h"
 #include "transport/Tunnel.h"
 #include "transport/Usbmux.h"
 
@@ -51,6 +52,9 @@ public:
     /// verbose 向 stderr 报告各阶段进展；失败时已取得的资源随局部对象释放。
     static std::optional<Device> establish(std::string_view udid, std::string &err,
                                            bool verbose = false, bool usb_only = false);
+    static std::optional<Device> establish_bounded(std::string_view udid,
+        const transport::IoBudget &budget, std::string &err,
+        bool verbose = false, bool usb_only = false);
 
     /// 使用远程配对记录，经 pair-verify、设备监听端口和 TLS-PSK 建立局域网隧道。
     /// address/port 指向设备 RemotePairing 服务；隧道建立后复用同一套 Stack/RSD。
@@ -59,6 +63,13 @@ public:
                                                 const wifi::PairRecord &record, std::string &err,
                                                 bool verbose = false,
                                                 uint16_t port = wifi::kAdvertisedPortFallback);
+    static std::optional<Device> establish_wifi_bounded(const std::string &address,
+        const wifi::PairRecord &record, const transport::IoBudget &budget, std::string &err,
+        bool verbose = false, uint16_t port = wifi::kAdvertisedPortFallback);
+
+    /// Abort startup I/O on this owned tunnel only. Caller must stop/join its
+    /// watchdog before moving or destroying Device; never resume an aborted session.
+    void interrupt_startup();
 
     /// 仅在 establish/establish_wifi 成功后访问 RSD 和隧道参数。
     [[nodiscard]] Rsd &rsd() { return *rsd_; }
@@ -94,7 +105,8 @@ public:
 
 private:
     /// USB/Wi-Fi 共用的隧道收尾：构造 Stack、启动隧道线程，再连接 RSD 读取目录。
-    bool finish_session(transport::PacketTunnel &&tunnel, PeerIdentity identity, bool verbose,
+    bool finish_session(transport::PacketTunnel &&tunnel, PeerIdentity identity,
+                        const transport::IoBudget &budget, bool verbose,
                         std::string &err);
 
     std::string udid_;

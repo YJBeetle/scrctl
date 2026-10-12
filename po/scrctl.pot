@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-11 03:36+0800\n"
+"POT-Creation-Date: 2026-10-12 20:34+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -24,8 +24,8 @@ msgid ""
 "table)\n"
 msgstr ""
 
-#: src/app/Application.cpp:82 src/app/Commands.cpp:140 src/app/Commands.cpp:149
-#: src/app/Commands.cpp:263
+#: src/app/Application.cpp:82 src/app/Commands.cpp:144 src/app/Commands.cpp:152
+#: src/app/Commands.cpp:161
 #, c-format
 msgid "SDL initialization failed: %s\n"
 msgstr ""
@@ -234,7 +234,7 @@ msgstr ""
 msgid "Finished: processed %d frames\n"
 msgstr ""
 
-#: src/app/AudioOut.cpp:11 src/app/LiveSource.cpp:411
+#: src/app/AudioOut.cpp:11 src/app/LiveSource.cpp:432
 msgid "Audio playback is unavailable because PCM decoding is disabled"
 msgstr ""
 
@@ -601,7 +601,7 @@ msgstr ""
 msgid "Requires a nonempty directory path"
 msgstr ""
 
-#: src/app/Cli.cpp:246 src/app/LiveSource.cpp:82
+#: src/app/Cli.cpp:246 src/app/LiveSource.cpp:94
 msgid "Requires a nonempty recording file"
 msgstr ""
 
@@ -624,7 +624,7 @@ msgstr ""
 msgid "Recording requires at least one enabled audio or video track"
 msgstr ""
 
-#: src/app/Cli.cpp:275 src/app/LiveSource.cpp:97
+#: src/app/Cli.cpp:275 src/app/LiveSource.cpp:109
 msgid "Recording orientation requires a video track"
 msgstr ""
 
@@ -634,7 +634,7 @@ msgid ""
 "video capture"
 msgstr ""
 
-#: src/app/Cli.cpp:284 src/app/LiveSource.cpp:119
+#: src/app/Cli.cpp:284 src/app/LiveSource.cpp:131
 msgid ""
 "Container recording requires live video; screenshot polling cannot be "
 "recorded"
@@ -646,7 +646,7 @@ msgid ""
 "only flipping or reset --record-orientation to a rotation"
 msgstr ""
 
-#: src/app/Cli.cpp:292 src/app/LiveSource.cpp:129
+#: src/app/Cli.cpp:292 src/app/LiveSource.cpp:141
 msgid ""
 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate "
 "only the display"
@@ -728,7 +728,7 @@ msgstr ""
 msgid "no matching pairing record"
 msgstr ""
 
-#: src/app/Commands.cpp:65 src/app/Commands.cpp:120 src/app/Commands.cpp:169
+#: src/app/Commands.cpp:65 src/app/Commands.cpp:123 src/app/Commands.cpp:181
 #: src/ddi/Download.cpp:355
 msgid "DDI download cancelled"
 msgstr ""
@@ -737,146 +737,146 @@ msgstr ""
 msgid "Cannot enumerate the target USB device for DDI selection"
 msgstr ""
 
-#: src/app/Commands.cpp:101 src/app/Commands.cpp:122 src/app/DdiInstall.cpp:53
-#: src/app/DdiInstall.cpp:79
+#: src/app/Commands.cpp:104 src/app/Commands.cpp:125 src/app/DdiInstall.cpp:56
+#: src/app/DdiInstall.cpp:82
 msgid "DDI target metadata is missing its OS version or product model"
 msgstr ""
 
-#: src/app/Commands.cpp:158 src/app/Commands.cpp:170 src/app/Commands.cpp:179
-#: src/app/Commands.cpp:198
+#: src/app/Commands.cpp:170 src/app/Commands.cpp:182 src/app/Commands.cpp:191
+#: src/app/Commands.cpp:210
 #, c-format
 msgid "DDI download failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:182 src/app/DdiInstall.cpp:82
+#: src/app/Commands.cpp:194 src/app/DdiInstall.cpp:85
 #, c-format
 msgid "DDI target: OS %s, model %s, image type %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:189
+#: src/app/Commands.cpp:201
 #, c-format
 msgid "Downloading DDI: %s (%llu/%llu bytes)\n"
 msgstr ""
 
-#: src/app/Commands.cpp:203
+#: src/app/Commands.cpp:215
 #, c-format
 msgid "Verified cached DDI %s: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:204
+#: src/app/Commands.cpp:216
 #, c-format
 msgid "Downloaded and verified DDI %s: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:206
+#: src/app/Commands.cpp:218
 #, c-format
 msgid "DDI source: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:207
+#: src/app/Commands.cpp:219
 #, c-format
 msgid ""
 "Download complete; device installation is a separate step. See docs/DDI.md.\n"
 msgstr ""
 
-#: src/app/Commands.cpp:216 src/app/DeviceConnection.cpp:237
+#: src/app/Commands.cpp:229 src/app/DeviceConnection.cpp:244
 #, c-format
 msgid "Discovery warning: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:220
+#: src/app/Commands.cpp:233
 msgid "Wireless device (UDID unknown)"
 msgstr ""
 
-#: src/app/Commands.cpp:232
+#: src/app/Commands.cpp:245
 msgid "address unresolved"
 msgstr ""
 
-#: src/app/Commands.cpp:248
+#: src/app/Commands.cpp:261
 #, c-format
 msgid "No devices found\n"
 msgstr ""
 
-#: src/app/Commands.cpp:272
+#: src/app/Commands.cpp:278
 #, c-format
 msgid "Enter this one-use pairing code on the device: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:286
+#: src/app/Commands.cpp:293
 #, c-format
 msgid "Remote pairing failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:290
+#: src/app/Commands.cpp:297
 #, c-format
 msgid "Remote pairing verified for %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:291
+#: src/app/Commands.cpp:298
 #, c-format
 msgid "Remote pairing saved for %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:300 src/app/Commands.cpp:323
+#: src/app/Commands.cpp:307 src/app/Commands.cpp:330
 #, c-format
 msgid "Failed to establish session: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:305
+#: src/app/Commands.cpp:312
 #, c-format
 msgid "Failed to list apps: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:311
+#: src/app/Commands.cpp:318
 #, c-format
 msgid "Total: %zu\n"
 msgstr ""
 
-#: src/app/Commands.cpp:329
+#: src/app/Commands.cpp:336
 #, c-format
 msgid "Wrote %zu bytes to device clipboard\n"
 msgstr ""
 
-#: src/app/Commands.cpp:331
+#: src/app/Commands.cpp:338
 #, c-format
 msgid "--copy failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:338
+#: src/app/Commands.cpp:345
 #, c-format
 msgid "Device clipboard (%zu bytes): "
 msgstr ""
 
-#: src/app/Commands.cpp:342
+#: src/app/Commands.cpp:349
 #, c-format
 msgid "--paste failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:368
+#: src/app/Commands.cpp:375
 #, c-format
 msgid "--start-app requires a nonempty app name\n"
 msgstr ""
 
-#: src/app/Commands.cpp:378
+#: src/app/Commands.cpp:385
 #, c-format
 msgid "Failed to find app by name: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:396
+#: src/app/Commands.cpp:403
 #, c-format
 msgid "No app name starts with %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:404 tools/app_launch_probe.cpp:89
+#: src/app/Commands.cpp:411 tools/app_launch_probe.cpp:89
 #, c-format
 msgid "Failed to launch %s: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:407
+#: src/app/Commands.cpp:414
 msgid " (previous instance terminated)"
 msgstr ""
 
-#: src/app/Commands.cpp:407
+#: src/app/Commands.cpp:414
 #, c-format
 msgid "Launched %s%s\n"
 msgstr ""
@@ -893,85 +893,85 @@ msgid ""
 "state before replacing again.\n"
 msgstr ""
 
-#: src/app/DdiInstall.cpp:78 src/app/DdiInstall.cpp:110
+#: src/app/DdiInstall.cpp:81 src/app/DdiInstall.cpp:114
 msgid "DDI installation cancelled"
 msgstr ""
 
-#: src/app/DdiInstall.cpp:96
+#: src/app/DdiInstall.cpp:99
 #, c-format
 msgid "DDI transfer: %s (%llu/%llu bytes)\n"
 msgstr ""
 
-#: src/app/DdiInstall.cpp:146
+#: src/app/DdiInstall.cpp:150
 msgid "DDI Cryptex is installed but its developer image is not mounted"
 msgstr ""
 
-#: src/app/DdiInstall.cpp:149
+#: src/app/DdiInstall.cpp:153
 #, c-format
 msgid "DDI already installed: %s %s (no new installation)\n"
 msgstr ""
 
-#: src/app/DdiInstall.cpp:150
+#: src/app/DdiInstall.cpp:154
 #, c-format
 msgid "DDI installed and verified: %s %s\n"
 msgstr ""
 
-#: src/app/DdiInstall.cpp:154
+#: src/app/DdiInstall.cpp:158
 msgid "DDI installation requires the device ECID"
 msgstr ""
 
-#: src/app/DdiInstall.cpp:170
+#: src/app/DdiInstall.cpp:174
 #, c-format
 msgid "DDI already mounted: %s (no new installation)\n"
 msgstr ""
 
-#: src/app/DdiInstall.cpp:171
+#: src/app/DdiInstall.cpp:175
 #, c-format
 msgid "DDI mounted and verified: %s\n"
 msgstr ""
 
 #: src/app/DeviceConnection.cpp:15 src/app/DeviceConnection.cpp:52
-#: src/app/DeviceConnection.cpp:69 src/app/DeviceConnection.cpp:187
-#: src/app/LiveSource.cpp:73
+#: src/app/DeviceConnection.cpp:71 src/app/DeviceConnection.cpp:189
+#: src/transport/IoBudget.h:50
 msgid "Device startup cancelled"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:100
+#: src/app/DeviceConnection.cpp:102
 msgid ""
 "Multiple usable remote pairing records match; select a unique device with -s"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:106
+#: src/app/DeviceConnection.cpp:108
 msgid "No usable remote pairing record matches; pair the device over USB first"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:130
+#: src/app/DeviceConnection.cpp:132
 msgid ""
 "No paired wireless device is available; check the network and pair over USB "
 "first"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:134
+#: src/app/DeviceConnection.cpp:136
 msgid "Multiple paired wireless devices are available; select one with -s"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:154
+#: src/app/DeviceConnection.cpp:156
 msgid "Selected wireless device does not match a usable pairing record"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:158
+#: src/app/DeviceConnection.cpp:160
 msgid "No usable wireless connection candidate is available"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:173
+#: src/app/DeviceConnection.cpp:175
 msgid "Cannot connect to any discovered wireless address"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:201 src/remote/Discovery.cpp:242
+#: src/app/DeviceConnection.cpp:203 src/remote/Discovery.cpp:242
 msgid "USB device enumeration is unavailable"
 msgstr ""
 
-#: src/app/DeviceConnection.cpp:220
+#: src/app/DeviceConnection.cpp:225
 msgid "Wi-Fi port must be between 1 and 65535"
 msgstr ""
 
@@ -1036,257 +1036,257 @@ msgstr ""
 msgid "Source ended"
 msgstr ""
 
-#: src/app/LiveSource.cpp:42 src/app/LiveSource.cpp:695
+#: src/app/LiveSource.cpp:42 src/app/LiveSource.cpp:716
 #: src/media/FramePump.cpp:193
 #, c-format
 msgid "Recording failed: %s. The file may be incomplete.\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:89
+#: src/app/LiveSource.cpp:101
 msgid "Audio-only recording requires MP4 or MKV"
 msgstr ""
 
-#: src/app/LiveSource.cpp:93
+#: src/app/LiveSource.cpp:105
 msgid "Audio-only recording requires audio capture"
 msgstr ""
 
-#: src/app/LiveSource.cpp:102 src/media/FramePump.cpp:111
+#: src/app/LiveSource.cpp:114 src/media/FramePump.cpp:111
 msgid "Video capture without decoding requires a recording consumer"
 msgstr ""
 
-#: src/app/LiveSource.cpp:106
+#: src/app/LiveSource.cpp:118
 msgid "Video capture without decoding requires a live video stream"
 msgstr ""
 
-#: src/app/LiveSource.cpp:110
+#: src/app/LiveSource.cpp:122
 msgid "Hardware decoding and fallback tests require video decoding"
 msgstr ""
 
-#: src/app/LiveSource.cpp:115 src/media/AudioPump.cpp:104
+#: src/app/LiveSource.cpp:127 src/media/AudioPump.cpp:104
 msgid ""
 "Audio capture without PCM decoding requires a container recording with an "
 "audio track"
 msgstr ""
 
-#: src/app/LiveSource.cpp:123
+#: src/app/LiveSource.cpp:135
 msgid "Container recording is unavailable in this build (libavformat required)"
 msgstr ""
 
-#: src/app/LiveSource.cpp:135
+#: src/app/LiveSource.cpp:147
 msgid "Invalid --test-degrade: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:195
+#: src/app/LiveSource.cpp:211
 #, c-format
 msgid "Failed to query display dimensions: %s (using model crop table)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:196
+#: src/app/LiveSource.cpp:212
 msgid "Update contains no usable dimensions"
 msgstr ""
 
-#: src/app/LiveSource.cpp:209
+#: src/app/LiveSource.cpp:225
 #, c-format
 msgid ""
 "Failed to subscribe to display changes: %s (automatic rotation unavailable)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:243 src/app/LiveSource.cpp:658
+#: src/app/LiveSource.cpp:259 src/app/LiveSource.cpp:679
 msgid "Live video unavailable; recording stopped"
 msgstr ""
 
-#: src/app/LiveSource.cpp:248
+#: src/app/LiveSource.cpp:264
 #, c-format
 msgid "Media stream unavailable: %s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:251
+#: src/app/LiveSource.cpp:267
 #, c-format
 msgid ""
 "Using screenshot polling; refresh rate depends on capture time. Input "
 "control remains available\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:255
+#: src/app/LiveSource.cpp:271
 msgid "Failed to start screenshot polling: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:270
+#: src/app/LiveSource.cpp:286
 msgid "No first screenshot within 5 seconds"
 msgstr ""
 
-#: src/app/LiveSource.cpp:278
+#: src/app/LiveSource.cpp:294
 msgid "No first decoded frame within 5 seconds"
 msgstr ""
 
-#: src/app/LiveSource.cpp:283
+#: src/app/LiveSource.cpp:299
 msgid "No valid recording IDR within 5 seconds"
 msgstr ""
 
-#: src/app/LiveSource.cpp:295
+#: src/app/LiveSource.cpp:311
 msgid "Video became unavailable before recording startup completed"
 msgstr ""
 
-#: src/app/LiveSource.cpp:305
+#: src/app/LiveSource.cpp:321
 #, c-format
 msgid "Screenshot mirroring started: %s / iOS %s, %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:309
+#: src/app/LiveSource.cpp:325
 #, c-format
 msgid ""
 "Video stream started: %s / iOS %s, receive port=%u PT=%u, first frame %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:314
+#: src/app/LiveSource.cpp:330
 #, c-format
 msgid ""
 "Encoded video capture started: %s / iOS %s, receive port=%u PT=%u, checked "
 "dimensions %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:323
+#: src/app/LiveSource.cpp:339
 #, c-format
 msgid ""
 "Display geometry: visible area %dx%d (displayId=%llu %s), UI rotation %d "
 "degrees clockwise, stream %ux%u\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:330
+#: src/app/LiveSource.cpp:346
 #, c-format
 msgid "Screenshot mode cannot record Annex-B; ignoring --record\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:332 src/app/LiveSource.cpp:387
+#: src/app/LiveSource.cpp:348 src/app/LiveSource.cpp:403
 #, c-format
 msgid "Recording to %s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:340
+#: src/app/LiveSource.cpp:356
 #, c-format
 msgid "Screenshot mode does not start audio\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:356
+#: src/app/LiveSource.cpp:372
 #, c-format
 msgid ""
 "Forwarding audio to the computer. Switching routes may pause the phone's "
 "player; resume playback on the phone if needed.\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:376
+#: src/app/LiveSource.cpp:392
 #, c-format
 msgid "Failed to start audio: %s (video continues)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:381
+#: src/app/LiveSource.cpp:397
 #, c-format
 msgid "Audio stream started: receive port=%u PT=%u backend=%s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:384
+#: src/app/LiveSource.cpp:400
 msgid "Audio routing: phone and computer (--audio-dup)"
 msgstr ""
 
-#: src/app/LiveSource.cpp:385
+#: src/app/LiveSource.cpp:401
 msgid "Audio routing: computer; phone playback is suppressed"
 msgstr ""
 
-#: src/app/LiveSource.cpp:395
+#: src/app/LiveSource.cpp:411
 #, c-format
 msgid "--test-degrade: from now,"
 msgstr ""
 
-#: src/app/LiveSource.cpp:397
+#: src/app/LiveSource.cpp:413
 #, c-format
 msgid " at %.1f seconds: %s"
 msgstr ""
 
-#: src/app/LiveSource.cpp:398
+#: src/app/LiveSource.cpp:414
 msgid "force fallback"
 msgstr ""
 
-#: src/app/LiveSource.cpp:398
+#: src/app/LiveSource.cpp:414
 msgid "release override"
 msgstr ""
 
-#: src/app/LiveSource.cpp:400
+#: src/app/LiveSource.cpp:416
 #, c-format
 msgid " (test mode)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:407
+#: src/app/LiveSource.cpp:428
 msgid ""
 "No playable audio stream (disabled, failed to start, or unsupported build)"
 msgstr ""
 
-#: src/app/LiveSource.cpp:425
+#: src/app/LiveSource.cpp:446
 msgid "Audio capture stopped before recording finished"
 msgstr ""
 
-#: src/app/LiveSource.cpp:436 src/app/LiveSource.cpp:457
+#: src/app/LiveSource.cpp:457 src/app/LiveSource.cpp:478
 msgid "Device input is unavailable before a session is started"
 msgstr ""
 
-#: src/app/LiveSource.cpp:446
+#: src/app/LiveSource.cpp:467
 #, c-format
 msgid "Device input connection established\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:487
+#: src/app/LiveSource.cpp:508
 #, c-format
 msgid "Failed to release device touch: %s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:493
+#: src/app/LiveSource.cpp:514
 #, c-format
 msgid "Failed to release device keys: %s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:499
+#: src/app/LiveSource.cpp:520
 #, c-format
 msgid "Failed to release device button: %s\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:662
+#: src/app/LiveSource.cpp:683
 #, c-format
 msgid ""
 "Live video unavailable; using screenshot polling while retrying video in the "
 "background\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:665
+#: src/app/LiveSource.cpp:686
 #, c-format
 msgid "Failed to switch to screenshots: %s (retry in %llu seconds)\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:671
+#: src/app/LiveSource.cpp:692
 #, c-format
 msgid "Live video recovered; switched back to video stream\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:692 src/media/FramePump.cpp:192
+#: src/app/LiveSource.cpp:713 src/media/FramePump.cpp:192
 #, c-format
 msgid "Recording failed: %s. Mirroring continues; the file is incomplete.\n"
 msgstr ""
 
-#: src/app/LiveSource.cpp:736
+#: src/app/LiveSource.cpp:757
 msgid "Encoded video capture stopped: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:739
+#: src/app/LiveSource.cpp:760
 msgid "Audio recording stopped: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:743
+#: src/app/LiveSource.cpp:764
 msgid "Audio stopped: "
 msgstr ""
 
-#: src/app/LiveSource.cpp:747
+#: src/app/LiveSource.cpp:768
 msgid "); closing session"
 msgstr ""
 
-#: src/app/LiveSource.cpp:747
+#: src/app/LiveSource.cpp:768
 msgid "Device connection lost ("
 msgstr ""
 
@@ -2868,7 +2868,7 @@ msgstr ""
 #: src/media/FramePump.cpp:754 src/media/ScreenshotSource.cpp:72
 #: src/net/Stack.cpp:364 src/net/TcpStream.cpp:44 src/net/TcpStream.cpp:128
 #: src/net/TcpStream.cpp:132 src/net/UdpSocket.cpp:109
-#: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:281
+#: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:322
 #: src/transport/Socket.cpp:114 src/transport/Usbmux.cpp:126
 #: src/wifi/RemotePairing.cpp:35 tools/rr_keepalive_probe.cpp:636
 msgid ")"
@@ -3462,7 +3462,7 @@ msgid ""
 msgstr ""
 
 #: src/media/StreamSession.cpp:223 src/remote/App.cpp:218
-#: src/transport/TcpConnect.cpp:27
+#: src/transport/TcpConnect.cpp:31
 msgid ": "
 msgstr ""
 
@@ -3794,114 +3794,114 @@ msgstr ""
 msgid "Cannot choose a unique usbmux connection for device "
 msgstr ""
 
-#: src/remote/Device.cpp:162
+#: src/remote/Device.cpp:172
 msgid "lockdown pairing session"
 msgstr ""
 
-#: src/remote/Device.cpp:165 tools/wifi_probe.cpp:348
+#: src/remote/Device.cpp:175 tools/wifi_probe.cpp:348
 msgid "Failed to establish lockdown session: "
 msgstr ""
 
-#: src/remote/Device.cpp:168
+#: src/remote/Device.cpp:179
 msgid "Start CoreDeviceProxy"
 msgstr ""
 
-#: src/remote/Device.cpp:171 src/remote/Rsd.cpp:202 src/remote/Rsd.cpp:425
+#: src/remote/Device.cpp:182 src/remote/Rsd.cpp:243 src/remote/Rsd.cpp:477
 #: src/transport/Usbmux.cpp:270 src/wifi/PairRecord.cpp:363
 #: tools/wifi_probe.cpp:353
 msgid " failed: "
 msgstr ""
 
-#: src/remote/Device.cpp:171
+#: src/remote/Device.cpp:182
 msgid "Start "
 msgstr ""
 
-#: src/remote/Device.cpp:174
+#: src/remote/Device.cpp:186
 msgid "CDTunnel handshake"
 msgstr ""
 
-#: src/remote/Device.cpp:179 src/remote/Device.cpp:279
+#: src/remote/Device.cpp:191 src/remote/Device.cpp:317
 msgid "Failed to establish packet tunnel: "
 msgstr ""
 
-#: src/remote/Device.cpp:186
+#: src/remote/Device.cpp:199
 msgid "Cannot construct a stable peer identity from pairing HostID"
 msgstr ""
 
-#: src/remote/Device.cpp:192 src/remote/Device.cpp:202
+#: src/remote/Device.cpp:206 src/remote/Device.cpp:218
 msgid "Connect to RSD inside tunnel and read directory"
 msgstr ""
 
-#: src/remote/Device.cpp:208
+#: src/remote/Device.cpp:224
 msgid "Tunnel returned an invalid IPv6 address"
 msgstr ""
 
-#: src/remote/Device.cpp:219
+#: src/remote/Device.cpp:235
 msgid "Ready"
 msgstr ""
 
-#: src/remote/Device.cpp:228 src/wifi/PairVerify.cpp:13
+#: src/remote/Device.cpp:252 src/wifi/PairVerify.cpp:13
 msgid "Pairing record incomplete; cannot sign"
 msgstr ""
 
-#: src/remote/Device.cpp:232 src/wifi/PairVerify.cpp:19
+#: src/remote/Device.cpp:257 src/wifi/PairVerify.cpp:19
 #: tools/wifi_probe.cpp:801
 msgid "Pairing record has no device identity; pair again over USB"
 msgstr ""
 
-#: src/remote/Device.cpp:240
+#: src/remote/Device.cpp:266
 msgid "LAN pair-verify"
 msgstr ""
 
-#: src/remote/Device.cpp:243
+#: src/remote/Device.cpp:275
 msgid "Cannot connect to device RemotePairing port "
 msgstr ""
 
-#: src/remote/Device.cpp:244
+#: src/remote/Device.cpp:276
 msgid ""
 " (check that the device is reachable on this network and has been paired)"
 msgstr ""
 
-#: src/remote/Device.cpp:253
+#: src/remote/Device.cpp:287
 msgid "Device rejected pairing record: "
 msgstr ""
 
-#: src/remote/Device.cpp:254
+#: src/remote/Device.cpp:288
 msgid " is not paired with this device, or its pairing was removed"
 msgstr ""
 
-#: src/remote/Device.cpp:256
+#: src/remote/Device.cpp:290
 msgid "pair-verify failed: "
 msgstr ""
 
-#: src/remote/Device.cpp:261
+#: src/remote/Device.cpp:296
 msgid "Request device tunnel port"
 msgstr ""
 
-#: src/remote/Device.cpp:269
+#: src/remote/Device.cpp:306
 msgid "TLS-PSK and CDTunnel handshake"
 msgstr ""
 
-#: src/remote/Device.cpp:272
+#: src/remote/Device.cpp:309
 msgid "Cannot connect to tunnel port "
 msgstr ""
 
-#: src/remote/Device.cpp:286
+#: src/remote/Device.cpp:325
 msgid ""
 "Pairing host identifier is not a valid UUID; cannot construct a stable peer "
 "identity"
 msgstr ""
 
-#: src/remote/Device.cpp:306 src/remote/Rsd.cpp:187 src/remote/Rsd.cpp:224
-#: src/remote/Rsd.cpp:480
+#: src/remote/Device.cpp:351 src/remote/Rsd.cpp:228 src/remote/Rsd.cpp:265
+#: src/remote/Rsd.cpp:537
 msgid "Service connection cancelled"
 msgstr ""
 
-#: src/remote/Device.cpp:310
+#: src/remote/Device.cpp:355
 msgid "Session not established"
 msgstr ""
 
-#: src/remote/Device.cpp:322
+#: src/remote/Device.cpp:367
 msgid " does not advertise feature "
 msgstr ""
 
@@ -3989,117 +3989,129 @@ msgstr ""
 msgid "Device orientation target must be portrait or landscape"
 msgstr ""
 
-#: src/remote/Pairing.cpp:23
+#: src/remote/Pairing.cpp:25
 msgid "USB pairing timeout must be between 1 and 300000 ms"
 msgstr ""
 
-#: src/remote/Pairing.cpp:48
+#: src/remote/Pairing.cpp:38
+msgid "USB pairing cancelled"
+msgstr ""
+
+#: src/remote/Pairing.cpp:39
+msgid "USB pairing cancellation callback failed"
+msgstr ""
+
+#: src/remote/Pairing.cpp:82
 msgid "Pairing requires the selected device to remain connected over USB"
 msgstr ""
 
-#: src/remote/Pairing.cpp:53
+#: src/remote/Pairing.cpp:87
 msgid "Device does not provide the USB RemotePairing service"
 msgstr ""
 
-#: src/remote/Pairing.cpp:57
+#: src/remote/Pairing.cpp:91
 msgid "USB RemotePairing service does not support RemoteXPC"
 msgstr ""
 
-#: src/remote/Pairing.cpp:69
+#: src/remote/Pairing.cpp:109
 msgid "Unexpected initial USB RemotePairing message"
 msgstr ""
 
-#: src/remote/Pairing.cpp:86
+#: src/remote/Pairing.cpp:127
 msgid "Multiple USB devices match; select one by UDID"
 msgstr ""
 
-#: src/remote/Pairing.cpp:91
+#: src/remote/Pairing.cpp:132
 msgid "No matching USB device is connected"
 msgstr ""
 
-#: src/remote/Pairing.cpp:93
+#: src/remote/Pairing.cpp:134
 msgid "USB device has no UDID; cannot bind a pairing record"
 msgstr ""
 
-#: src/remote/Pairing.cpp:107
+#: src/remote/Pairing.cpp:148
 msgid "USB pairing device selection is invalid"
 msgstr ""
 
-#: src/remote/Pairing.cpp:111
+#: src/remote/Pairing.cpp:152
 msgid "USB pairing workflow operations are unavailable"
 msgstr ""
 
-#: src/remote/Pairing.cpp:123
+#: src/remote/Pairing.cpp:164
 msgid "Cannot inspect existing USB pairing record"
 msgstr ""
 
-#: src/remote/Pairing.cpp:129
+#: src/remote/Pairing.cpp:170
 msgid "Existing USB pairing record is not a regular file"
 msgstr ""
 
-#: src/remote/Pairing.cpp:136
+#: src/remote/Pairing.cpp:177
 msgid ""
 "Existing pairing record belongs to a different device; choose another record "
 "directory"
 msgstr ""
 
-#: src/remote/Pairing.cpp:140
+#: src/remote/Pairing.cpp:181
 msgid "Existing pairing record cannot be read; enable USB repair explicitly"
 msgstr ""
 
-#: src/remote/Pairing.cpp:144
+#: src/remote/Pairing.cpp:185
 msgid "Verifying the existing USB pairing record"
 msgstr ""
 
-#: src/remote/Pairing.cpp:152
+#: src/remote/Pairing.cpp:195
 msgid "Existing pairing record verification failed: "
 msgstr ""
 
-#: src/remote/Pairing.cpp:157
+#: src/remote/Pairing.cpp:200
 msgid "Device rejected the pairing record; enable USB repair explicitly"
 msgstr ""
 
-#: src/remote/Pairing.cpp:161
+#: src/remote/Pairing.cpp:204
 msgid "Existing pairing record is incomplete; enable USB repair explicitly"
 msgstr ""
 
-#: src/remote/Pairing.cpp:167
+#: src/remote/Pairing.cpp:210
 msgid "Cannot obtain the local hostname for USB pairing"
 msgstr ""
 
-#: src/remote/Pairing.cpp:175
+#: src/remote/Pairing.cpp:218
 msgid "Cannot generate a host identifier for USB pairing"
 msgstr ""
 
-#: src/remote/Pairing.cpp:178
+#: src/remote/Pairing.cpp:221
 msgid "Starting USB pairing; confirm the request on the device"
 msgstr ""
 
-#: src/remote/Pairing.cpp:182
+#: src/remote/Pairing.cpp:227
 msgid "USB pair setup failed: "
 msgstr ""
 
-#: src/remote/Pairing.cpp:187
+#: src/remote/Pairing.cpp:232
 msgid "USB pair setup returned an incomplete or mismatched record"
 msgstr ""
 
-#: src/remote/Pairing.cpp:190
+#: src/remote/Pairing.cpp:235
 msgid "Reconnecting to verify the new USB pairing record"
 msgstr ""
 
-#: src/remote/Pairing.cpp:193
+#: src/remote/Pairing.cpp:240
 msgid "New USB pairing record verification failed: "
 msgstr ""
 
-#: src/remote/Pairing.cpp:198
+#: src/remote/Pairing.cpp:245
 msgid "Cannot save the verified USB pairing record: "
 msgstr ""
 
-#: src/remote/Pairing.cpp:205
+#: src/remote/Pairing.cpp:252
 msgid "USB pairing workflow failed before completion"
 msgstr ""
 
-#: src/remote/Pairing.cpp:216
+#: src/remote/Pairing.cpp:266
+msgid "USB pairing enumeration timed out or service is unavailable"
+msgstr ""
+
+#: src/remote/Pairing.cpp:267
 msgid "Cannot enumerate devices for USB pairing: "
 msgstr ""
 
@@ -4405,137 +4417,137 @@ msgstr ""
 msgid "Disconnected while waiting for device reply: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:125
+#: src/remote/Rsd.cpp:166
 #, c-format
 msgid ""
 "Invalid numeric component in SCRCTL_COREDEVICE_VERSION: %s (using 629.3)\n"
 msgstr ""
 
-#: src/remote/Rsd.cpp:138
+#: src/remote/Rsd.cpp:179
 #, c-format
 msgid "  coreDeviceVersion overridden by environment: %s (default: 629.3)\n"
 msgstr ""
 
-#: src/remote/Rsd.cpp:191
+#: src/remote/Rsd.cpp:232
 msgid "Service has no valid TCP port (expected 1..65535): "
 msgstr ""
 
-#: src/remote/Rsd.cpp:202
+#: src/remote/Rsd.cpp:243
 msgid " port "
 msgstr ""
 
-#: src/remote/Rsd.cpp:202 src/transport/Usbmux.cpp:270
+#: src/remote/Rsd.cpp:243 src/transport/Usbmux.cpp:270
 msgid "Connect to "
 msgstr ""
 
-#: src/remote/Rsd.cpp:213
+#: src/remote/Rsd.cpp:254
 msgid " HTTP/2 handshake failed: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:232 src/remote/Rsd.cpp:242 src/remote/Rsd.cpp:252
-#: src/remote/Rsd.cpp:262
+#: src/remote/Rsd.cpp:273 src/remote/Rsd.cpp:283 src/remote/Rsd.cpp:293
+#: src/remote/Rsd.cpp:303
 msgid "Service connection is not RemoteXPC"
 msgstr ""
 
-#: src/remote/Rsd.cpp:277
+#: src/remote/Rsd.cpp:318
 msgid " failed"
 msgstr ""
 
-#: src/remote/Rsd.cpp:281
+#: src/remote/Rsd.cpp:322
 msgid "(code "
 msgstr ""
 
-#: src/remote/Rsd.cpp:292
+#: src/remote/Rsd.cpp:333
 msgid "; original error: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:316
+#: src/remote/Rsd.cpp:357
 msgid " failed; response missing CoreDevice.output: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:329
+#: src/remote/Rsd.cpp:370
 msgid "Streaming feature requires an XPC service connection"
 msgstr ""
 
-#: src/remote/Rsd.cpp:346
+#: src/remote/Rsd.cpp:387
 msgid "Service connection is not an XPC channel"
 msgstr ""
 
-#: src/remote/Rsd.cpp:365
+#: src/remote/Rsd.cpp:406
 msgid " response missing both sideChannelStatus and error: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:371
+#: src/remote/Rsd.cpp:412
 msgid " failed mid-stream: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:425
+#: src/remote/Rsd.cpp:477
 msgid "Connect to RSD port "
 msgstr ""
 
-#: src/remote/Rsd.cpp:430
+#: src/remote/Rsd.cpp:484
 msgid "RSD control channel handshake failed: "
 msgstr ""
 
-#: src/remote/Rsd.cpp:440
+#: src/remote/Rsd.cpp:496
 msgid "peer_info missing Services"
 msgstr ""
 
-#: src/remote/Rsd.cpp:495
+#: src/remote/Rsd.cpp:552
 msgid "."
 msgstr ""
 
-#: src/remote/Rsd.cpp:495
+#: src/remote/Rsd.cpp:552
 msgid "Device directory missing service "
 msgstr ""
 
-#: src/remote/Rsd.cpp:497
+#: src/remote/Rsd.cpp:554
 msgid "Directory is empty; check tunnel setup and DDI mounting."
 msgstr ""
 
-#: src/remote/Rsd.cpp:498
+#: src/remote/Rsd.cpp:555
 msgid ""
 "\n"
 "Download a supported DDI with scrctl --download-ddi; installation and "
 "compatibility guidance: docs/DDI.md.\n"
 msgstr ""
 
-#: src/remote/Rsd.cpp:507
+#: src/remote/Rsd.cpp:564
 msgid " services, including "
 msgstr ""
 
-#: src/remote/Rsd.cpp:507
+#: src/remote/Rsd.cpp:564
 msgid "Device directory contains "
 msgstr ""
 
-#: src/remote/Rsd.cpp:508
+#: src/remote/Rsd.cpp:565
 msgid " com.apple.coredevice.* services:\n"
 msgstr ""
 
-#: src/remote/Rsd.cpp:511
+#: src/remote/Rsd.cpp:568
 msgid ""
 "  (none found; check DDI mounting through Xcode and the CoreDevice services "
 "available on this device)\n"
 msgstr ""
 
-#: src/remote/Rsd.cpp:517
+#: src/remote/Rsd.cpp:574
 msgid ""
 "A mounted DDI may still lack this service. Check its version and "
 "capabilities; download a supported DDI with scrctl --download-ddi. "
 "Installation guidance: docs/DDI.md.\n"
 msgstr ""
 
-#: src/remote/Rsd.cpp:519
+#: src/remote/Rsd.cpp:576
 msgid ""
 "Include this diagnostic when reporting the issue. For the full directory and "
 "feature lists, run feature_probe --all to print all "
 msgstr ""
 
-#: src/remote/Rsd.cpp:521
+#: src/remote/Rsd.cpp:578
 msgid " services.\n"
 msgstr ""
 
-#: src/remote/Rsd.cpp:531
+#: src/remote/Rsd.cpp:588
 msgid ""
 " (device rejected the system version: live media worked on tested iOS 27 "
 "devices and was rejected on tested iOS 18 devices. Screenshot fallback and "
@@ -4626,59 +4638,67 @@ msgstr ""
 msgid "Not an RTP packet"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:42
+#: src/transport/IoBudget.h:51
+msgid "Device startup timed out"
+msgstr ""
+
+#: src/transport/IoBudget.h:52
+msgid "Device startup cancellation callback failed"
+msgstr ""
+
+#: src/transport/Lockdown.cpp:39
 msgid "Bounded lockdown operation timed out"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:43
+#: src/transport/Lockdown.cpp:40
 msgid "Bounded lockdown operation was cancelled"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:44
+#: src/transport/Lockdown.cpp:41
 msgid "Lockdown cancellation callback failed"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:86
+#: src/transport/Lockdown.cpp:83
 msgid "Failed to write TLS header"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:89
+#: src/transport/Lockdown.cpp:86
 msgid "Failed to write TLS body"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:100
+#: src/transport/Lockdown.cpp:97
 msgid "Failed to read TLS header"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:108 src/transport/Socket.cpp:185
+#: src/transport/Lockdown.cpp:105 src/transport/Socket.cpp:185
 msgid "Invalid lockdown frame length: "
 msgstr ""
 
-#: src/transport/Lockdown.cpp:118
+#: src/transport/Lockdown.cpp:115
 msgid "Failed to read TLS body"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:149
+#: src/transport/Lockdown.cpp:146
 msgid "lockdown response is not a valid plist"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:172 src/transport/Lockdown.cpp:221
+#: src/transport/Lockdown.cpp:176 src/transport/Lockdown.cpp:228
 msgid "Cannot parse pairing record"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:182 src/transport/Lockdown.cpp:239
+#: src/transport/Lockdown.cpp:186 src/transport/Lockdown.cpp:246
 msgid "Pairing record missing required fields"
 msgstr ""
 
-#: src/transport/Lockdown.cpp:193 src/transport/Lockdown.cpp:262
+#: src/transport/Lockdown.cpp:201 src/transport/Lockdown.cpp:269
 msgid "StartSession rejected: "
 msgstr ""
 
-#: src/transport/Lockdown.cpp:286
+#: src/transport/Lockdown.cpp:293
 msgid ") rejected: "
 msgstr ""
 
-#: src/transport/Lockdown.cpp:291
+#: src/transport/Lockdown.cpp:298
 msgid "StartService response missing Port"
 msgstr ""
 
@@ -4718,32 +4738,48 @@ msgstr ""
 msgid "poll failed: "
 msgstr ""
 
-#: src/transport/TcpConnect.cpp:27
+#: src/transport/TcpConnect.cpp:31 src/transport/TcpConnect.cpp:123
 msgid "Failed to resolve address "
 msgstr ""
 
-#: src/transport/TcpConnect.cpp:27
+#: src/transport/TcpConnect.cpp:31 src/transport/TcpConnect.cpp:124
 msgid "no results"
 msgstr ""
 
-#: src/transport/TcpConnect.cpp:55 src/transport/Usbmux.cpp:176
+#: src/transport/TcpConnect.cpp:59 src/transport/Usbmux.cpp:176
 msgid "Failed to enable nonblocking mode: "
 msgstr ""
 
-#: src/transport/TcpConnect.cpp:78
+#: src/transport/TcpConnect.cpp:82
 msgid "Connection timed out"
 msgstr ""
 
-#: src/transport/TcpConnect.cpp:79
+#: src/transport/TcpConnect.cpp:83
 msgid "Failed to wait for connection: "
 msgstr ""
 
-#: src/transport/TcpConnect.cpp:96
+#: src/transport/TcpConnect.cpp:100
 msgid "Failed to restore blocking mode: "
 msgstr ""
 
-#: src/transport/TcpConnect.cpp:101
+#: src/transport/TcpConnect.cpp:105 src/transport/TcpConnect.cpp:243
 msgid "Cannot connect to "
+msgstr ""
+
+#: src/transport/TcpConnect.cpp:164
+msgid "Too many outstanding hostname resolutions; retry later"
+msgstr ""
+
+#: src/transport/TcpConnect.cpp:174
+msgid "Hostname resolution failed"
+msgstr ""
+
+#: src/transport/TcpConnect.cpp:184
+msgid "Cannot start hostname resolution"
+msgstr ""
+
+#: src/transport/TcpConnect.cpp:194
+msgid "Hostname resolution returned no addresses"
 msgstr ""
 
 #: src/transport/TlsChannel.cpp:33 src/transport/TlsChannel.cpp:47
@@ -4825,23 +4861,23 @@ msgstr ""
 msgid "Tunnel TLS read failed"
 msgstr ""
 
-#: src/transport/Tunnel.cpp:168
+#: src/transport/Tunnel.cpp:197
 msgid "Tunnel handshake response has incorrect magic"
 msgstr ""
 
-#: src/transport/Tunnel.cpp:180
+#: src/transport/Tunnel.cpp:209
 msgid "Tunnel handshake response is not valid JSON"
 msgstr ""
 
-#: src/transport/Tunnel.cpp:196
+#: src/transport/Tunnel.cpp:225
 msgid "Tunnel handshake response missing required fields"
 msgstr ""
 
-#: src/transport/Tunnel.cpp:214 src/transport/Tunnel.cpp:223
+#: src/transport/Tunnel.cpp:243 src/transport/Tunnel.cpp:252
 msgid "Tunnel not connected"
 msgstr ""
 
-#: src/transport/Tunnel.cpp:231
+#: src/transport/Tunnel.cpp:260
 msgid "Tunnel packet is not IPv6: version nibble="
 msgstr ""
 
@@ -4859,6 +4895,7 @@ msgid "mux response is not a valid plist"
 msgstr ""
 
 #: src/transport/Usbmux.cpp:223 src/transport/Usbmux.cpp:470
+#: src/transport/Usbmux.cpp:486
 msgid "ListDevices response missing DeviceList"
 msgstr ""
 
@@ -4898,15 +4935,15 @@ msgstr ""
 msgid "ReadPairRecord response missing PairRecordData"
 msgstr ""
 
-#: src/transport/Usbmux.cpp:492
+#: src/transport/Usbmux.cpp:505
 msgid "Connect failed, usbmuxd returned Number="
 msgstr ""
 
-#: src/transport/Usbmux.cpp:513
+#: src/transport/Usbmux.cpp:526
 msgid "ReadPairRecord response missing PairRecordData (response "
 msgstr ""
 
-#: src/transport/Usbmux.cpp:514
+#: src/transport/Usbmux.cpp:527
 msgid "); device may not trust this computer yet"
 msgstr ""
 

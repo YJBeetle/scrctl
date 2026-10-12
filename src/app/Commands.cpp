@@ -89,12 +89,15 @@ bool read_ddi_target(const Options &options, const std::function<bool()> &cancel
         }
         const auto selected = remote::detail::select_usbmux_device(devices, options.serial, error, true);
         if (!selected || cancelled()) return false;
-        auto lockdown = transport::Lockdown::establish(selected->device_id, selected->udid, error);
+        transport::IoBudget budget({std::chrono::seconds(30), cancelled});
+        auto lockdown = transport::Lockdown::establish_bounded(selected->device_id, selected->udid, budget, error);
         if (!lockdown || cancelled()) return false;
         auto request = plist::Value::Dict();
         request.set("Request", plist::Value::Str("GetValue"));
         plist::Value reply;
-        if (!lockdown->request(request, reply, error)) return false;
+        if (!lockdown->request_bounded(request, reply, budget.remaining(),
+                [&budget] { return budget.stopped(); }, error)) return false;
+        if (!budget.check(error)) return false;
         if (const auto *failure = reply.find("Error")) { error = failure->as_string_or(); return false; }
         const auto *values = reply.find("Value");
         if (!values || !values->is_dict()) {
@@ -133,6 +136,15 @@ std::optional<int> run_standalone_command(const Options &o) {
         std::printf("scrctl %s\n", SCRCTL_VERSION_STRING);
         return 0;
     }
+
+    // Device-only commands need signal handling, without a window or audio.
+    SdlRuntime command_runtime;
+    if (!o.install_ddi && !o.download_ddi && (o.list_devices || o.pair || o.list_apps || o.copy_text || o.paste) &&
+        !command_runtime.initialize(SDL_INIT_TIMER)) {
+        std::fprintf(stderr, SCRCTL_TR("SDL initialization failed: %s\n"), SDL_GetError());
+        return 1;
+    }
+    const auto cancelled = [&command_runtime] { return command_runtime.stop_requested(); };
 
     if (o.install_ddi) {
         SdlRuntime runtime;
@@ -211,6 +223,7 @@ std::optional<int> run_standalone_command(const Options &o) {
     if (o.list_devices) {
         remote::DiscoveryOptions options;
         options.timeout = std::chrono::milliseconds(o.discovery_timeout_ms);
+        options.should_cancel = cancelled;
         const auto result = remote::discover_devices(options);
         for (const auto &warning : result.warnings) {
             std::fprintf(stderr, SCRCTL_TR("Discovery warning: %s\n"),
@@ -256,17 +269,10 @@ std::optional<int> run_standalone_command(const Options &o) {
         };
         remote::PairingResult result;
         if (o.wifi == "auto") {
-            // Timer-only SDL establishes the existing signal handling without
-            // opening a desktop window, sound output or device media session.
-            SdlRuntime runtime;
-            if (!runtime.initialize(SDL_INIT_TIMER)) {
-                std::fprintf(stderr, SCRCTL_TR("SDL initialization failed: %s\n"), SDL_GetError());
-                return 1;
-            }
             remote::WifiPairingOptions options;
             options.udid = o.serial;
             options.timeout_ms = o.pairing_timeout_ms;
-            options.should_cancel = [&] { return runtime.stop_requested(); };
+            options.should_cancel = cancelled;
             options.progress = report;
             options.display_pin = [](std::string_view pin, std::string &) {
                 std::fprintf(stderr, SCRCTL_TR("Enter this one-use pairing code on the device: %s\n"),
@@ -279,6 +285,7 @@ std::optional<int> run_standalone_command(const Options &o) {
             options.udid = o.serial;
             options.timeout_ms = o.pairing_timeout_ms;
             options.allow_repair = o.repair_pairing;
+            options.should_cancel = cancelled;
             options.progress = report;
             result = remote::pair_usb_remote(options);
         }
@@ -295,7 +302,7 @@ std::optional<int> run_standalone_command(const Options &o) {
 
     if (o.list_apps) {
         std::string err;
-        auto dev = open_device(o.serial, o.wifi, err, o.wifi_port);
+        auto dev = open_device(o.serial, o.wifi, err, o.wifi_port, cancelled);
         if (!dev) {
             std::fprintf(stderr, SCRCTL_TR("Failed to establish session: %s\n"), err.c_str());
             return 1;
@@ -318,7 +325,7 @@ std::optional<int> run_standalone_command(const Options &o) {
     // SET_REPLY 后丢弃内容，例如 types 为空时，仅检查写入回复不能确认保存成功。
     if (o.copy_text || o.paste) {
         std::string err;
-        auto dev = open_device(o.serial, o.wifi, err, o.wifi_port);
+        auto dev = open_device(o.serial, o.wifi, err, o.wifi_port, cancelled);
         if (!dev) {
             std::fprintf(stderr, SCRCTL_TR("Failed to establish session: %s\n"), err.c_str());
             return 1;

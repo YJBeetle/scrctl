@@ -60,9 +60,11 @@ std::optional<wifi::PairRecord> load_selected_record(std::string_view serial, st
 }
 
 std::optional<remote::Device> open_discovered_device(const std::string &serial, std::string &error,
-                                                   const std::function<bool()> &should_cancel) {
+                                                   const std::function<bool()> &should_cancel,
+                                                   const transport::IoBudget &budget) {
     remote::DiscoveryOptions options;
     options.include_usb = false;
+    options.timeout = std::min(options.timeout, budget.remaining());
     options.should_cancel = should_cancel;
     const auto discovery = remote::discover_devices(options);
     if (discovery.cancelled || startup_cancelled(should_cancel, error)) {
@@ -77,8 +79,8 @@ std::optional<remote::Device> open_discovered_device(const std::string &serial, 
     const auto record = load_selected_record(selection->udid, error, should_cancel);
     if (!record) return std::nullopt;
     return detail::connect_wireless_candidates(*selection, *record, error,
-        [](const std::string &address, const wifi::PairRecord &paired, uint16_t port, std::string &err) {
-            return remote::Device::establish_wifi(address, paired, err, false, port);
+        [&budget](const std::string &address, const wifi::PairRecord &paired, uint16_t port, std::string &err) {
+            return remote::Device::establish_wifi_bounded(address, paired, budget, err, false, port);
         }, should_cancel);
 }
 } // namespace
@@ -212,30 +214,39 @@ std::optional<remote::Device> detail::open_default_device(
 std::optional<remote::Device> open_device(const std::string &serial, const std::string &wifi,
                                           std::string &error, uint16_t wifi_port,
                                           const std::function<bool()> &should_cancel) {
-    error.clear();
-    if (startup_cancelled(should_cancel, error)) return std::nullopt;
-    if (wifi == "auto") return open_discovered_device(serial, error, should_cancel);
-    if (!wifi.empty()) {
-        if (!wifi_port) {
-            error = SCRCTL_TR("Wi-Fi port must be between 1 and 65535");
-            return std::nullopt;
+    transport::IoBudget budget({std::chrono::milliseconds(30000), should_cancel});
+    const std::function<bool()> cancelled = [&budget] { return budget.stopped(); };
+    auto run = [&]() -> std::optional<remote::Device> {
+        error.clear();
+        if (startup_cancelled(cancelled, error)) return std::nullopt;
+        if (wifi == "auto") return open_discovered_device(serial, error, cancelled, budget);
+        if (!wifi.empty()) {
+            if (!wifi_port) {
+                error = SCRCTL_TR("Wi-Fi port must be between 1 and 65535");
+                return std::nullopt;
+            }
+            const auto record = load_selected_record(serial, error, cancelled);
+            if (!record) return std::nullopt;
+            if (startup_cancelled(cancelled, error)) return std::nullopt;
+            auto device = remote::Device::establish_wifi_bounded(wifi, *record, budget, error, false, wifi_port);
+            if (startup_cancelled(cancelled, error)) return std::nullopt;
+            return device;
         }
-        const auto record = load_selected_record(serial, error, should_cancel);
-        if (!record) return std::nullopt;
-        if (startup_cancelled(should_cancel, error)) return std::nullopt;
-        auto device = remote::Device::establish_wifi(wifi, *record, error, false, wifi_port);
-        if (startup_cancelled(should_cancel, error)) return std::nullopt;
-        return device;
-    }
-    return detail::open_default_device(serial, error, should_cancel, {
-        transport::Usbmux::list_devices_for_discovery,
-        [](const std::string &selected, std::string &err) { return remote::Device::establish(selected, err); },
-        [&](const std::string &selected, std::string &err) {
-            return open_discovered_device(selected, err, should_cancel);
-        },
-        [](const std::string &warning) {
-            std::fprintf(stderr, SCRCTL_TR("Discovery warning: %s\n"), warning.c_str());
-        },
-    });
+        return detail::open_default_device(serial, error, cancelled, {
+            transport::Usbmux::list_devices_for_discovery,
+            [&budget](const std::string &selected, std::string &err) {
+                return remote::Device::establish_bounded(selected, budget, err);
+            },
+            [&](const std::string &selected, std::string &err) {
+                return open_discovered_device(selected, err, cancelled, budget);
+            },
+            [](const std::string &warning) {
+                std::fprintf(stderr, SCRCTL_TR("Discovery warning: %s\n"), warning.c_str());
+            },
+        });
+    };
+    auto device = run();
+    if (!budget.check(error)) return std::nullopt;
+    return device;
 }
 } // namespace scrctl::app

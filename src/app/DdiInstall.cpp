@@ -37,17 +37,20 @@ int run_ddi_install(const Options &o, const std::function<bool()> &cancelled) {
     std::optional<transport::Lockdown> lockdown;
     std::optional<remote::Device> device;
     if (o.wifi.empty()) {
+        transport::IoBudget preparation({seconds(30), cancelled});
         std::vector<transport::DeviceRecord> records;
         if (transport::Usbmux::list_devices_for_discovery(records, milliseconds(1000), cancelled, error) !=
             transport::UsbmuxDiscoveryStatus::complete) return fail();
         record = remote::detail::select_usbmux_device(records, o.serial, error, true);
         if (!record) return fail();
         lockdown = transport::Lockdown::establish_bounded(record->device_id, record->udid,
-            seconds(15), cancelled, error);
+            preparation, error);
         if (!lockdown) return fail();
         auto query = plist::Value::Dict(); query.set("Request", plist::Value::Str("GetValue"));
         plist::Value reply;
-        if (!lockdown->request_bounded(query, reply, seconds(15), cancelled, error)) return fail();
+        if (!lockdown->request_bounded(query, reply, preparation.remaining(),
+                [&preparation] { return preparation.stopped(); }, error)) return fail();
+        if (!preparation.check(error)) return fail();
         const auto *values = reply.find("Value");
         if (!values || !values->is_dict() || reply.find("Error")) {
             error = SCRCTL_TR("DDI target metadata is missing its OS version or product model"); return fail();
@@ -104,7 +107,8 @@ int run_ddi_install(const Options &o, const std::function<bool()> &cancelled) {
     // Establishing the CoreDevice tunnel is connection preparation. The
     // installation budget starts once that transport is available.
     if (selected->kind == ddi::Kind::Cryptex && !device) {
-        device = remote::Device::establish(record->udid, error, false, true);
+        transport::IoBudget preparation({seconds(30), cancelled});
+        device = remote::Device::establish_bounded(record->udid, preparation, error, false, true);
         if (!device) return fail();
     }
     if (cancelled && cancelled()) { error = SCRCTL_TR("DDI installation cancelled"); return fail(); }

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "transport/Socket.h"
+#include "transport/IoBudget.h"
 
 namespace scrctl::transport {
 
@@ -45,6 +46,10 @@ public:
     /// 已验证的设备隧道监听器使用 TLS 1.2 PSK 套件；TLS 1.3 external PSK
     /// 是不同机制，当前未做设备适配。该路径不发送或校验证书，以 PSK 认证。
     bool handshake_psk(Socket &sock, const std::vector<uint8_t> &psk, std::string &err);
+
+    bool handshake_bounded(Socket &sock, const PemIdentity &id, const IoBudget &budget, std::string &err);
+    bool handshake_psk_bounded(Socket &sock, const std::vector<uint8_t> &psk,
+        const IoBudget &budget, std::string &err);
 
 private:
     void release();

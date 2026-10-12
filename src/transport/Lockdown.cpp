@@ -17,9 +17,6 @@ constexpr const char *kLabel = "scrctl";
 
 using Clock = std::chrono::steady_clock;
 using Ms = std::chrono::milliseconds;
-Ms remaining(Clock::time_point deadline) {
-    return std::max(Ms(0), std::chrono::duration_cast<Ms>(deadline - Clock::now()));
-}
 class BoundedIo {
 public:
     BoundedIo(Socket &socket, Ms timeout, const std::function<bool()> &cancelled)
@@ -162,12 +159,19 @@ bool Lockdown::request_bounded(const plist::Value &req, plist::Value &reply, Ms 
 
 std::optional<Lockdown> Lockdown::establish_bounded(uint32_t device_id, std::string_view udid,
         Ms timeout, const std::function<bool()> &cancelled, std::string &err) {
+    IoBudget budget(StartupOptions{timeout, cancelled});
+    return establish_bounded(device_id, udid, budget, err);
+}
+
+std::optional<Lockdown> Lockdown::establish_bounded(uint32_t device_id, std::string_view udid,
+        const IoBudget &budget, std::string &err) {
     err.clear();
-    const auto until = Clock::now() + std::clamp(timeout, Ms(0), Ms(std::chrono::hours(1)));
-    auto rec_mux = Usbmux::open_for_service(remaining(until), cancelled, err);
-    if (!rec_mux) return {};
+    if (!budget.check(err)) return {};
+    auto cancelled = [&budget] { return budget.stopped(); };
+    auto rec_mux = Usbmux::open_for_service(budget.remaining(), cancelled, err);
+    if (!rec_mux) { budget.check(err); return {}; }
     std::vector<uint8_t> record;
-    if (!rec_mux->read_pair_record_for_service(udid, record, remaining(until), cancelled, err)) return {};
+    if (!rec_mux->read_pair_record_for_service(udid, record, budget.remaining(), cancelled, err)) { budget.check(err); return {}; }
     auto parsed = plist::parse(std::string_view(reinterpret_cast<const char *>(record.data()), record.size()));
     if (!parsed || !parsed->is_dict()) { err = SCRCTL_TR("Cannot parse pairing record"); return {}; }
     auto take = [&](std::string_view key) {
@@ -180,26 +184,29 @@ std::optional<Lockdown> Lockdown::establish_bounded(uint32_t device_id, std::str
     if (const auto *value = parsed->find("SystemBUID")) ld.system_buid_ = value->as_string_or();
     ld.identity_ = PemIdentity{take("HostCertificate"), take("HostPrivateKey"), take("RootCertificate")};
     if (ld.host_id_.empty() || !ld.identity_.complete()) { err = SCRCTL_TR("Pairing record missing required fields"); return {}; }
-    auto mux = Usbmux::open_for_service(remaining(until), cancelled, err);
-    if (!mux) return {};
-    auto socket = mux->connect_for_service(device_id, kLockdownPort, remaining(until), cancelled, err);
-    if (!socket) return {};
+    auto mux = Usbmux::open_for_service(budget.remaining(), cancelled, err);
+    if (!mux) { budget.check(err); return {}; }
+    auto socket = mux->connect_for_service(device_id, kLockdownPort, budget.remaining(), cancelled, err);
+    if (!socket) { budget.check(err); return {}; }
     ld.sock_ = std::move(*socket);
     auto start = plist::Value::Dict(); start.set("Request", plist::Value::Str("StartSession"));
     start.set("HostID", plist::Value::Str(ld.host_id_)); start.set("SystemBUID", plist::Value::Str(ld.system_buid_));
     plist::Value reply;
-    if (!ld.request_bounded(start, reply, remaining(until), cancelled, err)) return {};
+    {
+        SocketBudgetGuard guard(ld.sock_, budget);
+        const bool ok = budget.check(err) && ld.request(start, reply, err);
+        if (!guard.finish(err) || !ok) return {};
+    }
     if (const auto *value = reply.find("Error")) {
         err = SCRCTL_TR("StartSession rejected: ") + value->as_string_or("?"); return {};
     }
     if (const auto *value = reply.find("SessionID")) ld.session_id_ = value->as_string_or();
     const auto *want_ssl = reply.find("EnableSessionSSL");
     if (!want_ssl || want_ssl->as_bool_or(true)) {
-        BoundedIo watch(ld.sock_, remaining(until), cancelled);
-        const auto ok = watch.active() && ld.tls_.handshake(ld.sock_, ld.identity_, err);
-        if (!watch.finish(err) || !ok) return {};
+        if (!ld.tls_.handshake_bounded(ld.sock_, ld.identity_, budget, err)) return {};
     }
     // Every scoped watcher above has joined before ld is moved into optional.
+    if (!budget.check(err)) return {};
     return ld;
 }
 
@@ -296,6 +303,16 @@ std::optional<Lockdown::ServiceEndpoint> Lockdown::start_service(std::string_vie
     const auto *ssl = reply.find("EnableServiceSSL");
     ep.requires_tls = ssl != nullptr && ssl->as_bool_or(false);
     return ep;
+}
+
+std::optional<Lockdown::ServiceEndpoint> Lockdown::start_service_bounded(std::string_view name,
+        const IoBudget &budget, std::string &err) {
+    if (!budget.check(err)) return {};
+    bounded_io_ = true;
+    SocketBudgetGuard guard(sock_, budget);
+    auto endpoint = start_service(name, err);
+    if (!guard.finish(err) || !endpoint) { sock_.interrupt(); return {}; }
+    return endpoint;
 }
 
 }  // namespace scrctl::transport

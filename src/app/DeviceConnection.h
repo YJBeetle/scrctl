@@ -11,7 +11,7 @@ namespace scrctl::app {
 /// wifi="auto" 只扫描本次 mDNS 广播，按唯一已配对设备尝试所有可用地址与 SRV 端口。
 /// 显式地址使用 wifi_port；无线模式只使用已有完整且有设备身份的记录，不创建配对。
 /// wifi 为空时先有界枚举 usbmux；缺少候选或枚举不可用时尝试自动无线，后者输出警告。
-/// 完整列表的选择歧义或 USB 协议失败直接返回；取消覆盖枚举及连接前的检查。
+/// 完整列表的选择歧义或 USB 协议失败直接返回；枚举、认证、隧道与 RSD 共用 30 秒总预算，支持在途取消。
 /// serial 始终是原始 USB/配对记录 UDID，不能用净化后的文件名或广播 identifier 替代。
 std::optional<remote::Device> open_device(const std::string &serial, const std::string &wifi,
                                           std::string &err,

@@ -143,12 +143,22 @@ std::vector<transport::DeviceRecord> Device::list(std::string &err) {
 
 std::optional<Device> Device::establish(std::string_view udid, std::string &err, bool verbose,
                                       bool usb_only) {
-    auto mux = transport::Usbmux::open(err);
+    transport::IoBudget budget;
+    return establish_bounded(udid, budget, err, verbose, usb_only);
+}
+
+std::optional<Device> Device::establish_bounded(std::string_view udid,
+    const transport::IoBudget &budget, std::string &err, bool verbose, bool usb_only) {
+    if (!budget.check(err)) return std::nullopt;
+    const auto cancelled = [&budget] { return budget.stopped(); };
+    auto mux = transport::Usbmux::open_for_service(budget.remaining(), cancelled, err);
     if (!mux) {
+        budget.check(err);
         return std::nullopt;
     }
     std::vector<transport::DeviceRecord> devices;
-    if (!mux->list_devices(devices, err)) {
+    if (!mux->list_devices_for_service(devices, budget.remaining(), cancelled, err)) {
+        budget.check(err);
         return std::nullopt;
     }
     const auto chosen = detail::select_usbmux_device(devices, udid, err, usb_only);
@@ -160,23 +170,26 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
     dev->connection_type_ = chosen->connection_type;
 
     stage(verbose, SCRCTL_TR("lockdown pairing session"));
-    dev->lockdown_ = transport::Lockdown::establish(chosen->device_id, chosen->udid, err);
+    dev->lockdown_ = transport::Lockdown::establish_bounded(chosen->device_id, chosen->udid, budget, err);
     if (!dev->lockdown_) {
         err = SCRCTL_TR("Failed to establish lockdown session: ") + err;
+        budget.check(err);
         return std::nullopt;
     }
     stage(verbose, SCRCTL_TR("Start CoreDeviceProxy"));
-    auto ep = dev->lockdown_->start_service(kCoreDeviceProxy, err);
+    auto ep = dev->lockdown_->start_service_bounded(kCoreDeviceProxy, budget, err);
     if (!ep) {
         err = SCRCTL_TR("Start ") + std::string(kCoreDeviceProxy) + SCRCTL_TR(" failed: ") + err + proxy_failure_hint(err);
+        budget.check(err);
         return std::nullopt;
     }
     stage(verbose, SCRCTL_TR("CDTunnel handshake"));
-    auto tunnel = transport::PacketTunnel::establish(chosen->device_id, ep->port,
+    auto tunnel = transport::PacketTunnel::establish_bounded(chosen->device_id, ep->port,
                                                     dev->lockdown_->identity(), ep->requires_tls,
-                                                    err);
+                                                    budget, err);
     if (!tunnel) {
         err = SCRCTL_TR("Failed to establish packet tunnel: ") + err;
+        budget.check(err);
         return std::nullopt;
     }
     // 从配对 HostID 确定性生成稳定 RSD 身份；已有 UUID 保持原值，
@@ -184,19 +197,22 @@ std::optional<Device> Device::establish(std::string_view udid, std::string &err,
     auto uuid = peer_uuid_from_host_id(dev->lockdown_->host_id());
     if (!uuid) {
         err = SCRCTL_TR("Cannot construct a stable peer identity from pairing HostID");
+        budget.check(err);
         return std::nullopt;
     }
     PeerIdentity identity;
     identity.uuid = *uuid;
 
     stage(verbose, SCRCTL_TR("Connect to RSD inside tunnel and read directory"));
-    if (!dev->finish_session(std::move(*tunnel), identity, verbose, err)) {
+    if (!dev->finish_session(std::move(*tunnel), identity, budget, verbose, err)) {
+        budget.check(err);
         return std::nullopt;
     }
     return dev;
 }
 
-bool Device::finish_session(transport::PacketTunnel &&tunnel, PeerIdentity identity, bool verbose,
+bool Device::finish_session(transport::PacketTunnel &&tunnel, PeerIdentity identity,
+                            const transport::IoBudget &budget, bool verbose,
                             std::string &err) {
     tunnel_ = std::make_unique<transport::PacketTunnel>(std::move(tunnel));
     stage(verbose, SCRCTL_TR("Connect to RSD inside tunnel and read directory"));
@@ -212,7 +228,7 @@ bool Device::finish_session(transport::PacketTunnel &&tunnel, PeerIdentity ident
     if (!stack_->start_pump(err)) {
         return false;
     }
-    rsd_ = Rsd::open(*stack_, *tunnel_, identity, err, verbose);
+    rsd_ = Rsd::open_bounded(*stack_, *tunnel_, identity, budget, err, verbose);
     if (!rsd_) {
         return false;
     }
@@ -223,13 +239,23 @@ bool Device::finish_session(transport::PacketTunnel &&tunnel, PeerIdentity ident
 std::optional<Device> Device::establish_wifi(const std::string &address,
                                              const wifi::PairRecord &record, std::string &err,
                                              bool verbose, uint16_t port) {
+    transport::IoBudget budget;
+    return establish_wifi_bounded(address, record, budget, err, verbose, port);
+}
+
+std::optional<Device> Device::establish_wifi_bounded(const std::string &address,
+    const wifi::PairRecord &record, const transport::IoBudget &budget,
+    std::string &err, bool verbose, uint16_t port) {
+    if (!budget.check(err)) return std::nullopt;
     // 本地记录问题应在连接前报出，避免网络不可达掩盖重新配对的原因。
     if (!record.complete()) {
         err = SCRCTL_TR("Pairing record incomplete; cannot sign");
+        budget.check(err);
         return std::nullopt;
     }
     if (!record.has_peer_identity()) {
         err = SCRCTL_TR("Pairing record has no device identity; pair again over USB");
+        budget.check(err);
         return std::nullopt;
     }
     std::optional<Device> dev;
@@ -238,12 +264,20 @@ std::optional<Device> Device::establish_wifi(const std::string &address,
     dev->connection_type_ = "WiFi";
 
     stage(verbose, SCRCTL_TR("LAN pair-verify"));
-    auto control = transport::connect_tcp(address, port, 5000, err);
+    // Preserve the short TCP fallback while all stages share the parent deadline.
+    const auto connect = [&](uint16_t target_port) {
+        transport::IoBudget tcp_budget({std::min(budget.remaining(), std::chrono::milliseconds(5000)),
+                                        [&budget] { return budget.stopped(); }});
+        return transport::connect_tcp_bounded(address, target_port, tcp_budget, err);
+    };
+    auto control = connect(port);
     if (!control) {
         err = SCRCTL_TR("Cannot connect to device RemotePairing port ") + address + ":" + std::to_string(port) +
               "：" + err + SCRCTL_TR(" (check that the device is reachable on this network and has been paired)");
+        budget.check(err);
         return std::nullopt;
     }
+    transport::SocketBudgetGuard control_guard(*control, budget);
     wifi::SocketStream stream(*control);
     wifi::FramedCarrier carrier(stream);
     wifi::Rppairing channel(carrier);
@@ -255,28 +289,33 @@ std::optional<Device> Device::establish_wifi(const std::string &address,
         } else {
             err = SCRCTL_TR("pair-verify failed: ") + verified.error;
         }
+        budget.check(err);
         return std::nullopt;
     }
 
     stage(verbose, SCRCTL_TR("Request device tunnel port"));
     const auto listener = wifi::request_tcp_listener(channel, verified.shared_secret, err);
     if (!listener) {
+        budget.check(err);
         return std::nullopt;
     }
     // 已取得隧道监听端口，关闭配对控制通道；隧道使用独立 TCP 连接。
+    if (!control_guard.finish(err)) return std::nullopt;
     control->close();
 
     stage(verbose, SCRCTL_TR("TLS-PSK and CDTunnel handshake"));
-    auto tunnel_sock = transport::connect_tcp(address, *listener, 5000, err);
+    auto tunnel_sock = connect(*listener);
     if (!tunnel_sock) {
         err = SCRCTL_TR("Cannot connect to tunnel port ") + std::to_string(*listener) + "：" + err;
+        budget.check(err);
         return std::nullopt;
     }
     auto tunnel =
-        transport::PacketTunnel::establish_psk(std::move(*tunnel_sock), verified.shared_secret,
-                                               err);
+        transport::PacketTunnel::establish_psk_bounded(std::move(*tunnel_sock), verified.shared_secret,
+                                               budget, err);
     if (!tunnel) {
         err = SCRCTL_TR("Failed to establish packet tunnel: ") + err;
+        budget.check(err);
         return std::nullopt;
     }
 
@@ -284,14 +323,20 @@ std::optional<Device> Device::establish_wifi(const std::string &address,
     const auto uuid = parse_uuid_text(record.host_identifier);
     if (!uuid) {
         err = SCRCTL_TR("Pairing host identifier is not a valid UUID; cannot construct a stable peer identity");
+        budget.check(err);
         return std::nullopt;
     }
     PeerIdentity identity;
     identity.uuid = *uuid;
-    if (!dev->finish_session(std::move(*tunnel), identity, verbose, err)) {
+    if (!dev->finish_session(std::move(*tunnel), identity, budget, verbose, err)) {
+        budget.check(err);
         return std::nullopt;
     }
     return dev;
+}
+
+void Device::interrupt_startup() {
+    if (tunnel_) tunnel_->shutdown();
 }
 
 std::string Device::property(std::string_view key) const {

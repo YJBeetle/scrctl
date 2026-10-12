@@ -5,6 +5,9 @@
 #include <string>
 
 #include "transport/Usbmux.h"
+#include "transport/IoBudget.h"
+#include <functional>
+#include <vector>
 
 namespace scrctl::transport {
 
@@ -18,5 +21,29 @@ namespace scrctl::transport {
 /// 丢包，无限等就变成一个看不出原因的卡死）。
 std::optional<Socket> connect_tcp(const std::string &host, uint16_t port, int timeout_ms,
                                   std::string &err);
+
+/// DNS and every address candidate share budget. Numeric addresses avoid DNS.
+/// At most two outstanding hostname resolutions are allowed process-wide. A
+/// timed-out system resolver may finish in the background; further hostname
+/// attempts are rejected while both slots remain occupied.
+std::optional<Socket> connect_tcp_bounded(const std::string &host, uint16_t port,
+                                         const IoBudget &budget, std::string &err);
+
+namespace detail {
+struct TcpAddress {
+    sockaddr_storage address{};
+    socklen_t length = 0;
+    int family = 0;
+    int type = SOCK_STREAM;
+    int protocol = 0;
+};
+// Offline test boundary. Resolver captures must own their state: they can
+// outlive the call after cancellation, but never receive the caller's budget.
+using TcpResolver = std::function<std::vector<TcpAddress>(const std::string &, uint16_t,
+                                                         std::string &)>;
+std::optional<Socket> connect_tcp_bounded_with_resolver(
+    const std::string &host, uint16_t port, const IoBudget &budget,
+    std::string &err, TcpResolver resolver);
+} // namespace detail
 
 }  // namespace scrctl::transport

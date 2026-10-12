@@ -112,9 +112,9 @@ TlsChannel &TlsChannel::operator=(TlsChannel &&other) noexcept {
 
 void TlsChannel::release() {
     if (ssl_ != nullptr) {
-        if (SSL_is_init_finished(ssl_)) {
-            SSL_shutdown(ssl_);
-        }
+        // Destruction must never perform blocking network I/O. Socket ownership
+        // belongs to the caller; closing/interruption tears down this endpoint.
+        // Failed handshakes likewise only free their local OpenSSL state.
         SSL_free(ssl_);
         ssl_ = nullptr;
     }
@@ -284,6 +284,32 @@ bool TlsChannel::handshake_psk(Socket &sock, const std::vector<uint8_t> &psk, st
     ctx_ = ctx.release();
     ssl_ = ssl.release();
     psk_ = std::move(stored_psk);
+    return true;
+}
+
+bool TlsChannel::handshake_bounded(Socket &sock, const PemIdentity &id,
+        const IoBudget &budget, std::string &err) {
+    if (!budget.check(err)) { release(); return false; }
+    SocketBudgetGuard guard(sock, budget);
+    const bool ok = handshake(sock, id, err);
+    if (!guard.finish(err) || !ok) {
+        sock.interrupt();
+        release();
+        return false;
+    }
+    return true;
+}
+
+bool TlsChannel::handshake_psk_bounded(Socket &sock, const std::vector<uint8_t> &psk,
+        const IoBudget &budget, std::string &err) {
+    if (!budget.check(err)) { release(); return false; }
+    SocketBudgetGuard guard(sock, budget);
+    const bool ok = handshake_psk(sock, psk, err);
+    if (!guard.finish(err) || !ok) {
+        sock.interrupt();
+        release();
+        return false;
+    }
     return true;
 }
 

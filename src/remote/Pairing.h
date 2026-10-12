@@ -23,6 +23,8 @@ struct UsbPairingOptions {
     /// 传输或身份校验失败不会触发重新配对。记录属于另一 UDID 时始终拒绝覆盖。
     bool allow_repair = false;
     std::function<void(std::string_view)> progress;
+    /// May be polled from an I/O cancellation monitor; must be thread safe.
+    std::function<bool()> should_cancel;
 };
 
 struct PairingResult {
@@ -38,7 +40,7 @@ struct PairingResult {
 /// 使用新服务连接 PairVerify 成功后才保存，保存失败返回 ok=false。
 /// 设备已执行的配对不能回滚；重新配对后保存失败可能使旧文件不再可用。
 /// timeout_ms 范围为 1..300000，限制每次配对回复等待（包括用户确认），
-/// 不表示整个流程的总 deadline；USB 隧道和 RSD 建立沿用 Device 的等待规则。
+/// 不表示整个流程的总 deadline；每次 USB 隧道和 RSD 准备有独立 30 秒预算，可通过 should_cancel 中断。
 PairingResult pair_usb_remote(const UsbPairingOptions &options = {});
 
 namespace detail {

@@ -12,6 +12,8 @@
 #include <filesystem>
 #include <memory>
 #include <utility>
+#include <thread>
+#include <stop_token>
 
 namespace scrctl::remote {
 namespace {
@@ -30,18 +32,50 @@ void progress(const UsbPairingOptions &options, std::string_view message) {
     if (options.progress) options.progress(message);
 }
 
+bool cancelled(const UsbPairingOptions &options, std::string &error) {
+    try {
+        if (!options.should_cancel || !options.should_cancel()) return false;
+        error = SCRCTL_TR("USB pairing cancelled");
+    } catch (...) { error = SCRCTL_TR("USB pairing cancellation callback failed"); }
+    return true;
+}
+
+// Per-reply timeouts remain unchanged. This monitor only observes cancellation
+// and closes the service TCP endpoint via its existing stop callback.
+class PairingCancellation {
+public:
+    explicit PairingCancellation(std::function<bool()> should_cancel)
+        : worker_([this, should_cancel = std::move(should_cancel)](std::stop_token stop) {
+            while (!stop.stop_requested()) {
+                bool cancelled = false;
+                try { cancelled = should_cancel && should_cancel(); }
+                catch (...) { cancelled = true; }
+                if (cancelled) { source_.request_stop(); return; }
+                std::this_thread::sleep_for(std::chrono::milliseconds(25));
+            }
+        }) {}
+    std::stop_token token() const { return source_.get_token(); }
+    void stop() { source_.request_stop(); }
+private:
+    std::stop_source source_;
+    std::jthread worker_;
+};
+
 struct UsbPairingChannel {
     // carrier 引用 connection，connection 引用 Device 的 Stack；按逆序释放。
     std::optional<Device> device;
+    std::unique_ptr<PairingCancellation> cancellation;
     std::unique_ptr<ServiceConnection> connection;
     std::unique_ptr<XpcPairingCarrier> carrier;
     std::unique_ptr<wifi::Rppairing> channel;
 };
 
 std::unique_ptr<UsbPairingChannel> open_pairing_channel(const std::string &udid,
-                                                     int timeout_ms, std::string &error) {
+                                                     const UsbPairingOptions &options, std::string &error) {
+    if (cancelled(options, error)) return nullptr;
+    transport::IoBudget budget({std::chrono::seconds(30), options.should_cancel});
     auto opened = std::make_unique<UsbPairingChannel>();
-    opened->device = Device::establish(udid, error, false, true);
+    opened->device = Device::establish_bounded(udid, budget, error, false, true);
     if (!opened->device) return nullptr;
     // 除选择阶段的过滤，再检查实际连接归属；热插拔变化不能降级为网络首次信任。
     if (opened->device->udid() != udid || opened->device->connection_type() != "USB") {
@@ -57,20 +91,27 @@ std::unique_ptr<UsbPairingChannel> open_pairing_channel(const std::string &udid,
         error = SCRCTL_TR("USB RemotePairing service does not support RemoteXPC");
         return nullptr;
     }
-    opened->connection = opened->device->connect(kPairingService, error);
+    opened->cancellation = std::make_unique<PairingCancellation>(options.should_cancel);
+    transport::BudgetWatchdog preparation(budget, [&] {
+        opened->cancellation->stop();
+        opened->device->interrupt_startup();
+    });
+    opened->connection = opened->device->connect(kPairingService, error, false,
+                                                opened->cancellation->token());
     if (!opened->connection) return nullptr;
 
     // 设备可能先发送 ServiceVersion。超时允许继续握手，连接断开则不能继续。
     // 版本消息不包含配对信封；未发请求前出现其它消息属于意外协议状态。
     xpc::Value initial;
-    const auto status = opened->connection->wait_message(initial, std::min(timeout_ms, 5000), error);
+    const auto status = opened->connection->wait_message(initial, std::min(options.timeout_ms, 5000), error);
     if (status == Channel::Wait::Broken) return nullptr;
     if (status == Channel::Wait::Message && !initial.find("ServiceVersion")) {
         error = SCRCTL_TR("Unexpected initial USB RemotePairing message");
         return nullptr;
     }
+    if (!preparation.finish(error) || cancelled(options, error)) return nullptr;
     error.clear();
-    opened->carrier = std::make_unique<XpcPairingCarrier>(*opened->connection, timeout_ms);
+    opened->carrier = std::make_unique<XpcPairingCarrier>(*opened->connection, options.timeout_ms);
     opened->channel = std::make_unique<wifi::Rppairing>(*opened->carrier);
     return opened;
 }
@@ -102,7 +143,7 @@ PairingResult detail::run_usb_pairing_workflow(std::string_view selected_udid,
                                              const PairingWorkflowOperations &operations) {
     PairingResult result;
     result.udid = selected_udid;
-    if (!validate(options, result.error)) return result;
+    if (!validate(options, result.error) || cancelled(options, result.error)) return result;
     if (selected_udid.empty() || (!options.udid.empty() && options.udid != selected_udid)) {
         result.error = SCRCTL_TR("USB pairing device selection is invalid");
         return result;
@@ -142,7 +183,9 @@ PairingResult detail::run_usb_pairing_workflow(std::string_view selected_udid,
             }
             if (existing && existing->complete() && existing->has_peer_identity()) {
                 progress(options, SCRCTL_TR("Verifying the existing USB pairing record"));
+                if (cancelled(options, result.error)) return result;
                 const auto verified = operations.verify(*existing, error);
+                if (cancelled(options, result.error)) return result;
                 if (verified.outcome == wifi::VerifyOutcome::Paired) {
                     result.ok = true;
                     result.reused = true;
@@ -177,7 +220,9 @@ PairingResult detail::run_usb_pairing_workflow(std::string_view selected_udid,
         }
         progress(options, SCRCTL_TR("Starting USB pairing; confirm the request on the device"));
         std::string error;
+        if (cancelled(options, result.error)) return result;
         const auto setup = operations.setup(host_identifier, hostname, selected_udid, error);
+        if (cancelled(options, result.error)) return result;
         if (!setup.ok) {
             result.error = SCRCTL_TR("USB pair setup failed: ") + (setup.error.empty() ? error : setup.error);
             return result;
@@ -188,7 +233,9 @@ PairingResult detail::run_usb_pairing_workflow(std::string_view selected_udid,
             return result;
         }
         progress(options, SCRCTL_TR("Reconnecting to verify the new USB pairing record"));
+        if (cancelled(options, result.error)) return result;
         const auto verified = operations.verify(setup.record, error);
+        if (cancelled(options, result.error)) return result;
         if (verified.outcome != wifi::VerifyOutcome::Paired) {
             result.error = SCRCTL_TR("New USB pairing record verification failed: ") +
                 (verified.error.empty() ? error : verified.error);
@@ -209,10 +256,14 @@ PairingResult detail::run_usb_pairing_workflow(std::string_view selected_udid,
 
 PairingResult pair_usb_remote(const UsbPairingOptions &options) {
     PairingResult result;
-    if (!validate(options, result.error)) return result;
+    if (!validate(options, result.error) || cancelled(options, result.error)) return result;
     std::string error;
-    const auto devices = Device::list(error);
-    if (!error.empty()) {
+    std::vector<transport::DeviceRecord> devices;
+    const auto status = transport::Usbmux::list_devices_for_discovery(devices,
+        std::chrono::milliseconds(1000), options.should_cancel, error);
+    if (status != transport::UsbmuxDiscoveryStatus::complete) {
+        if (cancelled(options, result.error)) return result;
+        if (error.empty()) error = SCRCTL_TR("USB pairing enumeration timed out or service is unavailable");
         result.error = SCRCTL_TR("Cannot enumerate devices for USB pairing: ") + error;
         return result;
     }
@@ -221,7 +272,7 @@ PairingResult pair_usb_remote(const UsbPairingOptions &options) {
 
     detail::PairingWorkflowOperations operations;
     operations.verify = [&](const wifi::PairRecord &record, std::string &operation_error) {
-        auto opened = open_pairing_channel(selected->udid, options.timeout_ms, operation_error);
+        auto opened = open_pairing_channel(selected->udid, options, operation_error);
         if (!opened) {
             wifi::PairVerifyResult failed;
             failed.error = operation_error;
@@ -231,7 +282,7 @@ PairingResult pair_usb_remote(const UsbPairingOptions &options) {
     };
     operations.setup = [&](std::string_view host_identifier, std::string_view hostname,
                            std::string_view udid, std::string &operation_error) {
-        auto opened = open_pairing_channel(selected->udid, options.timeout_ms, operation_error);
+        auto opened = open_pairing_channel(selected->udid, options, operation_error);
         if (!opened) {
             wifi::PairSetupResult failed;
             failed.error = operation_error;

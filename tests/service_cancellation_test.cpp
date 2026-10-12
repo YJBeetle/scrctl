@@ -3,6 +3,7 @@
 #include "remote/Device.h"
 #include "remote/Pasteboard.h"
 #include "remote/Rsd.h"
+#include "transport/Tunnel.h"
 #include "net/LwipRuntime.h"
 
 #include <atomic>
@@ -34,9 +35,10 @@ struct Peer {
     tcp_pcb *pcb = nullptr;
     std::vector<uint8_t> bytes;
     bool credit = true;
+    bool eof = false;
     static err_t receive(void *arg, tcp_pcb *pcb, pbuf *p, err_t) {
         auto &self = *static_cast<Peer *>(arg);
-        if (!p) return ERR_OK;
+        if (!p) { self.eof = true; return ERR_OK; }
         const auto n = self.bytes.size();
         self.bytes.resize(n + p->tot_len);
         pbuf_copy_partial(p, self.bytes.data() + n, p->tot_len, 0);
@@ -97,6 +99,11 @@ struct Server {
             require(tcp_output(peers[n]->pcb) == ERR_OK, "peer output");
         });
     }
+    bool alive(size_t n) {
+        return net::LwipRuntime::instance().call([&] {
+            return peers.at(n)->pcb != nullptr && !peers.at(n)->eof;
+        });
+    }
     void stop_credit(size_t n) {
         net::LwipRuntime::instance().call([&] { peers.at(n)->credit = false; });
     }
@@ -134,6 +141,122 @@ std::unique_ptr<remote::ServiceConnection> open(Link &link, std::stop_token toke
     require(opening.wait_for(2s) == std::future_status::ready, "XPC open completes");
     return opening.get();
 }
+// These linked stacks provide the real lwIP TCP path. PacketTunnel is only
+// borrowed for its negotiated RSD port; its unused host socket stays invalid.
+void rsd_port(transport::PacketTunnel &tunnel) {
+    const_cast<transport::TunnelParams &>(tunnel.params()).rsd_port = 12345;
+}
+void rsd_pre_cancel_and_pending_connect() {
+    MemoryTunnel tunnel;
+    std::atomic<unsigned> packets{0};
+    tunnel.deliver = [&](auto) { ++packets; };
+    net::Stack stack(tunnel, "fd00:85::1", "fd00:85::2");
+    transport::PacketTunnel params;
+    rsd_port(params);
+    std::atomic<bool> cancel{true};
+    transport::IoBudget budget({2s, [&] { return cancel.load(); }});
+    std::string err;
+    require(stack.start_pump(err), "RSD pending stack start");
+    require(!remote::Rsd::open_bounded(stack, params, {}, budget, err) &&
+            err == "Device startup cancelled" && packets == 0,
+            "RSD pre-cancel emits no SYN");
+    cancel = false;
+    transport::IoBudget connecting({2s, [&] { return cancel.load(); }});
+    auto pending = std::async(std::launch::async, [&] {
+        std::string why;
+        return !remote::Rsd::open_bounded(stack, params, {}, connecting, why) &&
+               why == "Device startup cancelled";
+    });
+    until([&] { return packets.load() != 0; });
+    cancel = true;
+    require(pending.wait_for(1s) == std::future_status::ready && pending.get(),
+            "RSD cancellation interrupts pending TCP connect");
+}
+void rsd_silent_handshake(bool cancel_handshake) {
+    Link link;
+    transport::PacketTunnel params;
+    rsd_port(params);
+    std::atomic<bool> cancel{false};
+    transport::IoBudget budget({cancel_handshake ? 2s : 180ms,
+                               [&] { return cancel.load(); }});
+    auto pending = std::async(std::launch::async, [&] {
+        std::string why;
+        return !remote::Rsd::open_bounded(link.client, params, {}, budget, why) &&
+               why == (cancel_handshake ? "Device startup cancelled" : "Device startup timed out");
+    });
+    until([&] { return link.peer->size(0) >= http2::kClientPrefaceSize; });
+    if (cancel_handshake) cancel = true;
+    require(pending.wait_for(1s) == std::future_status::ready && pending.get(),
+            "shared budget interrupts silent HTTP/2 handshake");
+}
+void rsd_announce_budget(bool trickle) {
+    Link link;
+    transport::PacketTunnel params;
+    rsd_port(params);
+    transport::IoBudget budget({300ms, {}});
+    const auto started = std::chrono::steady_clock::now();
+    auto pending = std::async(std::launch::async, [&] {
+        std::string why;
+        return !remote::Rsd::open_bounded(link.client, params, {}, budget, why) &&
+               why == "Device startup timed out";
+    });
+    until([&] { return link.peer->size(0) >= http2::kClientPrefaceSize; });
+    // Consume most of the initial budget before allowing HTTP/2 to finish.
+    std::this_thread::sleep_for(150ms);
+    const auto before = link.peer->size(0);
+    link.peer->send(0, http2::settings_frame({}));
+    until([&] { return link.peer->size(0) > before; });
+    if (trickle) {
+        auto body = xpc::make_dict();
+        xpc::dict_set(body, "Services", xpc::make_dict());
+        const auto frame = http2::data_frame(1, xpc::encode_message(
+            xpc::kFlagAlwaysSet | xpc::kFlagDataPresent, 1, &body));
+        // Partial bytes keep arriving, but must not restart the total budget.
+        for (size_t n = 0; n < 8; ++n) {
+            link.peer->send(0, std::span<const uint8_t>(frame.data() + n, 1));
+            std::this_thread::sleep_for(12ms);
+        }
+    }
+    require(pending.wait_for(1s) == std::future_status::ready && pending.get(),
+            "absolute budget interrupts peer_info silence or partial frame trickle");
+    require(std::chrono::steady_clock::now() - started < 800ms,
+            "SETTINGS completion does not reset directory read budget");
+}
+void rsd_success_releases_budget() {
+    Link link;
+    transport::PacketTunnel params;
+    rsd_port(params);
+    std::atomic<bool> cancel{false};
+    std::optional<remote::Rsd> rsd;
+    {
+        transport::IoBudget budget({350ms, [&] { return cancel.load(); }});
+        auto pending = std::async(std::launch::async, [&] {
+            std::string why;
+            auto result = remote::Rsd::open_bounded(link.client, params, {}, budget, why);
+            if (!result) throw std::runtime_error(why);
+            return result;
+        });
+        until([&] { return link.peer->size(0) >= http2::kClientPrefaceSize; });
+        link.peer->send(0, http2::settings_frame({}));
+        auto body = xpc::make_dict();
+        auto directory = xpc::make_dict();
+        auto service = xpc::make_dict();
+        xpc::dict_set(service, "Port", xpc::make_uint64(12345));
+        xpc::dict_set(directory, "test.plain", std::move(service));
+        xpc::dict_set(body, "Services", std::move(directory));
+        link.peer->send(0, http2::data_frame(1, xpc::encode_message(
+            xpc::kFlagAlwaysSet | xpc::kFlagDataPresent, 1, &body)));
+        require(pending.wait_for(1s) == std::future_status::ready, "bounded RSD completes");
+        rsd = pending.get();
+    } // Budget and its cancellation predicate can be destroyed after delivery.
+    cancel = true;
+    std::this_thread::sleep_for(400ms);
+    require(link.peer->alive(0), "completed RSD control survives old deadline and cancellation");
+    std::string err;
+    require(rsd->has_service("test.plain") && rsd->connect_service("test.plain", err),
+            "delivered RSD still connects services after startup budget expires");
+}
+
 void stopped_before_connect() {
     MemoryTunnel tunnel;
     std::atomic<unsigned> packets{0};
@@ -301,6 +424,12 @@ void destroy_registration() {
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     try {
+        rsd_pre_cancel_and_pending_connect();
+        rsd_silent_handshake(false);
+        rsd_silent_handshake(true);
+        rsd_announce_budget(false);
+        rsd_announce_budget(true);
+        rsd_success_releases_budget();
         stopped_before_connect();
         cancel_connect();
         cancel_handshake();

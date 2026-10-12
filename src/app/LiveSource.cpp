@@ -58,20 +58,32 @@ bool LiveSource::finish_recording(std::string &err) {
 }
 
 bool LiveSource::start(const Options &config, std::string &err) {
+    const scrctl::transport::IoBudget budget({std::chrono::seconds(30), config.should_cancel});
+    std::unique_ptr<scrctl::transport::BudgetWatchdog> startup_watch;
+    const bool started = [&]() -> bool {
     const auto &serial = config.serial, &wifi = config.wifi, &record_path = config.record_path;
     const auto &video_source = config.video_source, &test_degrade = config.test_degrade;
-    const auto &should_cancel = config.should_cancel;
     const bool hw_decode = config.hw_decode, watch_display = config.watch_display;
     const bool want_audio = config.want_audio, audio_dup = config.audio_dup;
     const bool decode_audio = config.decode_audio, decode_video = config.want_video && config.decode_video;
     const int audio_buffer_ms = config.audio_buffer_ms, record_orientation = config.record_orientation;
     const uint16_t wifi_port = config.wifi_port;
-    const auto cancelled = [&] {
-        if (!should_cancel || !should_cancel()) {
-            return false;
+    const auto cancelled = [&] { return !budget.check(err); };
+    // Poll source readiness in short slices: closing startup transport wakes RPCs,
+    // but a first-frame CV may otherwise continue its independent five-second wait.
+    const auto wait_first = [&](const auto &ready) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (!cancelled()) {
+            const auto left = std::chrono::ceil<std::chrono::milliseconds>(
+                deadline - std::chrono::steady_clock::now());
+            if (left.count() <= 0) return false;
+            const auto slice = std::min({left, budget.remaining(), std::chrono::milliseconds(25)});
+            if (slice.count() <= 0) return false;
+            if (ready(static_cast<int>(slice.count()))) return !cancelled();
+            // A terminal producer can return immediately rather than waiting.
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
-        err = SCRCTL_TR("Device startup cancelled");
-        return true;
+        return false;
     };
     want_video_ = config.want_video;
     decode_video_ = decode_video;
@@ -135,7 +147,7 @@ bool LiveSource::start(const Options &config, std::string &err) {
         err = SCRCTL_TR("Invalid --test-degrade: ") + err;
         return false;
     }
-    auto dev = open_device(serial, wifi, err, wifi_port, config.should_cancel);
+    auto dev = open_device(serial, wifi, err, wifi_port, [&budget] { return budget.stopped(); });
     if (!dev) {
         return false;
     }
@@ -143,6 +155,10 @@ bool LiveSource::start(const Options &config, std::string &err) {
         return false;
     }
     device_ = std::make_unique<scrctl::remote::Device>(std::move(*dev));
+    // Device address stays stable until this scoped monitor has joined. Do not
+    // capture pump/audio members: startup assigns those on the calling thread.
+    startup_watch = std::make_unique<scrctl::transport::BudgetWatchdog>(
+        budget, [device = device_.get()] { device->interrupt_startup(); });
 
     if (!want_video_ && container_recording) {
         scrctl::media::Recorder::Options ro;
@@ -266,7 +282,7 @@ bool LiveSource::start(const Options &config, std::string &err) {
         scrctl::Frame first;
         if (screenshot_.source != nullptr) {
             uint64_t s = 0;
-            if (!screenshot_.source->latest(first, s, 5000)) {
+            if (!wait_first([&](int ms) { return screenshot_.source->latest(first, s, ms); })) {
                 err = SCRCTL_TR("No first screenshot within 5 seconds");
                 screenshot_.source.reset();
                 return false;
@@ -274,11 +290,11 @@ bool LiveSource::start(const Options &config, std::string &err) {
             // 用局部序号读取首张截图，主循环仍可取得这张图。PNG 是已摆正的可见区，
             // 不能直接用它覆盖面板轴上的尺寸与原始方向；取帧时分别发布这两种几何。
         } else if (decode_video) {
-            if (!pump_->latest(first, 5000)) {
+            if (!wait_first([&](int ms) { return pump_->latest(first, ms); })) {
                 err = SCRCTL_TR("No first decoded frame within 5 seconds");
                 return false;
             }
-        } else if (!pump_->wait_ready(5000)) {
+        } else if (!wait_first([&](int ms) { return pump_->wait_ready(ms); })) {
             err = pump_->capture_error();
             if (err.empty()) err = SCRCTL_TR("No valid recording IDR within 5 seconds");
             return false;
@@ -400,6 +416,11 @@ bool LiveSource::start(const Options &config, std::string &err) {
         std::printf(SCRCTL_TR(" (test mode)\n"));
     }
     return true;
+    }();
+    // Normalize errors on every startup exit, including optional/fallback RPCs.
+    // Successful delivery must remove the watchdog before the budget is destroyed.
+    if (startup_watch && !startup_watch->finish(err)) return false;
+    return budget.check(err) && started;
 }
 
 bool LiveSource::start_playback(std::string &err) {

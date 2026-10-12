@@ -94,5 +94,68 @@ int main() {
                   received == 'x',
               "connected socket transfers bytes");
     }
+    using namespace std::chrono;
+    using scrctl::transport::IoBudget;
+    using scrctl::transport::connect_tcp_bounded;
+    for (const char *host : {"127.0.0.1", "localhost"}) {
+        IoBudget budget({seconds(1), {}});
+        auto client = connect_tcp_bounded(host, port, budget, err);
+        check(client.has_value() && err.empty(), "bounded numeric/hostname connection succeeds");
+        if (client) {
+            Socket peer(::accept(server.fd(), nullptr, nullptr));
+            char byte = 0;
+            check(peer.valid() && client->write_all("b", 1, err) &&
+                      peer.read_exact(&byte, 1, err) && byte == 'b',
+                  "bounded connection transfers data");
+#ifndef _WIN32
+            check((::fcntl(client->fd(), F_GETFL, 0) & O_NONBLOCK) == 0,
+                  "bounded socket restores blocking mode");
+#endif
+        }
+    }
+    IoBudget expired({milliseconds(0), {}});
+    check(!connect_tcp_bounded("127.0.0.1", port, expired, err) &&
+              err.find("timed out") != std::string::npos,
+          "pre-expired budget does not connect");
+    IoBudget cancelled({seconds(1), [] { return true; }});
+    check(!connect_tcp_bounded("localhost", port, cancelled, err) &&
+              err.find("cancelled") != std::string::npos,
+          "pre-cancelled budget does not resolve");
+
+    // A silent resolver owns all its state. Expiring callers must not wait for
+    // its system call; outstanding workers are capped even after callers leave.
+    auto slow = [](const std::string &, uint16_t, std::string &) {
+        std::this_thread::sleep_for(milliseconds(400));
+        return std::vector<scrctl::transport::detail::TcpAddress>{};
+    };
+    const auto began = steady_clock::now();
+    IoBudget dns_timeout({milliseconds(25), {}});
+    check(!scrctl::transport::detail::connect_tcp_bounded_with_resolver(
+              "slow.invalid", port, dns_timeout, err, slow) &&
+              err.find("timed out") != std::string::npos,
+          "DNS timeout returns before resolver finishes");
+    IoBudget dns_cancel({seconds(1), [began] {
+        return steady_clock::now() - began > milliseconds(60);
+    }});
+    check(!scrctl::transport::detail::connect_tcp_bounded_with_resolver(
+              "slow.invalid", port, dns_cancel, err, slow) &&
+              err.find("cancelled") != std::string::npos,
+          "DNS cancellation returns before resolver finishes");
+    check(steady_clock::now() - began < milliseconds(300), "DNS waits honor caller budget");
+    IoBudget overload({seconds(1), {}});
+    check(!scrctl::transport::detail::connect_tcp_bounded_with_resolver(
+              "slow.invalid", port, overload, err, slow) &&
+              err.find("outstanding") != std::string::npos,
+          "outstanding resolver jobs are bounded");
+    IoBudget numeric_during_dns({seconds(1), {}});
+    auto numeric = connect_tcp_bounded("127.0.0.1", port, numeric_during_dns, err);
+    check(numeric.has_value(), "numeric addresses bypass occupied DNS slots");
+    if (numeric) { Socket peer(::accept(server.fd(), nullptr, nullptr)); }
+    // Let injected jobs finish before process exit and prove slots are reusable.
+    std::this_thread::sleep_for(milliseconds(425));
+    IoBudget reused({seconds(1), {}});
+    auto resolved_again = connect_tcp_bounded("localhost", port, reused, err);
+    check(resolved_again.has_value(), "completed DNS jobs release slots");
+    if (resolved_again) { Socket peer(::accept(server.fd(), nullptr, nullptr)); }
     return failures ? 1 : 0;
 }

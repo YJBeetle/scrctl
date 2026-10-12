@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-11 03:36+0800\n"
+"POT-Creation-Date: 2026-10-12 20:34+0800\n"
 "PO-Revision-Date: 2026-10-09 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -19,8 +19,8 @@ msgid ""
 "table)\n"
 msgstr "可见区 %ux%u -> %dx%d（设备未报告尺寸，使用机型表）\n"
 
-#: src/app/Application.cpp:82 src/app/Commands.cpp:140 src/app/Commands.cpp:149
-#: src/app/Commands.cpp:263
+#: src/app/Application.cpp:82 src/app/Commands.cpp:144 src/app/Commands.cpp:152
+#: src/app/Commands.cpp:161
 #, c-format
 msgid "SDL initialization failed: %s\n"
 msgstr "SDL 初始化失败: %s\n"
@@ -233,7 +233,7 @@ msgstr "结束：编码视频录制已完成收尾\n"
 msgid "Finished: processed %d frames\n"
 msgstr "完成：处理 %d 帧\n"
 
-#: src/app/AudioOut.cpp:11 src/app/LiveSource.cpp:411
+#: src/app/AudioOut.cpp:11 src/app/LiveSource.cpp:432
 msgid "Audio playback is unavailable because PCM decoding is disabled"
 msgstr "音频未解码为 PCM，无法在电脑播放"
 
@@ -627,7 +627,7 @@ msgstr "需要非空设备标识"
 msgid "Requires a nonempty directory path"
 msgstr "需要非空目录路径"
 
-#: src/app/Cli.cpp:246 src/app/LiveSource.cpp:82
+#: src/app/Cli.cpp:246 src/app/LiveSource.cpp:94
 msgid "Requires a nonempty recording file"
 msgstr "需要非空的录制文件路径"
 
@@ -650,7 +650,7 @@ msgstr "仅录音频需要使用 MP4 或 MKV；裸 HEVC 无法保存音频"
 msgid "Recording requires at least one enabled audio or video track"
 msgstr "录制需要至少启用音频或视频中的一项"
 
-#: src/app/Cli.cpp:275 src/app/LiveSource.cpp:97
+#: src/app/Cli.cpp:275 src/app/LiveSource.cpp:109
 msgid "Recording orientation requires a video track"
 msgstr "录制方向需要视频轨道"
 
@@ -660,7 +660,7 @@ msgid ""
 "video capture"
 msgstr "按帧计数、硬件解码、降级测试和截图需要采集视频"
 
-#: src/app/Cli.cpp:284 src/app/LiveSource.cpp:119
+#: src/app/Cli.cpp:284 src/app/LiveSource.cpp:131
 msgid ""
 "Container recording requires live video; screenshot polling cannot be "
 "recorded"
@@ -674,7 +674,7 @@ msgstr ""
 "录制不支持翻转；只翻转显示请使用 --display-orientation，或在后面用 --record-"
 "orientation 指定旋转角度"
 
-#: src/app/Cli.cpp:292 src/app/LiveSource.cpp:129
+#: src/app/Cli.cpp:292 src/app/LiveSource.cpp:141
 msgid ""
 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate "
 "only the display"
@@ -756,7 +756,7 @@ msgstr "匹配设备身份失败"
 msgid "no matching pairing record"
 msgstr "没有匹配的配对记录"
 
-#: src/app/Commands.cpp:65 src/app/Commands.cpp:120 src/app/Commands.cpp:169
+#: src/app/Commands.cpp:65 src/app/Commands.cpp:123 src/app/Commands.cpp:181
 #: src/ddi/Download.cpp:355
 msgid "DDI download cancelled"
 msgstr "DDI 下载已取消"
@@ -765,146 +765,146 @@ msgstr "DDI 下载已取消"
 msgid "Cannot enumerate the target USB device for DDI selection"
 msgstr "无法枚举用于选择 DDI 的目标 USB 设备"
 
-#: src/app/Commands.cpp:101 src/app/Commands.cpp:122 src/app/DdiInstall.cpp:53
-#: src/app/DdiInstall.cpp:79
+#: src/app/Commands.cpp:104 src/app/Commands.cpp:125 src/app/DdiInstall.cpp:56
+#: src/app/DdiInstall.cpp:82
 msgid "DDI target metadata is missing its OS version or product model"
 msgstr "DDI 目标信息缺少系统版本或机型"
 
-#: src/app/Commands.cpp:158 src/app/Commands.cpp:170 src/app/Commands.cpp:179
-#: src/app/Commands.cpp:198
+#: src/app/Commands.cpp:170 src/app/Commands.cpp:182 src/app/Commands.cpp:191
+#: src/app/Commands.cpp:210
 #, c-format
 msgid "DDI download failed: %s\n"
 msgstr "DDI 下载失败：%s\n"
 
-#: src/app/Commands.cpp:182 src/app/DdiInstall.cpp:82
+#: src/app/Commands.cpp:194 src/app/DdiInstall.cpp:85
 #, c-format
 msgid "DDI target: OS %s, model %s, image type %s\n"
 msgstr "DDI 目标：系统 %s，机型 %s，镜像类型 %s\n"
 
-#: src/app/Commands.cpp:189
+#: src/app/Commands.cpp:201
 #, c-format
 msgid "Downloading DDI: %s (%llu/%llu bytes)\n"
 msgstr "正在下载 DDI：%s（%llu/%llu 字节）\n"
 
-#: src/app/Commands.cpp:203
+#: src/app/Commands.cpp:215
 #, c-format
 msgid "Verified cached DDI %s: %s\n"
 msgstr "已校验缓存的 DDI %s：%s\n"
 
-#: src/app/Commands.cpp:204
+#: src/app/Commands.cpp:216
 #, c-format
 msgid "Downloaded and verified DDI %s: %s\n"
 msgstr "已下载并校验 DDI %s：%s\n"
 
-#: src/app/Commands.cpp:206
+#: src/app/Commands.cpp:218
 #, c-format
 msgid "DDI source: %s\n"
 msgstr "DDI 来源：%s\n"
 
-#: src/app/Commands.cpp:207
+#: src/app/Commands.cpp:219
 #, c-format
 msgid ""
 "Download complete; device installation is a separate step. See docs/DDI.md.\n"
 msgstr "下载完成；设备安装是独立步骤，见 docs/DDI.md。\n"
 
-#: src/app/Commands.cpp:216 src/app/DeviceConnection.cpp:237
+#: src/app/Commands.cpp:229 src/app/DeviceConnection.cpp:244
 #, c-format
 msgid "Discovery warning: %s\n"
 msgstr "设备发现提示：%s\n"
 
-#: src/app/Commands.cpp:220
+#: src/app/Commands.cpp:233
 msgid "Wireless device (UDID unknown)"
 msgstr "无线设备（UDID 未知）"
 
-#: src/app/Commands.cpp:232
+#: src/app/Commands.cpp:245
 msgid "address unresolved"
 msgstr "尚未取得地址"
 
-#: src/app/Commands.cpp:248
+#: src/app/Commands.cpp:261
 #, c-format
 msgid "No devices found\n"
 msgstr "未发现设备\n"
 
-#: src/app/Commands.cpp:272
+#: src/app/Commands.cpp:278
 #, c-format
 msgid "Enter this one-use pairing code on the device: %s\n"
 msgstr "请在设备上输入此一次性配对码：%s\n"
 
-#: src/app/Commands.cpp:286
+#: src/app/Commands.cpp:293
 #, c-format
 msgid "Remote pairing failed: %s\n"
 msgstr "远程配对失败：%s\n"
 
-#: src/app/Commands.cpp:290
+#: src/app/Commands.cpp:297
 #, c-format
 msgid "Remote pairing verified for %s\n"
 msgstr "已验证 %s 的远程配对记录\n"
 
-#: src/app/Commands.cpp:291
+#: src/app/Commands.cpp:298
 #, c-format
 msgid "Remote pairing saved for %s\n"
 msgstr "已保存 %s 的远程配对记录\n"
 
-#: src/app/Commands.cpp:300 src/app/Commands.cpp:323
+#: src/app/Commands.cpp:307 src/app/Commands.cpp:330
 #, c-format
 msgid "Failed to establish session: %s\n"
 msgstr "建立会话失败: %s\n"
 
-#: src/app/Commands.cpp:305
+#: src/app/Commands.cpp:312
 #, c-format
 msgid "Failed to list apps: %s\n"
 msgstr "列 App 失败: %s\n"
 
-#: src/app/Commands.cpp:311
+#: src/app/Commands.cpp:318
 #, c-format
 msgid "Total: %zu\n"
 msgstr "共 %zu 个\n"
 
-#: src/app/Commands.cpp:329
+#: src/app/Commands.cpp:336
 #, c-format
 msgid "Wrote %zu bytes to device clipboard\n"
 msgstr "已写入设备剪贴板：%zu 字节\n"
 
-#: src/app/Commands.cpp:331
+#: src/app/Commands.cpp:338
 #, c-format
 msgid "--copy failed: %s\n"
 msgstr "--copy 写入失败: %s\n"
 
-#: src/app/Commands.cpp:338
+#: src/app/Commands.cpp:345
 #, c-format
 msgid "Device clipboard (%zu bytes): "
 msgstr "设备剪贴板（%zu 字节）： "
 
-#: src/app/Commands.cpp:342
+#: src/app/Commands.cpp:349
 #, c-format
 msgid "--paste failed: %s\n"
 msgstr "--paste 读取失败: %s\n"
 
-#: src/app/Commands.cpp:368
+#: src/app/Commands.cpp:375
 #, c-format
 msgid "--start-app requires a nonempty app name\n"
 msgstr "--start-app 的名字是空的\n"
 
-#: src/app/Commands.cpp:378
+#: src/app/Commands.cpp:385
 #, c-format
 msgid "Failed to find app by name: %s\n"
 msgstr "按名字找 App 失败: %s\n"
 
-#: src/app/Commands.cpp:396
+#: src/app/Commands.cpp:403
 #, c-format
 msgid "No app name starts with %s\n"
 msgstr "没有名字以 %s 开头的 App\n"
 
-#: src/app/Commands.cpp:404 tools/app_launch_probe.cpp:89
+#: src/app/Commands.cpp:411 tools/app_launch_probe.cpp:89
 #, c-format
 msgid "Failed to launch %s: %s\n"
 msgstr "启动 %s 失败: %s\n"
 
-#: src/app/Commands.cpp:407
+#: src/app/Commands.cpp:414
 msgid " (previous instance terminated)"
 msgstr "（已先终止原实例）"
 
-#: src/app/Commands.cpp:407
+#: src/app/Commands.cpp:414
 #, c-format
 msgid "Launched %s%s\n"
 msgstr "已启动 %s%s\n"
@@ -921,85 +921,85 @@ msgid ""
 "state before replacing again.\n"
 msgstr "中断的安装可能已生效；再次替换前请检查设备状态。\n"
 
-#: src/app/DdiInstall.cpp:78 src/app/DdiInstall.cpp:110
+#: src/app/DdiInstall.cpp:81 src/app/DdiInstall.cpp:114
 msgid "DDI installation cancelled"
 msgstr "DDI 安装已取消"
 
-#: src/app/DdiInstall.cpp:96
+#: src/app/DdiInstall.cpp:99
 #, c-format
 msgid "DDI transfer: %s (%llu/%llu bytes)\n"
 msgstr "DDI 传输：%s（%llu/%llu 字节）\n"
 
-#: src/app/DdiInstall.cpp:146
+#: src/app/DdiInstall.cpp:150
 msgid "DDI Cryptex is installed but its developer image is not mounted"
 msgstr "DDI Cryptex 已安装，但开发镜像未挂载"
 
-#: src/app/DdiInstall.cpp:149
+#: src/app/DdiInstall.cpp:153
 #, c-format
 msgid "DDI already installed: %s %s (no new installation)\n"
 msgstr "DDI 已安装：%s %s（未进行新的安装）\n"
 
-#: src/app/DdiInstall.cpp:150
+#: src/app/DdiInstall.cpp:154
 #, c-format
 msgid "DDI installed and verified: %s %s\n"
 msgstr "DDI 已安装并验证：%s %s\n"
 
-#: src/app/DdiInstall.cpp:154
+#: src/app/DdiInstall.cpp:158
 msgid "DDI installation requires the device ECID"
 msgstr "DDI 安装需要设备的 ECID"
 
-#: src/app/DdiInstall.cpp:170
+#: src/app/DdiInstall.cpp:174
 #, c-format
 msgid "DDI already mounted: %s (no new installation)\n"
 msgstr "DDI 已挂载：%s（未进行新的安装）\n"
 
-#: src/app/DdiInstall.cpp:171
+#: src/app/DdiInstall.cpp:175
 #, c-format
 msgid "DDI mounted and verified: %s\n"
 msgstr "DDI 已挂载并验证：%s\n"
 
 #: src/app/DeviceConnection.cpp:15 src/app/DeviceConnection.cpp:52
-#: src/app/DeviceConnection.cpp:69 src/app/DeviceConnection.cpp:187
-#: src/app/LiveSource.cpp:73
+#: src/app/DeviceConnection.cpp:71 src/app/DeviceConnection.cpp:189
+#: src/transport/IoBudget.h:50
 msgid "Device startup cancelled"
 msgstr "已取消设备启动"
 
-#: src/app/DeviceConnection.cpp:100
+#: src/app/DeviceConnection.cpp:102
 msgid ""
 "Multiple usable remote pairing records match; select a unique device with -s"
 msgstr "有多份匹配的可用远程配对记录；请用 -s 指定设备"
 
-#: src/app/DeviceConnection.cpp:106
+#: src/app/DeviceConnection.cpp:108
 msgid "No usable remote pairing record matches; pair the device over USB first"
 msgstr "未找到匹配的可用远程配对记录；请先通过 USB 配对设备"
 
-#: src/app/DeviceConnection.cpp:130
+#: src/app/DeviceConnection.cpp:132
 msgid ""
 "No paired wireless device is available; check the network and pair over USB "
 "first"
 msgstr "未找到已配对的无线设备；请检查网络，并先通过 USB 配对"
 
-#: src/app/DeviceConnection.cpp:134
+#: src/app/DeviceConnection.cpp:136
 msgid "Multiple paired wireless devices are available; select one with -s"
 msgstr "发现多台已配对的无线设备；请用 -s 选择其中一台"
 
-#: src/app/DeviceConnection.cpp:154
+#: src/app/DeviceConnection.cpp:156
 msgid "Selected wireless device does not match a usable pairing record"
 msgstr "所选无线设备没有匹配的可用配对记录"
 
-#: src/app/DeviceConnection.cpp:158
+#: src/app/DeviceConnection.cpp:160
 msgid "No usable wireless connection candidate is available"
 msgstr "没有可用的无线连接地址"
 
-#: src/app/DeviceConnection.cpp:173
+#: src/app/DeviceConnection.cpp:175
 msgid "Cannot connect to any discovered wireless address"
 msgstr "发现的无线地址均无法连接"
 
-#: src/app/DeviceConnection.cpp:201 src/remote/Discovery.cpp:242
+#: src/app/DeviceConnection.cpp:203 src/remote/Discovery.cpp:242
 msgid "USB device enumeration is unavailable"
 msgstr "无法枚举 USB 设备"
 
-#: src/app/DeviceConnection.cpp:220
+#: src/app/DeviceConnection.cpp:225
 msgid "Wi-Fi port must be between 1 and 65535"
 msgstr "Wi-Fi 端口必须在 1 到 65535 之间"
 
@@ -1064,116 +1064,116 @@ msgstr "回放文件未解码出任何视频帧"
 msgid "Source ended"
 msgstr "源已结束"
 
-#: src/app/LiveSource.cpp:42 src/app/LiveSource.cpp:695
+#: src/app/LiveSource.cpp:42 src/app/LiveSource.cpp:716
 #: src/media/FramePump.cpp:193
 #, c-format
 msgid "Recording failed: %s. The file may be incomplete.\n"
 msgstr "录制失败：%s。录制文件可能不完整。\n"
 
-#: src/app/LiveSource.cpp:89
+#: src/app/LiveSource.cpp:101
 msgid "Audio-only recording requires MP4 or MKV"
 msgstr "仅录音频需要使用 MP4 或 MKV"
 
-#: src/app/LiveSource.cpp:93
+#: src/app/LiveSource.cpp:105
 msgid "Audio-only recording requires audio capture"
 msgstr "仅录音频需要启用音频采集"
 
-#: src/app/LiveSource.cpp:102 src/media/FramePump.cpp:111
+#: src/app/LiveSource.cpp:114 src/media/FramePump.cpp:111
 msgid "Video capture without decoding requires a recording consumer"
 msgstr "不解码视频时必须指定录制目标"
 
-#: src/app/LiveSource.cpp:106
+#: src/app/LiveSource.cpp:118
 msgid "Video capture without decoding requires a live video stream"
 msgstr "不解码视频的录制需要实时视频流"
 
-#: src/app/LiveSource.cpp:110
+#: src/app/LiveSource.cpp:122
 msgid "Hardware decoding and fallback tests require video decoding"
 msgstr "硬件解码和降级测试需要启用视频解码"
 
-#: src/app/LiveSource.cpp:115 src/media/AudioPump.cpp:104
+#: src/app/LiveSource.cpp:127 src/media/AudioPump.cpp:104
 msgid ""
 "Audio capture without PCM decoding requires a container recording with an "
 "audio track"
 msgstr "不解码音频时，需要录制到包含音轨的 MP4 或 MKV 文件"
 
-#: src/app/LiveSource.cpp:123
+#: src/app/LiveSource.cpp:135
 msgid "Container recording is unavailable in this build (libavformat required)"
 msgstr "此构建不支持容器录制，需要 libavformat"
 
-#: src/app/LiveSource.cpp:135
+#: src/app/LiveSource.cpp:147
 msgid "Invalid --test-degrade: "
 msgstr "--test-degrade 参数无效："
 
-#: src/app/LiveSource.cpp:195
+#: src/app/LiveSource.cpp:211
 #, c-format
 msgid "Failed to query display dimensions: %s (using model crop table)\n"
 msgstr "查询显示尺寸失败: %s（使用机型裁剪表）\n"
 
-#: src/app/LiveSource.cpp:196
+#: src/app/LiveSource.cpp:212
 msgid "Update contains no usable dimensions"
 msgstr "推送里没有可用的尺寸"
 
-#: src/app/LiveSource.cpp:209
+#: src/app/LiveSource.cpp:225
 #, c-format
 msgid ""
 "Failed to subscribe to display changes: %s (automatic rotation unavailable)\n"
 msgstr "订阅显示变化失败: %s（无法自动跟随旋转）\n"
 
-#: src/app/LiveSource.cpp:243 src/app/LiveSource.cpp:658
+#: src/app/LiveSource.cpp:259 src/app/LiveSource.cpp:679
 msgid "Live video unavailable; recording stopped"
 msgstr "实时视频不可用，录制已停止"
 
-#: src/app/LiveSource.cpp:248
+#: src/app/LiveSource.cpp:264
 #, c-format
 msgid "Media stream unavailable: %s\n"
 msgstr "媒体流不可用：%s\n"
 
-#: src/app/LiveSource.cpp:251
+#: src/app/LiveSource.cpp:267
 #, c-format
 msgid ""
 "Using screenshot polling; refresh rate depends on capture time. Input "
 "control remains available\n"
 msgstr "已改用截图轮询，刷新率取决于截图耗时；输入控制仍可用\n"
 
-#: src/app/LiveSource.cpp:255
+#: src/app/LiveSource.cpp:271
 msgid "Failed to start screenshot polling: "
 msgstr "启动截图轮询失败: "
 
-#: src/app/LiveSource.cpp:270
+#: src/app/LiveSource.cpp:286
 msgid "No first screenshot within 5 seconds"
 msgstr "5 秒内未取得首张截图"
 
-#: src/app/LiveSource.cpp:278
+#: src/app/LiveSource.cpp:294
 msgid "No first decoded frame within 5 seconds"
 msgstr "5 秒内未解出首帧"
 
-#: src/app/LiveSource.cpp:283
+#: src/app/LiveSource.cpp:299
 msgid "No valid recording IDR within 5 seconds"
 msgstr "5 秒内未收到通过录制检查的 IDR"
 
-#: src/app/LiveSource.cpp:295
+#: src/app/LiveSource.cpp:311
 msgid "Video became unavailable before recording startup completed"
 msgstr "录制启动尚未完成，视频已不可用"
 
-#: src/app/LiveSource.cpp:305
+#: src/app/LiveSource.cpp:321
 #, c-format
 msgid "Screenshot mirroring started: %s / iOS %s, %ux%u\n"
 msgstr "截图镜像已建立：%s / iOS %s，尺寸 %ux%u\n"
 
-#: src/app/LiveSource.cpp:309
+#: src/app/LiveSource.cpp:325
 #, c-format
 msgid ""
 "Video stream started: %s / iOS %s, receive port=%u PT=%u, first frame %ux%u\n"
 msgstr "视频流已建立：%s / iOS %s，收流端口=%u PT=%u，首帧 %ux%u\n"
 
-#: src/app/LiveSource.cpp:314
+#: src/app/LiveSource.cpp:330
 #, c-format
 msgid ""
 "Encoded video capture started: %s / iOS %s, receive port=%u PT=%u, checked "
 "dimensions %ux%u\n"
 msgstr "编码视频采集已启动：%s / iOS %s，接收端口=%u PT=%u，已检查尺寸 %ux%u\n"
 
-#: src/app/LiveSource.cpp:323
+#: src/app/LiveSource.cpp:339
 #, c-format
 msgid ""
 "Display geometry: visible area %dx%d (displayId=%llu %s), UI rotation %d "
@@ -1182,22 +1182,22 @@ msgstr ""
 "显示几何：设备报可见区 %dx%d（displayId=%llu %s），界面旋转顺时针 %d°，码流 "
 "%ux%u\n"
 
-#: src/app/LiveSource.cpp:330
+#: src/app/LiveSource.cpp:346
 #, c-format
 msgid "Screenshot mode cannot record Annex-B; ignoring --record\n"
 msgstr "截图模式无法录制 Annex-B，已忽略 --record\n"
 
-#: src/app/LiveSource.cpp:332 src/app/LiveSource.cpp:387
+#: src/app/LiveSource.cpp:348 src/app/LiveSource.cpp:403
 #, c-format
 msgid "Recording to %s\n"
 msgstr "录制到 %s\n"
 
-#: src/app/LiveSource.cpp:340
+#: src/app/LiveSource.cpp:356
 #, c-format
 msgid "Screenshot mode does not start audio\n"
 msgstr "截图模式不启动音频流\n"
 
-#: src/app/LiveSource.cpp:356
+#: src/app/LiveSource.cpp:372
 #, c-format
 msgid ""
 "Forwarding audio to the computer. Switching routes may pause the phone's "
@@ -1206,81 +1206,81 @@ msgstr ""
 "正在将音频转到电脑。切换路由可能暂停手机播放器；如有需要，请在手机上继续播"
 "放。\n"
 
-#: src/app/LiveSource.cpp:376
+#: src/app/LiveSource.cpp:392
 #, c-format
 msgid "Failed to start audio: %s (video continues)\n"
 msgstr "启动音频流失败: %s（继续显示画面）\n"
 
-#: src/app/LiveSource.cpp:381
+#: src/app/LiveSource.cpp:397
 #, c-format
 msgid "Audio stream started: receive port=%u PT=%u backend=%s\n"
 msgstr "音频流已建立：收流端口=%u PT=%u 后端=%s\n"
 
-#: src/app/LiveSource.cpp:384
+#: src/app/LiveSource.cpp:400
 msgid "Audio routing: phone and computer (--audio-dup)"
 msgstr "音频路由：手机和电脑（--audio-dup）"
 
-#: src/app/LiveSource.cpp:385
+#: src/app/LiveSource.cpp:401
 msgid "Audio routing: computer; phone playback is suppressed"
 msgstr "音频路由：电脑；手机停止发声"
 
-#: src/app/LiveSource.cpp:395
+#: src/app/LiveSource.cpp:411
 #, c-format
 msgid "--test-degrade: from now,"
 msgstr "--test-degrade：从现在起"
 
-#: src/app/LiveSource.cpp:397
+#: src/app/LiveSource.cpp:413
 #, c-format
 msgid " at %.1f seconds: %s"
 msgstr " %.1f 秒%s"
 
-#: src/app/LiveSource.cpp:398
+#: src/app/LiveSource.cpp:414
 msgid "force fallback"
 msgstr "强制降级"
 
-#: src/app/LiveSource.cpp:398
+#: src/app/LiveSource.cpp:414
 msgid "release override"
 msgstr "放开"
 
-#: src/app/LiveSource.cpp:400
+#: src/app/LiveSource.cpp:416
 #, c-format
 msgid " (test mode)\n"
 msgstr "（测试模式）\n"
 
-#: src/app/LiveSource.cpp:407
+#: src/app/LiveSource.cpp:428
 msgid ""
 "No playable audio stream (disabled, failed to start, or unsupported build)"
 msgstr "没有可播放的音频流（已禁用、启动失败或构建不支持）"
 
-#: src/app/LiveSource.cpp:425
+#: src/app/LiveSource.cpp:446
 msgid "Audio capture stopped before recording finished"
 msgstr "录制尚未完成，音频采集已停止"
 
-#: src/app/LiveSource.cpp:436 src/app/LiveSource.cpp:457
+#: src/app/LiveSource.cpp:457 src/app/LiveSource.cpp:478
 msgid "Device input is unavailable before a session is started"
 msgstr "尚未建立设备会话，无法发送输入"
 
-#: src/app/LiveSource.cpp:446
+#: src/app/LiveSource.cpp:467
 #, c-format
 msgid "Device input connection established\n"
 msgstr "设备输入连接已建立\n"
 
-#: src/app/LiveSource.cpp:487
+#: src/app/LiveSource.cpp:508
 #, c-format
 msgid "Failed to release device touch: %s\n"
 msgstr "未能释放设备触点：%s\n"
 
-#: src/app/LiveSource.cpp:493
+#: src/app/LiveSource.cpp:514
 #, c-format
 msgid "Failed to release device keys: %s\n"
 msgstr "未能松开设备按键：%s\n"
 
-#: src/app/LiveSource.cpp:499
+#: src/app/LiveSource.cpp:520
 #, c-format
 msgid "Failed to release device button: %s\n"
 msgstr "未能松开设备硬件按钮：%s\n"
 
-#: src/app/LiveSource.cpp:662
+#: src/app/LiveSource.cpp:683
 #, c-format
 msgid ""
 "Live video unavailable; using screenshot polling while retrying video in the "
@@ -1288,38 +1288,38 @@ msgid ""
 msgstr ""
 "实时视频暂不可用，已切换到截图轮询；后台继续尝试恢复视频，成功后自动切回\n"
 
-#: src/app/LiveSource.cpp:665
+#: src/app/LiveSource.cpp:686
 #, c-format
 msgid "Failed to switch to screenshots: %s (retry in %llu seconds)\n"
 msgstr "切换到截图失败: %s（%llu 秒后重试）\n"
 
-#: src/app/LiveSource.cpp:671
+#: src/app/LiveSource.cpp:692
 #, c-format
 msgid "Live video recovered; switched back to video stream\n"
 msgstr "实时视频已恢复，已切回视频流\n"
 
-#: src/app/LiveSource.cpp:692 src/media/FramePump.cpp:192
+#: src/app/LiveSource.cpp:713 src/media/FramePump.cpp:192
 #, c-format
 msgid "Recording failed: %s. Mirroring continues; the file is incomplete.\n"
 msgstr "录制失败：%s。镜像继续，录制文件不完整。\n"
 
-#: src/app/LiveSource.cpp:736
+#: src/app/LiveSource.cpp:757
 msgid "Encoded video capture stopped: "
 msgstr "编码视频采集已停止："
 
-#: src/app/LiveSource.cpp:739
+#: src/app/LiveSource.cpp:760
 msgid "Audio recording stopped: "
 msgstr "音频录制已停止："
 
-#: src/app/LiveSource.cpp:743
+#: src/app/LiveSource.cpp:764
 msgid "Audio stopped: "
 msgstr "音频已停止："
 
-#: src/app/LiveSource.cpp:747
+#: src/app/LiveSource.cpp:768
 msgid "); closing session"
 msgstr "），正在关闭会话"
 
-#: src/app/LiveSource.cpp:747
+#: src/app/LiveSource.cpp:768
 msgid "Device connection lost ("
 msgstr "设备连接已断开（"
 
@@ -2934,7 +2934,7 @@ msgstr "设备会话已结束"
 #: src/media/FramePump.cpp:754 src/media/ScreenshotSource.cpp:72
 #: src/net/Stack.cpp:364 src/net/TcpStream.cpp:44 src/net/TcpStream.cpp:128
 #: src/net/TcpStream.cpp:132 src/net/UdpSocket.cpp:109
-#: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:281
+#: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:322
 #: src/transport/Socket.cpp:114 src/transport/Usbmux.cpp:126
 #: src/wifi/RemotePairing.cpp:35 tools/rr_keepalive_probe.cpp:636
 msgid ")"
@@ -3532,7 +3532,7 @@ msgstr ""
 "数或十进制字符串"
 
 #: src/media/StreamSession.cpp:223 src/remote/App.cpp:218
-#: src/transport/TcpConnect.cpp:27
+#: src/transport/TcpConnect.cpp:31
 msgid ": "
 msgstr " 失败: "
 
@@ -3868,114 +3868,114 @@ msgstr " 台）。请检查所选 UDID 与 USB 连接。"
 msgid "Cannot choose a unique usbmux connection for device "
 msgstr "无法为设备选择唯一的 usbmux 连接："
 
-#: src/remote/Device.cpp:162
+#: src/remote/Device.cpp:172
 msgid "lockdown pairing session"
 msgstr "lockdown 配对 session"
 
-#: src/remote/Device.cpp:165 tools/wifi_probe.cpp:348
+#: src/remote/Device.cpp:175 tools/wifi_probe.cpp:348
 msgid "Failed to establish lockdown session: "
 msgstr "lockdown 会话建立失败: "
 
-#: src/remote/Device.cpp:168
+#: src/remote/Device.cpp:179
 msgid "Start CoreDeviceProxy"
 msgstr "启动 CoreDeviceProxy"
 
-#: src/remote/Device.cpp:171 src/remote/Rsd.cpp:202 src/remote/Rsd.cpp:425
+#: src/remote/Device.cpp:182 src/remote/Rsd.cpp:243 src/remote/Rsd.cpp:477
 #: src/transport/Usbmux.cpp:270 src/wifi/PairRecord.cpp:363
 #: tools/wifi_probe.cpp:353
 msgid " failed: "
 msgstr " 失败: "
 
-#: src/remote/Device.cpp:171
+#: src/remote/Device.cpp:182
 msgid "Start "
 msgstr "启动 "
 
-#: src/remote/Device.cpp:174
+#: src/remote/Device.cpp:186
 msgid "CDTunnel handshake"
 msgstr "CDTunnel 握手"
 
-#: src/remote/Device.cpp:179 src/remote/Device.cpp:279
+#: src/remote/Device.cpp:191 src/remote/Device.cpp:317
 msgid "Failed to establish packet tunnel: "
 msgstr "包隧道建立失败: "
 
-#: src/remote/Device.cpp:186
+#: src/remote/Device.cpp:199
 msgid "Cannot construct a stable peer identity from pairing HostID"
 msgstr "无法根据配对记录的 HostID 生成稳定的连接身份"
 
-#: src/remote/Device.cpp:192 src/remote/Device.cpp:202
+#: src/remote/Device.cpp:206 src/remote/Device.cpp:218
 msgid "Connect to RSD inside tunnel and read directory"
 msgstr "连接隧道内 RSD 并读取目录"
 
-#: src/remote/Device.cpp:208
+#: src/remote/Device.cpp:224
 msgid "Tunnel returned an invalid IPv6 address"
 msgstr "隧道返回了无效的 IPv6 地址"
 
-#: src/remote/Device.cpp:219
+#: src/remote/Device.cpp:235
 msgid "Ready"
 msgstr "就绪"
 
-#: src/remote/Device.cpp:228 src/wifi/PairVerify.cpp:13
+#: src/remote/Device.cpp:252 src/wifi/PairVerify.cpp:13
 msgid "Pairing record incomplete; cannot sign"
 msgstr "配对记录不完整，无法签名"
 
-#: src/remote/Device.cpp:232 src/wifi/PairVerify.cpp:19
+#: src/remote/Device.cpp:257 src/wifi/PairVerify.cpp:19
 #: tools/wifi_probe.cpp:801
 msgid "Pairing record has no device identity; pair again over USB"
 msgstr "配对记录缺少设备身份，请重新通过 USB 配对"
 
-#: src/remote/Device.cpp:240
+#: src/remote/Device.cpp:266
 msgid "LAN pair-verify"
 msgstr "局域网配对验证"
 
-#: src/remote/Device.cpp:243
+#: src/remote/Device.cpp:275
 msgid "Cannot connect to device RemotePairing port "
 msgstr "无法连接设备的 RemotePairing 端口 "
 
-#: src/remote/Device.cpp:244
+#: src/remote/Device.cpp:276
 msgid ""
 " (check that the device is reachable on this network and has been paired)"
 msgstr "（请检查设备在当前网络是否可达，以及是否已配对）"
 
-#: src/remote/Device.cpp:253
+#: src/remote/Device.cpp:287
 msgid "Device rejected pairing record: "
 msgstr "设备拒绝此配对记录："
 
-#: src/remote/Device.cpp:254
+#: src/remote/Device.cpp:288
 msgid " is not paired with this device, or its pairing was removed"
 msgstr " 尚未与此设备配对，或配对已被移除"
 
-#: src/remote/Device.cpp:256
+#: src/remote/Device.cpp:290
 msgid "pair-verify failed: "
 msgstr "配对验证失败："
 
-#: src/remote/Device.cpp:261
+#: src/remote/Device.cpp:296
 msgid "Request device tunnel port"
 msgstr "请求设备隧道端口"
 
-#: src/remote/Device.cpp:269
+#: src/remote/Device.cpp:306
 msgid "TLS-PSK and CDTunnel handshake"
 msgstr "TLS-PSK + CDTunnel 握手"
 
-#: src/remote/Device.cpp:272
+#: src/remote/Device.cpp:309
 msgid "Cannot connect to tunnel port "
 msgstr "无法连接隧道端口 "
 
-#: src/remote/Device.cpp:286
+#: src/remote/Device.cpp:325
 msgid ""
 "Pairing host identifier is not a valid UUID; cannot construct a stable peer "
 "identity"
 msgstr "配对记录的主机标识不是有效 UUID，无法构造稳定的对端身份"
 
-#: src/remote/Device.cpp:306 src/remote/Rsd.cpp:187 src/remote/Rsd.cpp:224
-#: src/remote/Rsd.cpp:480
+#: src/remote/Device.cpp:351 src/remote/Rsd.cpp:228 src/remote/Rsd.cpp:265
+#: src/remote/Rsd.cpp:537
 msgid "Service connection cancelled"
 msgstr "服务连接已取消"
 
-#: src/remote/Device.cpp:310
+#: src/remote/Device.cpp:355
 msgid "Session not established"
 msgstr "会话尚未建立"
 
-#: src/remote/Device.cpp:322
+#: src/remote/Device.cpp:367
 msgid " does not advertise feature "
 msgstr " 没有声明 feature "
 
@@ -4063,117 +4063,129 @@ msgstr "无法识别设备方向回复"
 msgid "Device orientation target must be portrait or landscape"
 msgstr "设备目标方向必须为竖屏或横屏"
 
-#: src/remote/Pairing.cpp:23
+#: src/remote/Pairing.cpp:25
 msgid "USB pairing timeout must be between 1 and 300000 ms"
 msgstr "USB 配对超时必须在 1 到 300000 毫秒之间"
 
-#: src/remote/Pairing.cpp:48
+#: src/remote/Pairing.cpp:38
+msgid "USB pairing cancelled"
+msgstr "USB 配对已取消"
+
+#: src/remote/Pairing.cpp:39
+msgid "USB pairing cancellation callback failed"
+msgstr "USB 配对取消回调失败"
+
+#: src/remote/Pairing.cpp:82
 msgid "Pairing requires the selected device to remain connected over USB"
 msgstr "配对期间，所选设备必须保持 USB 连接"
 
-#: src/remote/Pairing.cpp:53
+#: src/remote/Pairing.cpp:87
 msgid "Device does not provide the USB RemotePairing service"
 msgstr "设备未提供 USB RemotePairing 服务"
 
-#: src/remote/Pairing.cpp:57
+#: src/remote/Pairing.cpp:91
 msgid "USB RemotePairing service does not support RemoteXPC"
 msgstr "USB RemotePairing 服务不支持 RemoteXPC"
 
-#: src/remote/Pairing.cpp:69
+#: src/remote/Pairing.cpp:109
 msgid "Unexpected initial USB RemotePairing message"
 msgstr "USB RemotePairing 的初始消息不符合预期"
 
-#: src/remote/Pairing.cpp:86
+#: src/remote/Pairing.cpp:127
 msgid "Multiple USB devices match; select one by UDID"
 msgstr "有多台匹配的 USB 设备；请用 UDID 选择其中一台"
 
-#: src/remote/Pairing.cpp:91
+#: src/remote/Pairing.cpp:132
 msgid "No matching USB device is connected"
 msgstr "没有连接匹配的 USB 设备"
 
-#: src/remote/Pairing.cpp:93
+#: src/remote/Pairing.cpp:134
 msgid "USB device has no UDID; cannot bind a pairing record"
 msgstr "USB 设备未提供 UDID，无法关联配对记录"
 
-#: src/remote/Pairing.cpp:107
+#: src/remote/Pairing.cpp:148
 msgid "USB pairing device selection is invalid"
 msgstr "USB 配对的设备选择无效"
 
-#: src/remote/Pairing.cpp:111
+#: src/remote/Pairing.cpp:152
 msgid "USB pairing workflow operations are unavailable"
 msgstr "USB 配对所需功能不可用"
 
-#: src/remote/Pairing.cpp:123
+#: src/remote/Pairing.cpp:164
 msgid "Cannot inspect existing USB pairing record"
 msgstr "无法检查现有的 USB 配对记录"
 
-#: src/remote/Pairing.cpp:129
+#: src/remote/Pairing.cpp:170
 msgid "Existing USB pairing record is not a regular file"
 msgstr "现有 USB 配对记录不是普通文件"
 
-#: src/remote/Pairing.cpp:136
+#: src/remote/Pairing.cpp:177
 msgid ""
 "Existing pairing record belongs to a different device; choose another record "
 "directory"
 msgstr "现有配对记录属于另一台设备；请选择其他记录目录"
 
-#: src/remote/Pairing.cpp:140
+#: src/remote/Pairing.cpp:181
 msgid "Existing pairing record cannot be read; enable USB repair explicitly"
 msgstr "无法读取现有配对记录；请允许通过 USB 重新配对后重试"
 
-#: src/remote/Pairing.cpp:144
+#: src/remote/Pairing.cpp:185
 msgid "Verifying the existing USB pairing record"
 msgstr "正在验证现有的 USB 配对记录"
 
-#: src/remote/Pairing.cpp:152
+#: src/remote/Pairing.cpp:195
 msgid "Existing pairing record verification failed: "
 msgstr "现有配对记录验证失败："
 
-#: src/remote/Pairing.cpp:157
+#: src/remote/Pairing.cpp:200
 msgid "Device rejected the pairing record; enable USB repair explicitly"
 msgstr "设备拒绝了配对记录；请允许通过 USB 重新配对后重试"
 
-#: src/remote/Pairing.cpp:161
+#: src/remote/Pairing.cpp:204
 msgid "Existing pairing record is incomplete; enable USB repair explicitly"
 msgstr "现有配对记录不完整；请允许通过 USB 重新配对后重试"
 
-#: src/remote/Pairing.cpp:167
+#: src/remote/Pairing.cpp:210
 msgid "Cannot obtain the local hostname for USB pairing"
 msgstr "无法获取 USB 配对所需的本机名称"
 
-#: src/remote/Pairing.cpp:175
+#: src/remote/Pairing.cpp:218
 msgid "Cannot generate a host identifier for USB pairing"
 msgstr "无法生成 USB 配对所需的主机标识"
 
-#: src/remote/Pairing.cpp:178
+#: src/remote/Pairing.cpp:221
 msgid "Starting USB pairing; confirm the request on the device"
 msgstr "正在通过 USB 配对，请在设备上确认请求"
 
-#: src/remote/Pairing.cpp:182
+#: src/remote/Pairing.cpp:227
 msgid "USB pair setup failed: "
 msgstr "USB 配对失败："
 
-#: src/remote/Pairing.cpp:187
+#: src/remote/Pairing.cpp:232
 msgid "USB pair setup returned an incomplete or mismatched record"
 msgstr "USB 配对返回的记录不完整或与设备不匹配"
 
-#: src/remote/Pairing.cpp:190
+#: src/remote/Pairing.cpp:235
 msgid "Reconnecting to verify the new USB pairing record"
 msgstr "正在重新连接，以验证新的 USB 配对记录"
 
-#: src/remote/Pairing.cpp:193
+#: src/remote/Pairing.cpp:240
 msgid "New USB pairing record verification failed: "
 msgstr "新的 USB 配对记录验证失败："
 
-#: src/remote/Pairing.cpp:198
+#: src/remote/Pairing.cpp:245
 msgid "Cannot save the verified USB pairing record: "
 msgstr "无法保存已验证的 USB 配对记录："
 
-#: src/remote/Pairing.cpp:205
+#: src/remote/Pairing.cpp:252
 msgid "USB pairing workflow failed before completion"
 msgstr "USB 配对未完成"
 
-#: src/remote/Pairing.cpp:216
+#: src/remote/Pairing.cpp:266
+msgid "USB pairing enumeration timed out or service is unavailable"
+msgstr "USB 配对设备枚举超时或服务不可用"
+
+#: src/remote/Pairing.cpp:267
 msgid "Cannot enumerate devices for USB pairing: "
 msgstr "USB 配对时无法枚举设备："
 
@@ -4482,95 +4494,95 @@ msgstr "等待设备回复超时"
 msgid "Disconnected while waiting for device reply: "
 msgstr "等待设备回复时连接断开："
 
-#: src/remote/Rsd.cpp:125
+#: src/remote/Rsd.cpp:166
 #, c-format
 msgid ""
 "Invalid numeric component in SCRCTL_COREDEVICE_VERSION: %s (using 629.3)\n"
 msgstr "SCRCTL_COREDEVICE_VERSION 包含无效数字分段：%s（使用 629.3）\n"
 
-#: src/remote/Rsd.cpp:138
+#: src/remote/Rsd.cpp:179
 #, c-format
 msgid "  coreDeviceVersion overridden by environment: %s (default: 629.3)\n"
 msgstr "  coreDeviceVersion 已由环境变量覆盖为 %s（默认 629.3）\n"
 
-#: src/remote/Rsd.cpp:191
+#: src/remote/Rsd.cpp:232
 msgid "Service has no valid TCP port (expected 1..65535): "
 msgstr "服务没有有效的 TCP 端口（应为 1..65535）："
 
-#: src/remote/Rsd.cpp:202
+#: src/remote/Rsd.cpp:243
 msgid " port "
 msgstr " 端口 "
 
-#: src/remote/Rsd.cpp:202 src/transport/Usbmux.cpp:270
+#: src/remote/Rsd.cpp:243 src/transport/Usbmux.cpp:270
 msgid "Connect to "
 msgstr "连接 "
 
-#: src/remote/Rsd.cpp:213
+#: src/remote/Rsd.cpp:254
 msgid " HTTP/2 handshake failed: "
 msgstr " 的 HTTP/2 握手失败："
 
-#: src/remote/Rsd.cpp:232 src/remote/Rsd.cpp:242 src/remote/Rsd.cpp:252
-#: src/remote/Rsd.cpp:262
+#: src/remote/Rsd.cpp:273 src/remote/Rsd.cpp:283 src/remote/Rsd.cpp:293
+#: src/remote/Rsd.cpp:303
 msgid "Service connection is not RemoteXPC"
 msgstr "这条服务连接不是 RemoteXPC 服务"
 
-#: src/remote/Rsd.cpp:277
+#: src/remote/Rsd.cpp:318
 msgid " failed"
 msgstr " 失败"
 
-#: src/remote/Rsd.cpp:281
+#: src/remote/Rsd.cpp:322
 msgid "(code "
 msgstr "（错误码 "
 
-#: src/remote/Rsd.cpp:292
+#: src/remote/Rsd.cpp:333
 msgid "; original error: "
 msgstr "；原始错误："
 
-#: src/remote/Rsd.cpp:316
+#: src/remote/Rsd.cpp:357
 msgid " failed; response missing CoreDevice.output: "
 msgstr " 失败，回复缺少 CoreDevice.output："
 
-#: src/remote/Rsd.cpp:329
+#: src/remote/Rsd.cpp:370
 msgid "Streaming feature requires an XPC service connection"
 msgstr "流式功能需要 XPC 服务连接"
 
-#: src/remote/Rsd.cpp:346
+#: src/remote/Rsd.cpp:387
 msgid "Service connection is not an XPC channel"
 msgstr "这条服务连接不是 XPC 通道"
 
-#: src/remote/Rsd.cpp:365
+#: src/remote/Rsd.cpp:406
 msgid " response missing both sideChannelStatus and error: "
 msgstr " 回复缺少 sideChannelStatus 和 error 字段："
 
-#: src/remote/Rsd.cpp:371
+#: src/remote/Rsd.cpp:412
 msgid " failed mid-stream: "
 msgstr " 中途失败："
 
-#: src/remote/Rsd.cpp:425
+#: src/remote/Rsd.cpp:477
 msgid "Connect to RSD port "
 msgstr "连接 RSD 端口 "
 
-#: src/remote/Rsd.cpp:430
+#: src/remote/Rsd.cpp:484
 msgid "RSD control channel handshake failed: "
 msgstr "RSD 控制通道握手失败: "
 
-#: src/remote/Rsd.cpp:440
+#: src/remote/Rsd.cpp:496
 msgid "peer_info missing Services"
 msgstr "peer_info 里没有 Services"
 
-#: src/remote/Rsd.cpp:495
+#: src/remote/Rsd.cpp:552
 msgid "."
 msgstr "。"
 
-#: src/remote/Rsd.cpp:495
+#: src/remote/Rsd.cpp:552
 msgid "Device directory missing service "
 msgstr "设备目录里没有服务 "
 
-#: src/remote/Rsd.cpp:497
+#: src/remote/Rsd.cpp:554
 msgid "Directory is empty; check tunnel setup and DDI mounting."
 msgstr "目录为空；请检查隧道建立及 DDI 挂载。"
 
-#: src/remote/Rsd.cpp:498
+#: src/remote/Rsd.cpp:555
 msgid ""
 "\n"
 "Download a supported DDI with scrctl --download-ddi; installation and "
@@ -4579,19 +4591,19 @@ msgstr ""
 "\n"
 "使用 scrctl --download-ddi 下载支持的 DDI；安装与兼容说明：docs/DDI.md。\n"
 
-#: src/remote/Rsd.cpp:507
+#: src/remote/Rsd.cpp:564
 msgid " services, including "
 msgstr " 条服务，其中 "
 
-#: src/remote/Rsd.cpp:507
+#: src/remote/Rsd.cpp:564
 msgid "Device directory contains "
 msgstr "设备目录包含 "
 
-#: src/remote/Rsd.cpp:508
+#: src/remote/Rsd.cpp:565
 msgid " com.apple.coredevice.* services:\n"
 msgstr " 条为 com.apple.coredevice.*：\n"
 
-#: src/remote/Rsd.cpp:511
+#: src/remote/Rsd.cpp:568
 msgid ""
 "  (none found; check DDI mounting through Xcode and the CoreDevice services "
 "available on this device)\n"
@@ -4599,7 +4611,7 @@ msgstr ""
 "  （未找到相关服务；请检查 Xcode 的 DDI 挂载及此设备提供的 CoreDevice 服"
 "务）\n"
 
-#: src/remote/Rsd.cpp:517
+#: src/remote/Rsd.cpp:574
 msgid ""
 "A mounted DDI may still lack this service. Check its version and "
 "capabilities; download a supported DDI with scrctl --download-ddi. "
@@ -4608,7 +4620,7 @@ msgstr ""
 "已挂载的 DDI 仍可能缺少此服务。请检查版本和能力；使用 scrctl --download-ddi "
 "下载支持的 DDI。安装说明：docs/DDI.md。\n"
 
-#: src/remote/Rsd.cpp:519
+#: src/remote/Rsd.cpp:576
 msgid ""
 "Include this diagnostic when reporting the issue. For the full directory and "
 "feature lists, run feature_probe --all to print all "
@@ -4616,11 +4628,11 @@ msgstr ""
 "报告问题时请附上这段诊断。完整目录及 feature 列表可通过 feature_probe --all "
 "打印，共 "
 
-#: src/remote/Rsd.cpp:521
+#: src/remote/Rsd.cpp:578
 msgid " services.\n"
 msgstr " 条。\n"
 
-#: src/remote/Rsd.cpp:531
+#: src/remote/Rsd.cpp:588
 msgid ""
 " (device rejected the system version: live media worked on tested iOS 27 "
 "devices and was rejected on tested iOS 18 devices. Screenshot fallback and "
@@ -4715,59 +4727,67 @@ msgstr "正在重新连接以验证新 Wi-Fi 配对记录"
 msgid "Not an RTP packet"
 msgstr "不是 RTP 包"
 
-#: src/transport/Lockdown.cpp:42
+#: src/transport/IoBudget.h:51
+msgid "Device startup timed out"
+msgstr "设备启动超时"
+
+#: src/transport/IoBudget.h:52
+msgid "Device startup cancellation callback failed"
+msgstr "设备启动取消回调失败"
+
+#: src/transport/Lockdown.cpp:39
 msgid "Bounded lockdown operation timed out"
 msgstr "限时 lockdown 操作超时"
 
-#: src/transport/Lockdown.cpp:43
+#: src/transport/Lockdown.cpp:40
 msgid "Bounded lockdown operation was cancelled"
 msgstr "限时 lockdown 操作已取消"
 
-#: src/transport/Lockdown.cpp:44
+#: src/transport/Lockdown.cpp:41
 msgid "Lockdown cancellation callback failed"
 msgstr "Lockdown 取消回调失败"
 
-#: src/transport/Lockdown.cpp:86
+#: src/transport/Lockdown.cpp:83
 msgid "Failed to write TLS header"
 msgstr "TLS 写头失败"
 
-#: src/transport/Lockdown.cpp:89
+#: src/transport/Lockdown.cpp:86
 msgid "Failed to write TLS body"
 msgstr "TLS 写体失败"
 
-#: src/transport/Lockdown.cpp:100
+#: src/transport/Lockdown.cpp:97
 msgid "Failed to read TLS header"
 msgstr "TLS 读头失败"
 
-#: src/transport/Lockdown.cpp:108 src/transport/Socket.cpp:185
+#: src/transport/Lockdown.cpp:105 src/transport/Socket.cpp:185
 msgid "Invalid lockdown frame length: "
 msgstr "lockdown 帧长度异常: "
 
-#: src/transport/Lockdown.cpp:118
+#: src/transport/Lockdown.cpp:115
 msgid "Failed to read TLS body"
 msgstr "TLS 读体失败"
 
-#: src/transport/Lockdown.cpp:149
+#: src/transport/Lockdown.cpp:146
 msgid "lockdown response is not a valid plist"
 msgstr "lockdown 回复不是合法 plist"
 
-#: src/transport/Lockdown.cpp:172 src/transport/Lockdown.cpp:221
+#: src/transport/Lockdown.cpp:176 src/transport/Lockdown.cpp:228
 msgid "Cannot parse pairing record"
 msgstr "配对记录无法解析"
 
-#: src/transport/Lockdown.cpp:182 src/transport/Lockdown.cpp:239
+#: src/transport/Lockdown.cpp:186 src/transport/Lockdown.cpp:246
 msgid "Pairing record missing required fields"
 msgstr "配对记录缺少必要字段"
 
-#: src/transport/Lockdown.cpp:193 src/transport/Lockdown.cpp:262
+#: src/transport/Lockdown.cpp:201 src/transport/Lockdown.cpp:269
 msgid "StartSession rejected: "
 msgstr "StartSession 被拒: "
 
-#: src/transport/Lockdown.cpp:286
+#: src/transport/Lockdown.cpp:293
 msgid ") rejected: "
 msgstr ") 被拒: "
 
-#: src/transport/Lockdown.cpp:291
+#: src/transport/Lockdown.cpp:298
 msgid "StartService response missing Port"
 msgstr "StartService 回复里没有 Port"
 
@@ -4807,33 +4827,49 @@ msgstr "等待超时"
 msgid "poll failed: "
 msgstr "poll 失败: "
 
-#: src/transport/TcpConnect.cpp:27
+#: src/transport/TcpConnect.cpp:31 src/transport/TcpConnect.cpp:123
 msgid "Failed to resolve address "
 msgstr "解析地址 "
 
-#: src/transport/TcpConnect.cpp:27
+#: src/transport/TcpConnect.cpp:31 src/transport/TcpConnect.cpp:124
 msgid "no results"
 msgstr "没有结果"
 
-#: src/transport/TcpConnect.cpp:55 src/transport/Usbmux.cpp:176
+#: src/transport/TcpConnect.cpp:59 src/transport/Usbmux.cpp:176
 msgid "Failed to enable nonblocking mode: "
 msgstr "设置非阻塞失败："
 
-#: src/transport/TcpConnect.cpp:78
+#: src/transport/TcpConnect.cpp:82
 msgid "Connection timed out"
 msgstr "连接超时"
 
-#: src/transport/TcpConnect.cpp:79
+#: src/transport/TcpConnect.cpp:83
 msgid "Failed to wait for connection: "
 msgstr "等待连接失败："
 
-#: src/transport/TcpConnect.cpp:96
+#: src/transport/TcpConnect.cpp:100
 msgid "Failed to restore blocking mode: "
 msgstr "恢复阻塞模式失败："
 
-#: src/transport/TcpConnect.cpp:101
+#: src/transport/TcpConnect.cpp:105 src/transport/TcpConnect.cpp:243
 msgid "Cannot connect to "
 msgstr "连不上 "
+
+#: src/transport/TcpConnect.cpp:164
+msgid "Too many outstanding hostname resolutions; retry later"
+msgstr "仍在进行的主机名解析过多，请稍后重试"
+
+#: src/transport/TcpConnect.cpp:174
+msgid "Hostname resolution failed"
+msgstr "主机名解析失败"
+
+#: src/transport/TcpConnect.cpp:184
+msgid "Cannot start hostname resolution"
+msgstr "无法启动主机名解析"
+
+#: src/transport/TcpConnect.cpp:194
+msgid "Hostname resolution returned no addresses"
+msgstr "主机名解析没有返回地址"
 
 #: src/transport/TlsChannel.cpp:33 src/transport/TlsChannel.cpp:47
 msgid "BIO_new_mem_buf failed"
@@ -4914,23 +4950,23 @@ msgstr "隧道 TLS 写失败"
 msgid "Tunnel TLS read failed"
 msgstr "隧道 TLS 读失败"
 
-#: src/transport/Tunnel.cpp:168
+#: src/transport/Tunnel.cpp:197
 msgid "Tunnel handshake response has incorrect magic"
 msgstr "隧道握手回复的 magic 不对"
 
-#: src/transport/Tunnel.cpp:180
+#: src/transport/Tunnel.cpp:209
 msgid "Tunnel handshake response is not valid JSON"
 msgstr "隧道握手回复不是合法 JSON"
 
-#: src/transport/Tunnel.cpp:196
+#: src/transport/Tunnel.cpp:225
 msgid "Tunnel handshake response missing required fields"
 msgstr "隧道握手回复缺少必要字段"
 
-#: src/transport/Tunnel.cpp:214 src/transport/Tunnel.cpp:223
+#: src/transport/Tunnel.cpp:243 src/transport/Tunnel.cpp:252
 msgid "Tunnel not connected"
 msgstr "隧道未连接"
 
-#: src/transport/Tunnel.cpp:231
+#: src/transport/Tunnel.cpp:260
 msgid "Tunnel packet is not IPv6: version nibble="
 msgstr "隧道内不是 IPv6 包: version nibble="
 
@@ -4948,6 +4984,7 @@ msgid "mux response is not a valid plist"
 msgstr "mux 回复不是合法 plist"
 
 #: src/transport/Usbmux.cpp:223 src/transport/Usbmux.cpp:470
+#: src/transport/Usbmux.cpp:486
 msgid "ListDevices response missing DeviceList"
 msgstr "ListDevices 回复里没有 DeviceList"
 
@@ -4987,15 +5024,15 @@ msgstr "DDI usbmux Connect 被拒绝"
 msgid "ReadPairRecord response missing PairRecordData"
 msgstr "ReadPairRecord 回复缺少 PairRecordData"
 
-#: src/transport/Usbmux.cpp:492
+#: src/transport/Usbmux.cpp:505
 msgid "Connect failed, usbmuxd returned Number="
 msgstr "Connect 失败，usbmuxd 返回 Number="
 
-#: src/transport/Usbmux.cpp:513
+#: src/transport/Usbmux.cpp:526
 msgid "ReadPairRecord response missing PairRecordData (response "
 msgstr "ReadPairRecord 没有返回 PairRecordData（回复 "
 
-#: src/transport/Usbmux.cpp:514
+#: src/transport/Usbmux.cpp:527
 msgid "); device may not trust this computer yet"
 msgstr "）；设备可能尚未信任本机"
 

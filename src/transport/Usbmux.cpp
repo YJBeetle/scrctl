@@ -476,6 +476,19 @@ bool Usbmux::list_devices(std::vector<DeviceRecord> &out, std::string &err) {
     return true;
 }
 
+bool Usbmux::list_devices_for_service(std::vector<DeviceRecord> &out,
+        std::chrono::milliseconds timeout, const std::function<bool()> &cancelled, std::string &err) {
+    out.clear();
+    plist::Value reply;
+    if (!round_trip_for_service(base_request("ListDevices"), reply, timeout, cancelled, err)) return false;
+    const auto *list = reply.find("DeviceList");
+    if (!list || list->kind != plist::Kind::Array) {
+        err = SCRCTL_TR("ListDevices response missing DeviceList"); return false;
+    }
+    for (const auto &rec : list->array) out.push_back(parse_record(rec));
+    return true;
+}
+
 std::optional<Socket> Usbmux::connect(uint32_t device_id, uint16_t port, std::string &err) {
     plist::Value req = base_request("Connect");
     req.set("DeviceID", plist::Value::Int(device_id));

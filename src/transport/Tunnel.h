@@ -52,6 +52,11 @@ public:
                                                     const std::vector<uint8_t> &psk,
                                                     std::string &err);
 
+    static std::optional<PacketTunnel> establish_bounded(uint32_t device_id, uint16_t proxy_port,
+        const PemIdentity &identity, bool use_tls, const IoBudget &budget, std::string &err);
+    static std::optional<PacketTunnel> establish_psk_bounded(Socket &&sock,
+        const std::vector<uint8_t> &psk, const IoBudget &budget, std::string &err);
+
     [[nodiscard]] const TunnelParams &params() const { return params_; }
     [[nodiscard]] bool valid() const { return sock_.valid(); }
 

@@ -4,6 +4,9 @@
 #include "i18n/Translation.h"
 
 #include <array>
+#include <atomic>
+#include <stdexcept>
+#include <thread>
 #include <chrono>
 #include <cstdio>
 #include <map>
@@ -81,6 +84,45 @@ void startup_cancellation() {
         check(source.start(options, error) && script.devices == 1 && script.cancellation_callback_received &&
                   script.universal == 0 && script.indigo == 0 && script.events.empty(),
               "non-cancelled callback preserves control-only startup without real device services");
+    }
+}
+void startup_budget_boundary() {
+    Source::Options options;
+    options.want_video = options.want_audio = false;
+    std::string error;
+    script.reset();
+    {
+        Source source;
+        options.should_cancel = []() -> bool { throw std::runtime_error("callback failure"); };
+        check(!source.start(options, error) && error == "Device startup cancellation callback failed" &&
+                  script.devices == 0,
+              "startup cancellation callback failure is normalized before opening device");
+    }
+    script.reset();
+    {
+        Source source;
+        options.should_cancel = []() -> bool {
+            if (script.devices != 0) throw std::runtime_error("callback failure");
+            return false;
+        };
+        check(!source.start(options, error) && error == "Device startup cancellation callback failed" &&
+                  script.devices == 1,
+              "device-open predicate shares budget failure reason rather than generic cancellation");
+    }
+    script.reset();
+    {
+        Source source;
+        std::atomic<unsigned> calls{0};
+        std::atomic<bool> cancel{false};
+        options.should_cancel = [&] { ++calls; return cancel.load(); };
+        check(source.start(options, error), "startup with budget watcher completes");
+        const auto after_start = calls.load();
+        cancel = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(80));
+        check(calls == after_start,
+              "completed startup removes watchdog and no longer calls borrowed cancellation predicate");
+        check(source.keyboard_state({4}, error),
+              "later cancellation does not disable successfully delivered control session");
     }
 }
 void locked(Source& source, const std::string& expected) {
@@ -304,7 +346,7 @@ bool Buttons::release(uint16_t page, uint16_t code, std::string& error) {
 
 int main() {
     scrctl::i18n::initialize("en");
-    startup_cancellation(); before_start(); normal_and_repeat(); release_every_input(); send_failures(); service_and_cleanup_failures();
+    startup_cancellation(); startup_budget_boundary(); before_start(); normal_and_repeat(); release_every_input(); send_failures(); service_and_cleanup_failures();
     std::printf("live_hid: %d checks, %d failures\n", checks, failures);
     return failures != 0;
 }
