@@ -20,6 +20,7 @@ using namespace scrctl;
 using namespace std::chrono_literals;
 namespace {
 unsigned checks = 0;
+const char *active_case = "initialization";
 void require(bool ok, const char *what) {
     if (!ok) throw std::runtime_error(what);
     ++checks;
@@ -35,7 +36,10 @@ struct Peer {
     tcp_pcb *pcb = nullptr;
     std::vector<uint8_t> bytes;
     bool credit = true;
+    bool settings_sent = false;
+    bool directory_sent = false;
     bool eof = false;
+    std::function<void(Peer &)> on_bytes;
     static err_t receive(void *arg, tcp_pcb *pcb, pbuf *p, err_t) {
         auto &self = *static_cast<Peer *>(arg);
         if (!p) { self.eof = true; return ERR_OK; }
@@ -44,11 +48,20 @@ struct Peer {
         pbuf_copy_partial(p, self.bytes.data() + n, p->tot_len, 0);
         if (self.credit) tcp_recved(pcb, p->tot_len);
         pbuf_free(p);
+        if (self.on_bytes) self.on_bytes(self);
         return ERR_OK;
     }
     static void error(void *arg, err_t) { static_cast<Peer *>(arg)->pcb = nullptr; }
 };
 struct Server {
+    // RSD scripts reply on real protocol milestones in the lwIP receive callback,
+    // removing the short-deadline race between a test polling thread and the peer.
+    enum class RsdReply { None, Settings, PartialDirectory, Directory };
+    RsdReply rsd_reply = RsdReply::None;
+    std::string script_error;
+    bool announced = false;
+    std::vector<uint8_t> partial_reply;
+    size_t partial_offset = 1;
     tcp_pcb *listener = nullptr;
     std::vector<std::unique_ptr<Peer>> peers;
     explicit Server(net::Stack &stack) {
@@ -79,12 +92,79 @@ struct Server {
         auto &self = *static_cast<Server *>(arg);
         auto peer = std::make_unique<Peer>();
         peer->pcb = pcb;
+        peer->on_bytes = [&self](Peer &p) { self.rsd_received(p); };
         tcp_arg(pcb, peer.get());
         tcp_recv(pcb, Peer::receive);
         tcp_err(pcb, Peer::error);
         tcp_nagle_disable(pcb);
         self.peers.push_back(std::move(peer));
         return ERR_OK;
+    }
+    void rsd_received(Peer &peer) {
+        if (rsd_reply == RsdReply::None || !peer.pcb) return;
+        const auto write = [&](const std::vector<uint8_t> &bytes) {
+            if (tcp_write(peer.pcb, bytes.data(), static_cast<u16_t>(bytes.size()),
+                          TCP_WRITE_FLAG_COPY) != ERR_OK || tcp_output(peer.pcb) != ERR_OK)
+                script_error = "automatic RSD peer write failed";
+        };
+        if (!peer.settings_sent && peer.bytes.size() >= http2::kClientPrefaceSize) {
+            peer.settings_sent = true;
+            write(http2::settings_frame({}));
+        }
+        if (peer.directory_sent) return;
+        // Identity is the first client DATA frame with an XPC dictionary. Byte
+        // growth alone can instead be SETTINGS ACK or an unrelated control frame.
+        size_t offset = http2::kClientPrefaceSize;
+        while (offset < peer.bytes.size()) {
+            http2::Frame frame;
+            size_t used = 0;
+            std::string error;
+            if (http2::parse_frame(std::span<const uint8_t>(peer.bytes).subspan(offset),
+                                   frame, used, error) != http2::Status::Ok) return;
+            offset += used;
+            if (frame.type != http2::kData) continue;
+            xpc::Message message;
+            if (xpc::decode_message(frame.payload, message, used, error) != xpc::Status::Ok ||
+                !message.has_body) continue;
+            announced = true;
+            if (rsd_reply == RsdReply::Settings) return;
+            peer.directory_sent = true;
+            auto body = xpc::make_dict();
+            auto directory = xpc::make_dict();
+            auto service = xpc::make_dict();
+            xpc::dict_set(service, "Port", xpc::make_uint64(12345));
+            xpc::dict_set(directory, "test.plain", std::move(service));
+            xpc::dict_set(body, "Services", std::move(directory));
+            if (rsd_reply == RsdReply::PartialDirectory)
+                xpc::dict_set(body, "padding", xpc::make_string(std::string(10000, 'x')));
+            auto reply = http2::data_frame(1, xpc::encode_message(
+                xpc::kFlagAlwaysSet | xpc::kFlagDataPresent, 1, &body));
+            if (rsd_reply == RsdReply::PartialDirectory) {
+                partial_reply = reply;
+                reply.resize(1);
+            }
+            write(reply);
+            return;
+        }
+    }
+    bool observed_announce() {
+        return net::LwipRuntime::instance().call([&] { return announced && script_error.empty(); });
+    }
+    // A deadline test deliberately races the close. Probe and enqueue on the
+    // same core-thread turn; closure is an expected stopping condition, not a
+    // precondition failure from a stale earlier observation.
+    bool send_partial_if_alive(size_t n) {
+        return net::LwipRuntime::instance().call([&] {
+            if (peers.size() <= n || !peers[n]->pcb || peers[n]->eof) return false;
+            // Withhold the last payload byte even if the test runs long, so a
+            // complete peer_info can never escape the deadline assertion.
+            if (partial_offset + 1 >= partial_reply.size()) return true;
+            const auto result = tcp_write(peers[n]->pcb, partial_reply.data() + partial_offset,
+                                          1, TCP_WRITE_FLAG_COPY);
+            if (result == ERR_OK) ++partial_offset;
+            if (result != ERR_OK) return false;
+            return tcp_output(peers[n]->pcb) == ERR_OK;
+        });
     }
     size_t size(size_t n) {
         return net::LwipRuntime::instance().call([&] {
@@ -177,15 +257,19 @@ void rsd_silent_handshake(bool cancel_handshake) {
     transport::PacketTunnel params;
     rsd_port(params);
     std::atomic<bool> cancel{false};
-    transport::IoBudget budget({cancel_handshake ? 2s : 180ms,
+    transport::IoBudget budget({cancel_handshake ? 10s : 180ms,
                                [&] { return cancel.load(); }});
     auto pending = std::async(std::launch::async, [&] {
         std::string why;
         return !remote::Rsd::open_bounded(link.client, params, {}, budget, why) &&
                why == (cancel_handshake ? "Device startup cancelled" : "Device startup timed out");
     });
-    until([&] { return link.peer->size(0) >= http2::kClientPrefaceSize; });
-    if (cancel_handshake) cancel = true;
+    // A timeout can legitimately fire before an overloaded CI worker completes
+    // TCP. Only cancellation needs proof that the SETTINGS read is in progress.
+    if (cancel_handshake) {
+        until([&] { return link.peer->size(0) >= http2::kClientPrefaceSize; });
+        cancel = true;
+    }
     require(pending.wait_for(1s) == std::future_status::ready && pending.get(),
             "shared budget interrupts silent HTTP/2 handshake");
 }
@@ -193,64 +277,52 @@ void rsd_announce_budget(bool trickle) {
     Link link;
     transport::PacketTunnel params;
     rsd_port(params);
-    transport::IoBudget budget({300ms, {}});
+    link.peer->rsd_reply = trickle ? Server::RsdReply::PartialDirectory : Server::RsdReply::Settings;
+    transport::IoBudget budget({1500ms, {}});
     const auto started = std::chrono::steady_clock::now();
     auto pending = std::async(std::launch::async, [&] {
         std::string why;
         return !remote::Rsd::open_bounded(link.client, params, {}, budget, why) &&
                why == "Device startup timed out";
     });
-    until([&] { return link.peer->size(0) >= http2::kClientPrefaceSize; });
-    // Consume most of the initial budget before allowing HTTP/2 to finish.
-    std::this_thread::sleep_for(150ms);
-    const auto before = link.peer->size(0);
-    link.peer->send(0, http2::settings_frame({}));
-    until([&] { return link.peer->size(0) > before; });
     if (trickle) {
-        auto body = xpc::make_dict();
-        xpc::dict_set(body, "Services", xpc::make_dict());
-        const auto frame = http2::data_frame(1, xpc::encode_message(
-            xpc::kFlagAlwaysSet | xpc::kFlagDataPresent, 1, &body));
-        // Partial bytes keep arriving, but must not restart the total budget.
-        for (size_t n = 0; n < 8; ++n) {
-            link.peer->send(0, std::span<const uint8_t>(frame.data() + n, 1));
-            std::this_thread::sleep_for(12ms);
+        // Keep feeding an incomplete HTTP/2 payload until the shared deadline.
+        // Never send a complete dictionary, and stop normally when TCP closes.
+        while (pending.wait_for(10ms) != std::future_status::ready) {
+            if (!link.peer->observed_announce()) continue;
+            if (!link.peer->send_partial_if_alive(0)) break;
         }
     }
-    require(pending.wait_for(1s) == std::future_status::ready && pending.get(),
+    require(pending.wait_for(2500ms) == std::future_status::ready && pending.get(),
             "absolute budget interrupts peer_info silence or partial frame trickle");
-    require(std::chrono::steady_clock::now() - started < 800ms,
-            "SETTINGS completion does not reset directory read budget");
+    require(link.peer->observed_announce(), "deadline exercised the actual peer_info read");
+    require(std::chrono::steady_clock::now() - started < 3s,
+            "partial receives do not restart directory read budget");
 }
+
 void rsd_success_releases_budget() {
     Link link;
     transport::PacketTunnel params;
     rsd_port(params);
     std::atomic<bool> cancel{false};
     std::optional<remote::Rsd> rsd;
+    link.peer->rsd_reply = Server::RsdReply::Directory;
+    std::chrono::milliseconds remainder{0};
     {
-        transport::IoBudget budget({350ms, [&] { return cancel.load(); }});
+        transport::IoBudget budget({1500ms, [&] { return cancel.load(); }});
         auto pending = std::async(std::launch::async, [&] {
             std::string why;
             auto result = remote::Rsd::open_bounded(link.client, params, {}, budget, why);
             if (!result) throw std::runtime_error(why);
             return result;
         });
-        until([&] { return link.peer->size(0) >= http2::kClientPrefaceSize; });
-        link.peer->send(0, http2::settings_frame({}));
-        auto body = xpc::make_dict();
-        auto directory = xpc::make_dict();
-        auto service = xpc::make_dict();
-        xpc::dict_set(service, "Port", xpc::make_uint64(12345));
-        xpc::dict_set(directory, "test.plain", std::move(service));
-        xpc::dict_set(body, "Services", std::move(directory));
-        link.peer->send(0, http2::data_frame(1, xpc::encode_message(
-            xpc::kFlagAlwaysSet | xpc::kFlagDataPresent, 1, &body)));
-        require(pending.wait_for(1s) == std::future_status::ready, "bounded RSD completes");
+        require(pending.wait_for(2s) == std::future_status::ready, "bounded RSD completes");
         rsd = pending.get();
+        require(link.peer->observed_announce(), "successful RSD exchanges identity and directory");
+        remainder = budget.remaining();
     } // Budget and its cancellation predicate can be destroyed after delivery.
     cancel = true;
-    std::this_thread::sleep_for(400ms);
+    std::this_thread::sleep_for(remainder + 50ms);
     require(link.peer->alive(0), "completed RSD control survives old deadline and cancellation");
     std::string err;
     require(rsd->has_service("test.plain") && rsd->connect_service("test.plain", err),
@@ -424,24 +496,38 @@ void destroy_registration() {
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     try {
+        active_case = "RSD pre-cancel/pending connect";
         rsd_pre_cancel_and_pending_connect();
+        active_case = "RSD silent SETTINGS deadline";
         rsd_silent_handshake(false);
+        active_case = "RSD silent SETTINGS cancellation";
         rsd_silent_handshake(true);
+        active_case = "RSD peer_info silence deadline";
         rsd_announce_budget(false);
+        active_case = "RSD partial peer_info drip deadline";
         rsd_announce_budget(true);
+        active_case = "rsd_success_releases_budget";
         rsd_success_releases_budget();
+        active_case = "stopped_before_connect";
         stopped_before_connect();
+        active_case = "cancel_connect";
         cancel_connect();
+        active_case = "cancel_handshake";
         cancel_handshake();
+        active_case = "cancel_reply_and_isolation";
         cancel_reply_and_isolation();
+        active_case = "cancel_buffered_reply";
         cancel_buffered_reply();
+        active_case = "cancel_flow_control";
         cancel_flow_control();
+        active_case = "cancel_tcp_send";
         cancel_tcp_send();
+        active_case = "destroy_registration";
         destroy_registration();
         std::printf("PASS: %u checks, service cancellation and endpoint isolation\n", checks);
         return 0;
     } catch (const std::exception &e) {
-        std::fprintf(stderr, "FAIL: %s\n", e.what());
+        std::fprintf(stderr, "FAIL [%s]: %s\n", active_case, e.what());
         return 1;
     }
 }

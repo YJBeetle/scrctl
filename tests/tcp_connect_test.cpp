@@ -3,6 +3,9 @@
 #include <cstdio>
 #include <thread>
 #include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <memory>
 #ifndef _WIN32
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -124,8 +127,18 @@ int main() {
 
     // A silent resolver owns all its state. Expiring callers must not wait for
     // its system call; outstanding workers are capped even after callers leave.
-    auto slow = [](const std::string &, uint16_t, std::string &) {
-        std::this_thread::sleep_for(milliseconds(400));
+    struct ResolverGate {
+        std::mutex mutex;
+        std::condition_variable changed;
+        unsigned entered = 0;
+        bool release = false;
+    };
+    auto gate = std::make_shared<ResolverGate>();
+    auto slow = [gate](const std::string &, uint16_t, std::string &) {
+        std::unique_lock lock(gate->mutex);
+        ++gate->entered;
+        gate->changed.notify_all();
+        gate->changed.wait(lock, [&] { return gate->release; });
         return std::vector<scrctl::transport::detail::TcpAddress>{};
     };
     const auto began = steady_clock::now();
@@ -134,14 +147,15 @@ int main() {
               "slow.invalid", port, dns_timeout, err, slow) &&
               err.find("timed out") != std::string::npos,
           "DNS timeout returns before resolver finishes");
-    IoBudget dns_cancel({seconds(1), [began] {
-        return steady_clock::now() - began > milliseconds(60);
+    check(steady_clock::now() - began < seconds(1), "DNS waits honor caller budget");
+    IoBudget dns_cancel({seconds(3), [gate] {
+        std::lock_guard lock(gate->mutex);
+        return gate->entered == 2;
     }});
     check(!scrctl::transport::detail::connect_tcp_bounded_with_resolver(
               "slow.invalid", port, dns_cancel, err, slow) &&
               err.find("cancelled") != std::string::npos,
           "DNS cancellation returns before resolver finishes");
-    check(steady_clock::now() - began < milliseconds(300), "DNS waits honor caller budget");
     IoBudget overload({seconds(1), {}});
     check(!scrctl::transport::detail::connect_tcp_bounded_with_resolver(
               "slow.invalid", port, overload, err, slow) &&
@@ -151,10 +165,17 @@ int main() {
     auto numeric = connect_tcp_bounded("127.0.0.1", port, numeric_during_dns, err);
     check(numeric.has_value(), "numeric addresses bypass occupied DNS slots");
     if (numeric) { Socket peer(::accept(server.fd(), nullptr, nullptr)); }
-    // Let injected jobs finish before process exit and prove slots are reusable.
-    std::this_thread::sleep_for(milliseconds(425));
-    IoBudget reused({seconds(1), {}});
-    auto resolved_again = connect_tcp_bounded("localhost", port, reused, err);
+    // Release held jobs explicitly; wait for slot cleanup rather than assuming
+    // workers finish after an arbitrary sleep on a loaded runner.
+    { std::lock_guard lock(gate->mutex); gate->release = true; }
+    gate->changed.notify_all();
+    IoBudget reused({seconds(3), {}});
+    std::optional<Socket> resolved_again;
+    do {
+        resolved_again = connect_tcp_bounded("localhost", port, reused, err);
+        if (resolved_again || err.find("outstanding") == std::string::npos) break;
+        std::this_thread::yield();
+    } while (!reused.stopped());
     check(resolved_again.has_value(), "completed DNS jobs release slots");
     if (resolved_again) { Socket peer(::accept(server.fd(), nullptr, nullptr)); }
     return failures ? 1 : 0;
