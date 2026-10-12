@@ -19,6 +19,27 @@ SHA256；源码清单逐文件记录路径、大小及 SHA256。源码收集失�
 FFmpeg 官方要求源码准确对应分发的库，并提供编译方式与修改资料，见
 [FFmpeg 分发说明](https://ffmpeg.org/legal.html)。
 
+## 已验证交付
+
+提交 `f9f1f3056f2da28e0cce1aeb5b89cd82d6c917af` 的
+[CI 38241744250](https://github.com/YJBeetle/scrctl/actions/runs/38241744250)
+在 macOS、Windows ARM64、Ubuntu、ASan + UBSan 四组全部通过。
+两平台对应源码附件、安装目录检查及运行包上传均成功：
+
+| 平台 | 实际运行库来源 | 源码附件内材料文件数 |
+| --- | --- | --- |
+| macOS | 25 dylib，14 Homebrew 包 | 82 |
+| Windows ARM64 | 104 DLL，81 MSYS2 包 | 264 |
+
+内部源码 `.tar` 的 SHA256（不是 GitHub artifact 外层 ZIP 的哈希）：
+
+```text
+macOS   eff2d1063132b88708a531afa7780d607c91ee36b906bbe24cbd891779185b65
+Windows b4e55c3a582ddcf2884b5e43f8747f76b5b9070c5aefb99684425fb4b84b7474
+```
+
+该结果验证源码材料与安装包的绑定及交付，不增加手机设备运行或逐字节重建的证明。
+
 ## 内容与版本对应
 
 - `project/scrctl-source.tar`：安装包记录的同一 Git 提交，含 CMake、平台适配、
