@@ -3,6 +3,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import subprocess
 from pathlib import Path
 import tarfile
 import tempfile
@@ -70,6 +71,46 @@ class ArchiveTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "checksum differs"):
             module.inspect_archive(self.path, "mingw-w64-test", "1.0-1",
                                    hash_reader=lambda *args: "0" * 64)
+
+    def test_git_source_checksum_uses_declared_tag_and_rejects_bad_checksum(self):
+        root = self.path.parent
+        repository = root / "repository"
+        subprocess.run(["git", "init", str(repository)], check=True, capture_output=True)
+        (repository / "source.txt").write_bytes(b"exact tagged source\n")
+        subprocess.run(["git", "-C", str(repository), "add", "source.txt"], check=True)
+        subprocess.run(["git", "-C", str(repository), "-c", "user.name=Test", "-c",
+                        "user.email=test@example.invalid", "commit", "-m", "source"],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repository), "tag", "v1"], check=True)
+        exported = subprocess.check_output(["git", "-c", "core.abbrev=no", "-C",
+                                            str(repository), "archive", "--format=tar", "v1"])
+        checksum = hashlib.sha256(exported).hexdigest()
+        bare = root / "bare"
+        subprocess.run(["git", "clone", "--bare", str(repository), str(bare)],
+                       check=True, capture_output=True)
+        source = "repository::git+https://example.invalid/repository#tag=v1"
+        def write_package(expected):
+            info = ("pkgbase = mingw-w64-test\n\tpkgver = 1.0\n\tpkgrel = 1\n"
+                    f"\tsource = {source}\n\tsha256sums = {expected}\npkgname = test\n")
+            with tarfile.open(self.path, "w:gz") as archive:
+                for name, data in [(".SRCINFO", info.encode()), ("PKGBUILD", b"recipe")]:
+                    entry = tarfile.TarInfo("mingw-w64-test/" + name)
+                    entry.size = len(data)
+                    archive.addfile(entry, io.BytesIO(data))
+                archive.add(bare, arcname="mingw-w64-test/repository")
+        write_package(checksum)
+        result = module.inspect_archive(self.path, "mingw-w64-test", "1.0-1")
+        self.assertEqual(result["inputs"][0]["checksums"], {"sha256": checksum})
+        write_package("0" * 64)
+        with self.assertRaisesRegex(RuntimeError, "checksum differs"):
+            module.inspect_archive(self.path, "mingw-w64-test", "1.0-1")
+        with self.assertRaisesRegex(RuntimeError, "tag or commit"):
+            module.archive_git_digest(self.path, "mingw-w64-test/repository",
+                                      source.replace("tag=v1", "branch=main"), "sha256")
+        (bare / "objects/info/alternates").write_text(str(repository / ".git/objects"))
+        write_package(checksum)
+        with self.assertRaisesRegex(RuntimeError, "external object store"):
+            module.inspect_archive(self.path, "mingw-w64-test", "1.0-1")
 
     def test_path_traversal_and_duplicate_members_fail(self):
         for name in ["../escape", "/absolute", "mingw-w64-test/PKGBUILD"]:

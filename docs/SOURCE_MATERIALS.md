@@ -42,6 +42,9 @@ Windows 若原工具链缓存仍有对应二进制包，会进一步比对包中
 `.BUILDINFO` 的 PKGBUILD 哈希；`recipe_binding` 会区分这一检查与仅根据精确
 pkgbase/版本匹配。声明 SKIP 的 VCS 输入依赖签名源码包的快照，清单保留这一边界，
 不把它描述成通过上游内容校验。
+Git 输入声明了非 SKIP 校验值时，按 makepkg 的 `git archive --format=tar`
+方式核对声明的 tag/commit；校验过程只读取包中的对象和引用，不运行仓库配置、
+hooks 或 PKGBUILD。
 
 系统提供且没有捆绑的 macOS frameworks、Windows 系统 DLL 不收集源码。
 通用编译器和全部构建工具的源码也不在此附件内；其版本、依赖声明和平台配方保留。

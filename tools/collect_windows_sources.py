@@ -14,6 +14,8 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -121,6 +123,68 @@ def archive_digest(archive, member, algorithm):
     return checksum.hexdigest()
 
 
+def archive_git_digest(archive, member, source, algorithm):
+    """Match makepkg's deterministic git archive checksum without running recipes."""
+    fragment = urllib.parse.urlsplit(source.split("::", 1)[-1]).fragment
+    kind, separator, ref = fragment.partition("=")
+    if kind not in {"tag", "commit"} or not separator or not ref:
+        raise RuntimeError(f"Git checksum requires a tag or commit: {source}")
+    prefix = member + "/"
+    with tempfile.TemporaryDirectory(prefix="scrctl-source-git-") as temporary:
+        directory = Path(temporary)
+        (directory / "objects").mkdir()
+        (directory / "refs").mkdir()
+        # Re-export through libarchive for all supported input compression formats.
+        # Copy only regular Git object/ref files; never install archive links,
+        # hooks, local configuration or external object-store references.
+        with tempfile.TemporaryFile() as errors:
+            process = subprocess.Popen([TAR, "-cf", "-", "--format=pax", "@" + str(archive)],
+                                       stdout=subprocess.PIPE, stderr=errors)
+            try:
+                with tarfile.open(fileobj=process.stdout, mode="r|") as stream:
+                    for entry in stream:
+                        if not entry.name.startswith(prefix):
+                            continue
+                        relative = PurePosixPath(entry.name[len(prefix):])
+                        if not relative.parts or ".." in relative.parts or relative.is_absolute():
+                            raise RuntimeError("Unsafe Git source archive path")
+                        allowed = (relative.as_posix() in {"HEAD", "packed-refs", "shallow"}
+                                   or relative.parts[0] in {"objects", "refs"})
+                        if not allowed or entry.isdir():
+                            continue
+                        if not entry.isfile() or relative.as_posix() == "objects/info/alternates":
+                            raise RuntimeError("Git source contains a link or external object store")
+                        target = directory.joinpath(*relative.parts)
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        with stream.extractfile(entry) as content, target.open("xb") as output:
+                            shutil.copyfileobj(content, output)
+                if process.wait(timeout=600):
+                    raise RuntimeError("Cannot read Git source package")
+            finally:
+                process.stdout.close()
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+        environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        environment.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull)
+        command = ["git", "-c", "core.abbrev=no", "-c", "core.attributesFile=" + os.devnull,
+                   "--git-dir=" + str(directory)]
+        resolved = subprocess.run(command + ["rev-parse", "--verify", "--end-of-options", ref + "^{commit}"],
+                                  env=environment, capture_output=True, timeout=60)
+        commit = resolved.stdout.decode().strip()
+        if resolved.returncode or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", commit):
+            raise RuntimeError(f"Git source lacks the declared tag or commit: {source}")
+        checksum = hashlib.new(algorithm)
+        with tempfile.TemporaryFile() as errors:
+            with subprocess.Popen(command + ["archive", "--format=tar", commit], env=environment,
+                                  stdout=subprocess.PIPE, stderr=errors) as process:
+                for chunk in iter(lambda: process.stdout.read(1024 * 1024), b""):
+                    checksum.update(chunk)
+                if process.wait(timeout=600):
+                    raise RuntimeError(f"Cannot export declared Git source: {source}")
+        return checksum.hexdigest()
+
+
 def parse_srcinfo(raw):
     fields = {}
     for line in raw.splitlines():
@@ -194,8 +258,11 @@ def inspect_archive(archive, base, version, expected_recipe_hash=None, reader=ar
                 if expected == "SKIP":
                     continue
                 if directory_present:
-                    raise RuntimeError(f"File checksum declared for VCS directory: {source}")
-                actual_hash = hash_reader(archive, member, algorithm)
+                    if not source.split("::", 1)[-1].startswith(("git+", "git://")):
+                        raise RuntimeError(f"Unsupported checksum for VCS directory: {source}")
+                    actual_hash = archive_git_digest(archive, member, source, algorithm)
+                else:
+                    actual_hash = hash_reader(archive, member, algorithm)
                 if actual_hash != expected:
                     raise RuntimeError(f"Upstream source checksum differs: {source}")
                 verified[algorithm] = actual_hash
