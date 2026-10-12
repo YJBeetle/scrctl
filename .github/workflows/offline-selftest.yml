@@ -137,9 +137,23 @@ jobs:
           name: scrctl-macos
           path: scrctl-macos-*.tar.gz
 
-  windows-arm64:
-    name: Windows ARM64
-    runs-on: windows-11-arm
+  windows:
+    name: Windows ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            label: ARM64
+            runner: windows-11-arm
+            msystem: CLANGARM64
+            package_prefix: mingw-w64-clang-aarch64
+          - arch: x64
+            label: x64
+            runner: windows-2022
+            msystem: CLANG64
+            package_prefix: mingw-w64-clang-x86_64
     timeout-minutes: 90
     defaults:
       run:
@@ -153,25 +167,25 @@ jobs:
           # Keep both implementations on the same LF worktree and local policy.
           git config --local core.autocrlf false
           git checkout-index --all --force
-      - name: 安装 ARM64 工具链和依赖
+      - name: 安装 ${{ matrix.label }} 工具链和依赖
         uses: msys2/setup-msys2@v2
         with:
-          msystem: CLANGARM64
+          msystem: ${{ matrix.msystem }}
           update: true
           install: >-
             git
-            mingw-w64-clang-aarch64-clang
-            mingw-w64-clang-aarch64-cmake
-            mingw-w64-clang-aarch64-ninja
-            mingw-w64-clang-aarch64-openssl
-            mingw-w64-clang-aarch64-curl
-            mingw-w64-clang-aarch64-gettext-tools
-            mingw-w64-clang-aarch64-SDL2
-            mingw-w64-clang-aarch64-python
-            mingw-w64-clang-aarch64-pkgconf
-            mingw-w64-clang-aarch64-ffmpeg
-            mingw-w64-clang-aarch64-nlohmann-json
-            mingw-w64-clang-aarch64-pugixml
+            ${{ matrix.package_prefix }}-clang
+            ${{ matrix.package_prefix }}-cmake
+            ${{ matrix.package_prefix }}-ninja
+            ${{ matrix.package_prefix }}-openssl
+            ${{ matrix.package_prefix }}-curl
+            ${{ matrix.package_prefix }}-gettext-tools
+            ${{ matrix.package_prefix }}-SDL2
+            ${{ matrix.package_prefix }}-python
+            ${{ matrix.package_prefix }}-pkgconf
+            ${{ matrix.package_prefix }}-ffmpeg
+            ${{ matrix.package_prefix }}-nlohmann-json
+            ${{ matrix.package_prefix }}-pugixml
       - name: 验证 MSYS2 源码签名通路
         run: |
           git diff --exit-code --stat HEAD
@@ -180,7 +194,7 @@ jobs:
           from pathlib import Path
           from tools.record_windows_package import MsysPackages
           from tools.collect_windows_sources import collect
-          owner = 'mingw-w64-clang-aarch64-bzip2'
+          owner = '${{ matrix.package_prefix }}-bzip2'
           metadata = {'source_commit': os.environ['GITHUB_SHA'],
                       'msys2_packages': {owner: MsysPackages().metadata(owner)},
                       'runtime_dependencies': [{'msys2_package': owner}]}
@@ -230,7 +244,7 @@ jobs:
       - name: 上传 Windows 对应源码
         uses: actions/upload-artifact@v4
         with:
-          name: scrctl-sources-windows-arm64
+          name: scrctl-sources-windows-${{ matrix.arch }}
           path: scrctl-sources-windows.tar
           compression-level: 0
           if-no-files-found: error
@@ -241,13 +255,13 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: windows-arm64-test-logs
+          name: windows-${{ matrix.arch }}-test-logs
           path: build-win/Testing/Temporary/*.log
           if-no-files-found: ignore
-      - name: 上传 Windows ARM64 产物
+      - name: 上传 Windows ${{ matrix.label }} 产物
         uses: actions/upload-artifact@v4
         with:
-          name: scrctl-windows-arm64
+          name: scrctl-windows-${{ matrix.arch }}
           path: dist-win/
 
   # 使用同一批离线用例检查字节缓冲访问、未对齐访问及其他未定义行为。

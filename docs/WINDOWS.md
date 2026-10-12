@@ -1,6 +1,7 @@
 # Windows 构建与验证
 
-目前已验证 Windows 11 ARM64、MSYS2 CLANGARM64 工具链。x64 和 MSVC 尚未验证。
+目前已验证 Windows 11 ARM64、MSYS2 CLANGARM64 工具链。Windows x64 / CLANG64 已加入 CI 矩阵，
+首轮构建与安装检查待验证；x64 真机 USB / Wi-Fi 尚未验证。MSVC 尚未支持和验证。
 应用使用普通 `main`，视频和 AAC-ELD 音频使用 FFmpeg，窗口与音频输出使用 SDL2。
 真实音乐离线解码及用户确认的短时 USB 播放已通过；新版调节层的 Wi-Fi 默认路由
 四分钟、双端播放和无音频对照均已确认，200 ms 缓冲下听感正常。USB 持续连接尚未通过；配置与对照见
@@ -16,18 +17,26 @@ winget install --id MSYS2.MSYS2 --exact --source winget --silent `
   --accept-source-agreements --accept-package-agreements --location C:\opt\msys64
 ```
 
-打开 **CLANGARM64** 终端。不要在 MINGW64、UCRT64
-或普通 MSYS 终端混用下面的依赖；CLANGARM64 生成原生 ARM64 程序。
+按目标架构打开对应终端，不要混用不同环境的依赖：
+
+| 目标 | MSYS2 终端 | 包名前缀 |
+|---|---|---|
+| ARM64（已验证） | CLANGARM64 | `mingw-w64-clang-aarch64` |
+| x64（CI 待验证） | CLANG64 | `mingw-w64-clang-x86_64` |
+
+下面的 `MINGW_PACKAGE_PREFIX` 由对应终端自动设置；它选择该环境的编译器、依赖和运行库。
+[MSYS2 环境说明](https://www.msys2.org/docs/environments/)。不要在普通 MSYS 终端执行，
+也不要用同一个构建目录在 ARM64 / x64 之间切换。
 
 ```bash
 pacman -S --needed \
-  mingw-w64-clang-aarch64-clang mingw-w64-clang-aarch64-cmake \
-  mingw-w64-clang-aarch64-ninja mingw-w64-clang-aarch64-openssl \
-  mingw-w64-clang-aarch64-curl \
-  mingw-w64-clang-aarch64-gettext-tools mingw-w64-clang-aarch64-SDL2 \
-  mingw-w64-clang-aarch64-python mingw-w64-clang-aarch64-pkgconf \
-  mingw-w64-clang-aarch64-ffmpeg mingw-w64-clang-aarch64-nlohmann-json \
-  mingw-w64-clang-aarch64-pugixml
+  ${MINGW_PACKAGE_PREFIX}-clang ${MINGW_PACKAGE_PREFIX}-cmake \
+  ${MINGW_PACKAGE_PREFIX}-ninja ${MINGW_PACKAGE_PREFIX}-openssl \
+  ${MINGW_PACKAGE_PREFIX}-curl \
+  ${MINGW_PACKAGE_PREFIX}-gettext-tools ${MINGW_PACKAGE_PREFIX}-SDL2 \
+  ${MINGW_PACKAGE_PREFIX}-python ${MINGW_PACKAGE_PREFIX}-pkgconf \
+  ${MINGW_PACKAGE_PREFIX}-ffmpeg ${MINGW_PACKAGE_PREFIX}-nlohmann-json \
+  ${MINGW_PACKAGE_PREFIX}-pugixml
 
 cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
@@ -234,9 +243,18 @@ scrcpy 的 MOD+Q 改动，改动后的验证另行记录。
 
 ## CI 产物
 
-GitHub Actions 的 `Windows ARM64` 作业使用 `windows-11-arm` 和 MSYS2 CLANGARM64，
-执行构建、离线测试、安装及独立启动检查。产物名为 `scrctl-windows-arm64`，
-测试日志另外保存。[提交 8efbfdd 的 Windows 作业](https://github.com/YJBeetle/scrctl/actions/runs/37596738733/job/112711112940)
+GitHub Actions 的 Windows 矩阵共用构建、离线测试、安装搬移检查和对应源码签名验证：
+
+| 作业 | runner / 工具链 | 运行包 | 对应源码附件 |
+|---|---|---|---|
+| Windows ARM64 | `windows-11-arm` / CLANGARM64 | `scrctl-windows-arm64` | `scrctl-sources-windows-arm64` |
+| Windows x64（首轮待验证） | `windows-2022` / CLANG64 | `scrctl-windows-x64` | `scrctl-sources-windows-x64` |
+
+两组分别保存测试日志，源码附件生成失败会阻止对应运行包上传。
+x64 首轮 CI 结果确认前，不将新增矩阵视为验证通过；CI 也不证明 x64 设备连接已测试。
+以下历史构建、下载包和真机记录均为 ARM64。
+
+[提交 8efbfdd 的 Windows 作业](https://github.com/YJBeetle/scrctl/actions/runs/37596738733/job/112711112940)
 已完成构建、离线测试、安装检查与上传；下载的实际 artifact ID 为 `11472035027`。
 包内 `source-commit.txt` 与 `scrctl-source.tar` 的归档提交均为
 `8efbfdddcbb39f653586377f022d313bd1bf63f4`。

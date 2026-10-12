@@ -365,7 +365,7 @@ def collect(metadata_path, output_directory, jobs=4, fetch=download, verifier=ve
                          "keyring; bundled DLL hashes remain bound by package-metadata.json. "
                          "Cached binary BUILDINFO recipe hashes are compared when present. "
                          "This is source delivery, not a bit-for-bit rebuild claim.",
-                "build": "Extract a source archive, enter its package directory in MSYS2 CLANGARM64, "
+                "build": "Extract a source archive, enter its package directory using the MSYS2 toolchain matching the recorded package owners, "
                          "install the PKGBUILD build dependencies, and run makepkg-mingw. "
                          "The captured package metadata and optional binary BUILDINFO record versions."}
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
