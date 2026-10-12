@@ -134,14 +134,20 @@ def archive_git_digest(archive, member, source, algorithm):
         directory = Path(temporary)
         (directory / "objects").mkdir()
         (directory / "refs").mkdir()
-        # Re-export through libarchive for all supported input compression formats.
         # Copy only regular Git object/ref files; never install archive links,
         # hooks, local configuration or external object-store references.
         with tempfile.TemporaryFile() as errors:
-            process = subprocess.Popen([TAR, "-cf", "-", "--format=pax", "@" + str(archive)],
-                                       stdout=subprocess.PIPE, stderr=errors)
+            process = None
+            if str(archive).endswith(".zst"):
+                decoder, archive_path = "zstd", str(archive)
+                if os.name == "nt":
+                    decoder = command_output(["cygpath", "-w", "/usr/bin/zstd.exe"]).decode().strip()
+                    archive_path = command_output(["cygpath", "-u", archive_path]).decode().strip()
+                process = subprocess.Popen([decoder, "-dc", archive_path],
+                                           stdout=subprocess.PIPE, stderr=errors)
             try:
-                with tarfile.open(fileobj=process.stdout, mode="r|") as stream:
+                with tarfile.open(name=str(archive) if process is None else None,
+                                  fileobj=process.stdout if process else None, mode="r|*") as stream:
                     for entry in stream:
                         if not entry.name.startswith(prefix):
                             continue
@@ -158,22 +164,30 @@ def archive_git_digest(archive, member, source, algorithm):
                         target.parent.mkdir(parents=True, exist_ok=True)
                         with stream.extractfile(entry) as content, target.open("xb") as output:
                             shutil.copyfileobj(content, output)
-                if process.wait(timeout=600):
-                    raise RuntimeError("Cannot read Git source package")
+                if process is not None and process.wait(timeout=600):
+                    errors.seek(0)
+                    raise RuntimeError("Cannot read Git source package: " + errors.read().decode(errors="replace")[-2000:])
             finally:
-                process.stdout.close()
-                if process.poll() is None:
-                    process.kill()
-                    process.wait()
+                if process is not None:
+                    process.stdout.close()
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
         environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
-        environment.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull)
-        command = ["git", "-c", "core.abbrev=no", "-c", "core.attributesFile=" + os.devnull,
-                   "--git-dir=" + str(directory)]
+        git, git_directory, null = "git", str(directory), os.devnull
+        if os.name == "nt":
+            git = command_output(["cygpath", "-w", "/usr/bin/git.exe"]).decode().strip()
+            git_directory = command_output(["cygpath", "-u", git_directory]).decode().strip()
+            null = "/dev/null"  # MSYS Git does not use Python's native Windows 'nul'.
+        environment.update(GIT_CONFIG_GLOBAL=null, GIT_CONFIG_SYSTEM=null)
+        command = [git, "-c", "core.abbrev=no", "-c", "core.attributesFile=" + null,
+                   "--git-dir=" + git_directory]
         resolved = subprocess.run(command + ["rev-parse", "--verify", "--end-of-options", ref + "^{commit}"],
                                   env=environment, capture_output=True, timeout=60)
         commit = resolved.stdout.decode().strip()
         if resolved.returncode or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", commit):
-            raise RuntimeError(f"Git source lacks the declared tag or commit: {source}")
+            raise RuntimeError(f"Git source lacks the declared tag or commit: {source}: "
+                               + resolved.stderr.decode(errors="replace")[-2000:])
         checksum = hashlib.new(algorithm)
         with tempfile.TemporaryFile() as errors:
             with subprocess.Popen(command + ["archive", "--format=tar", commit], env=environment,
@@ -181,7 +195,9 @@ def archive_git_digest(archive, member, source, algorithm):
                 for chunk in iter(lambda: process.stdout.read(1024 * 1024), b""):
                     checksum.update(chunk)
                 if process.wait(timeout=600):
-                    raise RuntimeError(f"Cannot export declared Git source: {source}")
+                    errors.seek(0)
+                    raise RuntimeError(f"Cannot export declared Git source: {source}: "
+                                       + errors.read().decode(errors="replace")[-2000:])
         return checksum.hexdigest()
 
 

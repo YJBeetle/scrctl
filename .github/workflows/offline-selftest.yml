@@ -180,6 +180,11 @@ jobs:
           path.write_text(json.dumps(metadata), encoding='utf-8')
           collect(path, 'source-signature-preflight', jobs=1)
           PY
+      - name: 打包工具离线回归
+        run: |
+          python -m unittest discover -s tests -p 'test_*sources.py' -v
+          python -m unittest discover -s tests -p test_record_windows_package.py -v
+          python -m unittest discover -s tests -p test_package_source_materials.py -v
       - name: 配置
         run: >-
           cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -199,11 +204,6 @@ jobs:
         run: ./build-win/scrctl.exe --help > /dev/null
       - name: 离线自检
         run: ctest --test-dir build-win --output-on-failure
-      - name: 打包工具离线回归
-        run: |
-          python -m unittest discover -s tests -p 'test_*sources.py' -v
-          python -m unittest discover -s tests -p test_record_windows_package.py -v
-          python -m unittest discover -s tests -p test_package_source_materials.py -v
       - name: 安装产物和依赖记录
         run: |
           cmake --install build-win --prefix dist-win
