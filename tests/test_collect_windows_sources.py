@@ -75,7 +75,10 @@ class ArchiveTest(unittest.TestCase):
     def test_git_source_checksum_uses_declared_tag_and_rejects_bad_checksum(self):
         root = self.path.parent
         repository = root / "repository"
-        subprocess.run(["git", "init", str(repository)], check=True, capture_output=True)
+        # The source-package fixture uses the conventional SHA-1/files layout,
+        # independent of a runner's Git experimental/default storage settings.
+        subprocess.run(["git", "init", "--object-format=sha1", "--ref-format=files",
+                        str(repository)], check=True, capture_output=True)
         (repository / "source.txt").write_bytes(b"exact tagged source\n")
         subprocess.run(["git", "-C", str(repository), "add", "source.txt"], check=True)
         subprocess.run(["git", "-C", str(repository), "-c", "user.name=Test", "-c",
@@ -86,7 +89,7 @@ class ArchiveTest(unittest.TestCase):
                                             str(repository), "archive", "--format=tar", "v1"])
         checksum = hashlib.sha256(exported).hexdigest()
         bare = root / "bare"
-        subprocess.run(["git", "clone", "--bare", str(repository), str(bare)],
+        subprocess.run(["git", "clone", "--bare", "--ref-format=files", str(repository), str(bare)],
                        check=True, capture_output=True)
         source = "repository::git+https://example.invalid/repository#tag=v1"
         def write_package(expected):
