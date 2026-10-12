@@ -146,6 +146,13 @@ jobs:
         shell: msys2 {0}
     steps:
       - uses: actions/checkout@v4
+      - name: 固定 Windows 源码换行
+        shell: pwsh
+        run: |
+          # checkout uses Git for Windows; subsequent steps use MSYS2 Git.
+          # Keep both implementations on the same LF worktree and local policy.
+          git config --local core.autocrlf false
+          git checkout-index --all --force
       - name: 安装 ARM64 工具链和依赖
         uses: msys2/setup-msys2@v2
         with:
@@ -167,6 +174,7 @@ jobs:
             mingw-w64-clang-aarch64-pugixml
       - name: 验证 MSYS2 源码签名通路
         run: |
+          git diff --exit-code --stat HEAD
           python - <<'PY'
           import json, os
           from pathlib import Path

@@ -68,7 +68,9 @@ def package(install, build, materials, platform, repository):
     if commit != current:
         raise RuntimeError('Installed package and project source commit differ')
     if subprocess.run(['git', '-C', str(repository), 'diff', '--quiet', 'HEAD']).returncode:
-        raise RuntimeError('Tracked project files differ from recorded source commit')
+        changes = subprocess.check_output(['git', '-C', str(repository), 'diff', '--name-status',
+                                           'HEAD'], text=True)
+        raise RuntimeError('Tracked project files differ from recorded source commit:\n' + changes[:4000])
     # Both collectors must finish before anything can be labelled a source bundle.
     collector = materials / ('homebrew' if platform == 'macos' else 'msys2')
     for directory in (collector, materials / 'embedded'):
