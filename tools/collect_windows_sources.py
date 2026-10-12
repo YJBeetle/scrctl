@@ -182,7 +182,8 @@ def archive_git_digest(archive, member, source, algorithm):
         environment.update(GIT_CONFIG_GLOBAL=null, GIT_CONFIG_SYSTEM=null)
         command = [git, "-c", "core.abbrev=no", "-c", "core.attributesFile=" + null,
                    "--git-dir=" + git_directory]
-        resolved = subprocess.run(command + ["rev-parse", "--verify", "--end-of-options", ref + "^{commit}"],
+        # Numeric commit peeling avoids MSYS brace expansion for native Python argv.
+        resolved = subprocess.run(command + ["rev-parse", "--verify", "--end-of-options", ref + "^0"],
                                   env=environment, capture_output=True, timeout=60)
         commit = resolved.stdout.decode().strip()
         if resolved.returncode or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", commit):
