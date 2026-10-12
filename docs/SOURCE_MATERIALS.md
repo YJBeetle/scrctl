@@ -6,6 +6,7 @@ macOS 和 Windows 的 CI 安装包分别配套同一轮运行的源码 artifact�
 | --- | --- | --- |
 | `scrctl-macos` | `scrctl-sources-macos` | `scrctl-sources-macos.tar` |
 | `scrctl-windows-arm64` | `scrctl-sources-windows-arm64` | `scrctl-sources-windows.tar` |
+| `scrctl-windows-x64` | `scrctl-sources-windows-x64` | `scrctl-sources-windows.tar` |
 
 请从**同一轮 GitHub Actions** 下载两个附件。安装目录的
 `share/doc/scrctl/source-materials.json` 保存源码提交、源码归档 SHA256 和总清单
@@ -39,6 +40,14 @@ Windows b4e55c3a582ddcf2884b5e43f8747f76b5b9070c5aefb99684425fb4b84b7474
 ```
 
 该结果验证源码材料与安装包的绑定及交付，不增加手机设备运行或逐字节重建的证明。
+
+### Windows x64
+
+提交 `7afa16d` 的 [Windows x64 作业](https://github.com/YJBeetle/scrctl/actions/runs/38308712797/job/115008931519)
+通过 73/73 项离线测试及安装搬移检查，运行包与对应源码附件均已上传。
+安装包来源为 105 DLL / 82 MSYS2 包，源码附件包含 267 份材料；内部源码 `.tar`
+SHA256 为 `4c95b0b5f2066c387f51fe266258a71b5e2b3962f72c660fbf558546ed06f45b`。
+这项验收覆盖 x64 构建和交付，不增加手机运行或逐字节重建证明。
 
 ## 内容与版本对应
 
@@ -101,7 +110,7 @@ python3 tools/collect_embedded_sources.py build sources-macos/embedded
 python3 tools/package_source_materials.py dist-macos build sources-macos --platform macos
 ```
 
-Windows（MSYS2 CLANGARM64，已初始化可信 pacman keyring）：
+Windows（匹配安装包架构的 MSYS2 CLANGARM64 或 CLANG64，已初始化可信 pacman keyring）：
 
 ```sh
 python tools/collect_windows_sources.py \

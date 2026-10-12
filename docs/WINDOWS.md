@@ -1,7 +1,8 @@
 # Windows 构建与验证
 
-目前已验证 Windows 11 ARM64、MSYS2 CLANGARM64 工具链。Windows x64 / CLANG64 已加入 CI 矩阵，
-首轮构建与安装检查待验证；x64 真机 USB / Wi-Fi 尚未验证。MSVC 尚未支持和验证。
+目前已验证 Windows 11 ARM64、MSYS2 CLANGARM64 工具链。Windows x64 / CLANG64
+已通过 Windows Server 2022 CI 的构建、73/73 离线测试、安装搬移与对应源码交付；
+x64 真机 USB / Wi-Fi 尚未验证。MSVC 尚未支持和验证。
 应用使用普通 `main`，视频和 AAC-ELD 音频使用 FFmpeg，窗口与音频输出使用 SDL2。
 真实音乐离线解码及用户确认的短时 USB 播放已通过；新版调节层的 Wi-Fi 默认路由
 四分钟、双端播放和无音频对照均已确认，200 ms 缓冲下听感正常。USB 持续连接尚未通过；配置与对照见
@@ -22,7 +23,7 @@ winget install --id MSYS2.MSYS2 --exact --source winget --silent `
 | 目标 | MSYS2 终端 | 包名前缀 |
 |---|---|---|
 | ARM64（已验证） | CLANGARM64 | `mingw-w64-clang-aarch64` |
-| x64（CI 待验证） | CLANG64 | `mingw-w64-clang-x86_64` |
+| x64（CI 构建及安装已验证） | CLANG64 | `mingw-w64-clang-x86_64` |
 
 下面的 `MINGW_PACKAGE_PREFIX` 由对应终端自动设置；它选择该环境的编译器、依赖和运行库。
 [MSYS2 环境说明](https://www.msys2.org/docs/environments/)。不要在普通 MSYS 终端执行，
@@ -248,9 +249,12 @@ GitHub Actions 的 Windows 矩阵共用构建、离线测试、安装搬移检�
 | 作业 | runner / 工具链 | 运行包 | 对应源码附件 |
 |---|---|---|---|
 | Windows ARM64 | `windows-11-arm` / CLANGARM64 | `scrctl-windows-arm64` | `scrctl-sources-windows-arm64` |
-| Windows x64（首轮待验证） | `windows-2022` / CLANG64 | `scrctl-windows-x64` | `scrctl-sources-windows-x64` |
+| Windows x64 | `windows-2022` / CLANG64 | `scrctl-windows-x64` | `scrctl-sources-windows-x64` |
 
 两组分别保存测试日志，源码附件生成失败会阻止对应运行包上传。
+提交 `7afa16d` 的 [Windows x64 作业](https://github.com/YJBeetle/scrctl/actions/runs/38308712797/job/115008931519)
+实际执行 73/73 项并通过，源码和运行包已上传，安装搬移与独立启动检查通过。
+这项验收覆盖原生 x64 构建与安装，不代替手机真机互操作。
 x64 首轮 CI 结果确认前，不将新增矩阵视为验证通过；CI 也不证明 x64 设备连接已测试。
 以下历史构建、下载包和真机记录均为 ARM64。
 
