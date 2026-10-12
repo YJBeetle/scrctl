@@ -101,8 +101,13 @@ int main() {
     using scrctl::transport::IoBudget;
     using scrctl::transport::connect_tcp_bounded;
     for (const char *host : {"127.0.0.1", "localhost"}) {
-        IoBudget budget({seconds(1), {}});
+        // Only IPv4 listens here. Windows can spend multiple seconds rejecting
+        // localhost's first IPv6 candidate; success must allow both attempts.
+        // The separate silent-resolver cases retain their short deadline checks.
+        IoBudget budget({seconds(5), {}});
         auto client = connect_tcp_bounded(host, port, budget, err);
+        if (!client || !err.empty())
+            std::fprintf(stderr, "bounded connect to %s: %s\n", host, err.c_str());
         check(client.has_value() && err.empty(), "bounded numeric/hostname connection succeeds");
         if (client) {
             Socket peer(::accept(server.fd(), nullptr, nullptr));
