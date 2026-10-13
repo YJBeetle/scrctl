@@ -78,12 +78,18 @@ int main() {
     std::weak_ptr<int> lifetime = borrowed_lifetime;
     Job cancel_job([&, owned = borrowed_lifetime](std::stop_token token) {
         std::stop_callback callback(token, [&] {
-            callback_reentered = cancel_job_pointer->busy();
+            {
+                std::lock_guard lock(mutex);
+                callback_reentered = cancel_job_pointer->busy();
+            }
             wake.notify_all();
         });
         cancel_entered.set_value();
         std::unique_lock lock(mutex);
-        wake.wait(lock, token, [] { return false; });
+        // Wait for our callback, rather than condition_variable_any's internal
+        // stop callback: that callback may wake the worker before ours runs,
+        // letting the worker destroy and unregister ours during request_stop.
+        wake.wait(lock, [&] { return callback_reentered.load(); });
         stop_seen = token.stop_requested();
         returned = true;
         return Job::Completion{true, false, scrctl::remote::DeviceOrientation::Portrait, {}};
