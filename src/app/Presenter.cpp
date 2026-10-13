@@ -10,8 +10,9 @@
 namespace scrctl::app {
 namespace {
 // SDL2 的文本输入状态属于整个 SDL 进程。所有 Presenter 都在 SDL 主线程
-// 创建/销毁；多窗口共享停用范围，最后一个窗口才恢复调用者原来的状态。
-unsigned physical_keyboard_windows = 0;
+// 创建/销毁；模式跟随焦点，多窗口结束后才恢复调用者原来的状态。
+unsigned keyboard_windows = 0;
+const Presenter *focused_keyboard_owner = nullptr;
 bool restore_text_input = false;
 bool same_crop(const Crop &a, const Crop &b) {
     return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h &&
@@ -20,15 +21,40 @@ bool same_crop(const Crop &a, const Crop &b) {
 }
 } // namespace
 
-void Presenter::begin_physical_keyboard_mode() {
-    if (physical_keyboard_mode_) return;
-    if (physical_keyboard_windows++ == 0) {
-        restore_text_input = SDL_IsTextInputActive() == SDL_TRUE;
+void Presenter::begin_keyboard_mode() {
+    if (keyboard_mode_registered_) return;
+    if (keyboard_windows++ == 0) restore_text_input = SDL_IsTextInputActive() == SDL_TRUE;
+    keyboard_mode_registered_ = true;
+    activate_keyboard_mode();
+}
+
+void Presenter::activate_keyboard_mode() {
+    focused_keyboard_owner = this;
+    if (prefer_text_ && input_active_) SDL_StartTextInput();
+    else SDL_StopTextInput();
+}
+
+void Presenter::clear_composition() {
+    composing_ = finishing_composition_ = composition_key_released_ = shortcut_text_blocked_ = false;
+    if (!prefer_text_ || !window_) return;
+    // Cancel the host preedit and only discard text addressed to this window.
+    Uint32 own_id = SDL_GetWindowID(window_);
+    SDL_FilterEvents([](void *userdata, SDL_Event *event) {
+        const auto id = *static_cast<Uint32 *>(userdata);
+        if ((event->type == SDL_TEXTINPUT && event->text.windowID == id) ||
+            (event->type == SDL_TEXTEDITING && event->edit.windowID == id)) return 0;
+#if SDL_VERSION_ATLEAST(2, 0, 22)
+        if (event->type == SDL_TEXTEDITING_EXT && event->editExt.windowID == id) {
+            SDL_free(event->editExt.text);
+            return 0;
+        }
+#endif
+        return 1;
+    }, &own_id);
+    if (focused_keyboard_owner == this) {
+        SDL_StopTextInput();
+        if (input_active_) SDL_StartTextInput();
     }
-    // 仅忽略 TEXTINPUT 不够：Windows IME 可在生成 SDL_KEYDOWN 前消费物理键。
-    // 本前端只转发物理 usages，Unicode 输入由显式剪贴板操作交付。
-    SDL_StopTextInput();
-    physical_keyboard_mode_ = true;
 }
 
 void Presenter::set_background(uint8_t r, uint8_t g, uint8_t b) {
@@ -83,7 +109,7 @@ bool Presenter::open(int frame_w, int frame_h, const Crop &crop, int degrees, do
     if (horizontal_flip_) {
         std::printf(SCRCTL_TR("Display is horizontally flipped before rotation\n"));
     }
-    begin_physical_keyboard_mode();
+    begin_keyboard_mode();
     return true;
 }
 
@@ -99,11 +125,12 @@ bool Presenter::open_background(const WindowSpec &spec) {
     SDL_GetRendererOutputSize(renderer_, &out_w, &out_h);
     std::printf(SCRCTL_TR("Background window %dx%d points / drawable %dx%d pixels\n"),
                 points_w, points_h, out_w, out_h);
-    begin_physical_keyboard_mode();
+    begin_keyboard_mode();
     return true;
 }
 
 bool Presenter::open_window(const WindowSpec &spec) {
+    prefer_text_ = spec.prefer_text;
     shortcut_mods_ = spec.shortcut_mods;
     keyboard_ = KeyboardState(shortcut_mods_);
     Uint32 win_flags = SDL_WINDOW_ALLOW_HIGHDPI;
@@ -374,7 +401,8 @@ void Presenter::report_input(int raw_x, int raw_y, double fx, double fy, const c
 
 bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                      const KeyboardHandler &on_keyboard, const PasteHandler &on_paste,
-                     const ButtonHandler &on_button, const RotateHandler &on_rotate) {
+                     const ButtonHandler &on_button, const RotateHandler &on_rotate,
+                     const TextHandler &on_text) {
     apply_pending_resize(on_touch, on_keyboard, on_button);
     if (release_pending_) {
         release_input(on_touch, on_keyboard, on_button);
@@ -411,6 +439,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
             if (window_id == 0 || e.window.windowID != window_id) break;
             if (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
                 input_active_ = true;
+                activate_keyboard_mode();
                 if (!(SDL_GetWindowFlags(window_) & SDL_WINDOW_MINIMIZED)) minimized_ = false;
             } else if (e.window.event == SDL_WINDOWEVENT_RESTORED ||
                        e.window.event == SDL_WINDOWEVENT_MAXIMIZED) {
@@ -424,6 +453,10 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                 // 可能在抬起之后再次发送 down，或让抬起跳到未发送的位置。
                 pending_move = false;
                 input_active_ = false;
+                if (focused_keyboard_owner == this) {
+                    focused_keyboard_owner = nullptr;
+                    SDL_StopTextInput();
+                }
                 if (e.window.event == SDL_WINDOWEVENT_MINIMIZED) minimized_ = true;
                 release_input(on_touch, on_keyboard, on_button);
             }
@@ -457,11 +490,41 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                 !(mods & (KMOD_CTRL | KMOD_ALT | KMOD_GUI | KMOD_SHIFT));
             const SDL_Scancode scancode = e.key.keysym.scancode;
             const bool fresh = !e.key.repeat && !keyboard_.is_pressed(scancode);
+            // Printable DOWN/UP belong to the host text path. Candidate editing
+            // keys also stay local until UP, including commit-before-DOWN order.
+            const bool candidate_key = scancode == SDL_SCANCODE_RETURN ||
+                scancode == SDL_SCANCODE_KP_ENTER || scancode == SDL_SCANCODE_ESCAPE ||
+                scancode == SDL_SCANCODE_BACKSPACE || scancode == SDL_SCANCODE_DELETE ||
+                scancode == SDL_SCANCODE_TAB || scancode == SDL_SCANCODE_LEFT ||
+                scancode == SDL_SCANCODE_RIGHT || scancode == SDL_SCANCODE_UP ||
+                scancode == SDL_SCANCODE_DOWN || scancode == SDL_SCANCODE_HOME ||
+                scancode == SDL_SCANCODE_END || scancode == SDL_SCANCODE_PAGEUP ||
+                scancode == SDL_SCANCODE_PAGEDOWN;
+            const bool completion_key = scancode == SDL_SCANCODE_RETURN ||
+                scancode == SDL_SCANCODE_KP_ENTER || scancode == SDL_SCANCODE_ESCAPE;
+            const bool command = (mods & (KMOD_CTRL | KMOD_GUI)) != 0 &&
+                                 !((mods & KMOD_RALT) && !(mods & KMOD_GUI));
+            const bool printable = (e.key.keysym.sym >= 32 && e.key.keysym.sym < 127) ||
+                (scancode >= SDL_SCANCODE_KP_DIVIDE && scancode <= SDL_SCANCODE_KP_PERIOD) ||
+                scancode == SDL_SCANCODE_KP_EQUALS;
+            const bool text_modifier = scancode == SDL_SCANCODE_LSHIFT ||
+                scancode == SDL_SCANCODE_RSHIFT || scancode == SDL_SCANCODE_LALT ||
+                scancode == SDL_SCANCODE_RALT;
+            const bool ime_local = prefer_text_ && !shortcut &&
+                ((candidate_key && composing_) || (completion_key && finishing_composition_) ||
+                 (!command && (printable || text_modifier)));
+            if (fresh && prefer_text_) {
+                if (shortcut || command) shortcut_text_blocked_ = true;
+                else {
+                    shortcut_text_blocked_ = false;
+                    if (!completion_key && !text_modifier && !composing_) finishing_composition_ = false;
+                }
+            }
             const auto reports = keyboard_.key_down(scancode, mods, e.key.repeat != 0,
-                                                     shortcut || local_f11);
+                                                     shortcut || local_f11 || ime_local, ime_local && !shortcut && !local_f11);
             // 一次完整 DOWN/UP 也可能换控件或修改文本；按住门控只能保护中间状态。
             // 仅真实设备报告使旧粘贴失效，MOD+V 自身不能取消刚创建的请求。
-            if (on_keyboard && !reports.empty()) ++input_generation_;
+            if (!prefer_text_ && on_keyboard && !reports.empty()) ++input_generation_;
             for (const auto &report : reports) {
                 if (on_keyboard) on_keyboard(report);
             }
@@ -564,6 +627,12 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                 button_ok = release_button(*button_key, on_button);
                 *button_key = {};
             }
+            if (prefer_text_ && (e.key.keysym.scancode == SDL_SCANCODE_RETURN ||
+                e.key.keysym.scancode == SDL_SCANCODE_KP_ENTER ||
+                e.key.keysym.scancode == SDL_SCANCODE_ESCAPE)) {
+                if (composing_ || finishing_composition_) composition_key_released_ = true;
+                finishing_composition_ = false;
+            }
             if (input_active_ || owned_button) {
                 for (const auto &report : keyboard_.key_up(e.key.keysym.scancode,
                                                           e.key.keysym.mod)) {
@@ -574,10 +643,32 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
             break;
         }
         case SDL_TEXTINPUT:
-        case SDL_TEXTEDITING:
-            // 物理模式已停用本进程 SDL 文本输入；此前排队的文字/IME 编辑
-            // 也不能与物理键报告混合注入。不更改宿主机输入法或键盘布局。
+            if (prefer_text_ && input_active_ && window_id && e.text.windowID == window_id) {
+                if (composing_ && !composition_key_released_) finishing_composition_ = true;
+                composing_ = false;
+                if (!shortcut_text_blocked_ && !(SDL_GetModState() & shortcut_mods_) &&
+                    e.text.text[0] && on_text) on_text(std::string(e.text.text));
+            }
             break;
+        case SDL_TEXTEDITING:
+            if (prefer_text_ && input_active_ && window_id && e.edit.windowID == window_id) {
+                if (e.edit.text[0] && !composing_) composition_key_released_ = false;
+                if (!e.edit.text[0] && composing_ && !composition_key_released_) finishing_composition_ = true;
+                composing_ = e.edit.text[0] != 0;
+                if (composing_) shortcut_text_blocked_ = false;
+            }
+            break;
+#if SDL_VERSION_ATLEAST(2, 0, 22)
+        case SDL_TEXTEDITING_EXT:
+            if (prefer_text_ && input_active_ && window_id && e.editExt.windowID == window_id) {
+                if (e.editExt.text && e.editExt.text[0] && !composing_) composition_key_released_ = false;
+                if ((!e.editExt.text || !e.editExt.text[0]) && composing_ && !composition_key_released_) finishing_composition_ = true;
+                composing_ = e.editExt.text && e.editExt.text[0];
+                if (composing_) shortcut_text_blocked_ = false;
+            }
+            SDL_free(e.editExt.text);
+            break;
+#endif
         case SDL_MOUSEBUTTONDOWN:
             if (input_active_ && window_id != 0 && e.button.windowID == window_id &&
                 e.button.button == SDL_BUTTON_MIDDLE && on_button && !button_failed_ &&
@@ -602,6 +693,7 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
                     break;
                 }
                 ++input_generation_;
+                clear_composition();
                 dragging_ = true;
                 last_touch_x_ = px;
                 last_touch_y_ = py;
@@ -672,6 +764,9 @@ bool Presenter::pump(const std::function<void(double, double, bool)> &on_touch,
         last_touch_y_ = py;
         on_touch(px, py, true);
     }
+    // A commit cannot identify a completion DOWN arriving in a later poll batch.
+    // Existing Text/Local key ownership still persists until its real UP.
+    finishing_composition_ = false;
     return quit;
 }
 
@@ -701,6 +796,12 @@ void Presenter::discard_queued_input() {
         case SDL_KEYDOWN: case SDL_KEYUP: event_id = event->key.windowID; break;
         case SDL_TEXTINPUT: event_id = event->text.windowID; break;
         case SDL_TEXTEDITING: event_id = event->edit.windowID; break;
+#if SDL_VERSION_ATLEAST(2, 0, 22)
+        case SDL_TEXTEDITING_EXT:
+            event_id = event->editExt.windowID;
+            if (event_id == id) SDL_free(event->editExt.text);
+            break;
+#endif
         case SDL_MOUSEMOTION: event_id = event->motion.windowID; break;
         case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP: event_id = event->button.windowID; break;
         case SDL_MOUSEWHEEL: event_id = event->wheel.windowID; break;
@@ -735,6 +836,7 @@ void Presenter::release_layout_input(const std::function<void(double, double, bo
                                      const KeyboardHandler &on_keyboard,
                                      const ButtonHandler &on_button) {
     ++input_generation_;
+    clear_composition();
     const bool buttons_ok = release_buttons(on_button, true);
     release_touch(on_touch);
     // 失败的输入通路不能保留待结束的本地按钮归属；其它 UP 已在上面尽力发送。
@@ -961,12 +1063,20 @@ void Presenter::release_input(const std::function<void(double, double, bool)> &o
                               const KeyboardHandler &on_keyboard,
                               const ButtonHandler &on_button) {
     ++input_generation_;
+    clear_composition();
     release_buttons(on_button, false);
     release_touch(on_touch);
     for (const auto &report : keyboard_.release_all()) {
         if (on_keyboard) on_keyboard(report);
     }
     release_pending_ = false;
+}
+
+bool Presenter::ready_for_text() const {
+    return window_ != nullptr && input_active_ && !release_pending_ && !dragging_ &&
+           middle_home_.usage == 0 &&
+           std::none_of(button_keys_.begin(), button_keys_.end(),
+                        [](const ButtonKey &key) { return key.usage != 0; });
 }
 
 bool Presenter::ready_for_paste() const {
@@ -989,6 +1099,7 @@ bool Presenter::press_button(ButtonKey &key, uint16_t usage, const ButtonHandler
     key = {usage, true};
     if (!already_down) {
         ++input_generation_;
+        clear_composition();
         if (!on_button(hid::button::kUsagePageConsumer, usage, true)) {
             button_failed_ = true;
             return false;
@@ -1029,8 +1140,15 @@ Presenter::~Presenter() {
     if (window_ != nullptr) {
         SDL_DestroyWindow(window_);
     }
-    if (physical_keyboard_mode_ && --physical_keyboard_windows == 0 && restore_text_input) {
-        SDL_StartTextInput();
+    if (keyboard_mode_registered_) {
+        if (focused_keyboard_owner == this) {
+            focused_keyboard_owner = nullptr;
+            SDL_StopTextInput();
+        }
+        if (--keyboard_windows == 0) {
+            if (restore_text_input) SDL_StartTextInput();
+            else SDL_StopTextInput();
+        }
     }
 }
 

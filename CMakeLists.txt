@@ -289,6 +289,8 @@ add_library(scrctl_app STATIC
         src/app/Presenter.cpp
         src/app/KeyboardState.cpp
         src/app/ClipboardPasteJob.cpp
+        src/app/TextInputQueue.cpp
+        src/app/TextInputDelivery.cpp
         src/app/DeviceRotationJob.cpp
         src/app/AudioOut.cpp
         src/app/FileSource.cpp
@@ -413,6 +415,14 @@ if(SCRCTL_BUILD_TESTS)
     target_link_libraries(clipboard_job_test PRIVATE Scrctl::Threading)
     add_test(NAME clipboard_job COMMAND clipboard_job_test)
     set_tests_properties(clipboard_job PROPERTIES TIMEOUT 15)
+
+    scrctl_add_test_executable(text_input_queue_test tests/text_input_queue_test.cpp)
+    target_link_libraries(text_input_queue_test PRIVATE scrctl_app)
+    add_test(NAME text_input_queue COMMAND text_input_queue_test)
+    scrctl_add_test_executable(text_input_delivery_test tests/text_input_delivery_test.cpp)
+    target_link_libraries(text_input_delivery_test PRIVATE scrctl_app)
+    add_test(NAME text_input_delivery COMMAND text_input_delivery_test)
+    set_tests_properties(text_input_delivery PROPERTIES TIMEOUT 15)
 
     scrctl_add_test_executable(device_rotation_test tests/device_rotation_test.cpp)
     target_link_libraries(device_rotation_test PRIVATE scrctl_app)

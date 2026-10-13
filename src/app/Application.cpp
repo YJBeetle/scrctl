@@ -14,6 +14,7 @@
 #include "app/Cli.h"
 #include "app/Commands.h"
 #include "app/ClipboardPasteJob.h"
+#include "app/TextInputDelivery.h"
 #include "app/DeviceRotationJob.h"
 #include "app/FileSource.h"
 #include "app/LiveSource.h"
@@ -320,10 +321,12 @@ int run(int argc, char **argv) {
     int exit_code = 0;
     uint64_t input_epoch = 0, seen_generation = 0, next_paste_id = 0;
     std::optional<std::chrono::steady_clock::time_point> paste_started;
+    std::unique_ptr<TextInputDelivery> text_delivery;
     const auto cancel_paste = [&] {
         ++input_epoch;
         paste_started.reset();
-        if (paste_job) paste_job->cancel();
+        if (text_delivery) text_delivery->cancel();
+        else if (paste_job) paste_job->cancel();
     };
     const auto synchronize_input = [&] {
         if (presenter && seen_generation != presenter->input_generation()) {
@@ -342,6 +345,7 @@ int run(int argc, char **argv) {
                      control_err.c_str());
     };
     auto on_touch = [&](double x, double y, bool down) {
+        synchronize_input();
         if (!control_enabled || live == nullptr || control_warned || o.no_video_playback) {
             return;
         }
@@ -349,13 +353,28 @@ int run(int argc, char **argv) {
             input_failed();
         }
     };
+    if (o.prefer_text && paste_job) {
+        text_delivery = std::make_unique<TextInputDelivery>(*paste_job,
+            [&](const KeyboardState::Report &report, std::string &error) {
+                return live->keyboard_state(report, error);
+            });
+    }
     const auto on_keyboard = [&](const std::vector<uint16_t> &usages) {
+        synchronize_input();
         if (!control_enabled || live == nullptr || control_warned) return;
-        if (!live->keyboard_state(usages, control_err)) input_failed();
+        const bool ok = text_delivery ? text_delivery->keyboard(usages, input_epoch, control_err)
+                                      : live->keyboard_state(usages, control_err);
+        if (!ok) input_failed();
+    };
+    const auto on_text = [&](const std::string &text) {
+        synchronize_input();
+        if (!text_delivery || control_warned || runtime.stop_requested()) return;
+        if (!text_delivery->text(text, input_epoch, control_err)) input_failed();
     };
     Presenter::ButtonHandler on_button;
     if (control_enabled && live != nullptr) {
         on_button = [&](uint16_t page, uint16_t code, bool down) {
+            synchronize_input();
             if (down && control_warned) return false;
             // UP 仍交给来源清理已尝试的 DOWN；来源不为清理打开新连接。
             // 清理错误不能覆盖已保存的首次控制错误或再次打印同一提示。
@@ -373,11 +392,11 @@ int run(int argc, char **argv) {
     const auto on_paste = [&] {
         synchronize_input();
         if (!paste_job || control_warned || !presenter || runtime.stop_requested()) return;
-        if (!presenter->ready_for_paste()) {
+        if (!(text_delivery ? presenter->ready_for_text() : presenter->ready_for_paste())) {
             std::fprintf(stderr, "%s\n", SCRCTL_TR("Release the held keys or mouse button before pasting"));
             return;
         }
-        if (paste_job->busy()) {
+        if (!text_delivery && paste_job->busy()) {
             std::fprintf(stderr, "%s\n", SCRCTL_TR("Clipboard paste is already in progress"));
             return;
         }
@@ -394,6 +413,10 @@ int run(int argc, char **argv) {
             std::fprintf(stderr, "%s\n", SCRCTL_TR("Clipboard text exceeds the 1 MiB paste limit"));
             return;
         }
+        if (text_delivery) {
+            if (!text_delivery->text(std::string(text.get(), size), input_epoch, control_err)) input_failed();
+            return;
+        }
         const auto started = paste_job->start(++next_paste_id, input_epoch,
                                               std::string(text.get(), size));
         if (started == ClipboardPasteJob::StartStatus::Started) {
@@ -405,6 +428,13 @@ int run(int argc, char **argv) {
     const auto service_paste = [&] {
         synchronize_input();
         if (!paste_job) return;
+        if (text_delivery) {
+            if (quit || control_warned || runtime.stop_requested()) cancel_paste();
+            if (!text_delivery->service(input_epoch, !quit && !control_warned &&
+                    !runtime.stop_requested() && presenter && presenter->ready_for_text(), control_err) &&
+                    !control_warned) input_failed();
+            return;
+        }
         if (quit || control_warned || runtime.stop_requested()) cancel_paste();
         if (paste_started && std::chrono::steady_clock::now() - *paste_started >=
                                  std::chrono::seconds(5)) {
@@ -467,12 +497,13 @@ int run(int argc, char **argv) {
         spec.fullscreen = o.fullscreen;
         spec.want_readback = o.verify_at > 0;
         spec.shortcut_mods = o.shortcut_mods;
+        spec.prefer_text = o.prefer_text;
         spec.horizontal_flip = o.display_flip;
         return spec;
     };
     const auto pump_window = [&] {
         if (presenter) {
-            quit = presenter->pump(on_touch, on_keyboard, on_paste, on_button, on_rotate);
+            quit = presenter->pump(on_touch, on_keyboard, on_paste, on_button, on_rotate, on_text);
             // 静止画面的本地重绘也可能失败；与新帧绘制失败一样返回错误，
             // 仍经统一退出流程取消粘贴并收尾录制，不能视为用户正常关闭。
             if (presenter->render_failed()) {
@@ -612,6 +643,7 @@ int run(int argc, char **argv) {
         pump_window();
     }
 
+    cancel_paste();
     if (presenter != nullptr) {
         presenter->release_input(on_touch, on_keyboard, on_button);
     }

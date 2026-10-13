@@ -119,7 +119,7 @@ void KeyboardState::sync_modifiers(uint16_t modifiers) {
                           (shortcut_mods_ & modifier.mask) == 0 && owner != Owner::Local;
         held_[modifier.usage] = down;
         // 允许新的主键带入尚未收到 DOWN 的修饰键，后续该修饰键的 UP 仍须生效。
-        if (down && owner == Owner::None) owner = Owner::Device;
+        if (down && (owner == Owner::None || owner == Owner::Text)) owner = Owner::Device;
         // 快照已确认设备修饰键松开，归属也需清除，下一次真实 DOWN 才会重新生效。
         // 本地键仍保留到自己的 UP，避免后续快照把快捷键重新引入设备集合。
         if (!down && owner == Owner::Device) owner = Owner::None;
@@ -127,7 +127,7 @@ void KeyboardState::sync_modifiers(uint16_t modifiers) {
 }
 
 KeyboardState::Reports KeyboardState::key_down(SDL_Scancode scancode, uint16_t modifiers,
-                                               bool repeat, bool consumed) {
+                                               bool repeat, bool consumed, bool local_text) {
     if (repeat || !valid_index(scancode)) return {};
     auto &owner = owners_[static_cast<std::size_t>(scancode)];
     if (owner != Owner::None) return {};
@@ -135,7 +135,7 @@ KeyboardState::Reports KeyboardState::key_down(SDL_Scancode scancode, uint16_t m
     const auto usage = modifier ? modifier->usage : ordinary_usage(scancode);
     if (usage == 0) return {};
     const bool local = consumed || (modifier && (shortcut_mods_ & modifier->mask) != 0);
-    owner = local ? Owner::Local : Owner::Device;
+    owner = local ? (local_text ? Owner::Text : Owner::Local) : Owner::Device;
     if (local) return {};
 
     const auto previous = held();

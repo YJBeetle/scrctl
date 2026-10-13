@@ -17,12 +17,13 @@ public:
 
     explicit KeyboardState(uint16_t shortcut_mods = KMOD_LALT | KMOD_LGUI);
 
-    /// consumed 由窗口标记本地快捷键（包含未分配动作的 MOD 组合及 F11）。
+    /// consumed 标记本地按键；local_text 表示主机文本键，而非本地快捷键。
+    /// 文本修饰键可被随后设备导航/命令接管，快捷键修饰键始终不泄漏。
     /// 选定 MOD 自身总是本地键；普通键与本地键的所有权保留到 UP。
     /// 设备修饰键也会在事件快照确认已松开时清除归属，允许后续新的 DOWN。
     /// repeat 或重复 DOWN 不改变状态。新普通键之前先同步左右修饰键，并保留其它主键。
     Reports key_down(SDL_Scancode scancode, uint16_t modifiers, bool repeat,
-                     bool consumed = false);
+                     bool consumed = false, bool local_text = false);
     Reports key_up(SDL_Scancode scancode, uint16_t modifiers);
 
     /// 清除设备键和本地所有权。只有存在设备按住状态时返回一条空报告，重复调用为空。
@@ -41,7 +42,7 @@ public:
     bool is_pressed(SDL_Scancode scancode) const;
 
 private:
-    enum class Owner : uint8_t { None, Device, Local };
+    enum class Owner : uint8_t { None, Device, Local, Text };
 
     void sync_modifiers(uint16_t modifiers);
     Reports changes_from(const Report &previous) const;
