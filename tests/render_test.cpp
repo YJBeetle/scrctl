@@ -1010,7 +1010,7 @@ struct KeyboardFixture {
 
     explicit KeyboardFixture(const char *title, int width = 64, int height = 96,
                              int degrees = 0, Uint16 shortcut_mods = KMOD_LALT | KMOD_LGUI,
-                             bool background = false, bool horizontal_flip = false, bool prefer_text = false) {
+                             bool background = false, bool horizontal_flip = false) {
         const Palette colors{kTopLeft, kTopRight, kBottomRight, kBottomLeft};
         if (!background) frame = colored_frame(64, 96, crop, colors, 0);
         scrctl::app::WindowSpec spec;
@@ -1020,7 +1020,6 @@ struct KeyboardFixture {
         spec.want_readback = true;
         spec.shortcut_mods = shortcut_mods;
         spec.horizontal_flip = horizontal_flip;
-        spec.prefer_text = prefer_text;
         const bool opened = background ? presenter.open_background(spec)
                                       : presenter.open(64, 96, crop, degrees, 1, false, spec);
         check(opened, "为输入回归创建实际 Presenter");
@@ -2511,147 +2510,6 @@ void presenter_physical_text_input_scope() {
     if (!originally_active) SDL_StopTextInput();
 }
 
-void presenter_prefer_text_events() {
-    const bool originally_active = SDL_IsTextInputActive() == SDL_TRUE;
-    SDL_StopTextInput();
-    auto physical = std::make_unique<KeyboardFixture>("Mixed physical owner");
-    auto text = std::make_unique<KeyboardFixture>("Host IME owner", 64, 96, 0,
-                                                KMOD_LALT | KMOD_LGUI, false, false, true);
-    auto &f = *text;
-    check(SDL_IsTextInputActive() == SDL_TRUE, "prefer-text 窗口启用本进程 SDL IME");
-    physical->window(SDL_WINDOWEVENT_FOCUS_GAINED);
-    physical->pump();
-    check(SDL_IsTextInputActive() == SDL_FALSE, "混合窗口焦点到物理模式时停用 IME");
-    f.window(SDL_WINDOWEVENT_FOCUS_GAINED);
-    f.pump();
-    check(SDL_IsTextInputActive() == SDL_TRUE, "焦点回文本窗口恢复 IME");
-    std::vector<std::string> commits;
-    const auto pump = [&] { return f.presenter.pump(f.on_touch(), f.on_keyboard(), {}, {}, {},
-        [&](const std::string &value) { commits.push_back(value); }); };
-    SDL_version linked{}; SDL_GetVersion(&linked);
-    const bool synthetic_text = !(linked.major == 2 && linked.minor == 32 &&
-                                    (linked.patch == 72 || linked.patch == 74));
-    const auto event = [&](Uint32 type, const char *value, Uint32 id = 0) {
-        if (!synthetic_text) return;
-        SDL_Event e{}; e.type = type;
-        if (type == SDL_TEXTINPUT) {
-            e.text.windowID = id ? id : f.window_id;
-            std::strncpy(e.text.text, value, sizeof e.text.text - 1);
-        } else {
-            e.edit.windowID = id ? id : f.window_id;
-            std::strncpy(e.edit.text, value, sizeof e.edit.text - 1);
-        }
-        check(SDL_PeepEvents(&e, 1, SDL_ADDEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT) == 1,
-              "真实 SDL 队列加入 UTF-8 提交/候选事件");
-    };
-    auto generation = f.presenter.input_generation();
-    f.key(SDL_KEYDOWN, SDL_SCANCODE_A);
-    event(SDL_TEXTINPUT, "a");
-    f.key(SDL_KEYUP, SDL_SCANCODE_A);
-    pump();
-    f.expect({}, "prefer-text 字母不重复生成物理 HID");
-    check(f.presenter.input_generation() == generation, "文本键不失效前一排队提交");
-    if (synthetic_text) check(commits == std::vector<std::string>{"a"}, "普通文本恰好提交一次");
-    commits.clear();
-    f.key(SDL_KEYDOWN, SDL_SCANCODE_LCTRL, KMOD_LCTRL);
-    f.key(SDL_KEYDOWN, SDL_SCANCODE_A, KMOD_LCTRL);
-    event(SDL_TEXTINPUT, "a");
-    f.key(SDL_KEYUP, SDL_SCANCODE_A, KMOD_LCTRL);
-    f.key(SDL_KEYUP, SDL_SCANCODE_LCTRL);
-    pump();
-    f.expect({{224}, {4,224}, {224}, {}}, "Ctrl+A 保留物理组合键报告");
-    check(commits.empty(), "Ctrl 组合不再交付副作用文本");
-    check(f.presenter.input_generation() == generation, "编辑组合键不取消已排队文本");
-    f.key(SDL_KEYDOWN, SDL_SCANCODE_LSHIFT, KMOD_LSHIFT);
-    f.key(SDL_KEYDOWN, SDL_SCANCODE_LEFT, KMOD_LSHIFT);
-    f.key(SDL_KEYUP, SDL_SCANCODE_LEFT, KMOD_LSHIFT);
-    f.key(SDL_KEYUP, SDL_SCANCODE_LSHIFT);
-    pump();
-    f.expect({{225}, {80,225}, {225}, {}}, "导航组合可接管原本由文本模式消费的 Shift");
-    if (synthetic_text) {
-        for (bool commit_first : {false, true}) {
-            commits.clear();
-            event(SDL_TEXTEDITING, "zhongwen");
-            f.key(SDL_KEYDOWN, SDL_SCANCODE_BACKSPACE);
-            f.key(SDL_KEYUP, SDL_SCANCODE_BACKSPACE);
-            f.key(SDL_KEYDOWN, SDL_SCANCODE_DOWN);
-            f.key(SDL_KEYUP, SDL_SCANCODE_DOWN);
-            if (commit_first) { event(SDL_TEXTEDITING, ""); event(SDL_TEXTINPUT, "中文✓🙂"); }
-            f.key(SDL_KEYDOWN, SDL_SCANCODE_RETURN);
-            if (!commit_first) { event(SDL_TEXTINPUT, "中文✓🙂"); event(SDL_TEXTEDITING, ""); }
-            f.key(SDL_KEYUP, SDL_SCANCODE_RETURN);
-            pump();
-            f.expect({}, "候选编辑和完成 Enter 在两种事件顺序均不漏到设备");
-            check(commits == std::vector<std::string>{"中文✓🙂"}, "只交付最终中文/emoji 提交");
-        }
-        commits.clear();
-        event(SDL_TEXTEDITING, "late");
-        f.key(SDL_KEYDOWN, SDL_SCANCODE_RETURN);
-        f.key(SDL_KEYUP, SDL_SCANCODE_RETURN);
-        event(SDL_TEXTINPUT, "晚提交");
-        event(SDL_TEXTEDITING, "");
-        f.key(SDL_KEYDOWN, SDL_SCANCODE_RETURN);
-        f.key(SDL_KEYUP, SDL_SCANCODE_RETURN);
-        pump();
-        f.expect({{40}, {}}, "完成键已抬起后才提交不吞下一次普通回车");
-        check(commits == std::vector<std::string>{"晚提交"}, "晚于完成键 UP 的提交仍交付一次");
-        commits.clear();
-        event(SDL_TEXTEDITING, "clicked");
-        event(SDL_TEXTINPUT, "中文");
-        event(SDL_TEXTEDITING, "");
-        f.key(SDL_KEYDOWN, SDL_SCANCODE_BACKSPACE);
-        f.key(SDL_KEYUP, SDL_SCANCODE_BACKSPACE);
-        pump();
-        f.expect({{42}, {}}, "提交后的正常退格不被候选完成保护消费");
-        check(commits == std::vector<std::string>{"中文"}, "无候选 Enter 的提交仍完整交付");
-        commits.clear();
-        event(SDL_TEXTEDITING, "clicked");
-        event(SDL_TEXTINPUT, "鼠标提交");
-        event(SDL_TEXTEDITING, "");
-        pump();
-        f.expect({}, "无完成 DOWN 的鼠标候选提交不产生键盘报告");
-        f.key(SDL_KEYDOWN, SDL_SCANCODE_RETURN);
-        f.key(SDL_KEYUP, SDL_SCANCODE_RETURN);
-        pump();
-        f.expect({{40}, {}}, "后一 pump 的用户普通回车不被上一候选提交吞掉");
-        check(commits == std::vector<std::string>{"鼠标提交"}, "候选只交付一次，后续回车保持物理编辑");
-        commits.clear();
-        f.key(SDL_KEYDOWN, SDL_SCANCODE_F, KMOD_LALT);
-        f.key(SDL_KEYUP, SDL_SCANCODE_F);
-        event(SDL_TEXTINPUT, "f");
-        pump();
-        check(commits.empty(), "本地 MOD 组合后排队文字不漏到设备");
-        f.expect({}, "MOD 全屏快捷键仍只有本地归属");
-        commits.clear();
-        event(SDL_TEXTINPUT, "other", physical->window_id);
-        pump();
-        check(commits.empty(), "其他窗口的文本不交付");
-        event(SDL_TEXTEDITING, "pending");
-        pump();
-        f.window(SDL_WINDOWEVENT_FOCUS_LOST);
-        event(SDL_TEXTINPUT, "stale");
-        pump();
-        check(commits.empty() && SDL_IsTextInputActive() == SDL_FALSE,
-              "失焦取消候选、排队提交和 SDL IME");
-        f.window(SDL_WINDOWEVENT_FOCUS_GAINED);
-        f.key(SDL_KEYDOWN, SDL_SCANCODE_BACKSPACE);
-        pump();
-        check(f.presenter.ready_for_text() && !f.presenter.ready_for_paste(),
-              "文本队列可完成于后来按住编辑键，普通粘贴仍要求松键");
-        f.key(SDL_KEYUP, SDL_SCANCODE_BACKSPACE);
-        pump();
-        f.expect({{42}, {}}, "候选取消后下一次退格正常交付");
-    } else {
-        std::printf("  SKIP SDL %u.%u.%u 合成文本转换；模式/物理键生命周期仍验证\n",
-                    linked.major, linked.minor, linked.patch);
-    }
-    physical.reset();
-    check(SDL_IsTextInputActive() == SDL_TRUE, "销毁非焦点物理窗口不改变文本窗口 IME");
-    text.reset();
-    check(SDL_IsTextInputActive() == SDL_FALSE, "最后混合窗口销毁恢复原先关闭状态");
-    if (originally_active) SDL_StartTextInput();
-}
-
 void presenter_physical_keyboard_events() {
     KeyboardFixture f("Presenter physical keyboard regression");
     if (f.window_id == 0) return;
@@ -3753,7 +3611,6 @@ int main() {
     presenter_releases_touch_when_window_deactivates();
     presenter_shortcuts_preserve_normal_input();
     presenter_physical_text_input_scope();
-    presenter_prefer_text_events();
     presenter_physical_keyboard_events();
     presenter_keyboard_quit_and_close();
     presenter_clipboard_request_context();

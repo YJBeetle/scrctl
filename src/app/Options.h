@@ -32,7 +32,6 @@ struct Options {
     int ddi_install_timeout = 300; ///< 整次设备安装预算，单位秒。
     int discovery_timeout_ms = 3000; ///< --list-devices 的无线扫描时限；0 只列 usbmux
     bool no_control = false; ///< --no-control：关闭输入控制
-    bool prefer_text = false; ///< --prefer-text：主机输入法提交经设备剪贴板交付 Unicode。
     /// 任意一个选定的修饰键按下时启用窗口快捷键；默认与 scrcpy 一致。
     uint16_t shortcut_mods = KMOD_LALT | KMOD_LGUI;
     std::string title = "scrctl";

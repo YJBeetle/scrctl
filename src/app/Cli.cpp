@@ -113,9 +113,6 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     app.add_flag("-n,--no-control", o.no_control, SCRCTL_N_("Disable input control"))
         ->excludes("--test-touch")->excludes("--test-button")->excludes("--test-type")
         ->excludes("--start-app");
-    app.add_flag("--prefer-text", o.prefer_text, SCRCTL_N_(
-        "Use host input method commits as Unicode via the device clipboard; leaves the host clipboard unchanged; the device may ask for paste permission"))
-        ->disable_flag_override();
     app.add_flag("--list-apps", o.list_apps, SCRCTL_N_("List device apps"));
     app.add_flag("--version", o.show_version, SCRCTL_N_("Show version"));
     app.add_flag("-f,--fullscreen", o.fullscreen, SCRCTL_N_("Desktop fullscreen"));
@@ -195,12 +192,6 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
     try {
         app.parse(argc, argv);
         if (!language.select()) return ParseResult::Error;
-        if (o.prefer_text && (o.no_control || o.no_window || app.count("--play") ||
-                o.list_devices || o.list_apps || o.pair || o.copy_text.has_value() || o.paste ||
-                o.show_version || o.download_ddi || o.install_ddi || !o.test_touch.empty())) {
-            throw CLI::ValidationError("--prefer-text", SCRCTL_TR(
-                "Requires a live device window with input control; incompatible with standalone commands, file playback, --no-control and --no-window"));
-        }
         if (app.count("--wifi") && std::all_of(o.wifi.begin(), o.wifi.end(), [](unsigned char c) {
             return std::isspace(c);
         })) {

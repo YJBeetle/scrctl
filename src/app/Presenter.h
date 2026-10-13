@@ -21,14 +21,12 @@ struct WindowSpec {
     bool want_readback = false;
     /// 先在源像素裁剪区域内水平翻转，再施加窗口旋转；不改变设备或录制数据。
     bool horizontal_flip = false;
-    bool prefer_text = false;
     uint16_t shortcut_mods = KMOD_LALT | KMOD_LGUI;
 };
 
 class Presenter {
   public:
     using KeyboardHandler = std::function<void(const KeyboardState::Report &)>;
-    using TextHandler = std::function<void(const std::string &)>;
     using PasteHandler = std::function<void()>;
     /// 单次设备横竖屏请求；调用方异步执行，不能阻塞窗口事件循环。
     using RotateHandler = std::function<void()>;
@@ -73,19 +71,16 @@ class Presenter {
     /// 用于核对 SDL 的坐标空间。
     void report_input(int raw_x, int raw_y, double fx, double fy, const char *tag) const;
 
-    /// 默认物理键盘转发 usages；prefer_text 仅将已提交 UTF-8 交给 on_text。
-    /// 按焦点选择 SDL 文本输入状态，最后一个 Presenter 销毁时恢复原状态；
-    /// 不更改宿主机输入法或键盘布局。
+    /// 物理键盘报告保留全部按住的 usages；不将 SDL_TEXTINPUT 重复注入成文字。
+    /// 成功打开窗口后停用本进程的 SDL 文本输入，最后一个 Presenter 销毁时
+    /// 恢复原先启用状态；不更改宿主机输入法或键盘布局。
     bool pump(const std::function<void(double, double, bool)> &on_touch,
               const KeyboardHandler &on_keyboard = {}, const PasteHandler &on_paste = {},
-              const ButtonHandler &on_button = {}, const RotateHandler &on_rotate = {},
-              const TextHandler &on_text = {});
+              const ButtonHandler &on_button = {}, const RotateHandler &on_rotate = {});
     /// 异步粘贴完成时必须再次检查焦点、按住状态和代次。释放输入及新设备
-    /// DOWN 在默认物理模式使旧代次失效；文本模式的编辑键由调用者串行排队。
+    /// DOWN 使旧代次失效，完整点击/按键抬起后也不能向已改变的上下文粘贴。
     [[nodiscard]] uint64_t input_generation() const { return input_generation_; }
     [[nodiscard]] bool ready_for_paste() const;
-    /// Host text commits may queue behind held edit keys; caller serializes delivery.
-    [[nodiscard]] bool ready_for_text() const;
     /// 查询 SDL 的实际全屏状态，不缓存用户的窗口模式选择。
     [[nodiscard]] bool is_fullscreen() const;
     /// 将来源或显式方向与用户的本机旋转/镜像组合；保持到窗口关闭，不改录制方向。
@@ -103,9 +98,7 @@ class Presenter {
 
   private:
     bool open_window(const WindowSpec &spec);
-    void begin_keyboard_mode();
-    void activate_keyboard_mode();
-    void clear_composition();
+    void begin_physical_keyboard_mode();
     bool draw_background();
     bool draw_uploaded(const char *readback_path = nullptr);
     bool refresh_display(bool resume,
@@ -163,12 +156,7 @@ class Presenter {
     SDL_Window *window_ = nullptr;
     SDL_Renderer *renderer_ = nullptr;
     SDL_Texture *texture_ = nullptr;
-    bool keyboard_mode_registered_ = false;
-    bool prefer_text_ = false;
-    bool composing_ = false;
-    bool finishing_composition_ = false;
-    bool composition_key_released_ = false;
-    bool shortcut_text_blocked_ = false;
+    bool physical_keyboard_mode_ = false;
     bool video_playback_ = true;
     bool texture_uploaded_ = false;
     bool render_failed_ = false;

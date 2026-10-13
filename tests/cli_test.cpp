@@ -113,33 +113,13 @@ int main() {
     Options defaults;
     check(parse({"scrctl"}, defaults) == ParseResult::Run && !defaults.win_x &&
               !defaults.win_y && defaults.scale == 1 && !defaults.scale_given &&
-              defaults.audio_buffer_ms == 50 && !defaults.audio_dup && !defaults.prefer_text &&
+              defaults.audio_buffer_ms == 50 && !defaults.audio_dup &&
               !defaults.no_audio && !defaults.no_audio_playback &&
               !defaults.no_video && !defaults.no_video_playback && !defaults.no_window &&
               !defaults.record_format &&
               defaults.shortcut_mods == (KMOD_LALT | KMOD_LGUI) &&
               defaults.orientation == -1 && !defaults.display_flip && defaults.record_orientation == 0,
           "default options");
-    Options text_mode;
-    check(parse({"scrctl", "--prefer-text"}, text_mode) == ParseResult::Run && text_mode.prefer_text &&
-              !text_mode.no_control && !text_mode.no_window,
-          "host IME text mode is explicit and retains the live controllable window");
-    Options background_text;
-    check(parse({"scrctl", "--prefer-text", "--no-playback"}, background_text) == ParseResult::Run &&
-              background_text.prefer_text && background_text.no_video && background_text.no_audio &&
-              !background_text.no_window && !background_text.no_control,
-          "host IME text mode permits the control-only background window");
-    for (std::vector<std::string> conflict : {
-            std::vector<std::string>{"--no-control"}, {"-n"}, {"--no-window"},
-            {"--play", "file.hevc"}, {"--list-devices"}, {"--list-apps"}, {"--pair"},
-            {"--pair", "--wifi", "auto"}, {"--download-ddi"}, {"--install-ddi"},
-            {"--copy", "text"}, {"--paste"}, {"--version"}, {"--test-touch", "0,0,1,1"}}) {
-        conflict.insert(conflict.begin(), "--prefer-text");
-        conflict.insert(conflict.begin(), "scrctl");
-        Options rejected;
-        check(parse(conflict, rejected) == ParseResult::Error,
-              "host IME text mode rejects commands that cannot consume window text");
-    }
     using RecordFormat = scrctl::app::RecordFormat;
     using MuxerFormat = scrctl::media::RecordingMuxer::Format;
     for (const auto& [name, selected, container] : {
