@@ -17,10 +17,23 @@ extern "C" {
 #include <libavutil/opt.h>
 #include <libswscale/swscale.h>
 }
+#if defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86)
+#include <mmintrin.h>
+#endif
 #endif
 
 namespace scrctl::media {
 namespace {
+// Some x86 codec/SIMD paths leave MMX registers active. MMX aliases the x87
+// stack used by long double clocks on MinGW x64. Restore its ABI state when
+// returning from this adapter, including failures and encoder destruction.
+struct CodecCpuState {
+    ~CodecCpuState() {
+#if defined(SCRCTL_HAVE_LIBAV) && (defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86))
+        _mm_empty();
+#endif
+    }
+};
 constexpr uint64_t max_pixels = 16u * 1024u * 1024u;
 constexpr const char* unavailable = SCRCTL_N_("Upright recording requires an available libx265 or hevc_videotoolbox encoder");
 #ifdef SCRCTL_HAVE_LIBAV
@@ -78,6 +91,7 @@ struct RecordingVideoEncoder::Impl {
     SwsContext* scale = nullptr;
     int length_bytes = 4;
     ~Impl() {
+        const CodecCpuState cpu_state;
         sws_freeContext(scale);
         av_packet_free(&packet);
         av_frame_free(&image);
@@ -181,6 +195,7 @@ bool RecordingVideoEncoder::available(std::string& error) {
     return false;
 }
 std::unique_ptr<RecordingVideoEncoder> RecordingVideoEncoder::create(const Options& options, std::string& error) {
+    const CodecCpuState cpu_state;
     error.clear();
     if (options.width < 2 || options.height < 2 || options.width % 2 || options.height % 2 ||
         options.width > 8192 || options.height > 8192 || uint64_t(options.width)*options.height > max_pixels ||
@@ -243,6 +258,7 @@ const char* RecordingVideoEncoder::backend_name() const { return impl_->backend.
 
 bool RecordingVideoEncoder::encode(const Frame& frame, int clockwise, Crop crop, int64_t ticks,
                                     std::vector<Packet>& output, std::string& error) {
+    const CodecCpuState cpu_state;
     error.clear();
     if (!impl_->first_error.empty()) { error = impl_->first_error; return false; }
     if (impl_->ended) return impl_->fail(SCRCTL_TR("Upright recording encoder is already finished"),error);
@@ -329,6 +345,7 @@ bool RecordingVideoEncoder::encode(const Frame& frame, int clockwise, Crop crop,
 #endif
 }
 bool RecordingVideoEncoder::finish(std::vector<Packet>& output, std::string& error) {
+    const CodecCpuState cpu_state;
     error.clear();
     if (!impl_->first_error.empty()) { error = impl_->first_error; return false; }
     if (impl_->ended) return true;
