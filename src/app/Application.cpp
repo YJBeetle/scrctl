@@ -151,9 +151,9 @@ int run(int argc, char **argv) {
         live_options.record_path = o.record;
         live_options.record_format = o.record_format;
         live_options.hw_decode = o.hw_decode;
-        live_options.watch_display = !o.no_video_playback;
+        live_options.watch_display = !o.no_video_playback || o.record_orientation == -1;
         live_options.want_video = !o.no_video;
-        live_options.decode_video = !o.no_video && (needs_pixels ||
+        live_options.decode_video = !o.no_video && (needs_pixels || o.record_orientation == -1 ||
             !scrctl::media::recording_idr_checks_available(capture_check_error));
         live_options.want_audio = want_audio;
         live_options.decode_audio = !o.no_audio_playback;

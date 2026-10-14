@@ -2,6 +2,7 @@
 #include "media/Recorder.h"
 
 #include "media/RecordingClock.h"
+#include "media/RecordingVideoEncoder.h"
 #include "media/RecordingMuxer.h"
 #include "media/RecordingVideoConfig.h"
 #include "rt/RtpTimestamp.h"
@@ -13,6 +14,7 @@
 #include <deque>
 #include <limits>
 #include <mutex>
+#include <map>
 #include <thread>
 #include <utility>
 
@@ -40,7 +42,7 @@ bool same_clock(const rt::SenderReport& a, const rt::SenderReport& b) {
 }  // namespace
 
 struct Recorder::Impl {
-    enum class Kind { Begin, Video, Audio, Report };
+    enum class Kind { Begin, Video, Pixels, Audio, Report };
     struct Event {
         Kind kind = Kind::Begin;
         Track track = Track::Video;
@@ -49,12 +51,16 @@ struct Recorder::Impl {
         int64_t ticks = 0;
         uint32_t timestamp = 0;
         std::vector<uint8_t> bytes;
+        std::vector<Nal> nals;
         Nal vps, sps, pps;
         rt::SenderReport report;
         Time::time_point received;
         std::size_t cost = 0;
         bool media_owned = false;
         bool vcl = false, idr = false, keyframe = false;
+        Frame frame;
+        VideoGeometry geometry;
+        std::size_t pixel_cost = 0;
     };
     struct Packet {
         std::vector<uint8_t> bytes;
@@ -84,6 +90,10 @@ struct Recorder::Impl {
     std::condition_variable changed;
     std::deque<Event> ingress;
     std::size_t owned_bytes = 0, media_events = 0;
+    std::size_t pixel_bytes = 0, pixel_events = 0;
+    std::optional<int64_t> last_pixel_received, last_pixel_admitted;
+    std::optional<Session> pixel_session;
+    std::optional<uint32_t> pixel_source;
     bool sealed = false, completed = false;
     std::string first_error;
     std::thread worker;
@@ -92,12 +102,20 @@ struct Recorder::Impl {
     std::array<Stream, 2> streams;
     std::optional<uint64_t> common_reference;
     std::optional<long double> origin;
+    // Header describes the first retained image, even if more configurations arrive
+    // before sender reports permit opening the muxer. Subsequent in-band epochs
+    // are separately retained and checked; neither changes clocks or sessions.
     std::optional<RecordingVideoConfig> video_config;
-    std::size_t configuration_cost = 0;
+    std::optional<RecordingVideoConfig> active_video_config;
+    std::size_t configuration_cost = 0, active_configuration_cost = 0;
     std::unique_ptr<RecordingMuxer> muxer;
     // 只保留一个完成 SR 映射的 MP4 尾包，原编码和事件仍占用 admission 预算。
     // 它等待下一视频点来决定展示间隔，既不等待 SR，也不需要保留旧时钟锚点。
     std::optional<MappedVideo> video_tail;
+    std::unique_ptr<RecordingVideoEncoder> encoder;
+    uint32_t encoder_width = 0, encoder_height = 0;
+    Time::time_point last_pixels_at{};
+    std::map<int64_t, Event> encoding_metadata;
     Time::time_point startup_deadline;
 
     explicit Impl(Options value)
@@ -160,6 +178,13 @@ struct Recorder::Impl {
         return true;
     }
 
+    void release_pixels(std::size_t bytes) {
+        if (!bytes) return;
+        std::lock_guard lock(mutex);
+        pixel_bytes -= bytes;
+        --pixel_events;
+    }
+
     bool session_valid(Stream& stream, const Event& event) {
         if (!stream.begun || stream.session != event.session) {
             fail(SCRCTL_TR("Recording media belongs to a missing or changed session"));
@@ -173,8 +198,13 @@ struct Recorder::Impl {
         // FU/AU 的完成可晚于同源 SR；空 pending 不代表之后不会收到较早采样。
         // 留最近七个锚点，为新 SR 在八点预算内留一槽。pending 仍保护所需左点；
         // 这是有界历史，不承诺任意延迟或固定秒数的样本都能被恢复。
-        if (!stream.pending.empty())
-            stream.clock->discard_before(stream.pending.front().ticks, recent_clock_anchors);
+        std::optional<int64_t> earliest;
+        if (!stream.pending.empty()) earliest = stream.pending.front().ticks;
+        if (&stream == &streams[0] && !encoding_metadata.empty()) {
+            const auto encoding = encoding_metadata.begin()->first;
+            earliest = earliest ? std::min(*earliest, encoding) : encoding;
+        }
+        if (earliest) stream.clock->discard_before(*earliest, recent_clock_anchors);
         else if (stream.report_high)
             stream.clock->discard_before(*stream.report_high, recent_clock_anchors);
     }
@@ -243,32 +273,153 @@ struct Recorder::Impl {
         if (stream.source && stream.source != event.source) {
             fail(SCRCTL_TR("Recording media source changed within the session")); return;
         }
-        if (video_config && (event.vps != video_config->vps || event.sps != video_config->sps ||
-                             event.pps != video_config->pps)) {
-            fail(SCRCTL_TR("Recording HEVC parameter sets changed")); return;
-        }
-        if (!event.vcl) return;
+        if (!event.vcl) return; // parameter-only prefixes belong to the next image
         if (!bind_media(stream, event, event.ticks)) return;
         if (!video_config && !event.idr) return;
+        const auto* current = active_video_config ? &*active_video_config
+                                                 : video_config ? &*video_config : nullptr;
+        const bool changed = current && (event.vps != current->vps ||
+            event.sps != current->sps || event.pps != current->pps);
         const bool first = !video_config;
         std::optional<RecordingVideoConfig> checked;
-        if (first) {
+        if (first || changed) {
+            if (!event.idr) {
+                fail(SCRCTL_TR("Recording HEVC configuration changes require an IDR")); return;
+            }
             checked = inspect_recording_video_config(event.vps, event.sps, event.pps);
             if (!checked->permits_equal_dts_pts()) {
                 fail(checked->error.empty() ? SCRCTL_TR("Recording HEVC requires a no-reorder configuration") : checked->error);
                 return;
             }
+            const auto syntax = inspect_recording_idr(event.nals, *checked);
+            if (!syntax.valid()) { fail(syntax.error); return; }
         }
-        const std::size_t packet_cost = event.bytes.size() * 2;
+        // Encode no pixels: retain each NAL verbatim and prepend the new epoch's
+        // parameters to its IDR. hev1/MKV carry these in-band; the initial header
+        // remains fixed. Exclude duplicate parameter prefixes on transitions.
+        std::size_t prefix_bytes = 0;
+        if (changed) prefix_bytes = event.vps.size() + event.sps.size() + event.pps.size() + 12;
+        std::size_t bytes = prefix_bytes;
+        for (const auto& nal : event.nals) {
+            const auto type = (nal[0] >> 1) & 63;
+            if (changed && type >= 32 && type <= 34) continue;
+            if (nal.size() > kMaxRecordingMuxerPacketBytes - 4 ||
+                bytes > kMaxRecordingMuxerPacketBytes - 4 - nal.size()) {
+                fail(SCRCTL_TR("Recording HEVC AU is incomplete or exceeds the packet budget")); return;
+            }
+            bytes += nal.size() + 4;
+        }
+        const auto packet_cost = bytes * 2;
+        const auto retained_parameters = (first || changed)
+            ? (event.vps.size() + event.sps.size() + event.pps.size()) * 3 : 0;
+        if (packet_cost + retained_parameters > event.cost) {
+            const auto extra = packet_cost + retained_parameters - event.cost;
+            bool exceeded;
+            {
+                std::lock_guard lock(mutex);
+                exceeded = extra > options.encoded_budget - owned_bytes;
+                if (!exceeded) { owned_bytes += extra; event.cost += extra; }
+            }
+            if (exceeded) { fail(SCRCTL_TR("Recorder input exceeds its encoded-byte or event budget")); return; }
+        }
+        event.bytes.reserve(bytes);
+        auto append = [&](const Nal& nal) {
+            event.bytes.insert(event.bytes.end(), {0, 0, 0, 1});
+            event.bytes.insert(event.bytes.end(), nal.begin(), nal.end());
+        };
+        if (changed) { append(event.vps); append(event.sps); append(event.pps); }
+        for (const auto& nal : event.nals) {
+            const auto type = (nal[0] >> 1) & 63;
+            if (!(changed && type >= 32 && type <= 34)) append(nal);
+        }
+        event.nals.clear();
         stream.pending.push_back({std::move(event.bytes), event.ticks, event.ticks,
                                   event.keyframe, event.received, packet_cost});
         event.cost -= packet_cost;
         event.media_owned = false;
         if (first) {
-            configuration_cost = (event.vps.size() + event.sps.size() + event.pps.size()) * 3;
+            configuration_cost = retained_parameters;
             video_config = std::move(checked);
             event.cost -= configuration_cost;
+        } else if (changed) {
+            active_video_config.reset();
+            release(active_configuration_cost, false);
+            active_configuration_cost = retained_parameters;
+            active_video_config = std::move(checked);
+            event.cost -= active_configuration_cost;
         }
+    }
+
+    void encoded_packets(std::vector<RecordingVideoEncoder::Packet>& outputs) {
+        for (auto& output : outputs) {
+            const auto found = encoding_metadata.find(output.pts_ticks);
+            if (found == encoding_metadata.end()) {
+                fail(SCRCTL_TR("Recording encoder returned an unknown timestamp")); return;
+            }
+            Event event = std::move(found->second);
+            encoding_metadata.erase(found);
+            event.kind = Kind::Video;
+            event.nals = std::move(output.nals);
+            event.vps = std::move(output.vps); event.sps = std::move(output.sps); event.pps = std::move(output.pps);
+            std::size_t bytes = 0;
+            for (const auto& nal : event.nals) {
+                bytes += nal.size() + 4;
+                if (nal.size() < 2) { fail(SCRCTL_TR("Recording encoder returned an invalid NAL")); return; }
+                const unsigned type = (nal[0] >> 1) & 63;
+                event.vcl |= type <= 31; event.idr |= type == 19 || type == 20;
+                event.keyframe |= type >= 16 && type <= 21;
+            }
+            const std::size_t cost = bytes * 2 + (event.vps.size() + event.sps.size() + event.pps.size()) * 3;
+            {
+                std::lock_guard lock(mutex);
+                if (cost > options.encoded_budget - owned_bytes || media_events >= max_media_events) {
+                    fail_locked(SCRCTL_TR("Recorder input exceeds its encoded-byte or event budget")); return;
+                }
+                owned_bytes += cost; ++media_events;
+            }
+            event.cost = cost; event.media_owned = true;
+            try { process_video(event); }
+            catch (...) { release(event.cost, event.media_owned); throw; }
+            release(event.cost, event.media_owned);
+            if (failed()) return;
+        }
+    }
+
+    void process_pixels(Event& event) {
+        auto& stream = streams[0];
+        if (!session_valid(stream, event)) return;
+        if (stream.source && stream.source != event.source) {
+            fail(SCRCTL_TR("Recording media source changed within the session")); return;
+        }
+        if (!encoder) {
+            const bool swapped = event.geometry.clockwise == 90 || event.geometry.clockwise == 270;
+            const auto width = event.geometry.crop_width > 0 ? event.geometry.crop_width : event.frame.width;
+            const auto height = event.geometry.crop_height > 0 ? event.geometry.crop_height : event.frame.height;
+            RecordingVideoEncoder::Options config;
+            config.width = (swapped ? height : width) + ((swapped ? height : width) & 1);
+            config.height = (swapped ? width : height) + ((swapped ? width : height) & 1);
+            std::string error;
+            encoder_width = config.width; encoder_height = config.height;
+            encoder = RecordingVideoEncoder::create(config, error);
+            if (!encoder) { fail(error); return; }
+        }
+        if (encoding_metadata.size() >= 8 || encoding_metadata.contains(event.ticks)) {
+            fail(SCRCTL_TR("Recording encoder pending-frame budget exceeded")); return;
+        }
+        Event metadata;
+        metadata.session = event.session; metadata.source = event.source;
+        metadata.ticks = event.ticks; metadata.received = event.received;
+        encoding_metadata.emplace(event.ticks, std::move(metadata));
+        const RecordingVideoEncoder::Crop crop{static_cast<uint32_t>(event.geometry.crop_x),
+            static_cast<uint32_t>(event.geometry.crop_y), static_cast<uint32_t>(event.geometry.crop_width),
+            static_cast<uint32_t>(event.geometry.crop_height)};
+        std::vector<RecordingVideoEncoder::Packet> outputs;
+        std::string error;
+        if (!encoder->encode(event.frame, event.geometry.clockwise, crop, event.ticks, outputs, error)) {
+            fail(error); return;
+        }
+        encoded_packets(outputs);
+        last_pixels_at = event.received;
     }
 
     void process(Event& event) {
@@ -281,6 +432,7 @@ struct Recorder::Impl {
                 stream.source = event.source;
                 break;
             case Kind::Video: process_video(event); break;
+            case Kind::Pixels: process_pixels(event); break;
             case Kind::Audio: {
                 if (!session_valid(stream, event)) return;
                 const auto ticks = stream.timestamp.observe(event.timestamp);
@@ -298,6 +450,24 @@ struct Recorder::Impl {
             }
             case Kind::Report:
                 if (!session_valid(stream, event)) return;
+                // An asynchronous encoder needs drain when a static source stops
+                // supplying frames. Reopen the same canvas before new activity.
+                if (event.track == Track::Video && stream.source == event.report.ssrc &&
+                    encoder && !encoding_metadata.empty() &&
+                    event.received - last_pixels_at >= std::chrono::milliseconds(100)) {
+                    std::vector<RecordingVideoEncoder::Packet> outputs;
+                    std::string error;
+                    if (!encoder->finish(outputs, error)) { fail(error); return; }
+                    encoded_packets(outputs);
+                    if (failed()) return;
+                    if (!encoding_metadata.empty()) {
+                        fail(SCRCTL_TR("Recording encoder did not return every submitted frame")); return;
+                    }
+                    RecordingVideoEncoder::Options config;
+                    config.width = encoder_width; config.height = encoder_height;
+                    encoder = RecordingVideoEncoder::create(config, error);
+                    if (!encoder) { fail(error); return; }
+                }
                 if (!stream.source) {
                     if (std::any_of(stream.early_reports.begin(), stream.early_reports.end(),
                         [&](const auto& known) { return same_clock(known, event.report); })) return;
@@ -458,6 +628,9 @@ struct Recorder::Impl {
             release(cost, true);
         }
         video_config.reset();
+        active_video_config.reset();
+        release(active_configuration_cost, false);
+        active_configuration_cost = 0;
         release(configuration_cost, false);
         configuration_cost = 0;
         std::deque<Event> abandoned;
@@ -465,7 +638,8 @@ struct Recorder::Impl {
             std::lock_guard lock(mutex);
             abandoned.swap(ingress);
         }
-        for (const auto& event : abandoned) release(event.cost, event.media_owned);
+        for (const auto& event : abandoned) { release(event.cost, event.media_owned); release_pixels(event.pixel_cost); }
+        encoder.reset(); encoding_metadata.clear();
     }
 
     void loop() {
@@ -495,14 +669,24 @@ struct Recorder::Impl {
                     catch (...) {
                         const auto cost = event.cost;
                         const auto media = event.media_owned;
+                        const auto pixels = event.pixel_cost;
                         event = {};
-                        release(cost, media);
+                        release(cost, media); release_pixels(pixels);
                         throw;
                     }
                     const auto cost = event.cost;
                     const auto media = event.media_owned;
+                    const auto pixels = event.pixel_cost;
                     event = {};
-                    release(cost, media);
+                    release(cost, media); release_pixels(pixels);
+                }
+                if (final && encoder) {
+                    std::vector<RecordingVideoEncoder::Packet> outputs;
+                    std::string error;
+                    if (!encoder->finish(outputs, error)) fail(error);
+                    else encoded_packets(outputs);
+                    if (!failed() && !encoding_metadata.empty())
+                        fail(SCRCTL_TR("Recording encoder did not return every submitted frame"));
                 }
                 drive(final ? RecordingClock::Mode::Final : RecordingClock::Mode::Running);
                 if (failed()) break;
@@ -539,6 +723,13 @@ std::unique_ptr<Recorder> Recorder::start(const Options& options, std::string& e
         error = SCRCTL_TR("Audio-only recording requires zero video orientation");
         return nullptr;
     }
+    if (options.upright_video && (!options.include_video || options.video_orientation != 0)) {
+        error = SCRCTL_TR("Upright recording requires video and zero static orientation"); return nullptr;
+    }
+    if (options.upright_max_fps > 60) {
+        error = SCRCTL_TR("Invalid Recorder path or bounded buffering/clock limits"); return nullptr;
+    }
+    if (options.upright_video && !RecordingVideoEncoder::available(error)) return nullptr;
     if (!RecordingMuxer::validate_video_orientation(options.format, options.video_orientation, error))
         return nullptr;
     if (!RecordingMuxer::available()) {
@@ -555,6 +746,17 @@ std::unique_ptr<Recorder> Recorder::start(const Options& options, std::string& e
     }
     try {
         auto recorder = std::unique_ptr<Recorder>(new Recorder(std::make_unique<Impl>(options)));
+        if (options.upright_video && (options.upright_width || options.upright_height)) {
+            RecordingVideoEncoder::Options encoder_options;
+            encoder_options.width = options.upright_width;
+            encoder_options.height = options.upright_height;
+            recorder->impl_->encoder_width = encoder_options.width;
+            recorder->impl_->encoder_height = encoder_options.height;
+            recorder->impl_->encoder = RecordingVideoEncoder::create(encoder_options, error);
+            if (!recorder->impl_->encoder) return nullptr;
+            std::fprintf(stderr, SCRCTL_TR("Recording encoder: %s, canvas %ux%u\n"),
+                recorder->impl_->encoder->backend_name(), options.upright_width, options.upright_height);
+        }
         recorder->impl_->worker = std::thread([state = recorder->impl_.get()] { state->loop(); });
         return recorder;
     } catch (...) {
@@ -584,10 +786,16 @@ bool Recorder::begin_track(Track track, std::span<const uint8_t> session,
 
 bool Recorder::video(std::span<const uint8_t> session, uint32_t source, int64_t ticks,
                      const std::vector<Nal>& nals, const Nal& vps, const Nal& sps, const Nal& pps) {
+    if (impl_->options.upright_video) {
+        fail(SCRCTL_TR("Upright recording accepts decoded frames only")); return false;
+    }
     if (!impl_->options.include_video) {
         fail(SCRCTL_TR("This recording has no video track")); return false;
     }
     if (session.size() != 16) { fail(SCRCTL_TR("Recording session UUID is invalid")); return false; }
+    if (nals.empty() || nals.size() > kMaxRecordingIdrNals) {
+        fail(SCRCTL_TR("Recording HEVC AU is empty or exceeds the NAL-count budget")); return false;
+    }
     std::size_t size = 0;
     for (const auto& nal : nals) {
         if (nal.size() < 2 || nal.size() > kMaxRecordingMuxerPacketBytes - 4 ||
@@ -614,17 +822,70 @@ bool Recorder::video(std::span<const uint8_t> session, uint32_t source, int64_t 
         std::copy(session.begin(), session.end(), event.session.begin());
         event.source = source;
         event.ticks = ticks;
-        event.bytes.reserve(size);
+        event.nals = nals;
         for (const auto& nal : nals) {
             const uint8_t type = (nal[0] >> 1) & 63;
             event.vcl |= type <= 31;
             event.idr |= type == 19 || type == 20;
             event.keyframe |= type >= 16 && type <= 21;
-            event.bytes.insert(event.bytes.end(), {0, 0, 0, 1});
-            event.bytes.insert(event.bytes.end(), nal.begin(), nal.end());
         }
         event.vps = vps; event.sps = sps; event.pps = pps;
     });
+}
+
+bool Recorder::video_frame(std::span<const uint8_t> session, uint32_t source, int64_t ticks,
+                           const Frame& frame, VideoGeometry geometry) {
+    if (!impl_->options.upright_video || !impl_->options.include_video || session.size() != 16) {
+        fail(SCRCTL_TR("Recording decoded-frame mode or session is invalid")); return false;
+    }
+    const uint64_t bytes = uint64_t(frame.row_pitch) * frame.height;
+    if (!frame.width || !frame.height || frame.bytes_per_pixel != 4 ||
+        uint64_t(frame.width) * 4 > frame.row_pitch || bytes > frame.pixels.size() ||
+        !bytes || bytes > 64u * 1024u * 1024u || geometry.crop_x < 0 || geometry.crop_y < 0 ||
+        geometry.crop_width < 0 || geometry.crop_height < 0 ||
+        (geometry.clockwise != 0 && geometry.clockwise != 90 && geometry.clockwise != 180 && geometry.clockwise != 270)) {
+        fail(SCRCTL_TR("Recording BGRA frame or orientation is invalid")); return false;
+    }
+    std::lock_guard lock(impl_->mutex);
+    if (impl_->sealed || !impl_->first_error.empty()) return false;
+    Session incoming_session;
+    std::copy(session.begin(), session.end(), incoming_session.begin());
+    if (impl_->pixel_session && *impl_->pixel_session != incoming_session) {
+        impl_->fail_locked(SCRCTL_TR("Recording media belongs to a missing or changed session")); return false;
+    }
+    if (impl_->pixel_source && *impl_->pixel_source != source) {
+        impl_->fail_locked(SCRCTL_TR("Recording media source changed within the session")); return false;
+    }
+    impl_->pixel_session = incoming_session; impl_->pixel_source = source;
+    if (ticks < 0 || (impl_->last_pixel_received && ticks <= *impl_->last_pixel_received)) {
+        impl_->fail_locked(SCRCTL_TR("Recording media timestamps do not advance within the track")); return false;
+    }
+    impl_->last_pixel_received = ticks;
+    if (impl_->options.upright_max_fps && impl_->last_pixel_admitted &&
+        ticks - *impl_->last_pixel_admitted < (24000 + impl_->options.upright_max_fps - 1) / impl_->options.upright_max_fps)
+        return true; // configured rate sampling, not queue-overload dropping
+    if (impl_->pixel_events >= 4 || bytes > 64u * 1024u * 1024u - impl_->pixel_bytes ||
+        impl_->ingress.size() >= max_ingress_events) {
+        impl_->fail_locked(SCRCTL_TR("Recorder decoded-frame budget exceeded")); return false;
+    }
+    ++impl_->pixel_events; impl_->pixel_bytes += bytes;
+    impl_->last_pixel_admitted = ticks;
+    try {
+        Impl::Event event;
+        event.kind = Impl::Kind::Pixels;
+        std::copy(session.begin(), session.end(), event.session.begin());
+        event.source = source; event.ticks = ticks; event.received = Time::now();
+        event.geometry = geometry; event.pixel_cost = static_cast<std::size_t>(bytes);
+        event.frame.width = frame.width; event.frame.height = frame.height;
+        event.frame.row_pitch = frame.row_pitch; event.frame.bytes_per_pixel = 4;
+        event.frame.pixels.assign(frame.pixels.begin(), frame.pixels.begin() + static_cast<std::size_t>(bytes));
+        impl_->ingress.push_back(std::move(event));
+    } catch (...) {
+        --impl_->pixel_events; impl_->pixel_bytes -= bytes;
+        impl_->fail_locked(SCRCTL_TR("Cannot allocate the Recorder input buffer")); return false;
+    }
+    impl_->changed.notify_one();
+    return true;
 }
 
 bool Recorder::audio(std::span<const uint8_t> session, uint32_t source, uint32_t timestamp,

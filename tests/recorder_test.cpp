@@ -1,6 +1,7 @@
 #include "media/Recorder.h"
 #include "RecordingAudioEvidence.h"
 #include "media/RecordingMuxer.h"
+#include "media/RecordingVideoEncoder.h"
 
 #include <array>
 #include <chrono>
@@ -15,6 +16,7 @@
 
 #ifdef SCRCTL_HAVE_LIBAVFORMAT
 extern "C" {
+#include <libavcodec/avcodec.h>
 #include <libavcodec/version.h>
 #include <libavformat/avformat.h>
 #include <libavutil/display.h>
@@ -194,6 +196,191 @@ void verify_audio(const File& file, std::span<const int64_t> pts) {
         check(file.audio[i].bytes == silence, "AAC-ELD is not resampled or reencoded");
         if (!near(file.audio[i].pts, pts[i]) || file.audio[i].bytes != silence)
             std::fprintf(stderr, "AUDIO: %s\n", file.audio[i].audio_evidence.diagnostic().c_str());
+    }
+}
+
+// Generated once with libx265, ultrafast/bframes=0/repeat-headers=1/info=0,
+// black 128x64. The fixture decodes real frames; CI needs no encoder.
+const Nal landscape_sps = hex("42010101600000030090000003000003001ea010204165ba4a4c2f016808000003000800000300f040");
+const Nal landscape_pps = hex("4401c073c189");
+const Nal landscape_idr = hex("2801ac214f400e7ffeebf349a4151de360");
+
+void verify_dynamic_decode(const std::filesystem::path& path, bool mp4, bool upright = false, std::vector<int64_t> expected_pts = {}) {
+    AVFormatContext* input = nullptr;
+    check(avformat_open_input(&input, path.string().c_str(), nullptr, nullptr) >= 0,
+          "dynamic dimensions container opens");
+    if (!input) return;
+    int index = -1;
+    for (unsigned i = 0; i < input->nb_streams; ++i)
+        if (input->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) index = static_cast<int>(i);
+    check(index >= 0, "dynamic dimensions file has a video track");
+    if (index < 0) { avformat_close_input(&input); return; }
+    const auto* parameters = input->streams[index]->codecpar;
+    check(parameters->width == 64 && parameters->height == (upright ? 96 : 64),
+          "header stays attached to first image when changes precede trusted clocks");
+    if (mp4) check(parameters->codec_tag == MKTAG('h','e','v','1'),
+                    "dynamic MP4 uses in-band HEVC sample entry");
+    const AVCodec* codec = avcodec_find_decoder_by_name("hevc");
+    AVCodecContext* decoder = avcodec_alloc_context3(codec);
+    check(decoder && avcodec_parameters_to_context(decoder, parameters) >= 0 &&
+          avcodec_open2(decoder, codec, nullptr) >= 0, "real HEVC decoder opens demuxed configuration");
+    if (!decoder || !decoder->codec) { avcodec_free_context(&decoder); avformat_close_input(&input); return; }
+    AVPacket* packet = av_packet_alloc();
+    AVFrame* frame = av_frame_alloc();
+    std::vector<std::pair<int,int>> dimensions;
+    std::vector<int64_t> timestamps;
+    auto drain = [&] {
+        int result;
+        while ((result = avcodec_receive_frame(decoder, frame)) >= 0) {
+            if (upright && dimensions.size() == 1) {
+                check(frame->data[0][0] < 40 && frame->data[0][frame->linesize[0] * 48 + 32] > 180,
+                      "landscape content is rotated into a fixed upright canvas with black bars");
+            }
+            dimensions.emplace_back(frame->width, frame->height);
+            timestamps.push_back(av_rescale_q(frame->pts, input->streams[index]->time_base,
+                                              AVRational{1,1000000}));
+            av_frame_unref(frame);
+        }
+        check(result == AVERROR(EAGAIN) || result == AVERROR_EOF, "each changed configuration fully decodes");
+    };
+    if (packet && frame) {
+        int result;
+        while ((result = av_read_frame(input, packet)) >= 0) {
+            if (packet->stream_index == index) {
+                check(avcodec_send_packet(decoder, packet) >= 0, "changed-dimension packet enters decoder");
+                drain();
+            }
+            av_packet_unref(packet);
+        }
+        check(result == AVERROR_EOF, "dynamic recording demux reaches EOF");
+        check(avcodec_send_packet(decoder, nullptr) >= 0, "dynamic decoder drains cleanly");
+        drain();
+    } else check(false, "dynamic decoder packet/frame allocations succeed");
+    const auto expected_dimensions = upright
+        ? std::vector<std::pair<int,int>>(expected_pts.empty() ? 2 : expected_pts.size(), {64,96})
+        : std::vector<std::pair<int,int>>{{64,64},{128,64},{64,64}};
+    check(dimensions == expected_dimensions,
+          "single recording decodes first, changed and restored dimensions without transcoding");
+    if (expected_pts.empty()) expected_pts = upright ? std::vector<int64_t>{0,10000} : std::vector<int64_t>{0,10000,20000};
+    bool timing_correct = timestamps.size() == expected_pts.size();
+    for (std::size_t i = 0; timing_correct && i < timestamps.size(); ++i)
+        timing_correct = near(timestamps[i], expected_pts[i]);
+    check(timing_correct,
+          "configuration changes retain common clock and monotonically advancing PTS");
+    av_frame_free(&frame); av_packet_free(&packet); avcodec_free_context(&decoder); avformat_close_input(&input);
+}
+
+void upright_recording(const Directory& directory) {
+    std::string error;
+    if (!scrctl::media::RecordingVideoEncoder::available(error)) {
+        std::printf("SKIP: upright Recorder needs a registered HEVC encoder: %s\n", error.c_str());
+        return;
+    }
+    for (const auto format : {scrctl::media::RecordingMuxer::Format::Matroska,
+                              scrctl::media::RecordingMuxer::Format::Mp4}) {
+        const auto path = directory.path / (format == scrctl::media::RecordingMuxer::Format::Mp4 ? "upright.mp4" : "upright.mkv");
+        auto config = options(path, false, format); config.upright_video = true;
+        auto recorder = Recorder::start(config, error);
+        check(recorder != nullptr, "upright recorder starts with explicit encoding support");
+        if (!recorder) continue;
+        begin(*recorder, false);
+        scrctl::Frame frame;
+        frame.width = 64; frame.height = 96; frame.row_pitch = 256;
+        frame.pixels.assign(256 * 96, 255);
+        check(recorder->video_frame(video_session, 0, 0, frame, {0,0,0,64,96}), "first BGRA frame enters its separate budget");
+        check(recorder->video_frame(video_session, 0, 240, frame, {90,0,0,64,96}), "rotated BGRA frame is copied without encoding on caller");
+        report(*recorder, Track::Video, sr(0,0,1000));
+        report(*recorder, Track::Video, sr(0,24000,1001));
+        check(recorder->finish(error) && error.empty(), "upright recording flushes and maps every encoded frame");
+        if (error.empty()) verify_dynamic_decode(path, format == scrctl::media::RecordingMuxer::Format::Mp4, true);
+    }
+    {
+        const auto path = directory.path / "upright-sampled-idle.mkv";
+        auto sampled = options(path); sampled.upright_video = true; sampled.upright_max_fps = 30;
+        auto recorder = Recorder::start(sampled, error);
+        check(recorder != nullptr, "sampled upright recorder starts");
+        if (recorder) {
+            begin(*recorder, false);
+            scrctl::Frame frame; frame.width = 64; frame.height = 96; frame.row_pitch = 256;
+            frame.pixels.assign(256 * 96, 255);
+            check(recorder->video_frame(video_session,0,0,frame,{0,0,0,64,96}), "rate sampler accepts first frame");
+            check(recorder->video_frame(video_session,0,240,frame,{90,0,0,64,96}), "configured sampler skips an early frame without changing its timeline");
+            check(recorder->video_frame(video_session,0,800,frame,{90,0,0,64,96}), "rate sampler accepts boundary frame");
+            std::this_thread::sleep_for(150ms);
+            report(*recorder,Track::Video,sr(0,0,1000));
+            report(*recorder,Track::Video,sr(0,24000,1001));
+            std::this_thread::sleep_for(150ms);
+            check(recorder->video_frame(video_session,0,24000,frame,{0,0,0,64,96}), "encoding resumes after a static interval");
+            report(*recorder,Track::Video,sr(0,48000,1002));
+            check(recorder->finish(error) && error.empty(), "static tail drain and resumed encoding remain in one recording");
+            if (error.empty()) verify_dynamic_decode(path,false,true,{0,33333,1000000});
+        }
+    }
+    auto config = options(directory.path / "upright-raw-must-fail.mkv"); config.upright_video = true;
+    auto recorder = Recorder::start(config, error);
+    if (recorder) {
+        begin(*recorder, false);
+        check(!recorder->video(video_session,0,0,{idr},vps,sps,pps), "upright mode refuses simultaneous raw packet ingestion");
+        check(!recorder->finish(error) && !std::filesystem::exists(config.path), "raw-packet misuse never silently records unrotated video");
+    }
+    config = options(directory.path / "upright-invalid-frame.mkv"); config.upright_video = true;
+    recorder = Recorder::start(config, error);
+    if (recorder) {
+        begin(*recorder, false);
+        scrctl::Frame invalid;
+        invalid.width = 64; invalid.height = 96; invalid.row_pitch = 256;
+        check(!recorder->video_frame(video_session,0,0,invalid,{}), "short BGRA buffer fails before copying");
+        check(!recorder->finish(error), "invalid pixel admission reaches recording final status");
+    }
+}
+
+void dynamic_configurations(const Directory& directory) {
+    using Format = scrctl::media::RecordingMuxer::Format;
+    for (const auto format : {Format::Mp4, Format::Matroska}) {
+        auto path = directory.path / (format == Format::Mp4 ? "dynamic.mp4" : "dynamic.mkv");
+        std::string error;
+        auto recorder = Recorder::start(options(path, false, format), error);
+        check(recorder != nullptr, "dynamic configuration recorder starts"); if (!recorder) continue;
+        begin(*recorder, false);
+        video(*recorder, 0);
+        check(recorder->video(video_session,0,240,{landscape_idr},vps,landscape_sps,landscape_pps),
+              "new dimensions IDR is admitted before SR approval");
+        video(*recorder,480);
+        report(*recorder,Track::Video,sr(0,0,1000)); report(*recorder,Track::Video,sr(0,24000,1001));
+        check(recorder->finish(error), "valid configuration transitions complete one container");
+        if (!error.empty()) std::fprintf(stderr,"DYNAMIC: %s\n",error.c_str());
+        if (error.empty()) verify_dynamic_decode(path, format == Format::Mp4);
+    }
+    {
+        const auto path = directory.path / "dynamic-prefix-budget.mkv";
+        auto config = options(path);
+        // Exactly admits two original inputs, but cannot also own the inserted
+        // transition prefix. Worker expansion must use the same byte budget.
+        config.encoded_budget = (vps.size()+sps.size()+pps.size())*3 + (idr.size()+4)*2 +
+            (vps.size()+landscape_sps.size()+landscape_pps.size())*3 + (landscape_idr.size()+4)*2;
+        std::string error;
+        auto recorder = Recorder::start(config,error);
+        check(recorder != nullptr,"transition-prefix budget recorder starts");
+        if (recorder) {
+            begin(*recorder,false); video(*recorder,0);
+            check(recorder->video(video_session,0,240,{landscape_idr},vps,landscape_sps,landscape_pps),
+                  "original transition input fits before its required prefix expansion");
+            check(!recorder->finish(error) && error.find("budget") != std::string::npos,
+                  "in-band parameter insertion cannot exceed shared encoded-byte budget");
+            check(!std::filesystem::exists(path), "prefix-budget failure before trusted clocks opens no output");
+        }
+    }
+    for (bool non_idr : {false, true}) {
+        std::string error;
+        auto recorder = Recorder::start(options(directory.path / (non_idr ? "non-idr-change.mkv" : "invalid-change.mkv")),error);
+        check(recorder != nullptr,"invalid transition recorder starts"); if (!recorder) continue;
+        begin(*recorder,false); video(*recorder,0);
+        Nal picture = landscape_idr;
+        if (non_idr) picture[0] = 0x02; else picture.resize(3);
+        check(recorder->video(video_session,0,240,{picture},vps,landscape_sps,landscape_pps),
+              "invalid transition enters worker validation");
+        check(!recorder->finish(error) && !error.empty(),
+              "configuration change without valid complete IDR still fails closed");
     }
 }
 
@@ -620,8 +807,8 @@ void early_reports_and_parameter_epoch(const Directory& directory) {
         Nal changed = pps; changed.back() ^= 1;
         check(recorder->video(video_session,0,240,{vps,sps,changed},vps,sps,changed),
               "a parameter-only AU is admitted for epoch validation");
-        check(!recorder->finish(error) && error.find("parameter") != std::string::npos,
-              "parameter-only changes after the initial IDR fail the recording");
+        check(recorder->finish(error),
+              "parameter-only prefixes do not change the last accepted configuration without an image");
     }
     for (uint8_t header : {uint8_t{0}, uint8_t{2}, uint8_t{9}}) {
         auto recorder = Recorder::start(options(directory.path / "bad-header.mkv"),error);
@@ -769,6 +956,8 @@ int main() {
         audio_only_recording(directory);
         audio_only_failures(directory);
         recorded_orientation(directory);
+        dynamic_configurations(directory);
+        upright_recording(directory);
         wrapping_audio_and_first_idr(directory);
         still_video(directory);
         still_video(directory, scrctl::media::RecordingMuxer::Format::Mp4);

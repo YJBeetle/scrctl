@@ -178,8 +178,8 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
         ->check(CLI::IsMember({"auto", "0", "90", "180", "270", "flip0", "flip90", "flip180", "flip270"}))->trigger_on_parse();
     app.add_option_function<std::string>("--record-orientation", [&](const std::string& value) {
         o.record_orientation = rotation(value, record_flip);
-    }, SCRCTL_N_("Clockwise MP4/MKV recording rotation: 0/90/180/270; default: 0; display is unchanged"))
-        ->check(CLI::IsMember({"0", "90", "180", "270", "flip0", "flip90", "flip180", "flip270"}))->trigger_on_parse();
+    }, SCRCTL_N_("MP4/MKV recording orientation: 0/90/180/270 as metadata, or auto to re-encode upright into a fixed canvas at up to 30 fps; default: 0; display is unchanged"))
+        ->check(CLI::IsMember({"auto", "0", "90", "180", "270", "flip0", "flip90", "flip180", "flip270"}))->trigger_on_parse();
     app.add_option("--crop", crop,
                    SCRCTL_N_("Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"));
     app.add_option("--background-color", background,
@@ -246,6 +246,10 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
             throw CLI::ValidationError("--record-format", SCRCTL_TR("Requires a nonempty recording file"));
         }
         const auto container_format = record_container_format(o.record, o.record_format);
+        if (o.record_orientation == -1 && (o.record.empty() || !container_format || o.no_video)) {
+            throw CLI::ValidationError("--record-orientation", SCRCTL_TR(
+                "Automatic recording orientation requires a video recording to MP4 or MKV"));
+        }
         if (o.no_window || o.no_video || no_playback) o.no_video_playback = true;
         if (no_playback) o.no_audio_playback = true;
         // 没有本机播放或容器音轨消费者时，跳过音频采集和设备路由请求。

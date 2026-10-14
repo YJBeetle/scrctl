@@ -257,7 +257,7 @@ bool near(int64_t a, int64_t b, int64_t tolerance = 500) {
 void check_video(const Track& video, std::span<const int64_t> pts, Muxer::Format format) {
     check(video.codec == AV_CODEC_ID_HEVC && video.width == 64 && video.height == 64,
           "fresh HEVC extradata exports correct codec and dimensions to the container");
-    if (format == Muxer::Format::Mp4) check(video.tag == MKTAG('h', 'v', 'c', '1'), "MP4 uses hvc1");
+    if (format == Muxer::Format::Mp4) check(video.tag == MKTAG('h', 'e', 'v', '1'), "MP4 uses hev1 to retain in-band configurations");
     check(video.packets.size() == pts.size(), "every complete HEVC AU is retained");
     for (std::size_t i = 0; i < video.packets.size() && i < pts.size(); ++i) {
         const auto& packet = video.packets[i];

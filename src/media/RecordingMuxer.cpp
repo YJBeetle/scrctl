@@ -366,7 +366,9 @@ std::unique_ptr<RecordingMuxer> RecordingMuxer::open(const Options& options, std
             impl.fail(error, error);
             return nullptr;
         }
-        impl.video->codecpar->codec_tag = options.format == Format::Mp4 ? MKTAG('h', 'v', 'c', '1') : 0;
+        // hvc1 makes movenc strip in-band parameter sets. hev1 preserves the
+        // checked IDR prefixes that allow a later size/configuration transition.
+        impl.video->codecpar->codec_tag = options.format == Format::Mp4 ? MKTAG('h', 'e', 'v', '1') : 0;
         impl.video->time_base = AVRational{1, 1000000};
         impl.video->avg_frame_rate = impl.video->r_frame_rate = AVRational{0, 1};
         if (options.video_orientation != 0) {

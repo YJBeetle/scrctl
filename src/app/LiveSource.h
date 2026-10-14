@@ -40,6 +40,7 @@ class LiveSource final : public FrameSource {
         bool audio_dup = false;
         std::string video_source = "stream";
         std::string test_degrade;
+        /// -1: upright re-encoding, otherwise static container rotation.
         int record_orientation = 0;
         std::function<bool()> should_cancel;
     };

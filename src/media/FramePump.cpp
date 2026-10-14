@@ -445,7 +445,7 @@ void FramePump::loop() {
                     }
                 }
             };
-            if (options_.decode_video) record_unit();
+            if (options_.decode_video && !options_.upright_geometry) record_unit();
             if (!options_.decode_video) {
                 // 参数和 IDR 语法通过公开 FFmpeg 接口检查，不配置显示解码器。
                 // 校验在容器异步入队之前；此处的健康判断不等于整张图像解码成功。
@@ -653,6 +653,15 @@ void FramePump::loop() {
                 std::lock_guard<std::mutex> lock(mutex_);
                 ++stats_.no_output;
                 return;
+            }
+            if (options_.recorder && options_.upright_geometry) {
+                const auto geometry = options_.upright_geometry(f);
+                if (!geometry || !media_source || !unit.sampling_timestamp) {
+                    options_.recorder->fail(SCRCTL_TR("Upright recording requires live display geometry and a sampling timestamp"));
+                } else {
+                    (void)options_.recorder->video_frame(session_->started().session_uuid,
+                        *media_source, *unit.sampling_timestamp, f, *geometry);
+                }
             }
             // 仅在解码成功且输出有效像素后解除等待。解析出完整关键帧并不保证
             // 解码器输出图像，过早清除会丢失 first_pli_ms_ 对应的后备恢复计时。
@@ -1079,18 +1088,6 @@ void FramePump::loop() {
                         width_ = height_ = 0;
                     }
                     discard_for_recovery();
-                }
-            }
-            if (options_.recorder != nullptr && nal.bytes.size() >= 2) {
-                const Nal *previous = nullptr;
-                switch ((nal.bytes[0] >> 1) & 0x3f) {
-                    case 32: previous = &parser_->vps(); break;
-                    case 33: previous = &parser_->sps(); break;
-                    case 34: previous = &parser_->pps(); break;
-                    default: break;
-                }
-                if (previous != nullptr && !previous->empty() && *previous != nal.bytes) {
-                    options_.recorder->fail(SCRCTL_TR("HEVC parameters changed during container recording"));
                 }
             }
             if (!parser_->push_nal(std::move(nal.bytes), timestamp, nal.ends_access_unit)) {

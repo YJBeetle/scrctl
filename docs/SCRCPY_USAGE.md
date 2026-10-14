@@ -136,7 +136,7 @@ MOD+R 查询手机当前方向后，请求横屏与竖屏切换；平放时采�
 | --- | --- |
 | `--record / -r`、`--record-format` | 默认按 `.mp4` / `.mkv` 扩展名保存所选轨道；其他扩展名兼容裸 HEVC，建议 `.hevc`。显式 `--record-format=mp4|mkv` 与 scrcpy 用法一致，允许无扩展名或不同扩展名；`hevc` 为 scrctl 裸视频扩展。格式选项需要非空录制文件，音轨和方向校验依据所选格式。容器默认 HEVC 和 AAC-ELD，`--no-audio` 只录视频，`--no-video` 只录音频；裸 HEVC 无音轨。MP4 最后视频帧显示 100 ms，参考 scrcpy 的收尾规则 |
 | `--display-orientation` | 只改变本机显示，支持 scrcpy 的四个旋转角度与四个 flip 值；另保留 auto 扩展。flip 先水平翻转，再顺时针旋转，鼠标映射使用相反顺序 |
-| `--orientation` / `--record-orientation` | 数字 `--orientation` 同时设置显示与容器录制方向；`--record-orientation` 只设置录制。按参数顺序覆盖；旧 `--orientation=auto` 仅设置显示 |
+| `--orientation` / `--record-orientation` | 数字 `--orientation` 同时设置显示与容器录制方向；`--record-orientation` 只设置录制，另支持 `auto` 正向重编码。按参数顺序覆盖；旧 `--orientation=auto` 仅设置显示 |
 | `--crop` | 裁剪本机显示的源像素；视频和截图各使用自身的像素坐标，不改变设备采集或录制 |
 | `--video-source` | 支持 display 和扩展值 screenshot（截图轮询）；没有 camera 能力 |
 | `--no-window` | 不创建窗口并关闭视频播放；无录制或帧诊断消费者时不采集视频，可继续播放音频。录制时可跳过显示解码；按帧数退出、硬件解码、降级测试、截图及缺少 IDR 检查能力时保留旧解码路径 |
@@ -154,6 +154,24 @@ flip。显示仍保留 `auto` 扩展。scrcpy 的 crop 作用于采集，scrctl 
 `--crop` 只裁剪电脑显示。参见
 [视频方向](https://github.com/Genymobile/scrcpy/blob/v5.0/doc/video.md#orientation)、
 [录制](https://github.com/Genymobile/scrcpy/blob/v5.0/doc/recording.md)。
+
+同一媒体会话内，容器录制允许完整 IDR 携带经重新检查的无重排 HEVC 配置，
+保留新参数并持续写入；MP4 使用 `hev1`，MKV 保留带内参数。首容器头的尺寸
+与方向元数据保持不变，实际帧尺寸由各段 HEVC 参数决定。已用双尺寸码流逐帧
+解码验证；播放器对动态尺寸和 `hev1` 的支持可能不同，尚未验证 QuickTime。
+默认录制保留源像素方向，固定编码画布里的侧向内容不会自动旋正。
+
+使用 `scrctl --record-orientation=auto -r capture.mp4`（也支持 MKV），可将设备
+方向和可见区域用于重编码，始终输出正向画面到一个文件。画布取开始录制时的
+可见尺寸并对齐到偶数；之后按比例适配，留白填黑，最多采样 30 fps，保留
+所选帧的媒体时间戳。该模式也可搭配 `--no-window`，优先使用 VideoToolbox，
+不可用时尝试 libx265；需要可用 HEVC 编码器，会产生额外开销和有损重编码。
+编码器或方向信息不可用时明确失败，不会降级为侧向录制。仅支持容器视频录制，
+不支持裸 HEVC、纯音频或翻转。方向属性异步更新，转屏瞬间不承诺逐帧同步。
+
+已在 Mac Wi-Fi 真机录制中验证横屏到竖屏：462 帧均为 2436×1126，竖屏
+正向居中，时间戳严格递增，完整解码无错误。`--crop` 仍只裁剪本机显示；
+此模式的可见区域处理不改变设备采集尺寸或传输带宽。
 
 录制写入失败时停止写文件。解码模式的镜像继续，仅录制模式结束任务。
 退出时检查文件刷新与关闭结果；

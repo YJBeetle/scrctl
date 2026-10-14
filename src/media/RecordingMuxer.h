@@ -18,7 +18,7 @@ inline constexpr std::size_t kMaxRecordingMuxerPacketBytes = 16u * 1024u * 1024u
 /// 调用方须串行使用，负责跨线程队列、文件提交和完整 AU 的组帧。
 class RecordingMuxer {
 public:
-    /// 普通 MP4 使用 hvc1，视频时长必须已知且为正，以免编辑列表隐藏尾帧。
+    /// 普通 MP4 使用 hev1 以保留带内参数，视频时长必须已知且为正，以免编辑列表隐藏尾帧。
     /// Matroska 首版只接受非负时间。调用方可选在两轨之前的共同原点，
     /// 保持相对偏移；本层不会自行平移时间或更改 AAC priming。
     enum class Format { Mp4, Matroska };
@@ -35,7 +35,9 @@ public:
         /// 相对编码像素的静态顺时针展示角度：0/90/180/270，不旋转或重编码图像。
         int video_orientation = 0;
         bool include_video = true;
-        /// 原始参数 NAL，不含起始码。所选视频只接受已确认无重排的配置。
+        /// 首图像的原始参数 NAL，不含起始码；固定用于容器 header。
+        /// 后续已批准的动态配置由调用方在 IDR 带内写入；本层不重编码或复核它。
+        /// 所选视频只接受已确认无重排的配置。
         /// 不选视频时参数必须空且方向必须为 0；至少选择视频或 audio 一轨。
         Nal vps, sps, pps;
         std::optional<Audio> audio;

@@ -120,6 +120,20 @@ int main() {
               defaults.shortcut_mods == (KMOD_LALT | KMOD_LGUI) &&
               defaults.orientation == -1 && !defaults.display_flip && defaults.record_orientation == 0,
           "default options");
+    {
+        Options automatic;
+        check(parse({"scrctl", "-r", "capture.mkv", "--record-orientation=auto", "--no-window"}, automatic) == ParseResult::Run &&
+              automatic.record_orientation == -1, "automatic upright recording permits a background video recording");
+        for (const auto& args : {std::vector<std::string>{"scrctl", "--record-orientation=auto"},
+                                std::vector<std::string>{"scrctl", "-r", "capture.hevc", "--record-orientation=auto"},
+                                std::vector<std::string>{"scrctl", "-r", "capture.mkv", "--no-video", "--record-orientation=auto"}}) {
+            Options invalid;
+            check(parse(args, invalid) == ParseResult::Error, "automatic recording needs a container video track");
+        }
+        Options overridden;
+        check(parse({"scrctl", "-r", "capture.mp4", "--record-orientation=auto", "--record-orientation=90"}, overridden) == ParseResult::Run &&
+              overridden.record_orientation == 90, "explicit static orientation overrides prior automatic mode");
+    }
     using RecordFormat = scrctl::app::RecordFormat;
     using MuxerFormat = scrctl::media::RecordingMuxer::Format;
     for (const auto& [name, selected, container] : {

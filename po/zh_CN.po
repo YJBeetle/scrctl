@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-12 20:34+0800\n"
+"POT-Creation-Date: 2026-10-14 12:21+0800\n"
 "PO-Revision-Date: 2026-10-09 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -233,7 +233,7 @@ msgstr "结束：编码视频录制已完成收尾\n"
 msgid "Finished: processed %d frames\n"
 msgstr "完成：处理 %d 帧\n"
 
-#: src/app/AudioOut.cpp:11 src/app/LiveSource.cpp:432
+#: src/app/AudioOut.cpp:11 src/app/LiveSource.cpp:469
 msgid "Audio playback is unavailable because PCM decoding is disabled"
 msgstr "音频未解码为 PCM，无法在电脑播放"
 
@@ -579,9 +579,10 @@ msgstr ""
 
 #: src/app/Cli.cpp:181
 msgid ""
-"Clockwise MP4/MKV recording rotation: 0/90/180/270; default: 0; display is "
+"MP4/MKV recording orientation: 0/90/180/270 as metadata, or auto to re-"
+"encode upright into a fixed canvas at up to 30 fps; default: 0; display is "
 "unchanged"
-msgstr "顺时针旋转 MP4/MKV 录制：0/90/180/270，默认 0；不改变显示"
+msgstr "MP4/MKV 录制方向：0/90/180/270 写入元数据，auto 重编码为固定画布的正向画面，最多 30 fps；默认 0；不改变显示"
 
 #: src/app/Cli.cpp:184
 msgid "Crop displayed pixels: WxH+X+Y or W:H:X:Y; recording is unchanged"
@@ -627,46 +628,51 @@ msgstr "需要非空设备标识"
 msgid "Requires a nonempty directory path"
 msgstr "需要非空目录路径"
 
-#: src/app/Cli.cpp:246 src/app/LiveSource.cpp:94
+#: src/app/Cli.cpp:246 src/app/LiveSource.cpp:96
 msgid "Requires a nonempty recording file"
 msgstr "需要非空的录制文件路径"
 
-#: src/app/Cli.cpp:255
+#: src/app/Cli.cpp:251
+msgid ""
+"Automatic recording orientation requires a video recording to MP4 or MKV"
+msgstr "自动录制方向需要包含视频的 MP4 或 MKV 录制"
+
+#: src/app/Cli.cpp:259
 msgid ""
 "Audio capture is disabled; --audio-dup requires playback or MP4/MKV recording"
 msgstr "音频采集已关闭；--audio-dup 需要电脑播放或 MP4/MKV 音轨录制"
 
-#: src/app/Cli.cpp:261
+#: src/app/Cli.cpp:265
 msgid ""
 "File playback requires video; incompatible with video playback disable "
 "options"
 msgstr "文件播放需要视频，不能同时指定关闭视频播放的选项"
 
-#: src/app/Cli.cpp:269
+#: src/app/Cli.cpp:273
 msgid "Audio-only recording requires MP4 or MKV; raw HEVC cannot contain audio"
 msgstr "仅录音频需要使用 MP4 或 MKV；裸 HEVC 无法保存音频"
 
-#: src/app/Cli.cpp:272
+#: src/app/Cli.cpp:276
 msgid "Recording requires at least one enabled audio or video track"
 msgstr "录制需要至少启用音频或视频中的一项"
 
-#: src/app/Cli.cpp:275 src/app/LiveSource.cpp:109
+#: src/app/Cli.cpp:279 src/app/LiveSource.cpp:116
 msgid "Recording orientation requires a video track"
 msgstr "录制方向需要视频轨道"
 
-#: src/app/Cli.cpp:280
+#: src/app/Cli.cpp:284
 msgid ""
 "Frame counting, hardware decoding, fallback tests and screenshots require "
 "video capture"
 msgstr "按帧计数、硬件解码、降级测试和截图需要采集视频"
 
-#: src/app/Cli.cpp:284 src/app/LiveSource.cpp:131
+#: src/app/Cli.cpp:288 src/app/LiveSource.cpp:138
 msgid ""
 "Container recording requires live video; screenshot polling cannot be "
 "recorded"
 msgstr "容器录制需要实时视频流，不能录制截图轮询"
 
-#: src/app/Cli.cpp:288
+#: src/app/Cli.cpp:292
 msgid ""
 "Recording does not support flipping; use --display-orientation for display-"
 "only flipping or reset --record-orientation to a rotation"
@@ -674,57 +680,57 @@ msgstr ""
 "录制不支持翻转；只翻转显示请使用 --display-orientation，或在后面用 --record-"
 "orientation 指定旋转角度"
 
-#: src/app/Cli.cpp:292 src/app/LiveSource.cpp:141
+#: src/app/Cli.cpp:296 src/app/LiveSource.cpp:148
 msgid ""
 "Recording rotation requires MP4 or MKV; use --display-orientation to rotate "
 "only the display"
 msgstr "录制旋转需要 MP4 或 MKV；只旋转显示请使用 --display-orientation"
 
-#: src/app/Cli.cpp:296
+#: src/app/Cli.cpp:300
 msgid ""
 "Wireless first pairing requires --wifi auto; existing records cannot be "
 "repaired wirelessly"
 msgstr "首次无线配对需要 --wifi auto；已有配对记录无法通过无线方式修复"
 
-#: src/app/Cli.cpp:307
+#: src/app/Cli.cpp:311
 msgid "Expected an integer or auto"
 msgstr "请使用整数或 auto"
 
-#: src/app/Cli.cpp:327
+#: src/app/Cli.cpp:331
 msgid ""
 "Use a comma-separated list of lctrl, rctrl, lalt, ralt, lsuper or rsuper"
 msgstr "请使用 lctrl、rctrl、lalt、ralt、lsuper 或 rsuper，以逗号分隔"
 
-#: src/app/Cli.cpp:338
+#: src/app/Cli.cpp:342
 msgid "Coordinates must be finite numbers in [0, 1]"
 msgstr "坐标必须是 [0, 1] 内的有限数"
 
-#: src/app/Cli.cpp:345
+#: src/app/Cli.cpp:349
 msgid "Requires a finite positive number"
 msgstr "需要有限正数"
 
-#: src/app/Cli.cpp:360
+#: src/app/Cli.cpp:364
 msgid ""
 "Expected WxH+X+Y or W:H:X:Y, with positive dimensions and nonnegative offsets"
 msgstr "格式应为 WxH+X+Y 或 W:H:X:Y，尺寸为正、偏移非负"
 
-#: src/app/Cli.cpp:369
+#: src/app/Cli.cpp:373
 msgid "Expected 3 or 6 hexadecimal digits, optionally prefixed with #"
 msgstr "请使用 3 位或 6 位十六进制颜色，可带 # 前缀"
 
-#: src/app/Cli.cpp:383
+#: src/app/Cli.cpp:387
 msgid "Frame number must be a positive integer"
 msgstr "帧号需要正整数"
 
-#: src/app/Cli.cpp:388
+#: src/app/Cli.cpp:392
 msgid "Requires a window; incompatible with --no-window"
 msgstr "需要窗口，不能与 --no-window 同用"
 
-#: src/app/Cli.cpp:391
+#: src/app/Cli.cpp:395
 msgid "Window readback requires video playback"
 msgstr "回读窗口画面需要开启视频播放"
 
-#: src/app/Cli.cpp:399
+#: src/app/Cli.cpp:403
 msgid "Nothing to do: enable media, recording or device control"
 msgstr "没有可执行的操作：请开启音视频、录制或设备控制"
 
@@ -1064,116 +1070,130 @@ msgstr "回放文件未解码出任何视频帧"
 msgid "Source ended"
 msgstr "源已结束"
 
-#: src/app/LiveSource.cpp:42 src/app/LiveSource.cpp:716
+#: src/app/LiveSource.cpp:43 src/app/LiveSource.cpp:753
 #: src/media/FramePump.cpp:193
 #, c-format
 msgid "Recording failed: %s. The file may be incomplete.\n"
 msgstr "录制失败：%s。录制文件可能不完整。\n"
 
-#: src/app/LiveSource.cpp:101
+#: src/app/LiveSource.cpp:102
+msgid ""
+"Automatic recording orientation requires a live video recording to MP4 or MKV"
+msgstr "自动录制方向需要实时视频的 MP4 或 MKV 录制"
+
+#: src/app/LiveSource.cpp:108
 msgid "Audio-only recording requires MP4 or MKV"
 msgstr "仅录音频需要使用 MP4 或 MKV"
 
-#: src/app/LiveSource.cpp:105
+#: src/app/LiveSource.cpp:112
 msgid "Audio-only recording requires audio capture"
 msgstr "仅录音频需要启用音频采集"
 
-#: src/app/LiveSource.cpp:114 src/media/FramePump.cpp:111
+#: src/app/LiveSource.cpp:121 src/media/FramePump.cpp:111
 msgid "Video capture without decoding requires a recording consumer"
 msgstr "不解码视频时必须指定录制目标"
 
-#: src/app/LiveSource.cpp:118
+#: src/app/LiveSource.cpp:125
 msgid "Video capture without decoding requires a live video stream"
 msgstr "不解码视频的录制需要实时视频流"
 
-#: src/app/LiveSource.cpp:122
+#: src/app/LiveSource.cpp:129
 msgid "Hardware decoding and fallback tests require video decoding"
 msgstr "硬件解码和降级测试需要启用视频解码"
 
-#: src/app/LiveSource.cpp:127 src/media/AudioPump.cpp:104
+#: src/app/LiveSource.cpp:134 src/media/AudioPump.cpp:104
 msgid ""
 "Audio capture without PCM decoding requires a container recording with an "
 "audio track"
 msgstr "不解码音频时，需要录制到包含音轨的 MP4 或 MKV 文件"
 
-#: src/app/LiveSource.cpp:135
+#: src/app/LiveSource.cpp:142
 msgid "Container recording is unavailable in this build (libavformat required)"
 msgstr "此构建不支持容器录制，需要 libavformat"
 
-#: src/app/LiveSource.cpp:147
+#: src/app/LiveSource.cpp:154
 msgid "Invalid --test-degrade: "
 msgstr "--test-degrade 参数无效："
 
-#: src/app/LiveSource.cpp:211
+#: src/app/LiveSource.cpp:218
 #, c-format
 msgid "Failed to query display dimensions: %s (using model crop table)\n"
 msgstr "查询显示尺寸失败: %s（使用机型裁剪表）\n"
 
-#: src/app/LiveSource.cpp:212
+#: src/app/LiveSource.cpp:219
 msgid "Update contains no usable dimensions"
 msgstr "推送里没有可用的尺寸"
 
-#: src/app/LiveSource.cpp:225
+#: src/app/LiveSource.cpp:232
+msgid "Upright recording requires a live display orientation subscription"
+msgstr "正向录制需要有效的显示方向订阅"
+
+#: src/app/LiveSource.cpp:236
 #, c-format
 msgid ""
 "Failed to subscribe to display changes: %s (automatic rotation unavailable)\n"
 msgstr "订阅显示变化失败: %s（无法自动跟随旋转）\n"
 
-#: src/app/LiveSource.cpp:259 src/app/LiveSource.cpp:679
+#: src/app/LiveSource.cpp:256 src/media/FramePump.cpp:660
+msgid ""
+"Upright recording requires live display geometry and a sampling timestamp"
+msgstr "正向录制需要有效显示几何与采样时间戳"
+
+#: src/app/LiveSource.cpp:296 src/app/LiveSource.cpp:716
 msgid "Live video unavailable; recording stopped"
 msgstr "实时视频不可用，录制已停止"
 
-#: src/app/LiveSource.cpp:264
+#: src/app/LiveSource.cpp:301
 #, c-format
 msgid "Media stream unavailable: %s\n"
 msgstr "媒体流不可用：%s\n"
 
-#: src/app/LiveSource.cpp:267
+#: src/app/LiveSource.cpp:304
 #, c-format
 msgid ""
 "Using screenshot polling; refresh rate depends on capture time. Input "
 "control remains available\n"
 msgstr "已改用截图轮询，刷新率取决于截图耗时；输入控制仍可用\n"
 
-#: src/app/LiveSource.cpp:271
+#: src/app/LiveSource.cpp:308
 msgid "Failed to start screenshot polling: "
 msgstr "启动截图轮询失败: "
 
-#: src/app/LiveSource.cpp:286
+#: src/app/LiveSource.cpp:323
 msgid "No first screenshot within 5 seconds"
 msgstr "5 秒内未取得首张截图"
 
-#: src/app/LiveSource.cpp:294
+#: src/app/LiveSource.cpp:331
 msgid "No first decoded frame within 5 seconds"
 msgstr "5 秒内未解出首帧"
 
-#: src/app/LiveSource.cpp:299
+#: src/app/LiveSource.cpp:336
 msgid "No valid recording IDR within 5 seconds"
 msgstr "5 秒内未收到通过录制检查的 IDR"
 
-#: src/app/LiveSource.cpp:311
+#: src/app/LiveSource.cpp:348
 msgid "Video became unavailable before recording startup completed"
 msgstr "录制启动尚未完成，视频已不可用"
 
-#: src/app/LiveSource.cpp:321
+#: src/app/LiveSource.cpp:358
 #, c-format
 msgid "Screenshot mirroring started: %s / iOS %s, %ux%u\n"
 msgstr "截图镜像已建立：%s / iOS %s，尺寸 %ux%u\n"
 
-#: src/app/LiveSource.cpp:325
+#: src/app/LiveSource.cpp:362
 #, c-format
 msgid ""
 "Video stream started: %s / iOS %s, receive port=%u PT=%u, first frame %ux%u\n"
 msgstr "视频流已建立：%s / iOS %s，收流端口=%u PT=%u，首帧 %ux%u\n"
 
-#: src/app/LiveSource.cpp:330
+#: src/app/LiveSource.cpp:367
 #, c-format
 msgid ""
 "Encoded video capture started: %s / iOS %s, receive port=%u PT=%u, checked "
 "dimensions %ux%u\n"
 msgstr "编码视频采集已启动：%s / iOS %s，接收端口=%u PT=%u，已检查尺寸 %ux%u\n"
 
-#: src/app/LiveSource.cpp:339
+#: src/app/LiveSource.cpp:376
 #, c-format
 msgid ""
 "Display geometry: visible area %dx%d (displayId=%llu %s), UI rotation %d "
@@ -1182,22 +1202,22 @@ msgstr ""
 "显示几何：设备报可见区 %dx%d（displayId=%llu %s），界面旋转顺时针 %d°，码流 "
 "%ux%u\n"
 
-#: src/app/LiveSource.cpp:346
+#: src/app/LiveSource.cpp:383
 #, c-format
 msgid "Screenshot mode cannot record Annex-B; ignoring --record\n"
 msgstr "截图模式无法录制 Annex-B，已忽略 --record\n"
 
-#: src/app/LiveSource.cpp:348 src/app/LiveSource.cpp:403
+#: src/app/LiveSource.cpp:385 src/app/LiveSource.cpp:440
 #, c-format
 msgid "Recording to %s\n"
 msgstr "录制到 %s\n"
 
-#: src/app/LiveSource.cpp:356
+#: src/app/LiveSource.cpp:393
 #, c-format
 msgid "Screenshot mode does not start audio\n"
 msgstr "截图模式不启动音频流\n"
 
-#: src/app/LiveSource.cpp:372
+#: src/app/LiveSource.cpp:409
 #, c-format
 msgid ""
 "Forwarding audio to the computer. Switching routes may pause the phone's "
@@ -1206,81 +1226,81 @@ msgstr ""
 "正在将音频转到电脑。切换路由可能暂停手机播放器；如有需要，请在手机上继续播"
 "放。\n"
 
-#: src/app/LiveSource.cpp:392
+#: src/app/LiveSource.cpp:429
 #, c-format
 msgid "Failed to start audio: %s (video continues)\n"
 msgstr "启动音频流失败: %s（继续显示画面）\n"
 
-#: src/app/LiveSource.cpp:397
+#: src/app/LiveSource.cpp:434
 #, c-format
 msgid "Audio stream started: receive port=%u PT=%u backend=%s\n"
 msgstr "音频流已建立：收流端口=%u PT=%u 后端=%s\n"
 
-#: src/app/LiveSource.cpp:400
+#: src/app/LiveSource.cpp:437
 msgid "Audio routing: phone and computer (--audio-dup)"
 msgstr "音频路由：手机和电脑（--audio-dup）"
 
-#: src/app/LiveSource.cpp:401
+#: src/app/LiveSource.cpp:438
 msgid "Audio routing: computer; phone playback is suppressed"
 msgstr "音频路由：电脑；手机停止发声"
 
-#: src/app/LiveSource.cpp:411
+#: src/app/LiveSource.cpp:448
 #, c-format
 msgid "--test-degrade: from now,"
 msgstr "--test-degrade：从现在起"
 
-#: src/app/LiveSource.cpp:413
+#: src/app/LiveSource.cpp:450
 #, c-format
 msgid " at %.1f seconds: %s"
 msgstr " %.1f 秒%s"
 
-#: src/app/LiveSource.cpp:414
+#: src/app/LiveSource.cpp:451
 msgid "force fallback"
 msgstr "强制降级"
 
-#: src/app/LiveSource.cpp:414
+#: src/app/LiveSource.cpp:451
 msgid "release override"
 msgstr "放开"
 
-#: src/app/LiveSource.cpp:416
+#: src/app/LiveSource.cpp:453
 #, c-format
 msgid " (test mode)\n"
 msgstr "（测试模式）\n"
 
-#: src/app/LiveSource.cpp:428
+#: src/app/LiveSource.cpp:465
 msgid ""
 "No playable audio stream (disabled, failed to start, or unsupported build)"
 msgstr "没有可播放的音频流（已禁用、启动失败或构建不支持）"
 
-#: src/app/LiveSource.cpp:446
+#: src/app/LiveSource.cpp:483
 msgid "Audio capture stopped before recording finished"
 msgstr "录制尚未完成，音频采集已停止"
 
-#: src/app/LiveSource.cpp:457 src/app/LiveSource.cpp:478
+#: src/app/LiveSource.cpp:494 src/app/LiveSource.cpp:515
 msgid "Device input is unavailable before a session is started"
 msgstr "尚未建立设备会话，无法发送输入"
 
-#: src/app/LiveSource.cpp:467
+#: src/app/LiveSource.cpp:504
 #, c-format
 msgid "Device input connection established\n"
 msgstr "设备输入连接已建立\n"
 
-#: src/app/LiveSource.cpp:508
+#: src/app/LiveSource.cpp:545
 #, c-format
 msgid "Failed to release device touch: %s\n"
 msgstr "未能释放设备触点：%s\n"
 
-#: src/app/LiveSource.cpp:514
+#: src/app/LiveSource.cpp:551
 #, c-format
 msgid "Failed to release device keys: %s\n"
 msgstr "未能松开设备按键：%s\n"
 
-#: src/app/LiveSource.cpp:520
+#: src/app/LiveSource.cpp:557
 #, c-format
 msgid "Failed to release device button: %s\n"
 msgstr "未能松开设备硬件按钮：%s\n"
 
-#: src/app/LiveSource.cpp:683
+#: src/app/LiveSource.cpp:720
 #, c-format
 msgid ""
 "Live video unavailable; using screenshot polling while retrying video in the "
@@ -1288,38 +1308,38 @@ msgid ""
 msgstr ""
 "实时视频暂不可用，已切换到截图轮询；后台继续尝试恢复视频，成功后自动切回\n"
 
-#: src/app/LiveSource.cpp:686
+#: src/app/LiveSource.cpp:723
 #, c-format
 msgid "Failed to switch to screenshots: %s (retry in %llu seconds)\n"
 msgstr "切换到截图失败: %s（%llu 秒后重试）\n"
 
-#: src/app/LiveSource.cpp:692
+#: src/app/LiveSource.cpp:729
 #, c-format
 msgid "Live video recovered; switched back to video stream\n"
 msgstr "实时视频已恢复，已切回视频流\n"
 
-#: src/app/LiveSource.cpp:713 src/media/FramePump.cpp:192
+#: src/app/LiveSource.cpp:750 src/media/FramePump.cpp:192
 #, c-format
 msgid "Recording failed: %s. Mirroring continues; the file is incomplete.\n"
 msgstr "录制失败：%s。镜像继续，录制文件不完整。\n"
 
-#: src/app/LiveSource.cpp:757
+#: src/app/LiveSource.cpp:794
 msgid "Encoded video capture stopped: "
 msgstr "编码视频采集已停止："
 
-#: src/app/LiveSource.cpp:760
+#: src/app/LiveSource.cpp:797
 msgid "Audio recording stopped: "
 msgstr "音频录制已停止："
 
-#: src/app/LiveSource.cpp:764
+#: src/app/LiveSource.cpp:801
 msgid "Audio stopped: "
 msgstr "音频已停止："
 
-#: src/app/LiveSource.cpp:768
+#: src/app/LiveSource.cpp:805
 msgid "); closing session"
 msgstr "），正在关闭会话"
 
-#: src/app/LiveSource.cpp:768
+#: src/app/LiveSource.cpp:805
 msgid "Device connection lost ("
 msgstr "设备连接已断开（"
 
@@ -2885,7 +2905,7 @@ msgid ""
 "Encoded video access unit has a missing or non-increasing sampling timestamp"
 msgstr "编码视频 AU 缺少采样时间戳，或时间戳未递增"
 
-#: src/media/FramePump.cpp:495 src/media/Recorder.cpp:258
+#: src/media/FramePump.cpp:495 src/media/Recorder.cpp:291
 msgid "Recording HEVC requires a no-reorder configuration"
 msgstr "HEVC 录制需要无帧重排序的配置"
 
@@ -2916,22 +2936,22 @@ msgstr "后续禁止 PLI"
 msgid "PLI continues"
 msgstr "继续发送 PLI"
 
-#: src/media/FramePump.cpp:745
+#: src/media/FramePump.cpp:754
 #, c-format
 msgid ""
 "%s: no data for %llu ms; device reports session alive, continuing to wait\n"
 msgstr "%s：%llu ms 未收到数据，设备报告会话仍运行，继续等待\n"
 
-#: src/media/FramePump.cpp:750
+#: src/media/FramePump.cpp:759
 #, c-format
 msgid "%s: no data for %llu ms, %s; recreating video session\n"
 msgstr "%s：%llu ms 未收到数据，%s，重建视频会话\n"
 
-#: src/media/FramePump.cpp:753
+#: src/media/FramePump.cpp:762
 msgid "device session ended"
 msgstr "设备会话已结束"
 
-#: src/media/FramePump.cpp:754 src/media/ScreenshotSource.cpp:72
+#: src/media/FramePump.cpp:763 src/media/ScreenshotSource.cpp:72
 #: src/net/Stack.cpp:364 src/net/TcpStream.cpp:44 src/net/TcpStream.cpp:128
 #: src/net/TcpStream.cpp:132 src/net/UdpSocket.cpp:109
 #: src/net/UdpSocket.cpp:136 src/remote/Rsd.cpp:322
@@ -2940,66 +2960,66 @@ msgstr "设备会话已结束"
 msgid ")"
 msgstr "）"
 
-#: src/media/FramePump.cpp:754
+#: src/media/FramePump.cpp:763
 msgid "session status query failed ("
 msgstr "查询会话状态失败（"
 
-#: src/media/FramePump.cpp:758 src/media/FramePump.cpp:773
+#: src/media/FramePump.cpp:767 src/media/FramePump.cpp:782
 #, c-format
 msgid "Failed to recreate video session: %s\n"
 msgstr "重建视频会话失败: %s\n"
 
-#: src/media/FramePump.cpp:789
+#: src/media/FramePump.cpp:798
 #, c-format
 msgid ""
 "%s: no data for %llu ms; recovery threshold exceeded, recreating video "
 "session\n"
 msgstr "%s：%llu ms 未收到数据，超过恢复阈值，重建视频会话\n"
 
-#: src/media/FramePump.cpp:817
+#: src/media/FramePump.cpp:826
 #, c-format
 msgid "Failed to recreate video session: %s (retry in 1 second)\n"
 msgstr "重建视频会话失败: %s（1 秒后再试）\n"
 
-#: src/media/FramePump.cpp:847
+#: src/media/FramePump.cpp:856
 #, c-format
 msgid "Failed to send RTCP keepalive: %s\n"
 msgstr "RTCP 保活包发送失败: %s\n"
 
-#: src/media/FramePump.cpp:852
+#: src/media/FramePump.cpp:861
 msgid "Input or frame request"
 msgstr "收到操作"
 
-#: src/media/FramePump.cpp:860
+#: src/media/FramePump.cpp:869
 #, c-format
 msgid "Video fallback active for %llu seconds; retrying video session\n"
 msgstr "视频降级已满 %llu 秒，重试视频会话\n"
 
-#: src/media/FramePump.cpp:867
+#: src/media/FramePump.cpp:876
 #, c-format
 msgid "%s; recreating video session to obtain a keyframe\n"
 msgstr "%s，重建视频会话以取得关键帧\n"
 
-#: src/media/FramePump.cpp:868
+#: src/media/FramePump.cpp:877
 msgid "Scheduled video retry after fallback"
 msgstr "视频降级后的定时重试"
 
-#: src/media/FramePump.cpp:869
+#: src/media/FramePump.cpp:878
 msgid "NAL exceeds platform decoder length limit"
 msgstr "NAL 超过平台后端长度上限"
 
-#: src/media/FramePump.cpp:905
+#: src/media/FramePump.cpp:914
 #, c-format
 msgid "Keyframe wait reached %d ms; recreating video session\n"
 msgstr "等待关键帧达到 %d ms，重建视频会话\n"
 
-#: src/media/FramePump.cpp:920
+#: src/media/FramePump.cpp:929
 #, c-format
 msgid ""
 "No keyframe output after %llu seconds; recreating video session (%d/%d)\n"
 msgstr "启动 %llu 秒仍无关键帧输出，重建视频会话 (%d/%d)\n"
 
-#: src/media/FramePump.cpp:928
+#: src/media/FramePump.cpp:937
 #, c-format
 msgid ""
 "No keyframe output after %d restarts. Video is unavailable; callers can use "
@@ -3008,176 +3028,220 @@ msgstr ""
 "连续 %d 次重建仍未输出关键帧，视频暂不可用。调用方可切换至截图服务；将每 "
 "%llu 秒重试视频会话。\n"
 
-#: src/media/FramePump.cpp:951
+#: src/media/FramePump.cpp:960
 msgid "Receive silence timeout"
 msgstr "静默超时"
 
-#: src/media/FramePump.cpp:1027
+#: src/media/FramePump.cpp:1036
 #, c-format
 msgid "Test: dropped video packet %d to inject a sequence gap\n"
 msgstr "测试：丢弃第 %d 个视频包以注入序号缺口\n"
 
-#: src/media/FramePump.cpp:1058
+#: src/media/FramePump.cpp:1067
 msgid "Video sampling timestamp became ambiguous"
 msgstr "视频采样时间戳的回绕周期变得不明确"
 
-#: src/media/FramePump.cpp:1061
+#: src/media/FramePump.cpp:1070
 msgid ""
 "Video sampling timestamp is ambiguous; discarding the access unit and "
 "requesting a keyframe.\n"
 msgstr "无法确定视频采样时间，丢弃当前帧并请求关键帧。\n"
 
-#: src/media/FramePump.cpp:1093
-msgid "HEVC parameters changed during container recording"
-msgstr "容器录制期间 HEVC 参数发生变化"
-
-#: src/media/FramePump.cpp:1098
+#: src/media/FramePump.cpp:1095
 msgid "Video access-unit input became inconsistent"
 msgstr "视频访问单元的输入数据不一致"
 
-#: src/media/FramePump.cpp:1101
+#: src/media/FramePump.cpp:1098
 msgid ""
 "Video access-unit input is inconsistent; discarding the access unit and "
 "requesting a keyframe.\n"
 msgstr "视频帧数据不一致，丢弃当前帧并请求关键帧。\n"
 
-#: src/media/Recorder.cpp:118
+#: src/media/Recorder.cpp:136
 msgid "Recording failed"
 msgstr "录制失败"
 
-#: src/media/Recorder.cpp:140
+#: src/media/Recorder.cpp:158 src/media/Recorder.cpp:323
+#: src/media/Recorder.cpp:376
 msgid "Recorder input exceeds its encoded-byte or event budget"
 msgstr "录制输入超过编码数据大小或事件数量上限"
 
-#: src/media/Recorder.cpp:156
+#: src/media/Recorder.cpp:174 src/media/Recorder.cpp:885
 msgid "Cannot allocate the Recorder input buffer"
 msgstr "无法分配录制输入缓冲区"
 
-#: src/media/Recorder.cpp:165
+#: src/media/Recorder.cpp:190 src/media/Recorder.cpp:854
 msgid "Recording media belongs to a missing or changed session"
 msgstr "录制数据来自尚未建立或已改变的会话"
 
-#: src/media/Recorder.cpp:189 src/media/Recorder.cpp:305
+#: src/media/Recorder.cpp:219 src/media/Recorder.cpp:475
 msgid "Recording early sender-report budget exceeded"
 msgstr "媒体数据到达前收到的发送端报告超过数量上限"
 
-#: src/media/Recorder.cpp:199
+#: src/media/Recorder.cpp:229
 msgid "Recording sender report has no usable NTP/RTP clock"
 msgstr "录制发送端报告没有可用的 NTP/RTP 时钟"
 
-#: src/media/Recorder.cpp:221 src/media/Recorder.cpp:244
+#: src/media/Recorder.cpp:251 src/media/Recorder.cpp:274
+#: src/media/Recorder.cpp:392 src/media/Recorder.cpp:857
 msgid "Recording media source changed within the session"
 msgstr "录制会话中的媒体数据源发生变化"
 
-#: src/media/Recorder.cpp:225
+#: src/media/Recorder.cpp:255 src/media/Recorder.cpp:861
 msgid "Recording media timestamps do not advance within the track"
 msgstr "录制轨道的媒体时间戳未严格递增"
 
-#: src/media/Recorder.cpp:248
-msgid "Recording HEVC parameter sets changed"
-msgstr "录制期间 HEVC 参数集发生变化"
+#: src/media/Recorder.cpp:287
+msgid "Recording HEVC configuration changes require an IDR"
+msgstr "录制 HEVC 配置变化需要 IDR 关键帧"
 
-#: src/media/Recorder.cpp:278
-msgid "Recording track session was started again"
-msgstr "录制轨道的会话被再次启动"
-
-#: src/media/Recorder.cpp:288
-msgid "Recording audio RTP timestamp has an ambiguous wrap or overflows"
-msgstr "录制音频 RTP 时间戳的回绕周期不明确或发生溢出"
-
-#: src/media/Recorder.cpp:327
-msgid "A selected recording track has no approved media"
-msgstr "所选录制轨道没有可用的媒体数据"
-
-#: src/media/Recorder.cpp:332
-msgid "Cannot map the first recording packet from trusted sender reports"
-msgstr "无法根据可信的发送端报告确定首个录制包的时间"
-
-#: src/media/Recorder.cpp:358
-msgid "Recording time cannot be represented as nonnegative microseconds"
-msgstr "录制时间无法表示为非负的微秒数"
-
-#: src/media/Recorder.cpp:367
-msgid "MP4 recording video duration is not positive or overflows"
-msgstr "MP4 录制的视频显示时长不是正数或发生溢出"
-
-#: src/media/Recorder.cpp:393
-msgid "Recording clock cannot map a packet within its SR/extrapolation budget"
-msgstr "录制包的时间超出发送端报告或边界外推允许的范围"
-
-#: src/media/Recorder.cpp:399
-msgid "Recording audio duration is not positive after clock mapping"
-msgstr "时钟映射后的录制音频时长不是正数"
-
-#: src/media/Recorder.cpp:404
-msgid "MP4 recording video timestamps do not advance after clock mapping"
-msgstr "时钟映射后的 MP4 视频时间戳未严格递增"
-
-#: src/media/Recorder.cpp:512
-msgid "A selected recording track did not produce a completed packet"
-msgstr "所选录制轨道未产生完整的编码包"
-
-#: src/media/Recorder.cpp:517
-msgid "Recording waited too long for approved media or trusted sender reports"
-msgstr "等待可用媒体数据或可信发送端报告超时"
-
-#: src/media/Recorder.cpp:521
-msgid "Recording worker could not process its input"
-msgstr "录制线程无法处理输入数据"
-
-#: src/media/Recorder.cpp:535 src/media/RecordingMuxer.cpp:301
-msgid "Recording requires at least one selected track"
-msgstr "录制需要至少选择一条轨道"
-
-#: src/media/Recorder.cpp:539 src/media/RecordingMuxer.cpp:305
-msgid "Audio-only recording requires zero video orientation"
-msgstr "仅录音频时，视频录制方向必须为 0"
-
-#: src/media/Recorder.cpp:545 src/media/RecordingMuxer.cpp:27
-msgid "Container recording requires libavformat and libavcodec"
-msgstr "容器录制需要 libavformat 和 libavcodec"
-
-#: src/media/Recorder.cpp:553
-msgid "Invalid Recorder path or bounded buffering/clock limits"
-msgstr "录制路径、缓冲上限或时钟限制无效"
-
-#: src/media/Recorder.cpp:561
-msgid "Cannot create the recording worker"
-msgstr "无法创建录制线程"
-
-#: src/media/Recorder.cpp:575
-msgid "Recording track selection or session UUID is invalid"
-msgstr "录制轨道选择或会话 UUID 无效"
-
-#: src/media/Recorder.cpp:588 src/media/RecordingMuxer.cpp:156
-msgid "This recording has no video track"
-msgstr "本次录制没有视频轨道"
-
-#: src/media/Recorder.cpp:590
-msgid "Recording session UUID is invalid"
-msgstr "录制会话 UUID 无效"
-
-#: src/media/Recorder.cpp:595 src/media/RecordingVideoConfig.cpp:270
+#: src/media/Recorder.cpp:308 src/media/Recorder.cpp:803
+#: src/media/RecordingVideoConfig.cpp:270
 msgid "Recording HEVC AU is incomplete or exceeds the packet budget"
 msgstr "录制的 HEVC 访问单元不完整或超过包大小上限"
 
-#: src/media/Recorder.cpp:599
+#: src/media/Recorder.cpp:357
+msgid "Recording encoder returned an unknown timestamp"
+msgstr "录制编码器返回了未知时间戳"
+
+#: src/media/Recorder.cpp:367
+msgid "Recording encoder returned an invalid NAL"
+msgstr "录制编码器返回了无效 NAL"
+
+#: src/media/Recorder.cpp:407
+msgid "Recording encoder pending-frame budget exceeded"
+msgstr "录制编码器待处理帧超过上限"
+
+#: src/media/Recorder.cpp:429
+msgid "Recording track session was started again"
+msgstr "录制轨道的会话被再次启动"
+
+#: src/media/Recorder.cpp:440
+msgid "Recording audio RTP timestamp has an ambiguous wrap or overflows"
+msgstr "录制音频 RTP 时间戳的回绕周期不明确或发生溢出"
+
+#: src/media/Recorder.cpp:464 src/media/Recorder.cpp:689
+msgid "Recording encoder did not return every submitted frame"
+msgstr "录制编码器未返回全部已提交帧"
+
+#: src/media/Recorder.cpp:497
+msgid "A selected recording track has no approved media"
+msgstr "所选录制轨道没有可用的媒体数据"
+
+#: src/media/Recorder.cpp:502
+msgid "Cannot map the first recording packet from trusted sender reports"
+msgstr "无法根据可信的发送端报告确定首个录制包的时间"
+
+#: src/media/Recorder.cpp:528
+msgid "Recording time cannot be represented as nonnegative microseconds"
+msgstr "录制时间无法表示为非负的微秒数"
+
+#: src/media/Recorder.cpp:537
+msgid "MP4 recording video duration is not positive or overflows"
+msgstr "MP4 录制的视频显示时长不是正数或发生溢出"
+
+#: src/media/Recorder.cpp:563
+msgid "Recording clock cannot map a packet within its SR/extrapolation budget"
+msgstr "录制包的时间超出发送端报告或边界外推允许的范围"
+
+#: src/media/Recorder.cpp:569
+msgid "Recording audio duration is not positive after clock mapping"
+msgstr "时钟映射后的录制音频时长不是正数"
+
+#: src/media/Recorder.cpp:574
+msgid "MP4 recording video timestamps do not advance after clock mapping"
+msgstr "时钟映射后的 MP4 视频时间戳未严格递增"
+
+#: src/media/Recorder.cpp:696
+msgid "A selected recording track did not produce a completed packet"
+msgstr "所选录制轨道未产生完整的编码包"
+
+#: src/media/Recorder.cpp:701
+msgid "Recording waited too long for approved media or trusted sender reports"
+msgstr "等待可用媒体数据或可信发送端报告超时"
+
+#: src/media/Recorder.cpp:705
+msgid "Recording worker could not process its input"
+msgstr "录制线程无法处理输入数据"
+
+#: src/media/Recorder.cpp:719 src/media/RecordingMuxer.cpp:301
+msgid "Recording requires at least one selected track"
+msgstr "录制需要至少选择一条轨道"
+
+#: src/media/Recorder.cpp:723 src/media/RecordingMuxer.cpp:305
+msgid "Audio-only recording requires zero video orientation"
+msgstr "仅录音频时，视频录制方向必须为 0"
+
+#: src/media/Recorder.cpp:727
+msgid "Upright recording requires video and zero static orientation"
+msgstr "正向录制需要视频，且静态旋转角度必须为零"
+
+#: src/media/Recorder.cpp:730 src/media/Recorder.cpp:744
+msgid "Invalid Recorder path or bounded buffering/clock limits"
+msgstr "录制路径、缓冲上限或时钟限制无效"
+
+#: src/media/Recorder.cpp:736 src/media/RecordingMuxer.cpp:27
+msgid "Container recording requires libavformat and libavcodec"
+msgstr "容器录制需要 libavformat 和 libavcodec"
+
+#: src/media/Recorder.cpp:757
+#, c-format
+msgid "Recording encoder: %s, canvas %ux%u\n"
+msgstr "录制编码器：%s，画布 %ux%u\n"
+
+#: src/media/Recorder.cpp:763
+msgid "Cannot create the recording worker"
+msgstr "无法创建录制线程"
+
+#: src/media/Recorder.cpp:777
+msgid "Recording track selection or session UUID is invalid"
+msgstr "录制轨道选择或会话 UUID 无效"
+
+#: src/media/Recorder.cpp:790
+msgid "Upright recording accepts decoded frames only"
+msgstr "正向录制只接受解码后的图像帧"
+
+#: src/media/Recorder.cpp:793 src/media/RecordingMuxer.cpp:156
+msgid "This recording has no video track"
+msgstr "本次录制没有视频轨道"
+
+#: src/media/Recorder.cpp:795
+msgid "Recording session UUID is invalid"
+msgstr "录制会话 UUID 无效"
+
+#: src/media/Recorder.cpp:797
+msgid "Recording HEVC AU is empty or exceeds the NAL-count budget"
+msgstr "录制 HEVC 访问单元为空或超过 NAL 数量上限"
+
+#: src/media/Recorder.cpp:807
 msgid "Recording HEVC AU has an invalid or unsupported layer header"
 msgstr "录制 HEVC 访问单元的头部无效，或使用了不支持的层"
 
-#: src/media/Recorder.cpp:603
+#: src/media/Recorder.cpp:811
 msgid "Recording HEVC AU is empty"
 msgstr "录制的 HEVC 访问单元为空"
 
-#: src/media/Recorder.cpp:607
+#: src/media/Recorder.cpp:815
 msgid "Recording HEVC parameters exceed the configuration budget"
 msgstr "HEVC 录制参数超过配置大小上限"
 
-#: src/media/Recorder.cpp:634
+#: src/media/Recorder.cpp:839
+msgid "Recording decoded-frame mode or session is invalid"
+msgstr "录制像素帧模式或会话无效"
+
+#: src/media/Recorder.cpp:847
+msgid "Recording BGRA frame or orientation is invalid"
+msgstr "录制 BGRA 图像帧或方向无效"
+
+#: src/media/Recorder.cpp:869
+msgid "Recorder decoded-frame budget exceeded"
+msgstr "录制像素帧缓冲超过上限"
+
+#: src/media/Recorder.cpp:895
 msgid "Recording AAC-ELD track, session or payload is invalid"
 msgstr "录制的 AAC-ELD 轨道、会话或编码数据无效"
 
-#: src/media/Recorder.cpp:650
+#: src/media/Recorder.cpp:911
 msgid "Recording sender-report track or session is invalid"
 msgstr "录制发送端报告的轨道或会话无效"
 
@@ -3349,31 +3413,31 @@ msgstr "无法创建录制容器: "
 msgid "Cannot allocate the HEVC recording track"
 msgstr "无法创建 HEVC 录制轨道"
 
-#: src/media/RecordingMuxer.cpp:385
+#: src/media/RecordingMuxer.cpp:387
 msgid "Cannot allocate recording video orientation metadata"
 msgstr "无法分配录制视频的方向元数据"
 
-#: src/media/RecordingMuxer.cpp:394
+#: src/media/RecordingMuxer.cpp:396
 msgid "Cannot allocate the AAC-ELD recording track"
 msgstr "无法创建 AAC-ELD 录制轨道"
 
-#: src/media/RecordingMuxer.cpp:405
+#: src/media/RecordingMuxer.cpp:407
 msgid "Cannot allocate the recording packet"
 msgstr "无法分配录制包"
 
-#: src/media/RecordingMuxer.cpp:412
+#: src/media/RecordingMuxer.cpp:414
 msgid "Cannot restrict recording output to local files: "
 msgstr "无法将录制输出限制为本地文件: "
 
-#: src/media/RecordingMuxer.cpp:418
+#: src/media/RecordingMuxer.cpp:420
 msgid "Cannot open the recording file: "
 msgstr "无法打开录制文件: "
 
-#: src/media/RecordingMuxer.cpp:424
+#: src/media/RecordingMuxer.cpp:426
 msgid "Cannot write the recording header: "
 msgstr "无法写入录制文件头: "
 
-#: src/media/RecordingMuxer.cpp:428
+#: src/media/RecordingMuxer.cpp:430
 msgid "Cannot write the recording header"
 msgstr "无法写入录制文件头"
 
@@ -3478,6 +3542,79 @@ msgstr "无法为 HEVC IDR 语法检查分配数据包"
 #: src/media/RecordingVideoConfig.cpp:328
 msgid "Invalid HEVC IDR slice syntax: "
 msgstr "HEVC IDR 切片语法无效："
+
+#: src/media/RecordingVideoEncoder.cpp:25
+msgid ""
+"Upright recording requires an available libx265 or hevc_videotoolbox encoder"
+msgstr "正向录制需要可用的 libx265 或 hevc_videotoolbox 编码器"
+
+#: src/media/RecordingVideoEncoder.cpp:128
+msgid "Cannot receive upright recording HEVC packet: "
+msgstr "无法接收正向录制 HEVC 编码包："
+
+#: src/media/RecordingVideoEncoder.cpp:133
+msgid "Upright recording encoder returned invalid or reordered timing"
+msgstr "正向录制编码器返回了无效或重排序时间戳"
+
+#: src/media/RecordingVideoEncoder.cpp:141
+#: src/media/RecordingVideoEncoder.cpp:145
+#: src/media/RecordingVideoEncoder.cpp:153
+#: src/media/RecordingVideoEncoder.cpp:232
+msgid "Upright recording encoder returned malformed HEVC"
+msgstr "正向录制编码器返回了格式错误的 HEVC"
+
+#: src/media/RecordingVideoEncoder.cpp:158
+msgid "Upright recording encoder did not produce a fixed no-reorder canvas"
+msgstr "正向录制编码器未输出固定画布的无重排视频"
+
+#: src/media/RecordingVideoEncoder.cpp:188
+msgid "Invalid upright recording fixed canvas or clock"
+msgstr "正向录制的固定画布或时钟无效"
+
+#: src/media/RecordingVideoEncoder.cpp:201
+msgid "Cannot allocate upright recording encoder"
+msgstr "无法分配正向录制编码器"
+
+#: src/media/RecordingVideoEncoder.cpp:230
+msgid "Cannot open upright recording encoder: "
+msgstr "无法打开正向录制编码器："
+
+#: src/media/RecordingVideoEncoder.cpp:236
+msgid "Cannot allocate upright recording canvas: "
+msgstr "无法分配正向录制画布："
+
+#: src/media/RecordingVideoEncoder.cpp:248
+msgid "Upright recording encoder is already finished"
+msgstr "正向录制编码器已经结束"
+
+#: src/media/RecordingVideoEncoder.cpp:255
+msgid "Invalid upright recording frame, orientation or timestamp"
+msgstr "正向录制的图像帧、方向或时间戳无效"
+
+#: src/media/RecordingVideoEncoder.cpp:259
+msgid "Upright recording crop is outside the source frame"
+msgstr "正向录制裁剪范围超出源图像"
+
+#: src/media/RecordingVideoEncoder.cpp:303
+msgid "Upright recording content is too narrow for the canvas"
+msgstr "正向录制内容过窄，无法适配画布"
+
+#: src/media/RecordingVideoEncoder.cpp:307
+msgid "Cannot write upright recording canvas: "
+msgstr "无法写入正向录制画布："
+
+#: src/media/RecordingVideoEncoder.cpp:316
+#: src/media/RecordingVideoEncoder.cpp:323
+msgid "Cannot convert upright recording pixels"
+msgstr "无法转换正向录制像素"
+
+#: src/media/RecordingVideoEncoder.cpp:326
+msgid "Cannot send upright recording frame: "
+msgstr "无法发送正向录制图像帧："
+
+#: src/media/RecordingVideoEncoder.cpp:338
+msgid "Cannot finish upright recording encoder: "
+msgstr "无法结束正向录制编码器："
 
 #: src/media/ScreenshotSource.cpp:38
 msgid "FFmpeg has no PNG decoder"
@@ -8412,6 +8549,11 @@ msgstr "不可用"
 #~ msgstr "无法读取 "
 
 #~ msgid ""
+#~ "Clockwise MP4/MKV recording rotation: 0/90/180/270; default: 0; display "
+#~ "is unchanged"
+#~ msgstr "顺时针旋转 MP4/MKV 录制：0/90/180/270，默认 0；不改变显示"
+
+#~ msgid ""
 #~ "Clockwise display and recording rotation: 0/90/180/270; auto changes "
 #~ "display only"
 #~ msgstr "顺时针旋转显示和录制：0/90/180/270；auto 只设置显示"
@@ -8480,6 +8622,9 @@ msgstr "不可用"
 #~ msgid "Failed to start video: %s\n"
 #~ msgstr "启动视频失败: %s\n"
 
+#~ msgid "HEVC parameters changed during container recording"
+#~ msgstr "容器录制期间 HEVC 参数发生变化"
+
 #~ msgid "LAN address (requires an existing pairing record)"
 #~ msgstr "局域网地址（需要已有配对记录）"
 
@@ -8506,6 +8651,13 @@ msgstr "不可用"
 #~ msgid ""
 #~ "MKV recording requires live video; screenshot polling cannot be recorded"
 #~ msgstr "MKV 录制需要实时视频流，不能录制截图轮询"
+
+#~ msgid ""
+#~ "MP4/MKV recording orientation: 0/90/180/270 as metadata, or auto to re-"
+#~ "encode upright into a fixed canvas; default: 0; display is unchanged"
+#~ msgstr ""
+#~ "MP4/MKV 录制方向：0/90/180/270 写入元数据；auto 重编码为固定画布的正向视"
+#~ "频；默认 0，不改变本机显示"
 
 #~ msgid "No device matches --udid"
 #~ msgstr "未找到与 --udid 匹配的设备"
@@ -8552,6 +8704,9 @@ msgstr "不可用"
 #~ "without audio"
 #~ msgstr ""
 #~ "录制为 .mp4 或 .mkv（HEVC 视频及音频）；其他扩展名保存不含音频的裸 HEVC"
+
+#~ msgid "Recording HEVC parameter sets changed"
+#~ msgstr "录制期间 HEVC 参数集发生变化"
 
 #~ msgid "Recording without video is not supported yet"
 #~ msgstr "暂不支持不含视频的录制"
