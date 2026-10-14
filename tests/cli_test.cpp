@@ -118,21 +118,26 @@ int main() {
               !defaults.no_video && !defaults.no_video_playback && !defaults.no_window &&
               !defaults.record_format &&
               defaults.shortcut_mods == (KMOD_LALT | KMOD_LGUI) &&
-              defaults.orientation == -1 && !defaults.display_flip && defaults.record_orientation == 0,
+              defaults.orientation == -1 && !defaults.display_flip && defaults.record_orientation == 0 && defaults.record_orientation_from_device,
           "default options");
+    for (const auto* file : {"capture.mp4", "capture.mkv"}) {
+        Options invalid;
+        check(parse({"scrctl", "-r", file, "--record-orientation=auto"}, invalid) == ParseResult::Error,
+              "recording rejects automatic re-encoding even with a valid container");
+    }
     {
-        Options automatic;
-        check(parse({"scrctl", "-r", "capture.mkv", "--record-orientation=auto", "--no-window"}, automatic) == ParseResult::Run &&
-              automatic.record_orientation == -1, "automatic upright recording permits a background video recording");
-        for (const auto& args : {std::vector<std::string>{"scrctl", "--record-orientation=auto"},
-                                std::vector<std::string>{"scrctl", "-r", "capture.hevc", "--record-orientation=auto"},
-                                std::vector<std::string>{"scrctl", "-r", "capture.mkv", "--no-video", "--record-orientation=auto"}}) {
-            Options invalid;
-            check(parse(args, invalid) == ParseResult::Error, "automatic recording needs a container video track");
-        }
-        Options overridden;
-        check(parse({"scrctl", "-r", "capture.mp4", "--record-orientation=auto", "--record-orientation=90"}, overridden) == ParseResult::Run &&
-              overridden.record_orientation == 90, "explicit static orientation overrides prior automatic mode");
+        Options initial, explicit_zero, combined, display_only;
+        check(parse({"scrctl", "-r", "capture.mp4"}, initial) == ParseResult::Run && initial.record_orientation_from_device,
+              "default container recording snapshots initial device orientation");
+        check(parse({"scrctl", "-r", "capture.mp4", "--record-orientation=0"}, explicit_zero) == ParseResult::Run &&
+              !explicit_zero.record_orientation_from_device && explicit_zero.record_orientation == 0,
+              "explicit zero overrides initial device orientation");
+        check(parse({"scrctl", "-r", "capture.mp4", "--orientation=270"}, combined) == ParseResult::Run &&
+              !combined.record_orientation_from_device && combined.record_orientation == 270,
+              "combined numeric orientation overrides initial recording angle");
+        check(parse({"scrctl", "-r", "capture.mp4", "--display-orientation=90", "--orientation=auto"}, display_only) == ParseResult::Run &&
+              display_only.record_orientation_from_device,
+              "display-only and legacy automatic display do not override initial recording angle");
     }
     using RecordFormat = scrctl::app::RecordFormat;
     using MuxerFormat = scrctl::media::RecordingMuxer::Format;

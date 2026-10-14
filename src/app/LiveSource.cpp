@@ -8,7 +8,6 @@
 #include "app/ViewGeom.h"
 #include "media/RecordingMuxer.h"
 #include "media/RecordingVideoConfig.h"
-#include "media/RecordingVideoEncoder.h"
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -64,11 +63,10 @@ bool LiveSource::start(const Options &config, std::string &err) {
     const bool started = [&]() -> bool {
     const auto &serial = config.serial, &wifi = config.wifi, &record_path = config.record_path;
     const auto &video_source = config.video_source, &test_degrade = config.test_degrade;
-    const bool upright = config.record_orientation == -1;
-    const bool hw_decode = config.hw_decode, watch_display = config.watch_display || upright;
+    const bool hw_decode = config.hw_decode, watch_display = config.watch_display;
     const bool want_audio = config.want_audio, audio_dup = config.audio_dup;
-    const bool decode_audio = config.decode_audio, decode_video = config.want_video && (config.decode_video || upright);
-    const int audio_buffer_ms = config.audio_buffer_ms, record_orientation = upright ? 0 : config.record_orientation;
+    const bool decode_audio = config.decode_audio, decode_video = config.want_video && config.decode_video;
+    const int audio_buffer_ms = config.audio_buffer_ms, record_orientation = config.record_orientation;
     const uint16_t wifi_port = config.wifi_port;
     const auto cancelled = [&] { return !budget.check(err); };
     // Poll source readiness in short slices: closing startup transport wakes RPCs,
@@ -98,11 +96,6 @@ bool LiveSource::start(const Options &config, std::string &err) {
     }
     const auto container_format = record_container_format(record_path, config.record_format);
     const bool container_recording = container_format.has_value();
-    if (upright && (!want_video_ || !container_recording || video_source == "screenshot")) {
-        err = SCRCTL_TR("Automatic recording orientation requires a live video recording to MP4 or MKV");
-        return false;
-    }
-    if (upright && !scrctl::media::RecordingVideoEncoder::available(err)) return false;
     if (!want_video_ && !record_path.empty()) {
         if (!container_recording) {
             err = SCRCTL_TR("Audio-only recording requires MP4 or MKV");
@@ -228,10 +221,6 @@ bool LiveSource::start(const Options &config, std::string &err) {
         if (watch_display) {
             std::string werr;
             watcher_ = scrctl::remote::DisplayWatcher::start(*device_, display_id_, werr, false);
-            if (upright && !watcher_) {
-                err = SCRCTL_TR("Upright recording requires a live display orientation subscription");
-                return false;
-            }
             if (watcher_ == nullptr && !coredevice_family_empty) {
                 std::fprintf(stderr, SCRCTL_TR("Failed to subscribe to display changes: %s (automatic rotation unavailable)\n"), werr.c_str());
             }
@@ -248,36 +237,17 @@ bool LiveSource::start(const Options &config, std::string &err) {
                 ro.path = record_path;
                 ro.format = *container_format;
                 ro.video_orientation = record_orientation;
-                ro.upright_video = upright;
-                ro.upright_max_fps = upright ? 30 : 0;
-                if (upright) {
-                    const auto geometry = sample_geometry(false);
-                    if (!geometry.panel_degrees || geometry.display_w <= 0 || geometry.display_h <= 0) {
-                        err = SCRCTL_TR("Upright recording requires live display geometry and a sampling timestamp");
-                        return false;
-                    }
-                    const bool swapped = *geometry.panel_degrees == 90 || *geometry.panel_degrees == 270;
-                    ro.upright_width = swapped ? geometry.display_h : geometry.display_w;
-                    ro.upright_height = swapped ? geometry.display_w : geometry.display_h;
-                    ro.upright_width += ro.upright_width & 1;
-                    ro.upright_height += ro.upright_height & 1;
+                if (config.record_orientation_from_device) {
+                    // Snapshot once before capture. Later display notifications must
+                    // never modify this fixed container matrix or the encoded pixels.
+                    const auto initial = sample_geometry(false).panel_degrees;
+                    if (initial) ro.video_orientation = *initial;
+                    else std::fprintf(stderr, SCRCTL_TR("Cannot determine initial recording orientation; using 0 degrees\n"));
                 }
                 ro.include_audio = want_audio;
                 recorder_ = scrctl::media::Recorder::start(ro, err);
                 if (recorder_ == nullptr) return false;
                 options.recorder = recorder_.get();
-                if (upright) {
-                    options.upright_geometry = [this](const scrctl::Frame& frame)
-                        -> std::optional<scrctl::media::Recorder::VideoGeometry> {
-                        if (!watcher_ || !watcher_->alive()) return std::nullopt;
-                        const auto geometry = sample_geometry(false);
-                        if (!geometry.panel_degrees || geometry.display_w <= 0 || geometry.display_h <= 0 ||
-                            geometry.display_w > static_cast<int>(frame.width) ||
-                            geometry.display_h > static_cast<int>(frame.height)) return std::nullopt;
-                        return scrctl::media::Recorder::VideoGeometry{*geometry.panel_degrees,
-                            0, 0, geometry.display_w, geometry.display_h};
-                    };
-                }
             }
             pump_ = scrctl::media::FramePump::start(*device_, options, err);
             if (pump_ != nullptr) {

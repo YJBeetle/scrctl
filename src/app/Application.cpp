@@ -151,9 +151,9 @@ int run(int argc, char **argv) {
         live_options.record_path = o.record;
         live_options.record_format = o.record_format;
         live_options.hw_decode = o.hw_decode;
-        live_options.watch_display = !o.no_video_playback || o.record_orientation == -1;
+        live_options.watch_display = !o.no_video_playback;
         live_options.want_video = !o.no_video;
-        live_options.decode_video = !o.no_video && (needs_pixels || o.record_orientation == -1 ||
+        live_options.decode_video = !o.no_video && (needs_pixels ||
             !scrctl::media::recording_idr_checks_available(capture_check_error));
         live_options.want_audio = want_audio;
         live_options.decode_audio = !o.no_audio_playback;
@@ -162,6 +162,7 @@ int run(int argc, char **argv) {
         live_options.video_source = o.video_source;
         live_options.test_degrade = o.test_degrade;
         live_options.record_orientation = o.record_orientation;
+        live_options.record_orientation_from_device = o.record_orientation_from_device;
         live_options.should_cancel = [&runtime] { return runtime.stop_requested(); };
         if (!made->start(live_options, err)) {
             if (exit_requested()) {

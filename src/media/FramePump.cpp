@@ -445,7 +445,7 @@ void FramePump::loop() {
                     }
                 }
             };
-            if (options_.decode_video && !options_.upright_geometry) record_unit();
+            if (options_.decode_video) record_unit();
             if (!options_.decode_video) {
                 // 参数和 IDR 语法通过公开 FFmpeg 接口检查，不配置显示解码器。
                 // 校验在容器异步入队之前；此处的健康判断不等于整张图像解码成功。
@@ -653,15 +653,6 @@ void FramePump::loop() {
                 std::lock_guard<std::mutex> lock(mutex_);
                 ++stats_.no_output;
                 return;
-            }
-            if (options_.recorder && options_.upright_geometry) {
-                const auto geometry = options_.upright_geometry(f);
-                if (!geometry || !media_source || !unit.sampling_timestamp) {
-                    options_.recorder->fail(SCRCTL_TR("Upright recording requires live display geometry and a sampling timestamp"));
-                } else {
-                    (void)options_.recorder->video_frame(session_->started().session_uuid,
-                        *media_source, *unit.sampling_timestamp, f, *geometry);
-                }
             }
             // 仅在解码成功且输出有效像素后解除等待。解析出完整关键帧并不保证
             // 解码器输出图像，过早清除会丢失 first_pli_ms_ 对应的后备恢复计时。

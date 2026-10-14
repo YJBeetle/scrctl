@@ -171,7 +171,6 @@ Windows 的普通 Q、字母、数字和退格已实际进入手机输入框且�
 ```bash
 scrctl --record capture.mkv                # HEVC 视频和 AAC-ELD 音频
 scrctl --record capture.mp4                # 同样保存音视频，使用 MP4 容器
-scrctl --record capture.mp4 --record-orientation=auto  # 转屏后仍保持正向，重编码到固定画布
 scrctl --record capture --record-format=mkv # 显式指定容器，不依赖扩展名
 scrctl --record capture.mkv --no-audio     # 只录视频，不改变手机音频路由
 scrctl --record capture.mkv --audio-dup --no-audio-playback  # 保留手机声音，电脑只录制
@@ -197,7 +196,7 @@ scrctl --record capture.hevc              # 原有裸 HEVC 方式，不录音频
 `--no-window` 配合录制时，有 IDR 语法检查能力的构建会直接保存编码视频，
 不创建显示解码器或 BGRA 帧。完整 IDR 通过参数和切片语法检查后才确认就绪；
 收包、时间戳、丢包恢复与会话续期照常运行。`--exit-after`、`--hw-decode`
-、`--record-orientation=auto` 或 `--test-degrade` 仍使用解码路径；缺少该检查能力时也保留原解码路径。
+或 `--test-degrade` 仍使用解码路径；缺少该检查能力时也保留原解码路径。
 这项优化仍依赖 FFmpeg 的公开参数与语法检查接口，不等于取消 FFmpeg 依赖。
 
 默认按扩展名选择格式：`.mp4` / `.mkv`（不区分大小写）为容器录制，其他扩展名
@@ -231,11 +230,14 @@ MP4 使用 `hev1` 保留带内参数，容器头仍保留首配置；播放器�
 失败时文件可能不存在或不完整。退出会先等待两个收包线程，再写容器尾部。
 持续音频不需要等待下一张视频画面。
 
-`--record-orientation=auto` 是 scrctl 的正向录制扩展：根据设备方向重编码到初始
-可见尺寸的固定画布，按比例居中、留白填黑，最多采样 30 fps。优先 VideoToolbox，
-不可用时尝试 libx265；需要可用 HEVC 编码器，存在额外开销和有损重编码。
-支持 MP4/MKV 和无窗口录制，不支持裸 HEVC、纯音频或翻转。方向事件异步更新，
-转屏瞬间不承诺逐帧同步；`--crop` 仍只作用于本机显示。详见
+录制直接封装设备提供的原始编码，不旋正或缩放像素、不补黑边，也不重编码。
+视频容器默认将起录时的设备方向写为固定旋转元数据，让开始录制时的画面正向显示；
+之后转屏不更新该元数据。方向查询失败时提示并使用 0 度。
+与 scrcpy 默认转屏录制的差异来自设备端：scrcpy 可在 Android 端随转屏调整采集和
+编码尺寸；scrctl 当前尚未找到经过验证、能让苹果端随转屏交换编码宽高的接口。
+实测 iPhone 13 mini / iOS 27.0.1 保持 1136×2464 编码画布，横屏内容侧向保存在其中。
+这限定当前采集方式和已测设备，不表示苹果协议绝对不支持其它输出方式。
+`--record-orientation` 仅支持固定数字角度，不支持 `auto`。详见
 [参数差异与验证范围](docs/SCRCPY_USAGE.md)。
 
 ### 显示与录制方向
@@ -250,8 +252,9 @@ scrctl --display-orientation=flip90          # 水平翻转电脑画面，再顺
 旋转支持 `0` / `90` / `180` / `270`；显示还支持 `flip0` / `flip90` / `flip180` /
 `flip270`，先水平翻转裁剪后的源画面，再顺时针旋转。鼠标映射会撤销这两个变换，
 点击仍对应画面中的设备位置。组合参数按出现顺序覆盖各自涉及的方向。
-显示默认 `auto` 跟随设备；录制默认 `0`。兼容用法 `--orientation=auto` 只设置
-显示并取消显示翻转，不改变已设置的录制方向；`--record-orientation=auto` 则启用上述正向重编码。
+显示默认 `auto` 跟随设备；视频容器录制默认采用起录时设备角度并保持固定。
+显式指定 `--record-orientation=0/90/180/270` 或数字 `--orientation` 时，以指定值为准。兼容用法 `--orientation=auto` 只设置
+显示并取消显示翻转，不改变已设置的录制方向；`--record-orientation` 不支持 `auto`。
 
 录制不支持翻转。可用 `--display-orientation=flip90` 单独翻转显示；若用
 `--orientation=flip90` 并录制，需在后面用 `--record-orientation=0` 等旋转值覆盖

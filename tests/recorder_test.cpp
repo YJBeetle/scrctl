@@ -1,8 +1,6 @@
 #include "media/Recorder.h"
-#include "decode/Decoder.h"
 #include "RecordingAudioEvidence.h"
 #include "media/RecordingMuxer.h"
-#include "media/RecordingVideoEncoder.h"
 
 #include <array>
 #include <chrono>
@@ -206,7 +204,7 @@ const Nal landscape_sps = hex("42010101600000030090000003000003001ea010204165ba4
 const Nal landscape_pps = hex("4401c073c189");
 const Nal landscape_idr = hex("2801ac214f400e7ffeebf349a4151de360");
 
-void verify_dynamic_decode(const std::filesystem::path& path, bool mp4, bool upright = false, std::vector<int64_t> expected_pts = {}) {
+void verify_dynamic_decode(const std::filesystem::path& path, bool mp4) {
     AVFormatContext* input = nullptr;
     check(avformat_open_input(&input, path.string().c_str(), nullptr, nullptr) >= 0,
           "dynamic dimensions container opens");
@@ -217,7 +215,7 @@ void verify_dynamic_decode(const std::filesystem::path& path, bool mp4, bool upr
     check(index >= 0, "dynamic dimensions file has a video track");
     if (index < 0) { avformat_close_input(&input); return; }
     const auto* parameters = input->streams[index]->codecpar;
-    check(parameters->width == 64 && parameters->height == (upright ? 96 : 64),
+    check(parameters->width == 64 && parameters->height == 64,
           "header stays attached to first image when changes precede trusted clocks");
     if (mp4) check(parameters->codec_tag == MKTAG('h','e','v','1'),
                     "dynamic MP4 uses in-band HEVC sample entry");
@@ -233,10 +231,6 @@ void verify_dynamic_decode(const std::filesystem::path& path, bool mp4, bool upr
     auto drain = [&] {
         int result;
         while ((result = avcodec_receive_frame(decoder, frame)) >= 0) {
-            if (upright && dimensions.size() == 1) {
-                check(frame->data[0][0] < 40 && frame->data[0][frame->linesize[0] * 48 + 32] > 180,
-                      "landscape content is rotated into a fixed upright canvas with black bars");
-            }
             dimensions.emplace_back(frame->width, frame->height);
             timestamps.push_back(av_rescale_q(frame->pts, input->streams[index]->time_base,
                                               AVRational{1,1000000}));
@@ -257,12 +251,10 @@ void verify_dynamic_decode(const std::filesystem::path& path, bool mp4, bool upr
         check(avcodec_send_packet(decoder, nullptr) >= 0, "dynamic decoder drains cleanly");
         drain();
     } else check(false, "dynamic decoder packet/frame allocations succeed");
-    const auto expected_dimensions = upright
-        ? std::vector<std::pair<int,int>>(expected_pts.empty() ? 2 : expected_pts.size(), {64,96})
-        : std::vector<std::pair<int,int>>{{64,64},{128,64},{64,64}};
+    const std::vector<std::pair<int,int>> expected_dimensions{{64,64},{128,64},{64,64}};
     check(dimensions == expected_dimensions,
           "single recording decodes first, changed and restored dimensions without transcoding");
-    if (expected_pts.empty()) expected_pts = upright ? std::vector<int64_t>{0,10000} : std::vector<int64_t>{0,10000,20000};
+    const std::vector<int64_t> expected_pts{0,10000,20000};
     bool timing_correct = timestamps.size() == expected_pts.size();
     for (std::size_t i = 0; timing_correct && i < timestamps.size(); ++i)
         timing_correct = near(timestamps[i], expected_pts[i]);
@@ -271,71 +263,6 @@ void verify_dynamic_decode(const std::filesystem::path& path, bool mp4, bool upr
     av_frame_free(&frame); av_packet_free(&packet); avcodec_free_context(&decoder); avformat_close_input(&input);
 }
 
-void upright_recording(const Directory& directory) {
-    std::string error;
-    if (!scrctl::media::RecordingVideoEncoder::available(error)) {
-        std::printf("SKIP: upright Recorder needs a registered HEVC encoder: %s\n", error.c_str());
-        return;
-    }
-    for (const auto format : {scrctl::media::RecordingMuxer::Format::Matroska,
-                              scrctl::media::RecordingMuxer::Format::Mp4}) {
-        const auto path = directory.path / (format == scrctl::media::RecordingMuxer::Format::Mp4 ? "upright.mp4" : "upright.mkv");
-        auto config = options(path, false, format); config.upright_video = true;
-        auto recorder = Recorder::start(config, error);
-        check(recorder != nullptr, "upright recorder starts with explicit encoding support");
-        if (!recorder) continue;
-        begin(*recorder, false);
-        scrctl::Frame frame;
-        frame.width = 64; frame.height = 96; frame.row_pitch = 256;
-        frame.pixels.assign(256 * 96, 255);
-        check(recorder->video_frame(video_session, 0, 0, frame, {0,0,0,64,96}), "first BGRA frame enters its separate budget");
-        check(recorder->video_frame(video_session, 0, 240, frame, {90,0,0,64,96}), "rotated BGRA frame is copied without encoding on caller");
-        report(*recorder, Track::Video, sr(0,0,1000));
-        report(*recorder, Track::Video, sr(0,24000,1001));
-        check(recorder->finish(error) && error.empty(), "upright recording flushes and maps every encoded frame");
-        if (error.empty()) verify_dynamic_decode(path, format == scrctl::media::RecordingMuxer::Format::Mp4, true);
-    }
-    {
-        const auto path = directory.path / "upright-sampled-idle.mkv";
-        auto sampled = options(path); sampled.upright_video = true; sampled.upright_max_fps = 30;
-        auto recorder = Recorder::start(sampled, error);
-        check(recorder != nullptr, "sampled upright recorder starts");
-        if (recorder) {
-            begin(*recorder, false);
-            scrctl::Frame frame; frame.width = 64; frame.height = 96; frame.row_pitch = 256;
-            frame.pixels.assign(256 * 96, 255);
-            check(recorder->video_frame(video_session,0,0,frame,{0,0,0,64,96}), "rate sampler accepts first frame");
-            check(recorder->video_frame(video_session,0,240,frame,{90,0,0,64,96}), "configured sampler skips an early frame without changing its timeline");
-            check(recorder->video_frame(video_session,0,800,frame,{90,0,0,64,96}), "rate sampler accepts boundary frame");
-            std::this_thread::sleep_for(150ms);
-            report(*recorder,Track::Video,sr(0,0,1000));
-            report(*recorder,Track::Video,sr(0,24000,1001));
-            std::this_thread::sleep_for(150ms);
-            check(recorder->video_frame(video_session,0,24000,frame,{0,0,0,64,96}), "encoding resumes after a static interval");
-            report(*recorder,Track::Video,sr(0,48000,1002));
-            const bool finished = recorder->finish(error);
-            if (!finished || !error.empty()) std::fprintf(stderr, "UPRIGHT IDLE: %s\n", error.c_str());
-            check(finished && error.empty(), "static tail drain and resumed encoding remain in one recording");
-            if (error.empty()) verify_dynamic_decode(path,false,true,{0,33333,1000000});
-        }
-    }
-    auto config = options(directory.path / "upright-raw-must-fail.mkv"); config.upright_video = true;
-    auto recorder = Recorder::start(config, error);
-    if (recorder) {
-        begin(*recorder, false);
-        check(!recorder->video(video_session,0,0,{idr},vps,sps,pps), "upright mode refuses simultaneous raw packet ingestion");
-        check(!recorder->finish(error) && !std::filesystem::exists(config.path), "raw-packet misuse never silently records unrotated video");
-    }
-    config = options(directory.path / "upright-invalid-frame.mkv"); config.upright_video = true;
-    recorder = Recorder::start(config, error);
-    if (recorder) {
-        begin(*recorder, false);
-        scrctl::Frame invalid;
-        invalid.width = 64; invalid.height = 96; invalid.row_pitch = 256;
-        check(!recorder->video_frame(video_session,0,0,invalid,{}), "short BGRA buffer fails before copying");
-        check(!recorder->finish(error), "invalid pixel admission reaches recording final status");
-    }
-}
 
 void dynamic_configurations(const Directory& directory) {
     using Format = scrctl::media::RecordingMuxer::Format;
@@ -960,7 +887,6 @@ int main() {
         audio_only_failures(directory);
         recorded_orientation(directory);
         dynamic_configurations(directory);
-        upright_recording(directory);
         wrapping_audio_and_first_idr(directory);
         still_video(directory);
         still_video(directory, scrctl::media::RecordingMuxer::Format::Mp4);

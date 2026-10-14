@@ -4,8 +4,6 @@
 #include <condition_variable>
 #include <cstdint>
 #include <cstdio>
-#include <functional>
-#include <optional>
 #include <memory>
 #include <mutex>
 #include <span>
@@ -15,7 +13,6 @@
 
 #include "decode/Decoder.h"
 #include "media/MediaOffer.h"
-#include "media/Recorder.h"
 #include "rt/RtpHevc.h"
 
 namespace scrctl::media {
@@ -55,9 +52,6 @@ public:
         /// 可选容器消费者，由拥有者管理。必须在本泵停止并 join 后再销毁；
         /// 与 record_path 的裸 HEVC 写入互斥，未启用时不复制编码 AU。
         Recorder *recorder = nullptr;
-        /// Upright recording samples device geometry at decoded-frame delivery.
-        /// Empty geometry is an error; never substitute a stale orientation.
-        std::function<std::optional<Recorder::VideoGeometry>(const Frame&)> upright_geometry;
         /// 关闭时只接收并录制原始编码视频，不创建显示解码器或发布像素帧。
         /// 必须有上述录制消费者；完整 IDR 的参数与 slice header 检查决定
         /// 是否已就绪和恢复，不把语法有效当成整张图像可解码的证明。

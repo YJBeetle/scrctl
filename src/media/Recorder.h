@@ -14,12 +14,10 @@
 #include <string_view>
 #include <vector>
 
-namespace scrctl { struct Frame; }
-
 namespace scrctl::media {
 
 /// 单一会话的 MP4/MKV 录制消费者；拥有一个 worker，串行使用时钟、参数检查和封装。
-/// 泵转交已检查的编码包，或自动正向模式的 BGRA 帧；不等待磁盘或队列空间。
+/// 泵只转交已经组好且完成来源/传输完整性检查的编码包，不等待磁盘或队列空间。
 class Recorder {
 public:
     enum class Track { Video, Audio };
@@ -30,12 +28,6 @@ public:
         int video_orientation = 0;
         bool include_video = true;
         bool include_audio = false;
-        /// Decode, rotate and encode into the first visible frame's fixed canvas.
-        bool upright_video = false;
-        /// Optional startup canvas, opened before the media producer starts.
-        uint32_t upright_width = 0, upright_height = 0;
-        /// 0 preserves every decoded frame; positive limit samples original RTP ticks.
-        unsigned upright_max_fps = 0;
         /// ingress、待 SR 包及写入中的原编码共用的预算，保守预留编码复制
         /// 和参数检查的临时空间；不是进程 RSS 或库内部缓存的硬上限。
         /// 可调低以缩短故障等待或减少缓存；首版不能超过这些默认上限。
@@ -68,14 +60,6 @@ public:
     [[nodiscard]] bool video(std::span<const uint8_t> session, uint32_t source, int64_t ticks,
                               const std::vector<Nal>& nals,
                               const Nal& vps, const Nal& sps, const Nal& pps);
-    struct VideoGeometry {
-        int clockwise = 0;
-        int crop_x = 0, crop_y = 0, crop_width = 0, crop_height = 0;
-    };
-    /// Copies BGRA only; worker rotates and encodes. At most four images, including
-    /// the in-flight image, share a separate 64 MiB admission budget.
-    [[nodiscard]] bool video_frame(std::span<const uint8_t> session, uint32_t source,
-                                   int64_t ticks, const Frame&, VideoGeometry);
     [[nodiscard]] bool audio(std::span<const uint8_t> session, uint32_t source,
                               uint32_t timestamp, std::span<const uint8_t> payload);
     [[nodiscard]] bool sender_report(Track, std::span<const uint8_t> session,

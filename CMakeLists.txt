@@ -194,7 +194,6 @@ add_library(scrctl_core STATIC
         src/media/AudioRegulator.cpp
         src/media/RecordingClock.cpp
         src/media/RecordingVideoConfig.cpp
-        src/media/RecordingVideoEncoder.cpp
         src/media/RecordingMuxer.cpp
         src/media/Recorder.cpp
         src/rt/RtpHevc.cpp
@@ -452,11 +451,6 @@ if(SCRCTL_BUILD_TESTS)
     scrctl_add_test_executable(recording_video_config_test tests/recording_video_config_test.cpp)
     target_link_libraries(recording_video_config_test PRIVATE scrctl_core)
     add_test(NAME recording_video_config COMMAND recording_video_config_test)
-
-    scrctl_add_test_executable(recording_video_encoder_test tests/recording_video_encoder_test.cpp)
-    target_link_libraries(recording_video_encoder_test PRIVATE scrctl_core)
-    add_test(NAME recording_video_encoder COMMAND recording_video_encoder_test)
-    set_tests_properties(recording_video_encoder PROPERTIES TIMEOUT 30)
 
     scrctl_add_test_executable(recording_muxer_test tests/recording_muxer_test.cpp)
     target_link_libraries(recording_muxer_test PRIVATE scrctl_core)
