@@ -4,6 +4,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#if defined(__x86_64__) || defined(_M_X64)
+#include <immintrin.h>
+#endif
 #include <iterator>
 #include <limits>
 #include <optional>
@@ -104,6 +108,10 @@ RecordingClock::Point RecordingClock::map_point(int64_t ticks, Mode mode) const 
 
 RecordingClock::Interval RecordingClock::map_interval(int64_t begin, int64_t end,
                                                       Mode mode) const {
+#if defined(__x86_64__) || defined(_M_X64)
+    alignas(16) unsigned char fpu_state[512]{};
+    _fxsave(fpu_state);
+#endif
     if (!error_.empty() || end < begin) return {State::Error};
     if (anchors_.size() < 2) return {mode == Mode::Final ? State::Error : State::Pending};
     const auto first = map_point(begin, mode);
@@ -114,7 +122,18 @@ RecordingClock::Interval RecordingClock::map_interval(int64_t begin, int64_t end
         return std::isfinite(value) && value > std::numeric_limits<int64_t>::min() &&
                value < std::numeric_limits<int64_t>::max();
     };
-    if (!valid(first.time_us) || !valid(last.time_us)) return {State::Error};
+    if (!valid(first.time_us) || !valid(last.time_us)) {
+        std::fprintf(stderr, "Recording clock numeric diagnostic: ticks=%lld..%lld mode=%d anchors=%zu edge=%lld..%lld mapped=%.17g..%.17g anchor-time=%.17g..%.17g long-double=%zu",
+            static_cast<long long>(begin), static_cast<long long>(end), static_cast<int>(mode), anchors_.size(),
+            static_cast<long long>(anchors_.front().ticks), static_cast<long long>(anchors_.back().ticks),
+            static_cast<double>(first.time_us), static_cast<double>(last.time_us),
+            static_cast<double>(anchors_.front().time_us), static_cast<double>(anchors_.back().time_us), sizeof(long double));
+#if defined(__x86_64__) || defined(_M_X64)
+        std::fprintf(stderr, " x87-status=%02x%02x tag=%02x", fpu_state[3], fpu_state[2], fpu_state[4]);
+#endif
+        std::fprintf(stderr, "\n");
+        return {State::Error};
+    }
     return {State::Ready, first.time_us, last.time_us};
 }
 
