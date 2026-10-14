@@ -79,8 +79,21 @@ void verify(const std::vector<Encoder::Packet>& packets) {
         }
         check(received==AVERROR(EAGAIN)||received==AVERROR_EOF,"normalized HEVC pictures fully decode");
     };
+    bool configured = false;
     for (const auto& encoded:packets) {
         std::vector<uint8_t> bytes;
+        // VideoToolbox returns parameter sets separately (as container extradata),
+        // while libx265 may also repeat them in-band. Supply the real metadata
+        // when opening this raw decoder, just as the muxer does for its track.
+        if (!configured) {
+            check(!encoded.vps.empty() && !encoded.sps.empty() && !encoded.pps.empty(),
+                  "first encoded image supplies complete decoder configuration");
+            for (const auto* nal : {&encoded.vps, &encoded.sps, &encoded.pps}) {
+                bytes.insert(bytes.end(), {0,0,0,1});
+                bytes.insert(bytes.end(), nal->begin(), nal->end());
+            }
+            configured = true;
+        }
         for (const auto& nal:encoded.nals) {
             bytes.insert(bytes.end(),{0,0,0,1}); bytes.insert(bytes.end(),nal.begin(),nal.end());
         }
