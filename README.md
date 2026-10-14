@@ -171,6 +171,7 @@ Windows 的普通 Q、字母、数字和退格已实际进入手机输入框且�
 ```bash
 scrctl --record capture.mkv                # HEVC 视频和 AAC-ELD 音频
 scrctl --record capture.mp4                # 同样保存音视频，使用 MP4 容器
+scrctl --record capture.mp4 --record-orientation=auto  # 转屏后仍保持正向，重编码到固定画布
 scrctl --record capture --record-format=mkv # 显式指定容器，不依赖扩展名
 scrctl --record capture.mkv --no-audio     # 只录视频，不改变手机音频路由
 scrctl --record capture.mkv --audio-dup --no-audio-playback  # 保留手机声音，电脑只录制
@@ -196,7 +197,7 @@ scrctl --record capture.hevc              # 原有裸 HEVC 方式，不录音频
 `--no-window` 配合录制时，有 IDR 语法检查能力的构建会直接保存编码视频，
 不创建显示解码器或 BGRA 帧。完整 IDR 通过参数和切片语法检查后才确认就绪；
 收包、时间戳、丢包恢复与会话续期照常运行。`--exit-after`、`--hw-decode`
-或 `--test-degrade` 仍使用解码路径；缺少该检查能力时也保留原解码路径。
+、`--record-orientation=auto` 或 `--test-degrade` 仍使用解码路径；缺少该检查能力时也保留原解码路径。
 这项优化仍依赖 FFmpeg 的公开参数与语法检查接口，不等于取消 FFmpeg 依赖。
 
 默认按扩展名选择格式：`.mp4` / `.mkv`（不区分大小写）为容器录制，其他扩展名
@@ -222,11 +223,20 @@ MP4 中，前一帧的显示时长取两个已确认视频时间点的间隔；�
 一致。这是文件展示规则，不是设备报告的最终显示时长。设备长时间不发新画面时，
 视频轨可能早于音轨结束；只有一帧的纯视频录制长 100 ms。MKV 保留未知末帧时长。
 
-缺片、时钟或配置变化、会话重建、截图降级、磁盘错误会结束本次容器录制。
+同一会话中的 HEVC 参数和尺寸变化仅在完整 IDR 携带有效无重排配置时继续写入，
+MP4 使用 `hev1` 保留带内参数，容器头仍保留首配置；播放器支持需单独确认。
+缺片、时钟异常、不受支持的配置变化、会话重建、截图降级、磁盘错误会结束本次容器录制。
 解码模式的镜像可继续并自行恢复；仅录制模式结束任务，两种情况退出码均为非零。
 程序不把恢复后的另一段自动拼入同一文件；
 失败时文件可能不存在或不完整。退出会先等待两个收包线程，再写容器尾部。
 持续音频不需要等待下一张视频画面。
+
+`--record-orientation=auto` 是 scrctl 的正向录制扩展：根据设备方向重编码到初始
+可见尺寸的固定画布，按比例居中、留白填黑，最多采样 30 fps。优先 VideoToolbox，
+不可用时尝试 libx265；需要可用 HEVC 编码器，存在额外开销和有损重编码。
+支持 MP4/MKV 和无窗口录制，不支持裸 HEVC、纯音频或翻转。方向事件异步更新，
+转屏瞬间不承诺逐帧同步；`--crop` 仍只作用于本机显示。详见
+[参数差异与验证范围](docs/SCRCPY_USAGE.md)。
 
 ### 显示与录制方向
 
@@ -241,13 +251,13 @@ scrctl --display-orientation=flip90          # 水平翻转电脑画面，再顺
 `flip270`，先水平翻转裁剪后的源画面，再顺时针旋转。鼠标映射会撤销这两个变换，
 点击仍对应画面中的设备位置。组合参数按出现顺序覆盖各自涉及的方向。
 显示默认 `auto` 跟随设备；录制默认 `0`。兼容用法 `--orientation=auto` 只设置
-显示并取消显示翻转，不改变已设置的录制方向；`--record-orientation` 不支持 `auto`。
+显示并取消显示翻转，不改变已设置的录制方向；`--record-orientation=auto` 则启用上述正向重编码。
 
 录制不支持翻转。可用 `--display-orientation=flip90` 单独翻转显示；若用
 `--orientation=flip90` 并录制，需在后面用 `--record-orientation=0` 等旋转值覆盖
 录制方向。最终录制方向仍为 flip 时会在连接设备前报错。
 
-录制旋转通过容器元数据实现，相对于设备编码像素固定，不重编码，也不改变音频、
+数字角度的录制旋转通过容器元数据实现，相对于设备编码像素固定，不重编码，也不改变音频、
 时间戳或触摸映射。播放器需要支持方向元数据；MKV 非零旋转需要 FFmpeg 6.1 或更新版本。
 裸 HEVC 不含容器方向元数据，非零录制方向会报错；可以改用容器，或用
 `--display-orientation` 单独旋转窗口。
