@@ -1,4 +1,5 @@
 #include "media/Recorder.h"
+#include "decode/Decoder.h"
 #include "RecordingAudioEvidence.h"
 #include "media/RecordingMuxer.h"
 #include "media/RecordingVideoEncoder.h"

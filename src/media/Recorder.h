@@ -2,7 +2,6 @@
 
 #include "bitstream/AnnexB.h"
 #include "media/RecordingMuxer.h"
-#include "decode/Decoder.h"
 #include "rt/Rtcp.h"
 
 #include <chrono>
@@ -14,6 +13,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
+namespace scrctl { struct Frame; }
 
 namespace scrctl::media {
 
