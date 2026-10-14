@@ -313,7 +313,9 @@ void upright_recording(const Directory& directory) {
             std::this_thread::sleep_for(150ms);
             check(recorder->video_frame(video_session,0,24000,frame,{0,0,0,64,96}), "encoding resumes after a static interval");
             report(*recorder,Track::Video,sr(0,48000,1002));
-            check(recorder->finish(error) && error.empty(), "static tail drain and resumed encoding remain in one recording");
+            const bool finished = recorder->finish(error);
+            if (!finished || !error.empty()) std::fprintf(stderr, "UPRIGHT IDLE: %s\n", error.c_str());
+            check(finished && error.empty(), "static tail drain and resumed encoding remain in one recording");
             if (error.empty()) verify_dynamic_decode(path,false,true,{0,33333,1000000});
         }
     }
