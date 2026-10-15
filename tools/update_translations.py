@@ -25,7 +25,7 @@ def main():
         run("xgettext", "--language=C++", "--from-code=UTF-8", "--sort-by-file",
             "--keyword=SCRCTL_TR", "--keyword=SCRCTL_N_",
             "--flag=SCRCTL_TR:1:pass-c-format", "--flag=SCRCTL_N_:1:pass-c-format",
-            "--package-name=scrctl", "--package-version=0.1.0", "-o", template, *sources)
+            "--package-name=scrctl", "--package-version=1.0.0", "-o", template, *sources)
         if args.check:
             run("msgcmp", "--no-fuzzy-matching", "--use-untranslated", "po/scrctl.pot", template)
         else:

@@ -3,6 +3,18 @@
 基于 CoreDevice 开发者服务的 iOS 镜像与控制工具，提供原生窗口和命令行接口。
 支持 USB、Wi-Fi 连接与手机发起的无线 PIN 配对；镜像时设备仍可直接操作。命令行设计参考 scrcpy。
 
+## 下载与安装
+
+正式版：[v1.0.0](https://github.com/YJBeetle/scrctl/releases/tag/v1.0.0)。
+提供 macOS ARM64、Windows ARM64 和 Windows x64 安装包；Linux 请按下方说明从源码构建。
+解压后运行 `bin/scrctl --help`；Windows 的 USB 驱动要求见 [安装说明](docs/WINDOWS.md)。
+macOS 包使用 ad hoc 签名，未经过 Apple 公证；系统可能要求确认打开来源。
+DDI 按需下载，不包含在安装包中。
+
+发布页的 `SHA256SUMS.txt` 用于核对下载文件。每个运行包都有同平台对应源码附件，
+包含依赖源码、构建配方与补丁，见 [源码材料说明](docs/SOURCE_MATERIALS.md)。
+版本变化见 [更新记录](CHANGELOG.md)，具体系统与机型的验证范围见下文。
+
 ## 功能与验证范围
 
 历史真机记录覆盖了屏幕镜像、触摸、硬件按键、ASCII 键盘输入、剪贴板、音频、
