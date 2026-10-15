@@ -92,14 +92,15 @@ Certificate unrelated_certificate() {
         EVP_PKEY_CTX_set_ec_paramgen_curve_nid(key_context.get(), NID_X9_62_prime256v1) != 1 ||
         EVP_PKEY_keygen(key_context.get(), &raw_key) != 1) return Certificate(nullptr, X509_free);
     std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> key(raw_key, EVP_PKEY_free);
-    auto *subject = X509_get_subject_name(certificate.get());
-    if (X509_set_version(certificate.get(), 2) != 1 ||
+    std::unique_ptr<X509_NAME, decltype(&X509_NAME_free)> subject(X509_NAME_new(), X509_NAME_free);
+    if (!subject || X509_set_version(certificate.get(), 2) != 1 ||
         ASN1_INTEGER_set(X509_get_serialNumber(certificate.get()), 1) != 1 ||
         !ASN1_TIME_set(X509_getm_notBefore(certificate.get()), fixture_time - 3600) ||
         !ASN1_TIME_set(X509_getm_notAfter(certificate.get()), fixture_time + 3600) ||
-        X509_NAME_add_entry_by_txt(subject, "CN", MBSTRING_ASC,
+        X509_NAME_add_entry_by_txt(subject.get(), "CN", MBSTRING_ASC,
             reinterpret_cast<const unsigned char *>("gs.apple.com"), -1, -1, 0) != 1 ||
-        X509_set_issuer_name(certificate.get(), subject) != 1 || X509_set_pubkey(certificate.get(), key.get()) != 1 ||
+        X509_set_subject_name(certificate.get(), subject.get()) != 1 ||
+        X509_set_issuer_name(certificate.get(), subject.get()) != 1 || X509_set_pubkey(certificate.get(), key.get()) != 1 ||
         X509_sign(certificate.get(), key.get(), EVP_sha256()) <= 0) return Certificate(nullptr, X509_free);
     return certificate;
 }

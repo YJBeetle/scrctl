@@ -60,12 +60,13 @@ inline scrctl::transport::PemIdentity failure_identity() {
         !X509_gmtime_adj(X509_getm_notAfter(cert.get()), 3600) ||
         X509_set_pubkey(cert.get(), key.get()) != 1)
         return {};
-    auto *name = X509_get_subject_name(cert.get());
+    auto name = std::unique_ptr<X509_NAME, decltype(&X509_NAME_free)>(X509_NAME_new(), X509_NAME_free);
     if (!name ||
-        X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC,
+        X509_NAME_add_entry_by_txt(name.get(), "CN", MBSTRING_ASC,
                                   reinterpret_cast<const unsigned char *>("scrctl TLS test"),
                                   -1, -1, 0) != 1 ||
-        X509_set_issuer_name(cert.get(), name) != 1 ||
+        X509_set_subject_name(cert.get(), name.get()) != 1 ||
+        X509_set_issuer_name(cert.get(), name.get()) != 1 ||
         X509_sign(cert.get(), key.get(), EVP_sha256()) <= 0)
         return {};
     auto cert_bio = std::unique_ptr<BIO, decltype(&BIO_free)>(BIO_new(BIO_s_mem()), BIO_free);
