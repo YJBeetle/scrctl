@@ -33,6 +33,15 @@ struct Fixture {
     }
     ~Fixture() { std::error_code error; std::filesystem::remove_all(root, error); }
     std::string path() const { return wifi::record_path(root.string(), record.udid); }
+    std::string seed_stale() {
+        auto old = record;
+        old.host_identifier = "old-host";
+        old.host_private_key.assign(32, 7);
+        old.peer_public_key.assign(32, 8);
+        std::string error;
+        check(wifi::save_record(path(), old, error), "stale same-device record fixture is saved");
+        return contents();
+    }
     bool admit(std::string &err) {
         return remote::detail::admit_wifi_pairing(record, options, err);
     }
@@ -79,9 +88,9 @@ int main() {
         std::ofstream(f.path()) << "preexisting trust bytes";
         std::string error;
         check(f.options.udid.empty() && !f.admit(error) &&
-                  error.find("already exists") != std::string::npos && f.verifies == 0 &&
+                  error.find("Cannot read existing") != std::string::npos && f.verifies == 0 &&
                   f.contents() == "preexisting trust bytes",
-              "omitting -s still rejects an existing authenticated device record before successful M6");
+              "unreadable existing trust is preserved before successful M6");
     }
 #ifndef _WIN32
     for (const bool dangling : {false, true}) {
@@ -91,7 +100,7 @@ int main() {
         if (!dangling) std::ofstream(target) << "external trust bytes";
         std::filesystem::create_symlink(target, f.path());
         std::string error;
-        check(!f.admit(error) && error.find("already exists") != std::string::npos &&
+        check(!f.admit(error) && error.find("not a regular file") != std::string::npos &&
                   std::filesystem::is_symlink(std::filesystem::symlink_status(f.path())) &&
                   f.verifies == 0 && (dangling ? !std::filesystem::exists(target) :
                                      f.contents() == "external trust bytes"),
@@ -219,6 +228,51 @@ int main() {
         size_t files = 0;
         for (const auto &entry : std::filesystem::directory_iterator(f.root)) { (void)entry; ++files; }
         check(files == 1, "exclusive save cleans temporary files on success and collision");
+    }
+    {
+        Fixture f;
+        const auto old = f.seed_stale();
+        std::string error;
+        check(f.admit(error) && error.empty() && f.contents() == old && f.verifies == 0,
+              "phone-revoked same-device trust does not block authenticated M5 admission");
+        const auto result = f.run();
+        const auto saved = wifi::load_record(f.path(), error);
+        check(result.ok && f.verifies == 1 && saved &&
+              saved->host_identifier == f.record.host_identifier && saved->peer_public_key == f.record.peer_public_key,
+              "fresh verified PIN pairing atomically refreshes stale same-device credentials");
+    }
+    for (const bool cancel : {false, true}) {
+        Fixture f;
+        const auto old = f.seed_stale();
+        bool cancelled = false;
+        f.options.should_cancel = [&] { return cancelled; };
+        f.verified = cancel;
+        if (cancel) f.during_verify = [&] { cancelled = true; };
+        check(!f.run().ok && f.verifies == 1 && f.contents() == old,
+              "failed verification or cancellation preserves the old same-device credentials");
+    }
+    {
+        Fixture f;
+        f.seed_stale();
+        std::string concurrent;
+        f.during_verify = [&] {
+            auto other = f.record; other.host_identifier = "concurrent-host";
+            std::string error;
+            check(wifi::save_record(f.path(), other, error), "concurrent successful pairing fixture saves");
+            concurrent = f.contents();
+        };
+        const auto result = f.run();
+        check(!result.ok && result.error.find("changed during verification") != std::string::npos &&
+              f.contents() == concurrent, "repair preserves credentials changed by another pairing during verify");
+    }
+    {
+        Fixture f;
+        auto other = f.record; other.udid = "another-device";
+        std::string error;
+        check(wifi::save_record(f.path(), other, error), "colliding filename fixture saves");
+        const auto before = f.contents();
+        check(!f.admit(error) && !f.run().ok && f.verifies == 0 && f.contents() == before,
+              "authenticated PIN pairing cannot replace a different device at a colliding record path");
     }
     {
         remote::WifiPairingOptions o;

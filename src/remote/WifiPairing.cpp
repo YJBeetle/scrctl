@@ -234,14 +234,30 @@ std::string pairing_record_path(const std::string &udid, const WifiPairingOption
                                                              : options.pairing_directory, udid);
 }
 
-bool pairing_target_available(const std::string &path, std::string &err) {
+// A user-approved PIN exchange may repair trust revoked only on the phone.
+// Snapshot the old identity so a concurrent pairing is not silently discarded.
+bool pairing_target(const std::string &path, const std::string &udid,
+                    std::optional<std::string> &existing, std::string &err) {
+    existing.reset();
     std::error_code ec;
     const auto status = std::filesystem::symlink_status(path, ec);
     if (std::filesystem::exists(status)) {
-        err = SCRCTL_TR("Pairing record already exists; Wi-Fi pairing will not replace it");
-        return false;
-    }
-    if (ec && ec != std::errc::no_such_file_or_directory) {
+        if (!std::filesystem::is_regular_file(status)) {
+            err = SCRCTL_TR("Wi-Fi pairing record is not a regular file; refusing replacement");
+            return false;
+        }
+        std::string load_error;
+        const auto previous = wifi::load_record(path, load_error);
+        if (!previous) {
+            err = SCRCTL_TR("Cannot read existing Wi-Fi pairing record: ") + load_error;
+            return false;
+        }
+        if (previous->udid != udid) {
+            err = SCRCTL_TR("Existing Wi-Fi pairing record belongs to another device");
+            return false;
+        }
+        existing = wifi::format_record(*previous);
+    } else if (ec && ec != std::errc::no_such_file_or_directory) {
         err = SCRCTL_TR("Cannot inspect the Wi-Fi pairing record path");
         return false;
     }
@@ -264,7 +280,8 @@ bool detail::admit_wifi_pairing(const wifi::PairRecord &record,
             err = SCRCTL_TR("Wi-Fi pairing cancelled");
             return false;
         }
-        return pairing_target_available(pairing_record_path(record.udid, options), err);
+        std::optional<std::string> existing;
+        return pairing_target(pairing_record_path(record.udid, options), record.udid, existing, err);
     } catch (const std::exception &) {
         err = SCRCTL_TR("Wi-Fi pairing workflow failed before completion");
         return false;
@@ -285,7 +302,8 @@ PairingResult detail::save_wifi_pairing(const wifi::PairRecord &record,
     }
     result.path = pairing_record_path(record.udid, options);
     try {
-        if (!pairing_target_available(result.path, result.error)) return result;
+        std::optional<std::string> existing;
+        if (!pairing_target(result.path, record.udid, existing, result.error)) return result;
         if (options.should_cancel && options.should_cancel()) {
             result.error = SCRCTL_TR("Wi-Fi pairing cancelled"); return result;
         }
@@ -299,7 +317,15 @@ PairingResult detail::save_wifi_pairing(const wifi::PairRecord &record,
         if (options.should_cancel && options.should_cancel()) {
             result.error = SCRCTL_TR("Wi-Fi pairing cancelled"); return result;
         }
-        if (!wifi::save_record_new(result.path, record, error)) {
+        std::optional<std::string> current;
+        if (!pairing_target(result.path, record.udid, current, result.error)) return result;
+        if (current != existing) {
+            result.error = SCRCTL_TR("Wi-Fi pairing record changed during verification; retry pairing");
+            return result;
+        }
+        const bool saved = existing ? wifi::save_record(result.path, record, error)
+                                    : wifi::save_record_new(result.path, record, error);
+        if (!saved) {
             result.error = SCRCTL_TR("Cannot save the verified Wi-Fi pairing record: ") + error;
             return result;
         }
@@ -320,7 +346,8 @@ PairingResult pair_wifi_remote(const WifiPairingOptions &options) {
     try {
         if (!deadline.active(result.error) || !transport::initialize_sockets(result.error)) return result;
         if (!options.udid.empty()) {
-            if (!pairing_target_available(pairing_record_path(options.udid, options), result.error)) return result;
+            std::optional<std::string> existing;
+            if (!pairing_target(pairing_record_path(options.udid, options), options.udid, existing, result.error)) return result;
         }
         wifi::PairableHostOptions host;
         host.host_identifier = uuid(result.error);
@@ -388,8 +415,8 @@ PairingResult pair_wifi_remote(const WifiPairingOptions &options) {
         wifi::FramedCarrier carrier(stream);
         const auto setup = wifi::accept_pairable_host(carrier, host, options.display_pin, result.error,
             [&](const wifi::PairableHostResult &peer, std::string &error) {
-                // The peer UDID is now authenticated. Refuse duplicates and an
-                // unexpected device before sending M6, not only before saving.
+                // The peer UDID is now authenticated. Check the expected device
+                // and compatible record target before sending M6.
                 return deadline.active(error) && detail::admit_wifi_pairing(peer.record, options, error) &&
                        deadline.active(error);
             });

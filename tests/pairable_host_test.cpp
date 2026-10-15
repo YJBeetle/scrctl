@@ -283,7 +283,7 @@ void test_admission_before_m6() {
             ("scrctl-pairable-admission-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
         ~Directory() { std::error_code ignored; std::filesystem::remove_all(path, ignored); }
     };
-    for (const int scenario : {0, 1, 2, 3}) {
+    for (const int scenario : {0, 1, 2, 3, 4}) {
         Directory directory;
         scrctl::remote::WifiPairingOptions workflow;
         workflow.pairing_directory = directory.path.string();
@@ -295,6 +295,13 @@ void test_admission_before_m6() {
         if (scenario == 1) workflow.udid = "ANOTHER-DEVICE";
         Client client;
         std::string error;
+        if (scenario == 4) {
+            PairRecord old;
+            old.udid = "OWNED-DEVICE-UDID";
+            old.host_identifier = "old-host";
+            old.host_private_key.assign(32, 5); old.host_public_key.assign(32, 6);
+            check(save_record(path, old, error), "same-device stale trust fixture saves");
+        }
         int admissions = 0;
         const auto result = accept_pairable_host(client, options(),
             [](std::string_view, std::string &) { return true; }, error,
@@ -308,12 +315,17 @@ void test_admission_before_m6() {
                 if (scenario == 2) return false; // Empty callback errors still get a useful failure.
                 return scrctl::remote::detail::admit_wifi_pairing(peer.record, workflow, err);
             });
-        if (scenario == 3) {
+        if (scenario == 3 || scenario == 4) {
             check(result && error.empty() && admissions == 1 && client.responses.size() == 4 &&
-                      client.authenticated_host && !std::filesystem::exists(directory.path),
-                  "read-only admission of a new peer permits the real M6 without creating a record");
+                      client.authenticated_host && (scenario == 4 || !std::filesystem::exists(directory.path)),
+                  "read-only admission of a new or previously revoked peer permits the real M6");
+            if (scenario == 4) {
+                const auto old = load_record(path, error);
+                check(old && old->host_identifier == "old-host",
+                      "authenticated M5 admission preserves old credentials until fresh verification");
+            }
         } else {
-            const char *expected = scenario == 0 ? "already exists" : "unexpected device identity";
+            const char *expected = scenario == 0 ? "Cannot read existing" : "unexpected device identity";
             check(!result && error.find(expected) != std::string::npos && admissions == 1 &&
                       client.responses.size() == 3 && !client.authenticated_host,
                   "duplicate, unexpected peer or rejected admission cannot receive the host M6 identity");
