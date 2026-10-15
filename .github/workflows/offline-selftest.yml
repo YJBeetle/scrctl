@@ -27,12 +27,12 @@ jobs:
             timeout_minutes: 90
             build_jobs: 3
           - name: Ubuntu
-            os: ubuntu-latest
+            os: ubuntu-24.04
             timeout_minutes: 20
             build_jobs: 4
     # 两个平台都必须成功；构建、测试和可执行文件启动分别检查。
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
       - name: 装依赖（macOS）
         if: runner.os == 'macOS'
@@ -106,7 +106,7 @@ jobs:
 
       - name: 上传 macOS 对应源码
         if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: scrctl-sources-macos
           path: scrctl-sources-macos.tar
@@ -119,7 +119,7 @@ jobs:
 
       - name: 上传测试日志
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ runner.os == 'macOS' && 'macos-test-logs' || 'linux-test-logs' }}
           path: build/Testing/Temporary/*.log
@@ -132,7 +132,7 @@ jobs:
 
       - name: 上传 macOS 产物
         if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: scrctl-macos
           path: scrctl-macos-*.tar.gz
@@ -159,7 +159,7 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - name: 固定 Windows 源码换行
         shell: pwsh
         run: |
@@ -243,7 +243,7 @@ jobs:
           python tools/collect_embedded_sources.py build-win sources-windows/embedded
           python tools/package_source_materials.py dist-win build-win sources-windows --platform windows
       - name: 上传 Windows 对应源码
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: scrctl-sources-windows-${{ matrix.arch }}
           path: scrctl-sources-windows.tar
@@ -254,13 +254,13 @@ jobs:
         run: ./tools/test_windows_install.ps1 -InstallDirectory dist-win -BuildDirectory build-win
       - name: 上传测试日志
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: windows-${{ matrix.arch }}-test-logs
           path: build-win/Testing/Temporary/*.log
           if-no-files-found: ignore
       - name: 上传 Windows ${{ matrix.label }} 产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: scrctl-windows-${{ matrix.arch }}
           path: dist-win/
@@ -272,7 +272,7 @@ jobs:
     # 最近一次完整作业耗时 19 分钟；为新增发现模块和依赖下载保留构建余量。
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
       - name: 装依赖
         run: brew install sdl2 openssl ffmpeg pkg-config gettext
@@ -299,7 +299,7 @@ jobs:
 
       - name: 上传 sanitizer 测试日志
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: sanitizer-test-logs
           path: build-san/Testing/Temporary/*.log
