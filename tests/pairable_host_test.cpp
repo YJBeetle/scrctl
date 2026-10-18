@@ -198,8 +198,8 @@ void reject(Client &client, const char *label, int expected_admissions = 0) {
 
 void test_complete_crypto_exchange() {
     Client client;
-    // Raw signed Identifier is independent of UDID; retain its exact bytes.
-    client.device_identifier = Bytes{'I', 'D', 0, 'R', 'A', 'W'};
+    // Signed UUID text is independent of UDID; retain its exact spelling.
+    client.device_identifier = bytes_of("05DCFD0E-DAC8-42E8-81A4-CADD6D09B12E");
     std::string err = "stale failure";
     int pins = 0;
     const auto result = accept_pairable_host(client, options(), [&](std::string_view pin, std::string &) {
@@ -211,7 +211,7 @@ void test_complete_crypto_exchange() {
     if (result) {
         check(result->record.complete() && result->record.has_peer_identity() &&
                   result->record.udid == "OWNED-DEVICE-UDID" &&
-                  result->record.peer_identifier == client.device_identifier &&
+                  result->record.peer_identifier == std::string(sv(client.device_identifier)) &&
                   result->record.peer_public_key == client.device_public &&
                   result->record.peer_alt_irk == Bytes(16, 0xa5) &&
                   result->record.host_private_key == options().host_private_key &&
@@ -271,6 +271,8 @@ void test_envelope_and_phase_rejections() {
         {"reject wrong phase", [](int n, Value &v) { if (n == 1) data(v)["data"] = b64_encode(tlv_build({{TlvType::State, Bytes{3}}, {TlvType::Method, Bytes{0}}})); }}
     };
     for (const auto &[label, mutation] : cases) { Client client; client.mutate_envelope = mutation; reject(client, label); }
+    Client binary_id; binary_id.device_identifier = Bytes{'I', 0, 'D'};
+    reject(binary_id, "signed binary identifier is rejected before a text record is published");
     Client wrong_pin("271828"); reject(wrong_pin, "real wrong-PIN SRP proof never publishes a record");
     Client damaged; damaged.corrupt_aead = true; reject(damaged, "damaged M5 AEAD never publishes a record");
     Client failed_write; failed_write.fail_m6_write = true;
@@ -309,7 +311,7 @@ void test_admission_before_m6() {
                 ++admissions;
                 check(client.reads == 4 && client.responses.size() == 3 && !client.authenticated_host &&
                           peer.record.udid == "OWNED-DEVICE-UDID" &&
-                          peer.record.peer_identifier == client.device_identifier &&
+                          peer.record.peer_identifier == std::string(sv(client.device_identifier)) &&
                           peer.record.peer_public_key == client.device_public,
                       "admission receives authenticated M5 identity before any successful M6 is written");
                 if (scenario == 2) return false; // Empty callback errors still get a useful failure.

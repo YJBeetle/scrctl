@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 1.0.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-15 23:44+0800\n"
+"POT-Creation-Date: 2026-10-18 16:40+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -3813,7 +3813,7 @@ msgid "Start CoreDeviceProxy"
 msgstr ""
 
 #: src/remote/Device.cpp:182 src/remote/Rsd.cpp:243 src/remote/Rsd.cpp:477
-#: src/transport/Usbmux.cpp:270 src/wifi/PairRecord.cpp:363
+#: src/transport/Usbmux.cpp:270 src/wifi/PairRecord.cpp:366
 #: tools/wifi_probe.cpp:353
 msgid " failed: "
 msgstr ""
@@ -4611,7 +4611,7 @@ msgid "Wi-Fi pairing returned an incomplete or unexpected device identity"
 msgstr ""
 
 #: src/remote/WifiPairing.cpp:286 src/remote/WifiPairing.cpp:334
-#: src/remote/WifiPairing.cpp:463
+#: src/remote/WifiPairing.cpp:464
 msgid "Wi-Fi pairing workflow failed before completion"
 msgstr ""
 
@@ -4633,21 +4633,21 @@ msgid ""
 "300000 ms"
 msgstr ""
 
-#: src/remote/WifiPairing.cpp:380
+#: src/remote/WifiPairing.cpp:381
 msgid ""
 "Open Settings > Privacy & Security > Developer Mode on the device and select "
 "Pair with this scrctl computer"
 msgstr ""
 
-#: src/remote/WifiPairing.cpp:393
+#: src/remote/WifiPairing.cpp:394
 msgid "Cannot accept Wi-Fi pairing connection: "
 msgstr ""
 
-#: src/remote/WifiPairing.cpp:400
+#: src/remote/WifiPairing.cpp:401
 msgid "Cannot identify the Wi-Fi pairing peer address"
 msgstr ""
 
-#: src/remote/WifiPairing.cpp:425
+#: src/remote/WifiPairing.cpp:426
 msgid "Reconnecting to verify the new Wi-Fi pairing record"
 msgstr ""
 
@@ -5322,7 +5322,7 @@ msgstr ""
 msgid "Cannot open temporary file "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:113 src/wifi/PairRecord.cpp:306
+#: src/wifi/PairRecord.cpp:113 src/wifi/PairRecord.cpp:309
 #: src/wifi/PairRecordWindows.cpp:47
 msgid "Failed to set record file permissions"
 msgstr ""
@@ -5352,43 +5352,43 @@ msgstr ""
 msgid "Pairing record file too large"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:206
+#: src/wifi/PairRecord.cpp:213
 msgid "Invalid scrctl pairing record header"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:213
+#: src/wifi/PairRecord.cpp:220
 msgid "Record line is not key=value"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:224
+#: src/wifi/PairRecord.cpp:231
 msgid "Duplicate pairing record field: "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:233
+#: src/wifi/PairRecord.cpp:240
 msgid " requires "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:233
+#: src/wifi/PairRecord.cpp:240
 msgid "Incorrect field length: "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:234
+#: src/wifi/PairRecord.cpp:241
 msgid " bytes; got "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:261
-msgid "Pairing record peer_identifier must not be empty"
+#: src/wifi/PairRecord.cpp:264 src/wifi/PairSetup.cpp:455
+msgid "Pairing record peer_identifier must be nonempty single-line text"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:279
+#: src/wifi/PairRecord.cpp:282
 msgid "Record missing host_private_key"
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:296
+#: src/wifi/PairRecord.cpp:299
 msgid "Failed to create directory "
 msgstr ""
 
-#: src/wifi/PairRecord.cpp:363
+#: src/wifi/PairRecord.cpp:366
 msgid "Reading directory "
 msgstr ""
 
@@ -5464,11 +5464,11 @@ msgstr ""
 msgid "Cannot decrypt M6: "
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:505
+#: src/wifi/PairSetup.cpp:511
 msgid "); pairing itself succeeded"
 msgstr ""
 
-#: src/wifi/PairSetup.cpp:505
+#: src/wifi/PairSetup.cpp:511
 msgid "createRemoteUnlockKey failed ("
 msgstr ""
 

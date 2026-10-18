@@ -391,12 +391,20 @@ void run_pair_setup_reply_tests(void (*check)(bool, const char *)) {
             check(io.encrypted == 0 && key_err.find("Main key not installed") != std::string::npos,
                   (label + " 不安装主密钥或发送解锁请求").c_str());
         }
+        {
+            MemStream io(Phase::SetupM6, Form::Normal);
+            io.device_identifier = Bytes{'I', 0, 'D'};
+            std::string err;
+            const auto result = run(io, err);
+            check(!result.ok && !result.record.has_peer_identity() && io.encrypted == 0 && !err.empty(),
+                  "已签名的非文本 Identifier 不发布记录或安装主密钥");
+        }
         for (const auto form : {Form::Normal, Form::InfoAltIrk, Form::InfoMalformed}) {
             MemStream io(Phase::SetupM6, form);
             std::string err;
             const auto result = run(io, err);
             check(result.ok && result.record.complete() && result.record.has_peer_identity() &&
-                  result.record.peer_identifier == io.device_identifier &&
+                  result.record.peer_identifier == std::string(sv(io.device_identifier)) &&
                   result.record.peer_public_key == io.device_public_key,
                   "合法 M6 签名后保存设备原始标识和长期公钥");
             check(form == Form::InfoAltIrk ? result.record.peer_alt_irk == Bytes(16, 0x42) :

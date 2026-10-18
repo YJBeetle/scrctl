@@ -27,7 +27,7 @@ struct Fixture {
         record.host_identifier = "new-host";
         record.host_private_key.assign(32, 1);
         record.host_public_key.assign(32, 2);
-        record.peer_identifier = wifi::bytes_of("signed-peer");
+        record.peer_identifier = "signed-peer";
         record.peer_public_key.assign(32, 3);
         record.peer_alt_irk.assign(16, 4);
     }

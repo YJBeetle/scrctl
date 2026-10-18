@@ -151,7 +151,7 @@ std::optional<PairableHostResult> device_identity(const Bytes &key, const Bytes 
     const auto *public_key = tlv_get(*fields, TlvType::PublicKey);
     const auto *signature = tlv_get(*fields, TlvType::Signature);
     const auto *info = tlv_get(*fields, TlvType::Info);
-    if (identifier == nullptr || identifier->empty() || identifier->size() > 1024 ||
+    if (identifier == nullptr || !valid_peer_identifier(sv(*identifier)) ||
         public_key == nullptr || public_key->size() != 32 ||
         signature == nullptr || signature->size() != 64 ||
         info == nullptr || info->empty() || info->size() > 16384) {
@@ -194,7 +194,7 @@ std::optional<PairableHostResult> device_identity(const Bytes &key, const Bytes 
     }
     PairableHostResult result;
     result.record.udid = udid->str;
-    result.record.peer_identifier = *identifier;
+    result.record.peer_identifier = std::string(sv(*identifier));
     result.record.peer_public_key = *public_key;
     result.record.peer_alt_irk = irk->bytes;
     for (const auto &[name, output] : std::array{

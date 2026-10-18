@@ -450,6 +450,12 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
         return fail();
     }
 
+    const std::string peer_identifier(sv(peer_identity->identifier));
+    if (!valid_peer_identifier(peer_identifier)) {
+        err = SCRCTL_TR("Pairing record peer_identifier must be nonempty single-line text");
+        return fail();
+    }
+
     // altIRK 只用于 mDNS authTag 匹配，不参与设备签名校验。Info 缺失或其 OPACK
     // 无法解析时可以留空；设备身份字段和签名已经由上一步单独验证。
     Bytes peer_alt_irk;
@@ -485,7 +491,7 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
     record.host_private_key.assign(host_key->seed.begin(), host_key->seed.end());
     record.host_public_key = host_public;
     record.advertised_identifier = advertised;
-    record.peer_identifier = peer_identity->identifier;
+    record.peer_identifier = peer_identifier;
     record.peer_public_key = peer_identity->public_key;
     record.peer_alt_irk = peer_alt_irk;
 

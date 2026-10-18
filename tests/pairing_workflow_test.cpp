@@ -29,7 +29,7 @@ wifi::PairRecord synthetic_record(std::string udid = "device-with:punctuation") 
     record.host_identifier = "saved-host-identifier";
     record.host_private_key.assign(32, 1);
     record.host_public_key.assign(32, 2);
-    record.peer_identifier = wifi::bytes_of("synthetic-peer");
+    record.peer_identifier = "synthetic-peer";
     record.peer_public_key.assign(32, 3);
     record.peer_alt_irk.assign(16, 4);
     return record;

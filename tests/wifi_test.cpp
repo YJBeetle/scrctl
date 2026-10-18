@@ -566,7 +566,7 @@ void test_pair_record() {
     full.advertised_identifier = "32567CFA-1462-41EE-94AD-182C31AAA6C3";
     full.peer_alt_irk = Bytes(16, 0x33);
     full.remote_unlock_host_key = "b879==";
-    full.peer_identifier = Bytes{'d', '\0', '\n', '=', 0xFF};
+    full.peer_identifier = "05DCFD0E-DAC8-42E8-81A4-CADD6D09B12E";
     full.peer_public_key = Bytes(32, 0x44);
     const auto again = scrctl::wifi::parse_record(scrctl::wifi::format_record(full), err);
     check(again.has_value() && again->advertised_identifier == full.advertised_identifier &&
@@ -576,7 +576,13 @@ void test_pair_record() {
     check(again && again->has_peer_identity() &&
               again->peer_identifier == full.peer_identifier &&
               again->peer_public_key == full.peer_public_key,
-          "身份字段使用十六进制保存，保留 NUL、换行和非文本字节");
+          "设备身份以 UUID 文本保存并原样读回");
+    check(scrctl::wifi::format_record(full).find("peer_identifier=05DCFD0E-DAC8-42E8-81A4-CADD6D09B12E\n") != std::string::npos,
+          "peer_identifier 与 host_identifier 一样直接写入文本");
+    const auto literal = scrctl::wifi::parse_record(scrctl::wifi::format_record(rec) +
+        "peer_identifier=3035444346443045\n", err);
+    check(literal && literal->peer_identifier == "3035444346443045",
+          "旧十六进制值不进行自动解码或兼容迁移");
     const auto legacy_text = scrctl::wifi::format_record(rec);
     const auto id_only = scrctl::wifi::parse_record(legacy_text + "peer_identifier=01\n", err);
     const auto key_only = scrctl::wifi::parse_record(
@@ -584,11 +590,11 @@ void test_pair_record() {
     check(id_only && key_only && id_only->complete() && key_only->complete() &&
               !id_only->has_peer_identity() && !key_only->has_peer_identity(),
           "缺一项设备身份的旧记录仍可定位设备，认证前需补齐");
-    for (const std::string field : std::vector<std::string>{"peer_identifier=\n", "peer_identifier=xyz\n",
-             "peer_identifier=0\n", "peer_public_key=\n", "peer_public_key=0011\n",
+    for (const std::string field : std::vector<std::string>{"peer_identifier=\n", std::string("peer_identifier=a\0b\n", 20),
+             "peer_identifier=a\rb\n", "peer_public_key=\n", "peer_public_key=0011\n",
              "peer_public_key=" + to_hex(Bytes(33, 0x44)) + "\n"}) {
         check(!scrctl::wifi::parse_record(legacy_text + field, err) && !err.empty(),
-              "身份字段存在时拒绝空值、无效十六进制和错误公钥长度");
+              "身份字段存在时拒绝空值、控制字符和错误公钥长度");
     }
     for (const std::string field : std::vector<std::string>{"udid=other\n", "host_identifier=other\n",
              "host_private_key=" + to_hex(rec.host_private_key) + "\n",
@@ -800,7 +806,7 @@ void test_pair_verify_shape() {
     record.host_identifier = "AC106655-9E9F-3445-96B3-075257AF1912";
     record.host_private_key = from_hex("4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb");
     record.host_public_key = from_hex("3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c");
-    record.peer_identifier = Bytes{'p', 'e', 'e', 'r', '\0', 0xFF};
+    record.peer_identifier = "05DCFD0E-DAC8-42E8-81A4-CADD6D09B12E";
     record.peer_public_key = from_hex("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
     const Bytes valid_m4 = tlv_build({{TlvType::State, Bytes{4}}});
     const Bytes denied = tlv_build({{TlvType::State, Bytes{6}}, {TlvType::Error, Bytes{2}}});
@@ -835,7 +841,7 @@ void test_pair_verify_shape() {
                 const auto shared = x25519_shared(peer_priv, bv(our_pub), err).value();
                 verify_key = hkdf_sha512(shared, "Pair-Verify-Encrypt-Salt", "Pair-Verify-Encrypt-Info", 32, err).value();
                 if (m2_override) { io.feed(pairing_reply(*m2_override)); return; }
-                Bytes id = record.peer_identifier;
+                Bytes id = bytes_of(record.peer_identifier);
                 if (fault == Fault::ChangedId) id.front() ^= 1;
                 Bytes signed_host = our_pub;
                 if (fault == Fault::ReplayHost) signed_host.front() ^= 1;

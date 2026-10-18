@@ -1,11 +1,15 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "wifi/Crypto.h"
 
 namespace scrctl::wifi {
+
+/// 可无损写入单行记录的非空设备身份文本；不转换大小写或解码十六进制。
+bool valid_peer_identifier(std::string_view identifier);
 
 /// 一台设备的远程配对记录。
 ///
@@ -21,8 +25,8 @@ struct PairRecord {
     Bytes host_public_key;   ///< Ed25519 公钥，32 字节
     std::string advertised_identifier;
     /// 从经过签名校验的 PairSetup M6 保存的设备长期身份。identifier 保留协议原始
-    /// 字节，不能用 USB UDID、广播标识或当前主机标识替代。
-    Bytes peer_identifier;
+    /// 文本（设备返回 UUID），不能用 USB UDID、广播标识或当前主机标识替代。
+    std::string peer_identifier;
     Bytes peer_public_key;  ///< 设备 Ed25519 公钥，32 字节；旧记录可以缺失
     Bytes peer_alt_irk;  ///< 设备的身份解析密钥，16 字节；未提供时可空，兼容旧记录
     std::string remote_unlock_host_key;
@@ -36,13 +40,14 @@ struct PairRecord {
 
     /// 旧记录仍可读取以定位设备，但只有保存了长期身份的记录才能认证 PairVerify M2。
     [[nodiscard]] bool has_peer_identity() const {
-        return !peer_identifier.empty() && peer_public_key.size() == 32;
+        return valid_peer_identifier(peer_identifier) && peer_public_key.size() == 32;
     }
 };
 
 /// 版本 1 文本格式：首个非空行为固定头，后续为 key=value，二进制字段使用十六进制。
 /// parse_record 检查已知二进制字段长度、拒绝已知键重复并要求私钥存在，忽略未知键。
-/// peer_identifier 存在时不能为空，peer_public_key 存在时必须为 32 字节；旧记录
+/// peer_identifier 与 host_identifier 一样直接保存文本，不兼容旧十六进制编码。
+/// peer_identifier 存在时须为有效的单行文本，peer_public_key 存在时必须为 32 字节；记录
 /// 可以缺失这些字段。成功解析不等于 complete() 或 has_peer_identity()，调用方
 /// 仍需检查用途所需的字段。format_record 不校验输入记录。
 std::string format_record(const PairRecord &record);

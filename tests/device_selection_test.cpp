@@ -32,7 +32,7 @@ wifi::PairRecord record(std::string udid = "device:one-original") {
     paired.host_identifier = "synthetic-host";
     paired.host_private_key.assign(32, 1);
     paired.host_public_key.assign(32, 2);
-    paired.peer_identifier = wifi::bytes_of("synthetic-peer");
+    paired.peer_identifier = "synthetic-peer";
     paired.peer_public_key.assign(32, 3);
     return paired;
 }

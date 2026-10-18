@@ -3450,8 +3450,13 @@ PairSetup 的 M6 必须携带可认证的身份密文，内层 TLV 必须完整�
 
 | 记录字段 | 保存形式 | 用途 |
 | --- | --- | --- |
-| peer_identifier | M6 Identifier 原始字节的十六进制表示 | 与后续 M2 Identifier 逐字节比较；不以 USB UDID、广播标识或主机标识替代 |
+| peer_identifier | 经过签名认证的 Identifier 原始文本（设备返回 UUID） | 与后续 M2 Identifier 逐字节比较；不以 USB UDID、广播标识或主机标识替代 |
 | peer_public_key | 32 字节设备长期 Ed25519 公钥的十六进制表示 | 验证后续 M2 的设备签名 |
+
+`peer_identifier` 当前与 `host_identifier` 一样直接保存单行文本，例如
+`peer_identifier=05DCFD0E-DAC8-42E8-81A4-CADD6D09B12E`。不进行十六进制
+解码、大小写转换或旧值自动迁移；此前十六进制形式的该字段须手动改为原始
+UUID 文本或重新配对。签名与后续身份比较仍使用该文本的原始字节。
 
 记录仍使用版本 1 文本头，旧记录可加载用于选择设备；缺少上述可信身份材料时，
 严格 PairVerify 直接要求通过 USB 重新配对，不从当前网络握手学习设备公钥。

@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 1.0.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-15 23:44+0800\n"
+"POT-Creation-Date: 2026-10-18 16:40+0800\n"
 "PO-Revision-Date: 2026-10-09 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -3888,7 +3888,7 @@ msgid "Start CoreDeviceProxy"
 msgstr "启动 CoreDeviceProxy"
 
 #: src/remote/Device.cpp:182 src/remote/Rsd.cpp:243 src/remote/Rsd.cpp:477
-#: src/transport/Usbmux.cpp:270 src/wifi/PairRecord.cpp:363
+#: src/transport/Usbmux.cpp:270 src/wifi/PairRecord.cpp:366
 #: tools/wifi_probe.cpp:353
 msgid " failed: "
 msgstr " 失败: "
@@ -4699,7 +4699,7 @@ msgid "Wi-Fi pairing returned an incomplete or unexpected device identity"
 msgstr "Wi-Fi 配对返回的设备身份不完整或与预期不符"
 
 #: src/remote/WifiPairing.cpp:286 src/remote/WifiPairing.cpp:334
-#: src/remote/WifiPairing.cpp:463
+#: src/remote/WifiPairing.cpp:464
 msgid "Wi-Fi pairing workflow failed before completion"
 msgstr "Wi-Fi 配对流程尚未完成便失败"
 
@@ -4721,7 +4721,7 @@ msgid ""
 "300000 ms"
 msgstr "Wi-Fi 配对需要 PIN 显示回调，且超时须在 1 至 300000 毫秒之间"
 
-#: src/remote/WifiPairing.cpp:380
+#: src/remote/WifiPairing.cpp:381
 msgid ""
 "Open Settings > Privacy & Security > Developer Mode on the device and select "
 "Pair with this scrctl computer"
@@ -4729,15 +4729,15 @@ msgstr ""
 "请在设备上打开“设置 > 隐私与安全性 > 开发者模式”，然后选择与这台 scrctl 电脑"
 "配对"
 
-#: src/remote/WifiPairing.cpp:393
+#: src/remote/WifiPairing.cpp:394
 msgid "Cannot accept Wi-Fi pairing connection: "
 msgstr "无法接受 Wi-Fi 配对连接："
 
-#: src/remote/WifiPairing.cpp:400
+#: src/remote/WifiPairing.cpp:401
 msgid "Cannot identify the Wi-Fi pairing peer address"
 msgstr "无法识别 Wi-Fi 配对对端的地址"
 
-#: src/remote/WifiPairing.cpp:425
+#: src/remote/WifiPairing.cpp:426
 msgid "Reconnecting to verify the new Wi-Fi pairing record"
 msgstr "正在重新连接以验证新 Wi-Fi 配对记录"
 
@@ -5412,7 +5412,7 @@ msgstr "十六进制数据包含无效字符"
 msgid "Cannot open temporary file "
 msgstr "无法打开临时文件 "
 
-#: src/wifi/PairRecord.cpp:113 src/wifi/PairRecord.cpp:306
+#: src/wifi/PairRecord.cpp:113 src/wifi/PairRecord.cpp:309
 #: src/wifi/PairRecordWindows.cpp:47
 msgid "Failed to set record file permissions"
 msgstr "设置记录文件权限失败"
@@ -5442,43 +5442,43 @@ msgstr "无法读取配对记录文件 "
 msgid "Pairing record file too large"
 msgstr "配对记录文件过大"
 
-#: src/wifi/PairRecord.cpp:206
+#: src/wifi/PairRecord.cpp:213
 msgid "Invalid scrctl pairing record header"
 msgstr "scrctl 配对记录头无效"
 
-#: src/wifi/PairRecord.cpp:213
+#: src/wifi/PairRecord.cpp:220
 msgid "Record line is not key=value"
 msgstr "配对记录中的行必须使用 key=value 格式"
 
-#: src/wifi/PairRecord.cpp:224
+#: src/wifi/PairRecord.cpp:231
 msgid "Duplicate pairing record field: "
 msgstr "配对记录中字段重复："
 
-#: src/wifi/PairRecord.cpp:233
+#: src/wifi/PairRecord.cpp:240
 msgid " requires "
 msgstr " 需要 "
 
-#: src/wifi/PairRecord.cpp:233
+#: src/wifi/PairRecord.cpp:240
 msgid "Incorrect field length: "
 msgstr "字段长度无效："
 
-#: src/wifi/PairRecord.cpp:234
+#: src/wifi/PairRecord.cpp:241
 msgid " bytes; got "
 msgstr " 字节，实际 "
 
-#: src/wifi/PairRecord.cpp:261
-msgid "Pairing record peer_identifier must not be empty"
-msgstr "配对记录中的 peer_identifier 不能为空"
+#: src/wifi/PairRecord.cpp:264 src/wifi/PairSetup.cpp:455
+msgid "Pairing record peer_identifier must be nonempty single-line text"
+msgstr "配对记录中的 peer_identifier 必须为非空单行文本"
 
-#: src/wifi/PairRecord.cpp:279
+#: src/wifi/PairRecord.cpp:282
 msgid "Record missing host_private_key"
 msgstr "配对记录缺少 host_private_key 字段"
 
-#: src/wifi/PairRecord.cpp:296
+#: src/wifi/PairRecord.cpp:299
 msgid "Failed to create directory "
 msgstr "创建目录失败："
 
-#: src/wifi/PairRecord.cpp:363
+#: src/wifi/PairRecord.cpp:366
 msgid "Reading directory "
 msgstr "读取目录 "
 
@@ -5556,11 +5556,11 @@ msgstr "PairSetup M6 未提供设备身份密文"
 msgid "Cannot decrypt M6: "
 msgstr "无法解密 M6："
 
-#: src/wifi/PairSetup.cpp:505
+#: src/wifi/PairSetup.cpp:511
 msgid "); pairing itself succeeded"
 msgstr "），配对本身已成功"
 
-#: src/wifi/PairSetup.cpp:505
+#: src/wifi/PairSetup.cpp:511
 msgid "createRemoteUnlockKey failed ("
 msgstr "createRemoteUnlockKey 失败（"
 

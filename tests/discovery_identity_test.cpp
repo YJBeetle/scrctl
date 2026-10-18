@@ -87,7 +87,7 @@ void advertisement_matching() {
     paired.host_identifier = "synthetic-host";
     paired.host_private_key.assign(32, 1);
     paired.host_public_key.assign(32, 2);
-    paired.peer_identifier = bytes_of("synthetic-peer");
+    paired.peer_identifier = "synthetic-peer";
     paired.peer_public_key.assign(32, 3);
     paired.advertised_identifier = "old-advertisement";
     paired.peer_alt_irk = test_key();

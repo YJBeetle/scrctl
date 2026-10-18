@@ -29,7 +29,7 @@ wifi::PairRecord paired_record() {
     record.host_identifier = "synthetic-host";
     record.host_private_key.assign(32, 1);
     record.host_public_key.assign(32, 2);
-    record.peer_identifier = wifi::bytes_of("synthetic-peer");
+    record.peer_identifier = "synthetic-peer";
     record.peer_public_key.assign(32, 3);
     record.peer_alt_irk.resize(16);
     for (size_t i = 0; i < 16; ++i) record.peer_alt_irk[i] = static_cast<uint8_t>(i);

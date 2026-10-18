@@ -151,7 +151,7 @@ with tempfile.TemporaryDirectory(prefix="scrctl-wifi-records-") as directory:
     directory = Path(directory)
     host = ("scrctl-pair-record 1\nudid=offline-device\nhost_identifier=offline-host\n"
             "host_private_key=" + "11" * 32 + "\nhost_public_key=" + "22" * 32 + "\n")
-    for name, extra in (("legacy", ""), ("id-only", "peer_identifier=70656572\n"),
+    for name, extra in (("legacy", ""), ("id-only", "peer_identifier=peer\n"),
                         ("key-only", "peer_public_key=" + "33" * 32 + "\n")):
         path = directory / (name + ".pair")
         path.write_text(host + extra, encoding="utf-8")

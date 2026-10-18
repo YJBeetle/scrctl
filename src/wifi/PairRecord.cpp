@@ -159,6 +159,13 @@ std::optional<std::string> read_file(const std::string &path, std::string &err) 
 
 }  // namespace
 
+bool valid_peer_identifier(std::string_view identifier) {
+    return !identifier.empty() && identifier.size() <= 1024 && trim(identifier) == identifier &&
+           std::none_of(identifier.begin(), identifier.end(), [](unsigned char c) {
+               return c < 0x20 || c == 0x7f;
+           });
+}
+
 std::string format_record(const PairRecord &record) {
     std::ostringstream out;
     out << kHeader << '\n';
@@ -170,7 +177,7 @@ std::string format_record(const PairRecord &record) {
         out << "advertised_identifier=" << record.advertised_identifier << '\n';
     }
     if (!record.peer_identifier.empty()) {
-        out << "peer_identifier=" << hex(record.peer_identifier) << '\n';
+        out << "peer_identifier=" << record.peer_identifier << '\n';
     }
     if (!record.peer_public_key.empty()) {
         out << "peer_public_key=" << hex(record.peer_public_key) << '\n';
@@ -253,15 +260,11 @@ std::optional<PairRecord> parse_record(std::string_view text, std::string &err) 
         } else if (key == "advertised_identifier") {
             record.advertised_identifier = value;
         } else if (key == "peer_identifier") {
-            const std::optional<Bytes> identifier = unhex(value, err);
-            if (!identifier) {
+            if (!valid_peer_identifier(value)) {
+                err = SCRCTL_TR("Pairing record peer_identifier must be nonempty single-line text");
                 return std::nullopt;
             }
-            if (identifier->empty()) {
-                err = SCRCTL_TR("Pairing record peer_identifier must not be empty");
-                return std::nullopt;
-            }
-            record.peer_identifier = *identifier;
+            record.peer_identifier = value;
         } else if (key == "peer_public_key") {
             if (!set_hex(record.peer_public_key, 32)) {
                 return std::nullopt;
