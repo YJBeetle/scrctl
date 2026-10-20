@@ -82,6 +82,32 @@ int run_ddi_install(const Options &o, const std::function<bool()> &cancelled) {
     if (target.product_type.empty()) { error = SCRCTL_TR("DDI target metadata is missing its OS version or product model"); return fail(); }
     auto selected = ddi::select_for_version(target.system_version, error);
     if (!selected) return fail();
+    if (!o.replace_ddi) {
+        if (selected->kind != ddi::Kind::Classic && !device) {
+            transport::IoBudget preparation({seconds(30), cancelled});
+            device = remote::Device::establish_bounded(record->udid, preparation, error, false, true);
+            if (!device) return fail();
+        }
+        if (selected->kind == ddi::Kind::Classic || device->rsd().supports(
+                "com.apple.coredevice.screencaptureservice", "com.apple.coredevice.feature.capturescreenshot")) {
+            auto adapter = !o.wifi.empty()
+                ? ddi::ServiceTransport::open_remote(*device, seconds(30), cancelled, error)
+                : ddi::ServiceTransport::open_usb(*lockdown, record->device_id, seconds(30), cancelled, error);
+            if (!adapter) return fail();
+            auto wire = adapter->service(); ddi::MountOptions options;
+            options.timeout = seconds(30); options.cancelled = cancelled;
+            const auto mounted = ddi::inspect_mounted(wire, target, options, error);
+            if (!mounted) return fail();
+            if (mounted->state != ddi::MountState::NotMounted) {
+                if (selected->kind == ddi::Kind::Classic && mounted->signature_matches != true) {
+                    error = SCRCTL_TR("Mounted Classic DDI signature does not match the requested image; enable replacement explicitly");
+                    return fail();
+                }
+                std::printf(SCRCTL_TR("DDI already mounted: %s (no new installation)\n"), mounted->image_type.c_str());
+                return 0;
+            }
+        }
+    }
     std::printf(SCRCTL_TR("DDI target: OS %s, model %s, image type %s\n"),
         safe_text(target.system_version).c_str(), safe_text(target.product_type).c_str(),
         std::string(ddi::kind_name(selected->kind)).c_str());

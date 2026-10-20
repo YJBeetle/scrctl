@@ -204,6 +204,34 @@ std::optional<MountResult> inspect_mounted(PlistService &service, Kind kind, con
     error.clear(); try { Session session(service, options); return inspect(session, kind); }
     catch (const std::exception &e) { error = safe_text(e.what()); return std::nullopt; }
 }
+std::optional<MountResult> detail::inspect_mounted_with_catalog(PlistService &service, const Catalog &catalog,
+    const MountOptions &options, std::string &error) {
+    auto result = inspect_mounted(service, catalog.kind, options, error);
+    if (!result || result->state == MountState::NotMounted || catalog.kind != Kind::Classic) return result;
+    const auto asset = std::find_if(catalog.assets.begin(), catalog.assets.end(), [](const Asset &a) {
+        return a.name == "DeveloperDiskImage.dmg.signature";
+    });
+    if (asset == catalog.assets.end() || (asset->sha256.empty() && asset->git_blob_sha1.empty())) {
+        error = SCRCTL_TR("Classic DDI catalog has no pinned signature digest"); return std::nullopt;
+    }
+    try {
+        result->signature_matches = result->signature.size() == asset->size &&
+            (asset->sha256.empty() || hex(hash_bytes(result->signature, EVP_sha256(), false)) == asset->sha256) &&
+            (asset->git_blob_sha1.empty() || hex(hash_bytes(result->signature, EVP_sha1(), true)) == asset->git_blob_sha1);
+    } catch (const std::exception &e) { error = safe_text(e.what()); return std::nullopt; }
+    return result;
+}
+std::optional<MountResult> inspect_mounted(PlistService &service, const DownloadTarget &target,
+    const MountOptions &options, std::string &error) {
+    const auto selection = select_for_version(target.system_version, error);
+    if (!selection) return std::nullopt;
+    if (selection->kind != Kind::Classic) return inspect_mounted(service, selection->kind, options, error);
+    const auto *catalog = detail::classic_catalog(selection->version);
+    if (!catalog) {
+        error = SCRCTL_TR("No pinned Classic DDI exists for the requested OS major.minor version"); return std::nullopt;
+    }
+    return detail::inspect_mounted_with_catalog(service, *catalog, options, error);
+}
 bool unmount_current(PlistService &service, Kind kind, const MountOptions &options, std::string &error) {
     error.clear(); try { Session session(service, options); unmount(session, kind); return true; }
     catch (const std::exception &e) { error = safe_text(e.what()); return false; }

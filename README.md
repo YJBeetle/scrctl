@@ -31,6 +31,9 @@ MP4 / MKV（HEVC 和 AAC-ELD）及裸 Annex-B HEVC。
 下面是具体设备的实测结果。DDI 的 manifest 声明某个机型，只是型号检查的一部分：
 Personalized 还需匹配同一安装身份与实际 payload，Cryptex 则使用通用资产身份，不用 `SupportedProductTypes` 列表提前拒绝机型。
 实际安装还需要设备接受个性化签名，产品功能仍取决于系统提供的服务。
+`--install-ddi` 会先检查可复用的挂载：Classic 必须匹配固定目录的签名，
+CoreDevice 系统还需提供截图服务能力；符合条件时不下载镜像。
+不匹配的 Classic 镜像须使用 `--replace-ddi` 显式替换。
 不能把 manifest 的机型列表当作已通过 scrctl 真机测试的支持列表。
 
 | 实测设备 | 系统版本 | 开发镜像与功能范围 |

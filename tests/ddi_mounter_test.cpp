@@ -138,6 +138,29 @@ std::optional<ddi::MountResult> run(Fixture &f, Fake &fake, ddi::MountOptions op
 int main() {
     std::string error;
     {
+        Fixture f; Fake fake; fake.mounted = true;
+        const auto &signature = f.data.at("DeveloperDiskImage.dmg.signature");
+        fake.expected_signature.assign(signature.begin(), signature.end());
+        auto result = ddi::detail::inspect_mounted_with_catalog(fake.service, f.catalog, {}, error);
+        check(result && result->signature_matches == true && !fake.called("ReceiveBytes"),
+              "Pinned Classic signature can be checked offline without cached image or network");
+        fake.expected_signature.front() ^= 1;
+        result = ddi::detail::inspect_mounted_with_catalog(fake.service, f.catalog, {}, error);
+        check(result && result->signature_matches == false, "Same-size mismatched signature cannot be reused offline");
+        fake.empty_signature = true;
+        result = ddi::detail::inspect_mounted_with_catalog(fake.service, f.catalog, {}, error);
+        check(result && result->signature_matches == false, "Missing signature cannot establish Classic compatibility");
+        fake.mounted = false;
+        result = ddi::detail::inspect_mounted_with_catalog(fake.service, f.catalog, {}, error);
+        check(result && result->state == ddi::MountState::NotMounted, "Absent mount proceeds to download and install");
+        check(!ddi::inspect_mounted(fake.service, ddi::DownloadTarget{"16.99", {}, {}, {}, {}}, {}, error),
+              "Unknown Classic catalog fails without downloading an unpinned image");
+        ddi::MountOptions cancelled; cancelled.cancelled = [] { return true; };
+        const auto count = fake.commands.size();
+        check(!ddi::detail::inspect_mounted_with_catalog(fake.service, f.catalog, cancelled, error) && fake.commands.size() == count,
+              "Cancelled preflight sends no device commands");
+    }
+    {
         Fixture f; Fake fake; uint64_t final_progress = 0; ddi::MountOptions options;
         options.progress = [&](uint64_t done, uint64_t total) { if (total != 150000) throw std::runtime_error("bad progress"); final_progress = done; };
         auto result = run(f, fake, options, error);

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 1.0.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-20 17:10+0800\n"
+"POT-Creation-Date: 2026-10-20 17:11+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -748,7 +748,7 @@ msgstr ""
 msgid "DDI download failed: %s\n"
 msgstr ""
 
-#: src/app/Commands.cpp:194 src/app/DdiInstall.cpp:85
+#: src/app/Commands.cpp:194 src/app/DdiInstall.cpp:111
 #, c-format
 msgid "DDI target: OS %s, model %s, image type %s\n"
 msgstr ""
@@ -893,39 +893,45 @@ msgid ""
 "state before replacing again.\n"
 msgstr ""
 
-#: src/app/DdiInstall.cpp:81 src/app/DdiInstall.cpp:114
+#: src/app/DdiInstall.cpp:81 src/app/DdiInstall.cpp:140
 msgid "DDI installation cancelled"
 msgstr ""
 
-#: src/app/DdiInstall.cpp:99
-#, c-format
-msgid "DDI transfer: %s (%llu/%llu bytes)\n"
+#: src/app/DdiInstall.cpp:103 src/ddi/Mounter.cpp:258
+msgid ""
+"Mounted Classic DDI signature does not match the requested image; enable "
+"replacement explicitly"
 msgstr ""
 
-#: src/app/DdiInstall.cpp:150
-msgid "DDI Cryptex is installed but its developer image is not mounted"
-msgstr ""
-
-#: src/app/DdiInstall.cpp:153
-#, c-format
-msgid "DDI already installed: %s %s (no new installation)\n"
-msgstr ""
-
-#: src/app/DdiInstall.cpp:154
-#, c-format
-msgid "DDI installed and verified: %s %s\n"
-msgstr ""
-
-#: src/app/DdiInstall.cpp:158
-msgid "DDI installation requires the device ECID"
-msgstr ""
-
-#: src/app/DdiInstall.cpp:174
+#: src/app/DdiInstall.cpp:106 src/app/DdiInstall.cpp:200
 #, c-format
 msgid "DDI already mounted: %s (no new installation)\n"
 msgstr ""
 
-#: src/app/DdiInstall.cpp:175
+#: src/app/DdiInstall.cpp:125
+#, c-format
+msgid "DDI transfer: %s (%llu/%llu bytes)\n"
+msgstr ""
+
+#: src/app/DdiInstall.cpp:176
+msgid "DDI Cryptex is installed but its developer image is not mounted"
+msgstr ""
+
+#: src/app/DdiInstall.cpp:179
+#, c-format
+msgid "DDI already installed: %s %s (no new installation)\n"
+msgstr ""
+
+#: src/app/DdiInstall.cpp:180
+#, c-format
+msgid "DDI installed and verified: %s %s\n"
+msgstr ""
+
+#: src/app/DdiInstall.cpp:184
+msgid "DDI installation requires the device ECID"
+msgstr ""
+
+#: src/app/DdiInstall.cpp:201
 #, c-format
 msgid "DDI mounted and verified: %s\n"
 msgstr ""
@@ -1959,7 +1965,7 @@ msgid ""
 "No absolute platform cache directory is available; specify --ddi-directory"
 msgstr ""
 
-#: src/ddi/Download.cpp:476
+#: src/ddi/Download.cpp:476 src/ddi/Mounter.cpp:231
 msgid "No pinned Classic DDI exists for the requested OS major.minor version"
 msgstr ""
 
@@ -2059,77 +2065,75 @@ msgstr ""
 msgid "DDI install asset changed after cache validation"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:217
+#: src/ddi/Mounter.cpp:215
+msgid "Classic DDI catalog has no pinned signature digest"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:245
 msgid "Cryptex DDI requires the cryptexd installer"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:219
+#: src/ddi/Mounter.cpp:247
 msgid "DDI install result does not match its catalog"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:222
+#: src/ddi/Mounter.cpp:250
 msgid "DDI install category does not match device OS"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:230
-msgid ""
-"Mounted Classic DDI signature does not match the requested image; enable "
-"replacement explicitly"
-msgstr ""
-
-#: src/ddi/Mounter.cpp:239
+#: src/ddi/Mounter.cpp:267
 msgid "DDI personalization requires a ticket callback and device ECID"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:246
+#: src/ddi/Mounter.cpp:274
 msgid "Invalid DDI personalization identifiers"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:248
+#: src/ddi/Mounter.cpp:276
 msgid "DDI device hardware identity changed"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:256
+#: src/ddi/Mounter.cpp:284
 msgid "Invalid DDI personalization nonce"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:259
+#: src/ddi/Mounter.cpp:287
 msgid "Cannot parse DDI install manifest"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:262
+#: src/ddi/Mounter.cpp:290
 msgid "DDI personalization did not return a ticket"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:269
+#: src/ddi/Mounter.cpp:297
 msgid "DDI personalization nonce changed before upload"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:271
+#: src/ddi/Mounter.cpp:299
 msgid "Invalid DDI install signature or ticket"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:276
+#: src/ddi/Mounter.cpp:304
 msgid "DDI image transfer callbacks are missing"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:280
+#: src/ddi/Mounter.cpp:308
 msgid "DDI image upload failed"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:287
+#: src/ddi/Mounter.cpp:315
 msgid "Another DDI became mounted during upload"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:293
+#: src/ddi/Mounter.cpp:321
 msgid "DDI mount completed without a verifiable mounted image"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:295
+#: src/ddi/Mounter.cpp:323
 msgid "Mounted DDI signature differs from the uploaded image"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:308
+#: src/ddi/Mounter.cpp:336
 msgid "No pinned DDI catalog matches this installation target"
 msgstr ""
 

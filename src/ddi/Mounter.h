@@ -39,6 +39,9 @@ struct MountResult {
 
 // Cryptex DDIs are also visible as Personalized to mobile_image_mounter.
 std::optional<MountResult> inspect_mounted(PlistService &, Kind, const MountOptions &, std::string &error);
+// Target-aware inspection checks Classic signatures against the pinned OS catalog
+// without downloading an image. Callers must require signature_matches == true.
+std::optional<MountResult> inspect_mounted(PlistService &, const DownloadTarget &, const MountOptions &, std::string &error);
 // Explicit replacement only; never rolls a nonce. Verifies the image is gone.
 bool unmount_current(PlistService &, Kind, const MountOptions &, std::string &error);
 // Classic/Personalized only. Validates pinned cache, prepares signature/ticket,
@@ -49,7 +52,9 @@ std::optional<MountResult> mount_image(PlistService &, const DownloadResult &, c
 
 namespace detail {
 struct Catalog;
-// Offline protocol-test seam, never used with externally supplied catalogs.
+// Offline protocol-test seams, never used with externally supplied catalogs.
+std::optional<MountResult> inspect_mounted_with_catalog(PlistService &, const Catalog &,
+    const MountOptions &, std::string &error);
 std::optional<MountResult> mount_image_with_catalog(PlistService &, const DownloadResult &, const DownloadTarget &,
     uint64_t ecid, const MountOptions &, const Catalog &, std::string &error);
 }
