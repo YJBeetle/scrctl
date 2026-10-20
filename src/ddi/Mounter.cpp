@@ -224,7 +224,11 @@ std::optional<MountResult> mount_image_with_catalog(PlistService &service, const
         auto assets = load_assets(s, download, catalog);
         auto existing = inspect(s, catalog.kind);
         if (existing.state == MountState::AlreadyMounted && !options.replace_existing) {
-            if (catalog.kind == Kind::Classic) existing.signature_matches = existing.signature == assets.at("DeveloperDiskImage.dmg.signature");
+            if (catalog.kind == Kind::Classic) {
+                existing.signature_matches = existing.signature == assets.at("DeveloperDiskImage.dmg.signature");
+                if (!*existing.signature_matches)
+                    throw std::runtime_error(SCRCTL_TR("Mounted Classic DDI signature does not match the requested image; enable replacement explicitly"));
+            }
             return existing;
         }
         developer_mode(s, version->major);

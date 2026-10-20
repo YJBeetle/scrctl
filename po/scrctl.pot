@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 1.0.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-18 16:40+0800\n"
+"POT-Creation-Date: 2026-10-20 17:09+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -2075,59 +2075,65 @@ msgstr ""
 msgid "DDI install category does not match device OS"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:235
+#: src/ddi/Mounter.cpp:230
+msgid ""
+"Mounted Classic DDI signature does not match the requested image; enable "
+"replacement explicitly"
+msgstr ""
+
+#: src/ddi/Mounter.cpp:239
 msgid "DDI personalization requires a ticket callback and device ECID"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:242
+#: src/ddi/Mounter.cpp:246
 msgid "Invalid DDI personalization identifiers"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:244
+#: src/ddi/Mounter.cpp:248
 msgid "DDI device hardware identity changed"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:252
+#: src/ddi/Mounter.cpp:256
 msgid "Invalid DDI personalization nonce"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:255
+#: src/ddi/Mounter.cpp:259
 msgid "Cannot parse DDI install manifest"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:258
+#: src/ddi/Mounter.cpp:262
 msgid "DDI personalization did not return a ticket"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:265
+#: src/ddi/Mounter.cpp:269
 msgid "DDI personalization nonce changed before upload"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:267
+#: src/ddi/Mounter.cpp:271
 msgid "Invalid DDI install signature or ticket"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:272
+#: src/ddi/Mounter.cpp:276
 msgid "DDI image transfer callbacks are missing"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:276
+#: src/ddi/Mounter.cpp:280
 msgid "DDI image upload failed"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:283
+#: src/ddi/Mounter.cpp:287
 msgid "Another DDI became mounted during upload"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:289
+#: src/ddi/Mounter.cpp:293
 msgid "DDI mount completed without a verifiable mounted image"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:291
+#: src/ddi/Mounter.cpp:295
 msgid "Mounted DDI signature differs from the uploaded image"
 msgstr ""
 
-#: src/ddi/Mounter.cpp:304
+#: src/ddi/Mounter.cpp:308
 msgid "No pinned DDI catalog matches this installation target"
 msgstr ""
 

@@ -151,7 +151,18 @@ int main() {
     {
         Fixture f; Fake fake; fake.mounted = true; fake.expected_signature = {42};
         auto result = run(f, fake, {}, error);
-        check(result && result->state == ddi::MountState::AlreadyMounted && result->signature_matches == false && !fake.called("ReceiveBytes") && !fake.called("UnmountImage"), "Existing different image is reported without mutation");
+        check(!result && error.find("signature does not match") != std::string::npos && !fake.called("ReceiveBytes") && !fake.called("UnmountImage"), "Existing mismatched Classic image fails without mutation");
+    }
+    {
+        Fixture f; Fake fake; fake.mounted = true;
+        const auto &signature = f.data.at("DeveloperDiskImage.dmg.signature");
+        fake.expected_signature.assign(signature.begin(), signature.end());
+        auto result = run(f, fake, {}, error);
+        check(result && result->state == ddi::MountState::AlreadyMounted && result->signature_matches == true &&
+              !fake.called("ReceiveBytes") && !fake.called("UnmountImage"), "Matching Classic signature reuses mounted image");
+        fake.empty_signature = true;
+        check(!run(f, fake, {}, error) && !fake.called("ReceiveBytes") && !fake.called("UnmountImage"),
+              "Mounted Classic image without a verifiable signature fails without mutation");
     }
     {
         Fixture f; Fake fake; fake.mounted = true; fake.expected_signature = {42}; ddi::MountOptions options; options.replace_existing = true;
