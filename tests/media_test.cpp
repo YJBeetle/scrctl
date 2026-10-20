@@ -5,6 +5,11 @@
 #include <limits>
 #include <string>
 #include <vector>
+#ifdef SCRCTL_HAVE_LIBAV
+extern "C" {
+#include <libavutil/log.h>
+}
+#endif
 
 #include "decode/AudioToolboxStatus.h"
 #include "media/AudioPump.h"
@@ -702,6 +707,17 @@ int main() {
               "没编 libav 的构建要明说缺后端: " + err);
 #endif
     }
+
+#ifdef SCRCTL_HAVE_LIBAV
+    {
+        const int previous = av_log_get_level();
+        av_log_set_level(AV_LOG_DEBUG);
+        auto decoder = scrctl::create_software_decoder();
+        check(decoder && av_log_get_level() == AV_LOG_DEBUG,
+              "创建软件解码器不修改进程级 FFmpeg 日志阈值");
+        av_log_set_level(previous);
+    }
+#endif
 
     std::printf("\n%s (失败 %d 项)\n", Failures == 0 ? "全部通过" : "存在失败", Failures);
     return Failures == 0 ? 0 : 1;

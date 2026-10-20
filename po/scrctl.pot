@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 1.0.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-20 17:12+0800\n"
+"POT-Creation-Date: 2026-10-20 17:14+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -2408,12 +2408,12 @@ msgid ""
 "ffmpeg-devel).\n"
 msgstr ""
 
-#: src/decode/FFmpegDecoder.cpp:38
+#: src/decode/FFmpegDecoder.cpp:39
 #, c-format
 msgid "FFmpeg has no HEVC decoder\n"
 msgstr ""
 
-#: src/decode/FFmpegDecoder.cpp:53
+#: src/decode/FFmpegDecoder.cpp:54
 #, c-format
 msgid "Failed to open FFmpeg HEVC decoder: %s\n"
 msgstr ""
@@ -2482,12 +2482,12 @@ msgstr ""
 msgid "Failed to initialize FFmpeg AAC-ELD decoder: "
 msgstr ""
 
-#: src/decode/VideoToolboxDecoder.cpp:59
+#: src/decode/VideoToolboxDecoder.cpp:60
 #, c-format
 msgid "Failed to parse HEVC parameter sets: %d\n"
 msgstr ""
 
-#: src/decode/VideoToolboxDecoder.cpp:87
+#: src/decode/VideoToolboxDecoder.cpp:88
 #, c-format
 msgid "Failed to create VideoToolbox session: %d\n"
 msgstr ""

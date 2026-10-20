@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 1.0.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-20 17:12+0800\n"
+"POT-Creation-Date: 2026-10-20 17:14+0800\n"
 "PO-Revision-Date: 2026-10-09 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -2464,12 +2464,12 @@ msgstr ""
 "（Debian/Ubuntu: apt install libavcodec-dev libavutil-dev libswscale-dev；"
 "Fedora: dnf install ffmpeg-devel）。\n"
 
-#: src/decode/FFmpegDecoder.cpp:38
+#: src/decode/FFmpegDecoder.cpp:39
 #, c-format
 msgid "FFmpeg has no HEVC decoder\n"
 msgstr "libavcodec 里没有 HEVC 解码器\n"
 
-#: src/decode/FFmpegDecoder.cpp:53
+#: src/decode/FFmpegDecoder.cpp:54
 #, c-format
 msgid "Failed to open FFmpeg HEVC decoder: %s\n"
 msgstr "libavcodec 打开 HEVC 解码器失败: %s\n"
@@ -2538,12 +2538,12 @@ msgstr "无法分配 FFmpeg AAC-ELD 解码器"
 msgid "Failed to initialize FFmpeg AAC-ELD decoder: "
 msgstr "无法初始化 FFmpeg AAC-ELD 解码器："
 
-#: src/decode/VideoToolboxDecoder.cpp:59
+#: src/decode/VideoToolboxDecoder.cpp:60
 #, c-format
 msgid "Failed to parse HEVC parameter sets: %d\n"
 msgstr "HEVC 参数集解析失败: %d\n"
 
-#: src/decode/VideoToolboxDecoder.cpp:87
+#: src/decode/VideoToolboxDecoder.cpp:88
 #, c-format
 msgid "Failed to create VideoToolbox session: %d\n"
 msgstr "VideoToolbox 解码会话创建失败: %d\n"

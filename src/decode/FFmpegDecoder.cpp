@@ -11,6 +11,7 @@ extern "C" {
 
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 #include <string>
 
 namespace scrctl {
@@ -100,11 +101,10 @@ public:
         const int send_st = avcodec_send_packet(ctx_, pkt);
         av_packet_free(&pkt);
         if (send_st < 0) {
-            static bool warned = false;
-            if (!warned) {
-                warned = true;
+            static std::once_flag warned;
+            std::call_once(warned, [send_st] {
                 std::fprintf(stderr, SCRCTL_TR("FFmpeg rejected packet: %s\n"), av_strerr(send_st).c_str());
-            }
+            });
             return false;
         }
 
@@ -201,14 +201,6 @@ private:
 }  // namespace
 
 std::unique_ptr<Decoder> create_software_decoder() {
-    // 将 libav 的进程级日志阈值设为 error，抑制已测全范围 yuvj420p 输入的重复
-    // 像素格式警告。这不改变颜色转换配置，也会影响进程内其他 libav 使用者。
-    // 本文件直接写 stderr 的诊断不受此阈值影响。
-    static bool log_quieted = false;
-    if (!log_quieted) {
-        av_log_set_level(AV_LOG_ERROR);
-        log_quieted = true;
-    }
     return std::make_unique<FFmpegDecoder>();
 }
 
