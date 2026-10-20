@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 1.0.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-20 17:09+0800\n"
+"POT-Creation-Date: 2026-10-20 17:10+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -729,7 +729,7 @@ msgid "no matching pairing record"
 msgstr ""
 
 #: src/app/Commands.cpp:65 src/app/Commands.cpp:123 src/app/Commands.cpp:181
-#: src/ddi/Download.cpp:355
+#: src/ddi/Download.cpp:349
 msgid "DDI download cancelled"
 msgstr ""
 
@@ -1802,168 +1802,164 @@ msgstr ""
 msgid "DDI BuildManifest does not match the pinned build"
 msgstr ""
 
-#: src/ddi/Download.cpp:175
-msgid "DDI manifest does not support the requested product type"
-msgstr ""
-
-#: src/ddi/Download.cpp:185
+#: src/ddi/Download.cpp:179
 msgid "DDI Cryptex manifest entries missing"
 msgstr ""
 
-#: src/ddi/Download.cpp:199
+#: src/ddi/Download.cpp:193
 msgid "DDI Cryptex manifest digest mismatch: "
 msgstr ""
 
-#: src/ddi/Download.cpp:208
+#: src/ddi/Download.cpp:202
 msgid "DDI BuildManifest lacks a Cryptex identity"
 msgstr ""
 
-#: src/ddi/Download.cpp:209
+#: src/ddi/Download.cpp:203
 msgid "DDI BuildManifest lacks a matching Personalized hardware identity"
 msgstr ""
 
-#: src/ddi/Download.cpp:210
+#: src/ddi/Download.cpp:204
 msgid "DDI Personalized manifest digest mismatch for the requested hardware"
 msgstr ""
 
-#: src/ddi/Download.cpp:219
+#: src/ddi/Download.cpp:213
 msgid "DDI cache directory is missing or is a symbolic link"
 msgstr ""
 
-#: src/ddi/Download.cpp:223
+#: src/ddi/Download.cpp:217
 msgid "DDI cache size or file type mismatch: "
 msgstr ""
 
-#: src/ddi/Download.cpp:225
+#: src/ddi/Download.cpp:219
 msgid "DDI cache SHA-256 mismatch: "
 msgstr ""
 
-#: src/ddi/Download.cpp:227
+#: src/ddi/Download.cpp:221
 msgid "DDI cache Git blob SHA-1 mismatch: "
 msgstr ""
 
-#: src/ddi/Download.cpp:231
+#: src/ddi/Download.cpp:225
 msgid "DDI cache completion marker mismatch"
 msgstr ""
 
-#: src/ddi/Download.cpp:265
+#: src/ddi/Download.cpp:259
 msgid "Cannot initialize HTTPS downloader"
 msgstr ""
 
-#: src/ddi/Download.cpp:267
+#: src/ddi/Download.cpp:261
 msgid "Cannot create HTTPS downloader"
 msgstr ""
 
-#: src/ddi/Download.cpp:268
+#: src/ddi/Download.cpp:262
 msgid "DDI downloads require HTTPS"
 msgstr ""
 
-#: src/ddi/Download.cpp:272
+#: src/ddi/Download.cpp:266
 msgid "Cannot configure HTTPS downloader"
 msgstr ""
 
-#: src/ddi/Download.cpp:293
+#: src/ddi/Download.cpp:287
 msgid "This Windows libcurl cannot use the native certificate store"
 msgstr ""
 
-#: src/ddi/Download.cpp:312
+#: src/ddi/Download.cpp:306
 msgid "DDI download callback failed"
 msgstr ""
 
-#: src/ddi/Download.cpp:313
+#: src/ddi/Download.cpp:307
 msgid "HTTPS DDI download failed: "
 msgstr ""
 
-#: src/ddi/Download.cpp:318
+#: src/ddi/Download.cpp:312
 msgid "DDI download did not return HTTP 200"
 msgstr ""
 
-#: src/ddi/Download.cpp:349
+#: src/ddi/Download.cpp:343
 msgid "DDI download timeout must be positive"
 msgstr ""
 
-#: src/ddi/Download.cpp:352
+#: src/ddi/Download.cpp:346
 msgid "DDI download timeout exceeds 24 hours"
 msgstr ""
 
-#: src/ddi/Download.cpp:356 src/ddi/Download.cpp:410
+#: src/ddi/Download.cpp:350 src/ddi/Download.cpp:404
 msgid "DDI download timed out"
 msgstr ""
 
-#: src/ddi/Download.cpp:362
+#: src/ddi/Download.cpp:356
 msgid "DDI cache root must be an absolute path"
 msgstr ""
 
-#: src/ddi/Download.cpp:365
+#: src/ddi/Download.cpp:359
 msgid "DDI cache root must not be a symbolic link"
 msgstr ""
 
-#: src/ddi/Download.cpp:372
+#: src/ddi/Download.cpp:366
 msgid ""
 "Existing DDI cache is invalid; remove this version directory and retry: "
 msgstr ""
 
-#: src/ddi/Download.cpp:381
+#: src/ddi/Download.cpp:375
 msgid ""
 "Another DDI download owns this version lock; retry after it finishes (remove "
 "the lock only if that process has exited)"
 msgstr ""
 
-#: src/ddi/Download.cpp:389
+#: src/ddi/Download.cpp:383
 msgid "Cannot generate DDI staging directory name"
 msgstr ""
 
-#: src/ddi/Download.cpp:391
+#: src/ddi/Download.cpp:385
 msgid "Cannot create unique DDI staging directory"
 msgstr ""
 
-#: src/ddi/Download.cpp:397
+#: src/ddi/Download.cpp:391
 msgid "Cannot create DDI download file: "
 msgstr ""
 
-#: src/ddi/Download.cpp:401
+#: src/ddi/Download.cpp:395
 msgid "DDI download exceeds pinned file size: "
 msgstr ""
 
-#: src/ddi/Download.cpp:403
+#: src/ddi/Download.cpp:397
 msgid "Cannot write DDI download file: "
 msgstr ""
 
-#: src/ddi/Download.cpp:413
+#: src/ddi/Download.cpp:407
 msgid "DDI download failed"
 msgstr ""
 
-#: src/ddi/Download.cpp:417
+#: src/ddi/Download.cpp:411
 msgid "Cannot flush DDI download file: "
 msgstr ""
 
-#: src/ddi/Download.cpp:419
+#: src/ddi/Download.cpp:413
 msgid "Cannot close DDI download file: "
 msgstr ""
 
-#: src/ddi/Download.cpp:420
+#: src/ddi/Download.cpp:414
 msgid "Incomplete DDI download: "
 msgstr ""
 
-#: src/ddi/Download.cpp:426
+#: src/ddi/Download.cpp:420
 msgid "Cannot write DDI completion marker"
 msgstr ""
 
-#: src/ddi/Download.cpp:428
+#: src/ddi/Download.cpp:422
 msgid ""
 "DDI version directory appeared during download; refusing to overwrite it"
 msgstr ""
 
-#: src/ddi/Download.cpp:450
+#: src/ddi/Download.cpp:444
 msgid "XDG_CACHE_HOME must be an absolute path"
 msgstr ""
 
-#: src/ddi/Download.cpp:463
+#: src/ddi/Download.cpp:457
 msgid ""
 "No absolute platform cache directory is available; specify --ddi-directory"
 msgstr ""
 
-#: src/ddi/Download.cpp:482
+#: src/ddi/Download.cpp:476
 msgid "No pinned Classic DDI exists for the requested OS major.minor version"
 msgstr ""
 

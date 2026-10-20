@@ -159,6 +159,26 @@ int main() {
         check(result && ddi::detail::validate(result->directory, fixture.catalog, error), "complete cache includes manifest SHA-384 validation");
         result = ddi::detail::download(opts, fixture.catalog, fixture.transfer(), error);
         check(result && result->cache_hit && fixture.calls == 5, "valid cache reuse performs no network request");
+        ddi::DownloadTarget cryptex_target{"27.0", "iPhone99,1", {}, {}, {}};
+        check(ddi::detail::validate(result->directory, fixture.catalog, error, &cryptex_target),
+              "Cryptex generic identity accepts a target absent from SupportedProductTypes");
+        {
+            using V = scrctl::plist::Value;
+            Fixture listed; Temp listed_temp; ddi::DownloadOptions listed_opts; listed_opts.cache_root = listed_temp.path;
+            auto manifest = scrctl::plist::parse(listed.contents.at("BuildManifest.plist"), &error);
+            auto supported = V::Array(); supported.push(V::Str("iPhone1,1"));
+            manifest->set("SupportedProductTypes", std::move(supported));
+            listed.contents["BuildManifest.plist"] = scrctl::plist::write(*manifest); listed.refresh_catalog();
+            auto image = ddi::detail::download(listed_opts, listed.catalog, listed.transfer(), error, &cryptex_target);
+            check(image.has_value(), "Cryptex does not restrict its generic identity to the manifest product list");
+            if (image) {
+                write(image->directory / "Image.dmg", std::string(20, 'x'));
+                listed.contents["Image.dmg"] = std::string(20, 'x'); listed.refresh_catalog();
+                check(!ddi::detail::validate(image->directory, listed.catalog, error, &cryptex_target) &&
+                      error.find("manifest digest") != std::string::npos,
+                      "Cryptex still rejects payloads inconsistent with the manifest despite matching catalog hashes");
+            }
+        }
         write(result->directory / "Image.dmg", std::string(20, 'x'));
         result = ddi::detail::download(opts, fixture.catalog, fixture.transfer(), error);
         check(!result && error.find("SHA-256") != std::string::npos && fixture.calls == 5,

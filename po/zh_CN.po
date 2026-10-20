@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 1.0.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-20 17:09+0800\n"
+"POT-Creation-Date: 2026-10-20 17:10+0800\n"
 "PO-Revision-Date: 2026-10-09 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -758,7 +758,7 @@ msgid "no matching pairing record"
 msgstr "没有匹配的配对记录"
 
 #: src/app/Commands.cpp:65 src/app/Commands.cpp:123 src/app/Commands.cpp:181
-#: src/ddi/Download.cpp:355
+#: src/ddi/Download.cpp:349
 msgid "DDI download cancelled"
 msgstr "DDI 下载已取消"
 
@@ -1854,169 +1854,165 @@ msgstr "DDI BuildManifest plist 无效"
 msgid "DDI BuildManifest does not match the pinned build"
 msgstr "DDI BuildManifest 与固定构建不符"
 
-#: src/ddi/Download.cpp:175
-msgid "DDI manifest does not support the requested product type"
-msgstr "DDI 清单不支持指定机型"
-
-#: src/ddi/Download.cpp:185
+#: src/ddi/Download.cpp:179
 msgid "DDI Cryptex manifest entries missing"
 msgstr "缺少 DDI Cryptex 清单条目"
 
-#: src/ddi/Download.cpp:199
+#: src/ddi/Download.cpp:193
 msgid "DDI Cryptex manifest digest mismatch: "
 msgstr "DDI Cryptex 清单摘要不符："
 
-#: src/ddi/Download.cpp:208
+#: src/ddi/Download.cpp:202
 msgid "DDI BuildManifest lacks a Cryptex identity"
 msgstr "DDI BuildManifest 缺少 Cryptex 身份"
 
-#: src/ddi/Download.cpp:209
+#: src/ddi/Download.cpp:203
 msgid "DDI BuildManifest lacks a matching Personalized hardware identity"
 msgstr "DDI BuildManifest 中没有匹配的 Personalized 硬件身份"
 
-#: src/ddi/Download.cpp:210
+#: src/ddi/Download.cpp:204
 msgid "DDI Personalized manifest digest mismatch for the requested hardware"
 msgstr "DDI Personalized 清单中指定硬件的摘要与镜像不匹配"
 
-#: src/ddi/Download.cpp:219
+#: src/ddi/Download.cpp:213
 msgid "DDI cache directory is missing or is a symbolic link"
 msgstr "DDI 缓存目录不存在或为符号链接"
 
-#: src/ddi/Download.cpp:223
+#: src/ddi/Download.cpp:217
 msgid "DDI cache size or file type mismatch: "
 msgstr "DDI 缓存大小或文件类型不符："
 
-#: src/ddi/Download.cpp:225
+#: src/ddi/Download.cpp:219
 msgid "DDI cache SHA-256 mismatch: "
 msgstr "DDI 缓存 SHA-256 不符："
 
-#: src/ddi/Download.cpp:227
+#: src/ddi/Download.cpp:221
 msgid "DDI cache Git blob SHA-1 mismatch: "
 msgstr "DDI 缓存的 Git blob SHA-1 不匹配："
 
-#: src/ddi/Download.cpp:231
+#: src/ddi/Download.cpp:225
 msgid "DDI cache completion marker mismatch"
 msgstr "DDI 缓存完成标记不符"
 
-#: src/ddi/Download.cpp:265
+#: src/ddi/Download.cpp:259
 msgid "Cannot initialize HTTPS downloader"
 msgstr "无法初始化 HTTPS 下载器"
 
-#: src/ddi/Download.cpp:267
+#: src/ddi/Download.cpp:261
 msgid "Cannot create HTTPS downloader"
 msgstr "无法创建 HTTPS 下载器"
 
-#: src/ddi/Download.cpp:268
+#: src/ddi/Download.cpp:262
 msgid "DDI downloads require HTTPS"
 msgstr "DDI 下载需要 HTTPS"
 
-#: src/ddi/Download.cpp:272
+#: src/ddi/Download.cpp:266
 msgid "Cannot configure HTTPS downloader"
 msgstr "无法配置 HTTPS 下载器"
 
-#: src/ddi/Download.cpp:293
+#: src/ddi/Download.cpp:287
 msgid "This Windows libcurl cannot use the native certificate store"
 msgstr "此 Windows libcurl 无法使用系统证书库"
 
-#: src/ddi/Download.cpp:312
+#: src/ddi/Download.cpp:306
 msgid "DDI download callback failed"
 msgstr "DDI 下载回调失败"
 
-#: src/ddi/Download.cpp:313
+#: src/ddi/Download.cpp:307
 msgid "HTTPS DDI download failed: "
 msgstr "HTTPS DDI 下载失败："
 
-#: src/ddi/Download.cpp:318
+#: src/ddi/Download.cpp:312
 msgid "DDI download did not return HTTP 200"
 msgstr "DDI 下载未返回 HTTP 200"
 
-#: src/ddi/Download.cpp:349
+#: src/ddi/Download.cpp:343
 msgid "DDI download timeout must be positive"
 msgstr "DDI 下载超时必须为正数"
 
-#: src/ddi/Download.cpp:352
+#: src/ddi/Download.cpp:346
 msgid "DDI download timeout exceeds 24 hours"
 msgstr "DDI 下载超时超过 24 小时"
 
-#: src/ddi/Download.cpp:356 src/ddi/Download.cpp:410
+#: src/ddi/Download.cpp:350 src/ddi/Download.cpp:404
 msgid "DDI download timed out"
 msgstr "DDI 下载超时"
 
-#: src/ddi/Download.cpp:362
+#: src/ddi/Download.cpp:356
 msgid "DDI cache root must be an absolute path"
 msgstr "DDI 缓存根目录必须为绝对路径"
 
-#: src/ddi/Download.cpp:365
+#: src/ddi/Download.cpp:359
 msgid "DDI cache root must not be a symbolic link"
 msgstr "DDI 缓存根目录不能为符号链接"
 
-#: src/ddi/Download.cpp:372
+#: src/ddi/Download.cpp:366
 msgid ""
 "Existing DDI cache is invalid; remove this version directory and retry: "
 msgstr "已有 DDI 缓存无效；移除该版本目录后重试："
 
-#: src/ddi/Download.cpp:381
+#: src/ddi/Download.cpp:375
 msgid ""
 "Another DDI download owns this version lock; retry after it finishes (remove "
 "the lock only if that process has exited)"
 msgstr ""
 "另一个 DDI 下载正在使用该版本锁；等待其完成后重试（仅在该进程已退出时移除锁）"
 
-#: src/ddi/Download.cpp:389
+#: src/ddi/Download.cpp:383
 msgid "Cannot generate DDI staging directory name"
 msgstr "无法生成 DDI 临时目录名"
 
-#: src/ddi/Download.cpp:391
+#: src/ddi/Download.cpp:385
 msgid "Cannot create unique DDI staging directory"
 msgstr "无法创建唯一的 DDI 临时目录"
 
-#: src/ddi/Download.cpp:397
+#: src/ddi/Download.cpp:391
 msgid "Cannot create DDI download file: "
 msgstr "无法创建 DDI 下载文件："
 
-#: src/ddi/Download.cpp:401
+#: src/ddi/Download.cpp:395
 msgid "DDI download exceeds pinned file size: "
 msgstr "DDI 下载超过固定文件大小："
 
-#: src/ddi/Download.cpp:403
+#: src/ddi/Download.cpp:397
 msgid "Cannot write DDI download file: "
 msgstr "无法写入 DDI 下载文件："
 
-#: src/ddi/Download.cpp:413
+#: src/ddi/Download.cpp:407
 msgid "DDI download failed"
 msgstr "DDI 下载失败"
 
-#: src/ddi/Download.cpp:417
+#: src/ddi/Download.cpp:411
 msgid "Cannot flush DDI download file: "
 msgstr "无法刷新 DDI 下载文件："
 
-#: src/ddi/Download.cpp:419
+#: src/ddi/Download.cpp:413
 msgid "Cannot close DDI download file: "
 msgstr "无法关闭 DDI 下载文件："
 
-#: src/ddi/Download.cpp:420
+#: src/ddi/Download.cpp:414
 msgid "Incomplete DDI download: "
 msgstr "DDI 下载不完整："
 
-#: src/ddi/Download.cpp:426
+#: src/ddi/Download.cpp:420
 msgid "Cannot write DDI completion marker"
 msgstr "无法写入 DDI 完成标记"
 
-#: src/ddi/Download.cpp:428
+#: src/ddi/Download.cpp:422
 msgid ""
 "DDI version directory appeared during download; refusing to overwrite it"
 msgstr "下载期间出现了 DDI 版本目录；拒绝覆盖"
 
-#: src/ddi/Download.cpp:450
+#: src/ddi/Download.cpp:444
 msgid "XDG_CACHE_HOME must be an absolute path"
 msgstr "XDG_CACHE_HOME 必须为绝对路径"
 
-#: src/ddi/Download.cpp:463
+#: src/ddi/Download.cpp:457
 msgid ""
 "No absolute platform cache directory is available; specify --ddi-directory"
 msgstr "没有可用的平台缓存绝对路径；请指定 --ddi-directory"
 
-#: src/ddi/Download.cpp:482
+#: src/ddi/Download.cpp:476
 msgid "No pinned Classic DDI exists for the requested OS major.minor version"
 msgstr "没有对应指定系统主版本和次版本的固定 Classic DDI"
 
@@ -8508,6 +8504,9 @@ msgstr "不可用"
 
 #~ msgid "Crop WxH+X+Y or W:H:X:Y"
 #~ msgstr "裁剪 WxH+X+Y 或 W:H:X:Y"
+
+#~ msgid "DDI manifest does not support the requested product type"
+#~ msgstr "DDI 清单不支持指定机型"
 
 #, c-format
 #~ msgid "Device clipboard (%zu bytes): %s\n"

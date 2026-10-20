@@ -29,7 +29,7 @@ MP4 / MKV（HEVC 和 AAC-ELD）及裸 Annex-B HEVC。
 ### iOS / iPadOS 与机型
 
 下面是具体设备的实测结果。DDI 的 manifest 声明某个机型，只是型号检查的一部分：
-Personalized 还需匹配同一安装身份与实际 payload，Cryptex 则使用通用资产身份。
+Personalized 还需匹配同一安装身份与实际 payload，Cryptex 则使用通用资产身份，不用 `SupportedProductTypes` 列表提前拒绝机型。
 实际安装还需要设备接受个性化签名，产品功能仍取决于系统提供的服务。
 不能把 manifest 的机型列表当作已通过 scrctl 真机测试的支持列表。
 
