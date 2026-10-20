@@ -29,7 +29,6 @@ struct PairRecord {
     std::string peer_identifier;
     Bytes peer_public_key;  ///< 设备 Ed25519 公钥，32 字节；旧记录可以缺失
     Bytes peer_alt_irk;  ///< 设备的身份解析密钥，16 字节；未提供时可空，兼容旧记录
-    std::string remote_unlock_host_key;
 
     /// 检查主机签名所需标识和密钥长度，不验证公私钥是否匹配或设备端信任状态。
     /// 设备身份是否齐备由 has_peer_identity() 单独检查。

@@ -44,11 +44,11 @@ struct PairSetupOptions {
 };
 
 /// 在已连接的控制面执行配对，不负责建立连接或写入记录。成功时安装双向主密钥，
-/// 可选 createRemoteUnlockKey 失败不改变 ok。失败时 ok=false，error 与 err 记录原因；
+/// 失败时 ok=false，error 与 err 记录原因；
 /// 已执行的设备端配对步骤不会由本函数回滚，channel 也不保证恢复到初始状态。
 /// 已有设备在 setup 后关闭连接，后续起隧道需重连并 verify（验证范围见 docs §25）。
 /// 验证 SRP 服务端证明，并要求 M6 身份密文通过 AEAD 和设备 Ed25519 签名校验。
-/// 只有这些检查完成后才安装主密钥、发布含设备长期身份的记录并请求可选解锁密钥。
+/// 只有这些检查完成后才安装主密钥、发布含设备长期身份的记录。
 /// 首次配对的身份信任仍依赖可信入口及用户确认；此处没有 Apple 根证书认证。
 PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
                            std::string_view hostname, std::string_view udid,

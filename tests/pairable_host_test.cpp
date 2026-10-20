@@ -215,8 +215,7 @@ void test_complete_crypto_exchange() {
                   result->record.peer_public_key == client.device_public &&
                   result->record.peer_alt_irk == Bytes(16, 0xa5) &&
                   result->record.host_private_key == options().host_private_key &&
-                  result->record.host_identifier == options().host_identifier &&
-                  result->record.remote_unlock_host_key.empty(),
+                  result->record.host_identifier == options().host_identifier,
               "result binds signed peer identity, distinct UDID and altIRK without an unlock key");
         check(result->peer_name == "Owned offline phone" && result->peer_model == "iPhone-fixture",
               "only authenticated INFO provides peer display metadata");

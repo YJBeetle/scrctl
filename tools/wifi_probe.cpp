@@ -485,10 +485,9 @@ int finish_pair_setup(const ChannelOpener &open, std::string udid,
     }
     std::printf(SCRCTL_TR("Pair setup completed\n"));
     print_handshake(setup.device_handshake);
-    std::printf(SCRCTL_TR("  Host private/public key lengths: %zu/%zu bytes; peer altIRK: %s; remote unlock key: %s\n"),
+    std::printf(SCRCTL_TR("  Host private/public key lengths: %zu/%zu bytes; peer altIRK: %s\n"),
                 setup.record.host_private_key.size(), setup.record.host_public_key.size(),
-                setup.record.peer_alt_irk.size() == 16 ? SCRCTL_TR("present") : SCRCTL_TR("missing"),
-                setup.record.remote_unlock_host_key.empty() ? SCRCTL_TR("missing") : SCRCTL_TR("present"));
+                setup.record.peer_alt_irk.size() == 16 ? SCRCTL_TR("present") : SCRCTL_TR("missing"));
 
     if (save) {
         const std::string path =

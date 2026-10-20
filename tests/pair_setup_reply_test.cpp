@@ -148,7 +148,7 @@ public:
         require(envelope.has_value());
         const auto &message = envelope->at("message");
         if (message.contains("streamEncrypted")) {
-            ++encrypted;  // 无远程解锁响应；该可选步骤失败仍允许 setup 成功。
+            ++encrypted;  // 记录未预期的 setup 后请求。
             return true;
         }
         const auto &inner = message.at("plain").at("_0");
@@ -418,7 +418,7 @@ void run_pair_setup_reply_tests(void (*check)(bool, const char *)) {
             check(result.ok && result.record.complete() && result.record.has_peer_identity(),
                   "合法 setup State 2/4/6、真实 SRP 证明与设备身份签名通过");
             check(io.setup_m1 == 1 && io.setup_m3 == 1 && io.setup_m5 == 1 && io.host_signature_valid &&
-                  io.encrypted == 1, "正常 setup 验证双方身份签名后仍尝试可选解锁请求");
+                  io.encrypted == 0, "正常 setup 验证双方身份签名后不再请求未使用的远程解锁密钥");
             OpackValue info;
             const auto metadata = host_metadata("HOST-IDENTIFIER", err);
             check(metadata && opack_decode(io.host_info, info, err) &&

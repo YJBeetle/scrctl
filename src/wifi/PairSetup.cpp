@@ -495,22 +495,6 @@ PairSetupResult pair_setup(Rppairing &channel, std::string_view host_identifier,
     record.peer_public_key = peer_identity->public_key;
     record.peer_alt_irk = peer_alt_irk;
 
-    // 8) 可选远程解锁密钥。请求失败只通过 progress 报告，不撤销已安装的主密钥，
-    // 也不改变本次 setup 的成功结果；成功响应中没有 hostKey 时字段保持为空。
-    std::string unlock_err;
-    const json::Value unlock_request =
-        j_obj({{"request", j_obj({{"_0", j_obj({{"createRemoteUnlockKey", j_obj({})}})}})}});
-    const std::optional<json::Value> unlock = channel.encrypted_roundtrip(unlock_request, unlock_err);
-    if (unlock) {
-        const json::Value *created = json::find(*unlock, "createRemoteUnlockKey");
-        const json::Value *host_key_field = created != nullptr ? json::find(*created, "hostKey") : nullptr;
-        if (host_key_field != nullptr) {
-            record.remote_unlock_host_key = json::as_string_or(*host_key_field);
-        }
-    } else if (progress) {
-        progress(std::string(SCRCTL_TR("createRemoteUnlockKey failed (")) + unlock_err + SCRCTL_TR("); pairing itself succeeded"));
-    }
-
     result.record = std::move(record);
     result.ok = true;
     return result;

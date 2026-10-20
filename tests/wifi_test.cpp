@@ -565,13 +565,11 @@ void test_pair_record() {
     scrctl::wifi::PairRecord full = rec;
     full.advertised_identifier = "32567CFA-1462-41EE-94AD-182C31AAA6C3";
     full.peer_alt_irk = Bytes(16, 0x33);
-    full.remote_unlock_host_key = "b879==";
     full.peer_identifier = "05DCFD0E-DAC8-42E8-81A4-CADD6D09B12E";
     full.peer_public_key = Bytes(32, 0x44);
     const auto again = scrctl::wifi::parse_record(scrctl::wifi::format_record(full), err);
     check(again.has_value() && again->advertised_identifier == full.advertised_identifier &&
-              again->peer_alt_irk == full.peer_alt_irk &&
-              again->remote_unlock_host_key == full.remote_unlock_host_key,
+              again->peer_alt_irk == full.peer_alt_irk,
           "可选字段（含 altIRK）也要过一遍存读");
     check(again && again->has_peer_identity() &&
               again->peer_identifier == full.peer_identifier &&

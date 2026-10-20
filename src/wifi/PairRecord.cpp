@@ -185,9 +185,6 @@ std::string format_record(const PairRecord &record) {
     if (!record.peer_alt_irk.empty()) {
         out << "peer_alt_irk=" << hex(record.peer_alt_irk) << '\n';
     }
-    if (!record.remote_unlock_host_key.empty()) {
-        out << "remote_unlock_host_key=" << record.remote_unlock_host_key << '\n';
-    }
     return out.str();
 }
 
@@ -225,8 +222,7 @@ std::optional<PairRecord> parse_record(std::string_view text, std::string &err) 
         const bool known = key == "udid" || key == "host_identifier" ||
                            key == "host_private_key" || key == "host_public_key" ||
                            key == "advertised_identifier" || key == "peer_identifier" ||
-                           key == "peer_public_key" || key == "peer_alt_irk" ||
-                           key == "remote_unlock_host_key";
+                           key == "peer_public_key" || key == "peer_alt_irk";
         if (known && !seen_fields.insert(key).second) {
             err = SCRCTL_TR("Duplicate pairing record field: ") + std::string(key);
             return std::nullopt;
@@ -273,8 +269,6 @@ std::optional<PairRecord> parse_record(std::string_view text, std::string &err) 
             if (!set_hex(record.peer_alt_irk, 16)) {
                 return std::nullopt;
             }
-        } else if (key == "remote_unlock_host_key") {
-            record.remote_unlock_host_key = value;
         }
         // 忽略未知键，允许新增可选字段后的记录继续由旧版本解析。
     }
