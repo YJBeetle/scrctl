@@ -5,10 +5,8 @@
 #include <openssl/pem.h>
 #include <openssl/x509.h>
 
-#include <climits>
-#include <csignal>
 #include <cstring>
-#include <mutex>
+#include <new>
 #include <utility>
 
 namespace scrctl::transport {
@@ -126,24 +124,128 @@ void TlsChannel::release() {
 }
 
 namespace {
-#ifdef SIGPIPE
-// OpenSSL 的 socket BIO 不经过 Socket::write_all，无法使用该方法的
-// MSG_NOSIGNAL。Socket 接管 fd 时设置 SO_NOSIGPIPE（平台支持时），
-// TLS 初始化再忽略 SIGPIPE，覆盖 Linux 及 fd 选项设置失败的情况。
-//
-// SIG_IGN 会改变整个进程的信号处理；未来嵌入其他宿主时需要重新设计
-// 这一边界。目前 scrctl 作为独立程序运行，设置只执行一次。
-void ignore_sigpipe_once() {
-    static std::once_flag once;
-    std::call_once(once, [] { ::signal(SIGPIPE, SIG_IGN); });
+// This BIO borrows a native socket and never changes the host process' signals.
+// Store SOCKET at its native width; OpenSSL's default socket BIO uses an int.
+struct SocketBioState
+{
+    NativeSocket socket;
+    bool eof = false;
+};
+
+int socket_bio_create(BIO* bio)
+{
+    BIO_set_init(bio, 0);
+    BIO_set_data(bio, nullptr);
+    BIO_set_shutdown(bio, BIO_NOCLOSE);
+    return 1;
 }
+
+int socket_bio_destroy(BIO* bio)
+{
+    if (!bio) {
+        return 0;
+    }
+    delete static_cast<SocketBioState*>(BIO_get_data(bio));
+    BIO_set_data(bio, nullptr);
+    BIO_set_init(bio, 0);
+    return 1;
+}
+
+bool socket_bio_retry(int code)
+{
+    return code == kSocketInterrupted || socket_read_timed_out(code);
+}
+
+int socket_bio_read(BIO* bio, char* buffer, int size)
+{
+    if (!buffer || size <= 0) {
+        return 0;
+    }
+    auto* socket = static_cast<SocketBioState*>(BIO_get_data(bio));
+    if (!socket) {
+        return -1;
+    }
+    BIO_clear_retry_flags(bio);
+    const auto count = ::recv(socket->socket, buffer, size, 0);
+    if (count == 0) {
+        socket->eof = true;
+    }
+    if (count < 0 && socket_bio_retry(socket_error())) {
+        BIO_set_retry_read(bio);
+    }
+    return static_cast<int>(count);
+}
+
+int socket_bio_write(BIO* bio, const char* buffer, int size)
+{
+    if (!buffer || size <= 0) {
+        return 0;
+    }
+    auto* socket = static_cast<SocketBioState*>(BIO_get_data(bio));
+    if (!socket) {
+        return -1;
+    }
+    BIO_clear_retry_flags(bio);
+#ifdef MSG_NOSIGNAL
+    constexpr int flags = MSG_NOSIGNAL;
 #else
-void ignore_sigpipe_once() {}
+    constexpr int flags = 0; // macOS sockets already use SO_NOSIGPIPE.
 #endif
+    const auto count = ::send(socket->socket, buffer, size, flags);
+    if (count < 0 && socket_bio_retry(socket_error())) {
+        BIO_set_retry_write(bio);
+    }
+    return static_cast<int>(count);
+}
+
+long socket_bio_ctrl(BIO* bio, int command, long, void*)
+{
+    if (command == BIO_CTRL_EOF) {
+        auto* state = static_cast<SocketBioState*>(BIO_get_data(bio));
+        return state && state->eof ? 1 : 0;
+    }
+    return command == BIO_CTRL_FLUSH ? 1 : 0;
+}
+
+const BIO_METHOD* socket_bio_method()
+{
+    static const auto* method = [] {
+        BIO_METHOD* value = BIO_meth_new(BIO_get_new_index() | BIO_TYPE_SOURCE_SINK, "scrctl borrowed socket");
+        if (!value) {
+            return static_cast<BIO_METHOD*>(nullptr);
+        }
+        if (BIO_meth_set_create(value, socket_bio_create) != 1 || BIO_meth_set_destroy(value, socket_bio_destroy) != 1
+            || BIO_meth_set_read(value, socket_bio_read) != 1 || BIO_meth_set_write(value, socket_bio_write) != 1
+            || BIO_meth_set_ctrl(value, socket_bio_ctrl) != 1) {
+            BIO_meth_free(value);
+            return static_cast<BIO_METHOD*>(nullptr);
+        }
+        return value;
+    }();
+    return method;
+}
+
+bool set_socket_bio(SSL* ssl, Socket& socket, std::string& error)
+{
+    if (!socket.valid() || !socket_bio_method()) {
+        error = SCRCTL_TR("Cannot attach a TLS socket BIO");
+        return false;
+    }
+    auto bio = std::unique_ptr<BIO, decltype(&BIO_free)>(BIO_new(socket_bio_method()), BIO_free);
+    auto handle = std::unique_ptr<SocketBioState>(new (std::nothrow) SocketBioState { socket.fd() });
+    if (!bio || !handle) {
+        error = SCRCTL_TR("Cannot allocate a TLS socket BIO");
+        return false;
+    }
+    BIO_set_data(bio.get(), handle.release());
+    BIO_set_init(bio.get(), 1);
+    auto* owned = bio.release();
+    SSL_set_bio(ssl, owned, owned);
+    return true;
+}
 }  // namespace
 
 bool TlsChannel::handshake(Socket &sock, const PemIdentity &id, std::string &err) {
-    ignore_sigpipe_once();
     release();
     ERR_clear_error();
     err.clear();
@@ -204,13 +306,7 @@ bool TlsChannel::handshake(Socket &sock, const PemIdentity &id, std::string &err
         return err = openssl_error(SCRCTL_TR("SSL_new failed")), false;
     }
     // 不校验设备证书身份；证书兼容策略见 verify_accept_peer。
-    // OpenSSL 的 socket BIO 接口使用 int；拒绝无效或无法无损表示的本机句柄。
-    if (!sock.valid() || sock.fd() > static_cast<NativeSocket>(INT_MAX)) {
-        return err = SCRCTL_TR("SSL_set_fd failed"), false;
-    }
-    if (SSL_set_fd(ssl.get(), static_cast<int>(sock.fd())) != 1) {
-        return err = openssl_error(SCRCTL_TR("SSL_set_fd failed")), false;
-    }
+    if (!set_socket_bio(ssl.get(), sock, err)) return false;
     ERR_clear_error();
     const int connected = SSL_connect(ssl.get());
     if (connected != 1) {
@@ -226,7 +322,6 @@ bool TlsChannel::handshake(Socket &sock, const PemIdentity &id, std::string &err
 }
 
 bool TlsChannel::handshake_psk(Socket &sock, const std::vector<uint8_t> &psk, std::string &err) {
-    ignore_sigpipe_once();
     release();
     ERR_clear_error();
     err.clear();
@@ -261,13 +356,7 @@ bool TlsChannel::handshake_psk(Socket &sock, const std::vector<uint8_t> &psk, st
     if (SSL_set_ex_data(ssl.get(), psk_ex_index(), stored_psk.get()) != 1) {
         return err = openssl_error(SCRCTL_TR("Failed to attach PSK to TLS channel")), false;
     }
-    // OpenSSL 的 socket BIO 接口使用 int；拒绝无效或无法无损表示的本机句柄。
-    if (!sock.valid() || sock.fd() > static_cast<NativeSocket>(INT_MAX)) {
-        return err = SCRCTL_TR("SSL_set_fd failed"), false;
-    }
-    if (SSL_set_fd(ssl.get(), static_cast<int>(sock.fd())) != 1) {
-        return err = openssl_error(SCRCTL_TR("SSL_set_fd failed")), false;
-    }
+    if (!set_socket_bio(ssl.get(), sock, err)) return false;
     ERR_clear_error();
     const int connected = SSL_connect(ssl.get());
     if (connected != 1) {

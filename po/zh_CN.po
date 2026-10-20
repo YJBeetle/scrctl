@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 1.0.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-20 17:11+0800\n"
+"POT-Creation-Date: 2026-10-20 17:12+0800\n"
 "PO-Revision-Date: 2026-10-09 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -4895,73 +4895,76 @@ msgstr "无法启动主机名解析"
 msgid "Hostname resolution returned no addresses"
 msgstr "主机名解析没有返回地址"
 
-#: src/transport/TlsChannel.cpp:33 src/transport/TlsChannel.cpp:47
+#: src/transport/TlsChannel.cpp:31 src/transport/TlsChannel.cpp:45
 msgid "BIO_new_mem_buf failed"
 msgstr "BIO_new_mem_buf 失败"
 
-#: src/transport/TlsChannel.cpp:39
+#: src/transport/TlsChannel.cpp:37
 msgid "Failed to parse certificate PEM"
 msgstr "证书 PEM 解析失败"
 
-#: src/transport/TlsChannel.cpp:53
+#: src/transport/TlsChannel.cpp:51
 msgid "Failed to parse private key PEM"
 msgstr "私钥 PEM 解析失败"
 
-#: src/transport/TlsChannel.cpp:154 src/transport/TlsChannel.cpp:242
+#: src/transport/TlsChannel.cpp:231
+msgid "Cannot attach a TLS socket BIO"
+msgstr "无法连接 TLS socket BIO"
+
+#: src/transport/TlsChannel.cpp:237
+msgid "Cannot allocate a TLS socket BIO"
+msgstr "无法分配 TLS socket BIO"
+
+#: src/transport/TlsChannel.cpp:256 src/transport/TlsChannel.cpp:337
 msgid "SSL_CTX_new failed"
 msgstr "SSL_CTX_new 失败"
 
-#: src/transport/TlsChannel.cpp:158 src/transport/TlsChannel.cpp:247
+#: src/transport/TlsChannel.cpp:260 src/transport/TlsChannel.cpp:342
 msgid "Failed to configure TLS protocol version"
 msgstr "设置 TLS 协议版本失败"
 
-#: src/transport/TlsChannel.cpp:168 src/transport/TlsChannel.cpp:198
+#: src/transport/TlsChannel.cpp:270 src/transport/TlsChannel.cpp:300
 msgid "Failed to add root certificate"
 msgstr "加入根证书失败"
 
-#: src/transport/TlsChannel.cpp:183
+#: src/transport/TlsChannel.cpp:285
 msgid "Failed to load client certificate"
 msgstr "装载客户端证书失败"
 
-#: src/transport/TlsChannel.cpp:186
+#: src/transport/TlsChannel.cpp:288
 msgid "Failed to load client private key"
 msgstr "装载客户端私钥失败"
 
-#: src/transport/TlsChannel.cpp:189
+#: src/transport/TlsChannel.cpp:291
 msgid "Client certificate does not match private key"
 msgstr "客户端证书与私钥不匹配"
 
-#: src/transport/TlsChannel.cpp:204 src/transport/TlsChannel.cpp:259
+#: src/transport/TlsChannel.cpp:306 src/transport/TlsChannel.cpp:354
 msgid "SSL_new failed"
 msgstr "SSL_new 失败"
 
-#: src/transport/TlsChannel.cpp:209 src/transport/TlsChannel.cpp:212
-#: src/transport/TlsChannel.cpp:266 src/transport/TlsChannel.cpp:269
-msgid "SSL_set_fd failed"
-msgstr "SSL_set_fd 失败"
-
-#: src/transport/TlsChannel.cpp:220
+#: src/transport/TlsChannel.cpp:316
 msgid "TLS handshake failed, ssl_err="
 msgstr "TLS 握手失败 ssl_err="
 
-#: src/transport/TlsChannel.cpp:234
+#: src/transport/TlsChannel.cpp:329
 msgid "PSK is empty"
 msgstr "PSK 为空，无法握手"
 
-#: src/transport/TlsChannel.cpp:250
+#: src/transport/TlsChannel.cpp:345
 msgid ""
 "TLS backend has no PSK cipher suite; use an OpenSSL build with PSK support"
 msgstr "TLS 后端缺少 PSK 密码套件；请使用支持 PSK 的 OpenSSL 构建"
 
-#: src/transport/TlsChannel.cpp:262
+#: src/transport/TlsChannel.cpp:357
 msgid "Failed to attach PSK to TLS channel"
 msgstr "给 TLS 通道挂 PSK 失败"
 
-#: src/transport/TlsChannel.cpp:278
+#: src/transport/TlsChannel.cpp:367
 msgid "PSK handshake failed, ssl_err="
 msgstr "PSK 握手失败 ssl_err="
 
-#: src/transport/TlsChannel.cpp:280
+#: src/transport/TlsChannel.cpp:369
 msgid ""
 " (device tunnel listener rejected the PSK; check pair-verify key derivation)"
 msgstr "（设备隧道监听器拒绝 PSK；请检查 pair-verify 密钥派生）"
@@ -8680,6 +8683,9 @@ msgstr "不可用"
 #, c-format
 #~ msgid "Render rotation changed to %d degrees clockwise; window recreated\n"
 #~ msgstr "图像旋转角改为顺时针 %d°，窗口已重建\n"
+
+#~ msgid "SSL_set_fd failed"
+#~ msgstr "SSL_set_fd 失败"
 
 #~ msgid "Screenshot is the visible area"
 #~ msgstr "截图即可见区"

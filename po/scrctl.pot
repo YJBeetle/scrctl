@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 1.0.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-20 17:11+0800\n"
+"POT-Creation-Date: 2026-10-20 17:12+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -4805,73 +4805,76 @@ msgstr ""
 msgid "Hostname resolution returned no addresses"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:33 src/transport/TlsChannel.cpp:47
+#: src/transport/TlsChannel.cpp:31 src/transport/TlsChannel.cpp:45
 msgid "BIO_new_mem_buf failed"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:39
+#: src/transport/TlsChannel.cpp:37
 msgid "Failed to parse certificate PEM"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:53
+#: src/transport/TlsChannel.cpp:51
 msgid "Failed to parse private key PEM"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:154 src/transport/TlsChannel.cpp:242
+#: src/transport/TlsChannel.cpp:231
+msgid "Cannot attach a TLS socket BIO"
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:237
+msgid "Cannot allocate a TLS socket BIO"
+msgstr ""
+
+#: src/transport/TlsChannel.cpp:256 src/transport/TlsChannel.cpp:337
 msgid "SSL_CTX_new failed"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:158 src/transport/TlsChannel.cpp:247
+#: src/transport/TlsChannel.cpp:260 src/transport/TlsChannel.cpp:342
 msgid "Failed to configure TLS protocol version"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:168 src/transport/TlsChannel.cpp:198
+#: src/transport/TlsChannel.cpp:270 src/transport/TlsChannel.cpp:300
 msgid "Failed to add root certificate"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:183
+#: src/transport/TlsChannel.cpp:285
 msgid "Failed to load client certificate"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:186
+#: src/transport/TlsChannel.cpp:288
 msgid "Failed to load client private key"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:189
+#: src/transport/TlsChannel.cpp:291
 msgid "Client certificate does not match private key"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:204 src/transport/TlsChannel.cpp:259
+#: src/transport/TlsChannel.cpp:306 src/transport/TlsChannel.cpp:354
 msgid "SSL_new failed"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:209 src/transport/TlsChannel.cpp:212
-#: src/transport/TlsChannel.cpp:266 src/transport/TlsChannel.cpp:269
-msgid "SSL_set_fd failed"
-msgstr ""
-
-#: src/transport/TlsChannel.cpp:220
+#: src/transport/TlsChannel.cpp:316
 msgid "TLS handshake failed, ssl_err="
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:234
+#: src/transport/TlsChannel.cpp:329
 msgid "PSK is empty"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:250
+#: src/transport/TlsChannel.cpp:345
 msgid ""
 "TLS backend has no PSK cipher suite; use an OpenSSL build with PSK support"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:262
+#: src/transport/TlsChannel.cpp:357
 msgid "Failed to attach PSK to TLS channel"
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:278
+#: src/transport/TlsChannel.cpp:367
 msgid "PSK handshake failed, ssl_err="
 msgstr ""
 
-#: src/transport/TlsChannel.cpp:280
+#: src/transport/TlsChannel.cpp:369
 msgid ""
 " (device tunnel listener rejected the PSK; check pair-verify key derivation)"
 msgstr ""

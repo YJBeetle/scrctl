@@ -10,7 +10,7 @@
 namespace scrctl::transport {
 namespace {
 // socket BIO 不经过 write_all，因此在支持的平台对句柄本身关闭 SIGPIPE。
-// TLS 初始化还会安装进程级防护，覆盖该选项不可用或设置失败的情况。
+// TLS BIO 的 send 同样使用 MSG_NOSIGNAL，不修改进程级信号处理。
 void disable_sigpipe(NativeSocket fd) {
 #ifdef SO_NOSIGPIPE
     const int one = 1;
@@ -60,7 +60,7 @@ void Socket::close() {
 
 #if defined(MSG_NOSIGNAL)
 // Linux 使用 MSG_NOSIGNAL 保护这里的 send。OpenSSL 的 socket BIO
-// 不经过本方法，仍由 TlsChannel 的进程级 SIGPIPE 防护处理。
+// 不经过本方法，但其自定义 BIO 同样使用 MSG_NOSIGNAL。
 constexpr int kNoSigPipe = MSG_NOSIGNAL;
 #else
 constexpr int kNoSigPipe = 0;

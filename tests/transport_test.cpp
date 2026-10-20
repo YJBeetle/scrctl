@@ -1,4 +1,4 @@
-// POSIX 传输回归：普通 send 与 OpenSSL socket BIO 分别检查 SIGPIPE 防护。
+// POSIX 传输回归：普通 send 与自定义 TLS BIO 分别检查 SIGPIPE 防护。
 // 子进程保留默认 SIGPIPE 行为，便于将缺失防护明确报告为失败。
 // 先接管活连接、再关闭对端，保持与生产创建和转发连接的顺序一致。
 #include <sys/socket.h>
@@ -114,18 +114,28 @@ void tls_write_path() {
     const int rc = ::getsockopt(sock.fd(), SOL_SOCKET, SO_NOSIGPIPE, &value, &len);
     check(rc == 0 && value == 1, "接管过的 fd 上确实设了 SO_NOSIGPIPE");
 #endif
-    // 进程级那层：handshake_psk 传空 PSK 会立刻失败返回，但装防护那一行已经跑过——
-    // 这正是生产路径的顺序（先装防护，再碰对端）。
-    scrctl::transport::TlsChannel tls;
-    std::string herr;
-    check(!tls.handshake_psk(sock, {}, herr) && !herr.empty(),
-          "空 PSK 握手按预期失败（只为跑过装防护那一行）: " + herr);
-#ifdef SIGPIPE
-    struct sigaction old {};
-    ::sigaction(SIGPIPE, nullptr, &old);
-    check(old.sa_handler == SIG_IGN, "握手之后进程级 SIGPIPE 已是 SIG_IGN（不分平台）");
+    // Both certificate and PSK handshakes must survive a closed peer while
+    // preserving the caller's SIGPIPE disposition.
+    for (bool psk : {false, true}) {
+        const pid_t pid = ::fork();
+        if (pid == 0) {
+            ::signal(SIGPIPE, SIG_DFL);
+            scrctl::transport::TlsChannel tls;
+            std::string error;
+            const bool connected = psk
+                ? tls.handshake_psk(sock, std::vector<uint8_t>(32, 1), error)
+                : tls.handshake(sock, scrctl_test::failure_identity(), error);
+            struct sigaction current {};
+            ::sigaction(SIGPIPE, nullptr, &current);
+            ::_exit(!connected && !error.empty() && !tls.valid() && current.sa_handler == SIG_DFL ? 0 : 1);
+        }
+        int status = 0;
+        check(pid > 0 && ::waitpid(pid, &status, 0) == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0,
+              psk ? "PSK 握手断连时安全失败且保持默认 SIGPIPE" : "证书握手断连时安全失败且保持默认 SIGPIPE");
+    }
+#ifdef SO_NOSIGPIPE
+    check(bare_write_survives(sock.fd()), "macOS fd 级防护仍保护裸 write()");
 #endif
-    check(bare_write_survives(sock.fd()), "裸 write() 不被 SIGPIPE 打死");
 }
 
 void still_works_as_a_socket() {
