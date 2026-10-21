@@ -1,10 +1,10 @@
 #include "ddi/Cryptex.h"
 #include "ddi/DownloadInternal.h"
+#include "ddi/File.h"
 #include "ddi/Tss.h"
 #include "i18n/Translation.h"
 #include <algorithm>
 #include <array>
-#include <fstream>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
@@ -32,25 +32,12 @@ std::string text(const plist::Value &v) {
         throw std::runtime_error(SCRCTL_TR("Cryptex manifest has an invalid string"));
     return v.string;
 }
-std::string read_file(const std::filesystem::path &path, uint64_t limit) {
-    if (std::filesystem::is_symlink(std::filesystem::symlink_status(path)) ||
-        !std::filesystem::is_regular_file(path))
-        throw std::runtime_error(SCRCTL_TR("Cryptex asset is not a bounded regular file"));
-    const auto size = std::filesystem::file_size(path);
-    if (size > limit) throw std::runtime_error(SCRCTL_TR("Cryptex asset is not a bounded regular file"));
-    std::string bytes(static_cast<std::size_t>(size), '\0');
-    std::ifstream file(path, std::ios::binary);
-    file.read(bytes.data(), static_cast<std::streamsize>(size));
-    if (!file || static_cast<uint64_t>(file.gcount()) != size)
-        throw std::runtime_error(SCRCTL_TR("Cannot read the complete Cryptex asset"));
-    return bytes;
-}
 std::string pinned_snapshot(const std::filesystem::path &directory, std::string_view name) {
     const auto &catalog = detail::cryptex_catalog();
     const auto asset = std::find_if(catalog.assets.begin(), catalog.assets.end(),
                                   [&](const auto &a) { return a.name == name; });
     if (asset == catalog.assets.end()) throw std::runtime_error(SCRCTL_TR("Unknown pinned Cryptex asset"));
-    auto bytes = read_file(directory / asset->name, asset->size);
+    auto bytes = detail::read_file(directory / asset->name, asset->size);
     std::array<uint8_t, EVP_MAX_MD_SIZE> digest{};
     unsigned int length = 0;
     if (bytes.size() != asset->size || EVP_Digest(bytes.data(), bytes.size(), digest.data(), &length,

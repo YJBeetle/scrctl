@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 1.0.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-20 17:16+0800\n"
+"POT-Creation-Date: 2026-10-22 02:16+0800\n"
 "PO-Revision-Date: 2026-10-09 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -758,7 +758,7 @@ msgid "no matching pairing record"
 msgstr "没有匹配的配对记录"
 
 #: src/app/Commands.cpp:65 src/app/Commands.cpp:123 src/app/Commands.cpp:181
-#: src/ddi/Download.cpp:349
+#: src/ddi/Download.cpp:337
 msgid "DDI download cancelled"
 msgstr "DDI 下载已取消"
 
@@ -1653,374 +1653,366 @@ msgstr "Cryptex 清单中的整数无效"
 msgid "Cryptex manifest has an invalid string"
 msgstr "Cryptex 清单中的字符串无效"
 
-#: src/ddi/Cryptex.cpp:38 src/ddi/Cryptex.cpp:40
-msgid "Cryptex asset is not a bounded regular file"
-msgstr "Cryptex 资产不是大小符合限制的普通文件"
-
-#: src/ddi/Cryptex.cpp:45
-msgid "Cannot read the complete Cryptex asset"
-msgstr "无法完整读取 Cryptex 资产"
-
-#: src/ddi/Cryptex.cpp:52
+#: src/ddi/Cryptex.cpp:39
 msgid "Unknown pinned Cryptex asset"
 msgstr "未知的固定版本 Cryptex 资产"
 
-#: src/ddi/Cryptex.cpp:58
+#: src/ddi/Cryptex.cpp:45
 msgid "Cryptex asset snapshot checksum failed"
 msgstr "Cryptex 资产快照摘要校验失败"
 
-#: src/ddi/Cryptex.cpp:63
+#: src/ddi/Cryptex.cpp:50
 msgid "Cryptex asset changed before installation"
 msgstr "Cryptex 资产在安装前发生变化"
 
-#: src/ddi/Cryptex.cpp:67
+#: src/ddi/Cryptex.cpp:54
 msgid "Cryptex identifiers exceed the nesting limit"
 msgstr "Cryptex 身份信息超过嵌套深度限制"
 
-#: src/ddi/Cryptex.cpp:79
+#: src/ddi/Cryptex.cpp:66
 msgid "Cryptex identifiers contain an unsupported value"
 msgstr "Cryptex 身份信息包含不支持的值"
 
-#: src/ddi/Cryptex.cpp:99 src/ddi/Cryptex.cpp:102
+#: src/ddi/Cryptex.cpp:86 src/ddi/Cryptex.cpp:89
 msgid "Cryptex installation cancelled or timed out"
 msgstr "Cryptex 安装已取消或超时"
 
-#: src/ddi/Cryptex.cpp:109
+#: src/ddi/Cryptex.cpp:96
 msgid "Cryptex service does not use RemoteXPC"
 msgstr "Cryptex 服务未使用 RemoteXPC"
 
-#: src/ddi/Cryptex.cpp:129 src/ddi/Cryptex.cpp:132 src/ddi/Cryptex.cpp:134
-#: src/ddi/Cryptex.cpp:138
+#: src/ddi/Cryptex.cpp:116 src/ddi/Cryptex.cpp:119 src/ddi/Cryptex.cpp:121
+#: src/ddi/Cryptex.cpp:125
 msgid "Cryptex installed state is malformed"
 msgstr "Cryptex 已安装状态格式错误"
 
-#: src/ddi/Cryptex.cpp:141
+#: src/ddi/Cryptex.cpp:128
 msgid "Multiple DDI Cryptex installations require manual resolution"
 msgstr "存在多个 DDI Cryptex 安装，需要手动处理"
 
-#: src/ddi/Cryptex.cpp:155
+#: src/ddi/Cryptex.cpp:142
 msgid "Cryptex manifest identities are invalid"
 msgstr "Cryptex 清单身份信息无效"
 
-#: src/ddi/Cryptex.cpp:161
+#: src/ddi/Cryptex.cpp:148
 msgid "Cryptex manifest has ambiguous identities"
 msgstr "Cryptex 清单中存在多个匹配身份"
 
-#: src/ddi/Cryptex.cpp:165
+#: src/ddi/Cryptex.cpp:152
 msgid "Cryptex manifest lacks its generic identity"
 msgstr "Cryptex 清单缺少通用身份"
 
-#: src/ddi/Cryptex.cpp:171
+#: src/ddi/Cryptex.cpp:158
 msgid "Cryptex asset is not a Developer Disk Image"
 msgstr "Cryptex 资产不是开发者磁盘镜像"
 
-#: src/ddi/Cryptex.cpp:174
+#: src/ddi/Cryptex.cpp:161
 msgid "Cryptex DDI nonce-domain handle is unsupported"
 msgstr "不支持此 Cryptex DDI nonce 域句柄"
 
-#: src/ddi/Cryptex.cpp:176
+#: src/ddi/Cryptex.cpp:163
 msgid "Cryptex product-class flag is invalid"
 msgstr "Cryptex 产品类别标志无效"
 
-#: src/ddi/Cryptex.cpp:190
+#: src/ddi/Cryptex.cpp:177
 msgid "Cryptex reply is not a dictionary"
 msgstr "Cryptex 回复不是字典"
 
-#: src/ddi/Cryptex.cpp:192
+#: src/ddi/Cryptex.cpp:179
 msgid "Cryptex device error"
 msgstr "Cryptex 设备错误"
 
-#: src/ddi/Cryptex.cpp:209
+#: src/ddi/Cryptex.cpp:196
 msgid "Cryptex device returned a nonzero or malformed error"
 msgstr "Cryptex 设备返回非零错误码或错误格式无效"
 
-#: src/ddi/Cryptex.cpp:212
+#: src/ddi/Cryptex.cpp:199
 msgid "Cryptex reply lacks status and payload"
 msgstr "Cryptex 回复缺少状态和数据"
 
-#: src/ddi/Cryptex.cpp:220
+#: src/ddi/Cryptex.cpp:207
 msgid "Cryptex nonce structure has an invalid size"
 msgstr "Cryptex nonce 结构大小无效"
 
-#: src/ddi/Cryptex.cpp:223
+#: src/ddi/Cryptex.cpp:210
 msgid "Cryptex nonce length is invalid"
 msgstr "Cryptex nonce 长度无效"
 
-#: src/ddi/Cryptex.cpp:248 src/ddi/Cryptex.cpp:270
+#: src/ddi/Cryptex.cpp:235 src/ddi/Cryptex.cpp:257
 msgid "Cryptex installation timeout is invalid"
 msgstr "Cryptex 安装超时无效"
 
-#: src/ddi/Cryptex.cpp:252
+#: src/ddi/Cryptex.cpp:239
 msgid "Cryptex installed-state query failed: "
 msgstr "Cryptex 已安装状态查询失败： "
 
-#: src/ddi/Cryptex.cpp:266
+#: src/ddi/Cryptex.cpp:253
 msgid "Cryptex installation requires a supported Cryptex OS target"
 msgstr "Cryptex 安装需要支持的 Cryptex 系统版本"
 
-#: src/ddi/Cryptex.cpp:275
+#: src/ddi/Cryptex.cpp:262
 msgid "Device does not advertise CryptexInstall"
 msgstr "设备未声明 CryptexInstall"
 
-#: src/ddi/Cryptex.cpp:287
+#: src/ddi/Cryptex.cpp:274
 msgid "A different DDI Cryptex is installed; explicit replacement is required"
 msgstr "已安装另一版本的 DDI Cryptex；需要显式允许替换"
 
-#: src/ddi/Cryptex.cpp:294
+#: src/ddi/Cryptex.cpp:281
 msgid ""
 "Personalized DDI mount inspection is required before Cryptex installation"
 msgstr "安装 Cryptex 前必须检查 Personalized DDI 的挂载状态"
 
-#: src/ddi/Cryptex.cpp:302
+#: src/ddi/Cryptex.cpp:289
 msgid "A Personalized DDI is mounted; explicit replacement is required"
 msgstr "已挂载 Personalized DDI；需要显式允许替换"
 
-#: src/ddi/Cryptex.cpp:305
+#: src/ddi/Cryptex.cpp:292
 msgid "Device does not advertise Cryptex ReadIdentifiers"
 msgstr "设备未声明 Cryptex ReadIdentifiers"
 
-#: src/ddi/Cryptex.cpp:309
+#: src/ddi/Cryptex.cpp:296
 msgid "Cryptex personalization identifiers are invalid"
 msgstr "Cryptex 个性化身份信息无效"
 
-#: src/ddi/Cryptex.cpp:315 src/ddi/Cryptex.cpp:349
+#: src/ddi/Cryptex.cpp:302 src/ddi/Cryptex.cpp:336
 msgid "Cryptex nonce reply is invalid"
 msgstr "Cryptex nonce 回复无效"
 
-#: src/ddi/Cryptex.cpp:327
+#: src/ddi/Cryptex.cpp:314
 msgid "Cryptex ticket size is invalid"
 msgstr "Cryptex 票据大小无效"
 
-#: src/ddi/Cryptex.cpp:354
+#: src/ddi/Cryptex.cpp:341
 msgid "Cryptex personalization nonce changed before installation"
 msgstr "安装前 Cryptex 个性化随机数已变化"
 
-#: src/ddi/Cryptex.cpp:383
+#: src/ddi/Cryptex.cpp:370
 msgid "Cryptex final installation reply failed: "
 msgstr "Cryptex 最终安装回复失败： "
 
-#: src/ddi/Cryptex.cpp:389
+#: src/ddi/Cryptex.cpp:376
 msgid "Cryptex post-installation verification failed: "
 msgstr "Cryptex 安装后验证失败： "
 
-#: src/ddi/Cryptex.cpp:393
+#: src/ddi/Cryptex.cpp:380
 msgid ""
 "Cryptex installation reply succeeded but the expected DDI is not installed"
 msgstr "Cryptex 安装回复成功，但预期的 DDI 未安装"
 
-#: src/ddi/Download.cpp:26
-msgid "DDI cache contains a nonregular file"
-msgstr "DDI 缓存包含非普通文件"
-
 #: src/ddi/Download.cpp:28
-msgid "DDI file exceeds its size limit"
-msgstr "DDI 文件超过大小限制"
-
-#: src/ddi/Download.cpp:30
-msgid "Cannot open DDI file"
-msgstr "无法打开 DDI 文件"
-
-#: src/ddi/Download.cpp:34
-msgid "Cannot read complete DDI file"
-msgstr "无法完整读取 DDI 文件"
-
-#: src/ddi/Download.cpp:40
 msgid "Cannot open DDI file for checksum"
 msgstr "无法打开 DDI 文件进行校验"
 
-#: src/ddi/Download.cpp:43
+#: src/ddi/Download.cpp:31
 msgid "Cannot initialize DDI checksum"
 msgstr "无法初始化 DDI 校验"
 
-#: src/ddi/Download.cpp:48 src/ddi/Download.cpp:54
+#: src/ddi/Download.cpp:36 src/ddi/Download.cpp:42
 msgid "Cannot calculate DDI checksum"
 msgstr "无法计算 DDI 校验值"
 
-#: src/ddi/Download.cpp:56
+#: src/ddi/Download.cpp:44
 msgid "Cannot read DDI checksum input"
 msgstr "无法读取 DDI 校验输入"
 
-#: src/ddi/Download.cpp:60
+#: src/ddi/Download.cpp:48
 msgid "Cannot finalize DDI checksum"
 msgstr "无法完成 DDI 校验"
 
-#: src/ddi/Download.cpp:85 src/ddi/Download.cpp:96
+#: src/ddi/Download.cpp:73 src/ddi/Download.cpp:84
 msgid "Invalid DDI download catalog"
 msgstr "DDI 下载目录清单无效"
 
-#: src/ddi/Download.cpp:103
+#: src/ddi/Download.cpp:91
 msgid "Invalid DDI download asset"
 msgstr "DDI 下载资产无效"
 
-#: src/ddi/Download.cpp:144
+#: src/ddi/Download.cpp:132
 msgid "Invalid DDI BuildManifest plist"
 msgstr "DDI BuildManifest plist 无效"
 
-#: src/ddi/Download.cpp:148
+#: src/ddi/Download.cpp:136
 msgid "DDI BuildManifest does not match the pinned build"
 msgstr "DDI BuildManifest 与固定构建不符"
 
-#: src/ddi/Download.cpp:179
+#: src/ddi/Download.cpp:167
 msgid "DDI Cryptex manifest entries missing"
 msgstr "缺少 DDI Cryptex 清单条目"
 
-#: src/ddi/Download.cpp:193
+#: src/ddi/Download.cpp:181
 msgid "DDI Cryptex manifest digest mismatch: "
 msgstr "DDI Cryptex 清单摘要不符："
 
-#: src/ddi/Download.cpp:202
+#: src/ddi/Download.cpp:190
 msgid "DDI BuildManifest lacks a Cryptex identity"
 msgstr "DDI BuildManifest 缺少 Cryptex 身份"
 
-#: src/ddi/Download.cpp:203
+#: src/ddi/Download.cpp:191
 msgid "DDI BuildManifest lacks a matching Personalized hardware identity"
 msgstr "DDI BuildManifest 中没有匹配的 Personalized 硬件身份"
 
-#: src/ddi/Download.cpp:204
+#: src/ddi/Download.cpp:192
 msgid "DDI Personalized manifest digest mismatch for the requested hardware"
 msgstr "DDI Personalized 清单中指定硬件的摘要与镜像不匹配"
 
-#: src/ddi/Download.cpp:213
+#: src/ddi/Download.cpp:201
 msgid "DDI cache directory is missing or is a symbolic link"
 msgstr "DDI 缓存目录不存在或为符号链接"
 
-#: src/ddi/Download.cpp:217
+#: src/ddi/Download.cpp:205
 msgid "DDI cache size or file type mismatch: "
 msgstr "DDI 缓存大小或文件类型不符："
 
-#: src/ddi/Download.cpp:219
+#: src/ddi/Download.cpp:207
 msgid "DDI cache SHA-256 mismatch: "
 msgstr "DDI 缓存 SHA-256 不符："
 
-#: src/ddi/Download.cpp:221
+#: src/ddi/Download.cpp:209
 msgid "DDI cache Git blob SHA-1 mismatch: "
 msgstr "DDI 缓存的 Git blob SHA-1 不匹配："
 
-#: src/ddi/Download.cpp:225
+#: src/ddi/Download.cpp:213
 msgid "DDI cache completion marker mismatch"
 msgstr "DDI 缓存完成标记不符"
 
-#: src/ddi/Download.cpp:259
+#: src/ddi/Download.cpp:247
 msgid "Cannot initialize HTTPS downloader"
 msgstr "无法初始化 HTTPS 下载器"
 
-#: src/ddi/Download.cpp:261
+#: src/ddi/Download.cpp:249
 msgid "Cannot create HTTPS downloader"
 msgstr "无法创建 HTTPS 下载器"
 
-#: src/ddi/Download.cpp:262
+#: src/ddi/Download.cpp:250
 msgid "DDI downloads require HTTPS"
 msgstr "DDI 下载需要 HTTPS"
 
-#: src/ddi/Download.cpp:266
+#: src/ddi/Download.cpp:254
 msgid "Cannot configure HTTPS downloader"
 msgstr "无法配置 HTTPS 下载器"
 
-#: src/ddi/Download.cpp:287
+#: src/ddi/Download.cpp:275
 msgid "This Windows libcurl cannot use the native certificate store"
 msgstr "此 Windows libcurl 无法使用系统证书库"
 
-#: src/ddi/Download.cpp:306
+#: src/ddi/Download.cpp:294
 msgid "DDI download callback failed"
 msgstr "DDI 下载回调失败"
 
-#: src/ddi/Download.cpp:307
+#: src/ddi/Download.cpp:295
 msgid "HTTPS DDI download failed: "
 msgstr "HTTPS DDI 下载失败："
 
-#: src/ddi/Download.cpp:312
+#: src/ddi/Download.cpp:300
 msgid "DDI download did not return HTTP 200"
 msgstr "DDI 下载未返回 HTTP 200"
 
-#: src/ddi/Download.cpp:343
+#: src/ddi/Download.cpp:331
 msgid "DDI download timeout must be positive"
 msgstr "DDI 下载超时必须为正数"
 
-#: src/ddi/Download.cpp:346
+#: src/ddi/Download.cpp:334
 msgid "DDI download timeout exceeds 24 hours"
 msgstr "DDI 下载超时超过 24 小时"
 
-#: src/ddi/Download.cpp:350 src/ddi/Download.cpp:404
+#: src/ddi/Download.cpp:338 src/ddi/Download.cpp:392
 msgid "DDI download timed out"
 msgstr "DDI 下载超时"
 
-#: src/ddi/Download.cpp:356
+#: src/ddi/Download.cpp:344
 msgid "DDI cache root must be an absolute path"
 msgstr "DDI 缓存根目录必须为绝对路径"
 
-#: src/ddi/Download.cpp:359
+#: src/ddi/Download.cpp:347
 msgid "DDI cache root must not be a symbolic link"
 msgstr "DDI 缓存根目录不能为符号链接"
 
-#: src/ddi/Download.cpp:366
+#: src/ddi/Download.cpp:354
 msgid ""
 "Existing DDI cache is invalid; remove this version directory and retry: "
 msgstr "已有 DDI 缓存无效；移除该版本目录后重试："
 
-#: src/ddi/Download.cpp:375
+#: src/ddi/Download.cpp:363
 msgid ""
 "Another DDI download owns this version lock; retry after it finishes (remove "
 "the lock only if that process has exited)"
 msgstr ""
 "另一个 DDI 下载正在使用该版本锁；等待其完成后重试（仅在该进程已退出时移除锁）"
 
-#: src/ddi/Download.cpp:383
+#: src/ddi/Download.cpp:371
 msgid "Cannot generate DDI staging directory name"
 msgstr "无法生成 DDI 临时目录名"
 
-#: src/ddi/Download.cpp:385
+#: src/ddi/Download.cpp:373
 msgid "Cannot create unique DDI staging directory"
 msgstr "无法创建唯一的 DDI 临时目录"
 
-#: src/ddi/Download.cpp:391
+#: src/ddi/Download.cpp:379
 msgid "Cannot create DDI download file: "
 msgstr "无法创建 DDI 下载文件："
 
-#: src/ddi/Download.cpp:395
+#: src/ddi/Download.cpp:383
 msgid "DDI download exceeds pinned file size: "
 msgstr "DDI 下载超过固定文件大小："
 
-#: src/ddi/Download.cpp:397
+#: src/ddi/Download.cpp:385
 msgid "Cannot write DDI download file: "
 msgstr "无法写入 DDI 下载文件："
 
-#: src/ddi/Download.cpp:407
+#: src/ddi/Download.cpp:395
 msgid "DDI download failed"
 msgstr "DDI 下载失败"
 
-#: src/ddi/Download.cpp:411
+#: src/ddi/Download.cpp:399
 msgid "Cannot flush DDI download file: "
 msgstr "无法刷新 DDI 下载文件："
 
-#: src/ddi/Download.cpp:413
+#: src/ddi/Download.cpp:401
 msgid "Cannot close DDI download file: "
 msgstr "无法关闭 DDI 下载文件："
 
-#: src/ddi/Download.cpp:414
+#: src/ddi/Download.cpp:402
 msgid "Incomplete DDI download: "
 msgstr "DDI 下载不完整："
 
-#: src/ddi/Download.cpp:420
+#: src/ddi/Download.cpp:408
 msgid "Cannot write DDI completion marker"
 msgstr "无法写入 DDI 完成标记"
 
-#: src/ddi/Download.cpp:422
+#: src/ddi/Download.cpp:410
 msgid ""
 "DDI version directory appeared during download; refusing to overwrite it"
 msgstr "下载期间出现了 DDI 版本目录；拒绝覆盖"
 
-#: src/ddi/Download.cpp:444
+#: src/ddi/Download.cpp:432
 msgid "XDG_CACHE_HOME must be an absolute path"
 msgstr "XDG_CACHE_HOME 必须为绝对路径"
 
-#: src/ddi/Download.cpp:457
+#: src/ddi/Download.cpp:445
 msgid ""
 "No absolute platform cache directory is available; specify --ddi-directory"
 msgstr "没有可用的平台缓存绝对路径；请指定 --ddi-directory"
 
-#: src/ddi/Download.cpp:476 src/ddi/Mounter.cpp:231
+#: src/ddi/Download.cpp:464 src/ddi/Mounter.cpp:231
 msgid "No pinned Classic DDI exists for the requested OS major.minor version"
 msgstr "没有对应指定系统主版本和次版本的固定 Classic DDI"
+
+#: src/ddi/File.cpp:12
+msgid "DDI cache contains a nonregular file"
+msgstr "DDI 缓存包含非普通文件"
+
+#: src/ddi/File.cpp:16
+msgid "DDI file exceeds its size limit"
+msgstr "DDI 文件超过大小限制"
+
+#: src/ddi/File.cpp:18
+msgid "Cannot open DDI file"
+msgstr "无法打开 DDI 文件"
+
+#: src/ddi/File.cpp:22
+msgid "Cannot read complete DDI file"
+msgstr "无法完整读取 DDI 文件"
 
 #: src/ddi/Mounter.cpp:42
 msgid "DDI install timeout must be positive and at most 24 hours"
@@ -8465,6 +8457,9 @@ msgstr "不可用"
 #~ msgid "Cannot read "
 #~ msgstr "无法读取 "
 
+#~ msgid "Cannot read the complete Cryptex asset"
+#~ msgstr "无法完整读取 Cryptex 资产"
+
 #~ msgid "Cannot receive upright recording HEVC packet: "
 #~ msgstr "无法接收正向录制 HEVC 编码包："
 
@@ -8510,6 +8505,9 @@ msgstr "不可用"
 
 #~ msgid "Crop WxH+X+Y or W:H:X:Y"
 #~ msgstr "裁剪 WxH+X+Y 或 W:H:X:Y"
+
+#~ msgid "Cryptex asset is not a bounded regular file"
+#~ msgstr "Cryptex 资产不是大小符合限制的普通文件"
 
 #~ msgid "DDI manifest does not support the requested product type"
 #~ msgstr "DDI 清单不支持指定机型"

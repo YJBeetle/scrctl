@@ -1,4 +1,5 @@
 #include "ddi/DownloadInternal.h"
+#include "ddi/File.h"
 #include "plist/Plist.h"
 #include <openssl/evp.h>
 #include <openssl/rand.h>
@@ -152,6 +153,23 @@ void write(const fs::path &path, const std::string &bytes) {
 
 int main() {
     try {
+        {
+            Temp files; const auto asset = files.path / "asset";
+            const std::string contents("a\0b", 3); write(asset, contents);
+            check(ddi::detail::read_file(asset, contents.size()) == contents,
+                  "shared DDI reader retains binary bytes at the exact size limit");
+            const auto rejects = [](const fs::path &path, uint64_t limit) {
+                try { (void)ddi::detail::read_file(path, limit); return false; }
+                catch (const std::exception &) { return true; }
+            };
+            check(rejects(asset, 2), "shared DDI reader rejects an oversized file");
+            write(asset, "");
+            check(ddi::detail::read_file(asset, 0).empty(), "shared DDI reader accepts an empty file at zero limit");
+            check(rejects(files.path, 100) && rejects(files.path / "missing", 100),
+                  "shared DDI reader rejects directories and missing files");
+            std::error_code ec; fs::create_symlink(asset, files.path / "link", ec);
+            if (!ec) check(rejects(files.path / "link", 100), "shared DDI reader rejects symlinks");
+        }
         Fixture fixture; Temp temp; ddi::DownloadOptions opts; opts.cache_root = temp.path;
         std::string error;
         auto result = ddi::detail::download(opts, fixture.catalog, fixture.transfer(), error);

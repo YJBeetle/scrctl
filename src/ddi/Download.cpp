@@ -1,4 +1,5 @@
 #include "ddi/DownloadInternal.h"
+#include "ddi/File.h"
 #include "plist/Plist.h"
 #include "i18n/Translation.h"
 
@@ -21,19 +22,6 @@ namespace {
 namespace fs = std::filesystem;
 using Clock = std::chrono::steady_clock;
 
-std::string read_file(const fs::path &path, uint64_t limit) {
-    if (fs::is_symlink(fs::symlink_status(path)) || !fs::is_regular_file(path))
-        throw std::runtime_error(SCRCTL_TR("DDI cache contains a nonregular file"));
-    const auto size = fs::file_size(path);
-    if (size > limit) throw std::runtime_error(SCRCTL_TR("DDI file exceeds its size limit"));
-    std::ifstream file(path, std::ios::binary);
-    if (!file) throw std::runtime_error(SCRCTL_TR("Cannot open DDI file"));
-    std::string bytes(static_cast<size_t>(size), '\0');
-    file.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-    if (file.gcount() != static_cast<std::streamsize>(size))
-        throw std::runtime_error(SCRCTL_TR("Cannot read complete DDI file"));
-    return bytes;
-}
 
 std::vector<uint8_t> digest_file(const fs::path &path, const EVP_MD *algorithm, bool git_blob = false) {
     std::ifstream file(path, std::ios::binary);
@@ -140,7 +128,7 @@ bool matches_target(const plist::Value &identity, const DownloadTarget *target) 
 void check_manifest(const fs::path &directory, const detail::Catalog &catalog, const DownloadTarget *target) {
     if (catalog.kind == Kind::Classic) return;
     std::string err;
-    auto manifest = plist::parse(read_file(directory / "BuildManifest.plist", 8 * 1024 * 1024), &err);
+    auto manifest = plist::parse(detail::read_file(directory / "BuildManifest.plist", 8 * 1024 * 1024), &err);
     if (!manifest || !manifest->is_dict()) throw std::runtime_error(SCRCTL_TR("Invalid DDI BuildManifest plist"));
     const auto *build = manifest->find("ProductBuildVersion");
     const auto *identities = manifest->find("BuildIdentities");
@@ -221,7 +209,7 @@ bool validate_files(const fs::path &directory, const detail::Catalog &catalog, s
                 throw std::runtime_error(std::string(SCRCTL_TR("DDI cache Git blob SHA-1 mismatch: ")) + asset.name);
         }
         check_manifest(directory, catalog, target);
-        if (complete && read_file(directory / ".complete", 4096) != marker(catalog))
+        if (complete && detail::read_file(directory / ".complete", 4096) != marker(catalog))
             throw std::runtime_error(SCRCTL_TR("DDI cache completion marker mismatch"));
         error.clear();
         return true;

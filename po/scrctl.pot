@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 1.0.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-20 17:16+0800\n"
+"POT-Creation-Date: 2026-10-22 02:16+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -729,7 +729,7 @@ msgid "no matching pairing record"
 msgstr ""
 
 #: src/app/Commands.cpp:65 src/app/Commands.cpp:123 src/app/Commands.cpp:181
-#: src/ddi/Download.cpp:349
+#: src/ddi/Download.cpp:337
 msgid "DDI download cancelled"
 msgstr ""
 
@@ -1601,372 +1601,364 @@ msgstr ""
 msgid "Cryptex manifest has an invalid string"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:38 src/ddi/Cryptex.cpp:40
-msgid "Cryptex asset is not a bounded regular file"
-msgstr ""
-
-#: src/ddi/Cryptex.cpp:45
-msgid "Cannot read the complete Cryptex asset"
-msgstr ""
-
-#: src/ddi/Cryptex.cpp:52
+#: src/ddi/Cryptex.cpp:39
 msgid "Unknown pinned Cryptex asset"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:58
+#: src/ddi/Cryptex.cpp:45
 msgid "Cryptex asset snapshot checksum failed"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:63
+#: src/ddi/Cryptex.cpp:50
 msgid "Cryptex asset changed before installation"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:67
+#: src/ddi/Cryptex.cpp:54
 msgid "Cryptex identifiers exceed the nesting limit"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:79
+#: src/ddi/Cryptex.cpp:66
 msgid "Cryptex identifiers contain an unsupported value"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:99 src/ddi/Cryptex.cpp:102
+#: src/ddi/Cryptex.cpp:86 src/ddi/Cryptex.cpp:89
 msgid "Cryptex installation cancelled or timed out"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:109
+#: src/ddi/Cryptex.cpp:96
 msgid "Cryptex service does not use RemoteXPC"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:129 src/ddi/Cryptex.cpp:132 src/ddi/Cryptex.cpp:134
-#: src/ddi/Cryptex.cpp:138
+#: src/ddi/Cryptex.cpp:116 src/ddi/Cryptex.cpp:119 src/ddi/Cryptex.cpp:121
+#: src/ddi/Cryptex.cpp:125
 msgid "Cryptex installed state is malformed"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:141
+#: src/ddi/Cryptex.cpp:128
 msgid "Multiple DDI Cryptex installations require manual resolution"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:155
+#: src/ddi/Cryptex.cpp:142
 msgid "Cryptex manifest identities are invalid"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:161
+#: src/ddi/Cryptex.cpp:148
 msgid "Cryptex manifest has ambiguous identities"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:165
+#: src/ddi/Cryptex.cpp:152
 msgid "Cryptex manifest lacks its generic identity"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:171
+#: src/ddi/Cryptex.cpp:158
 msgid "Cryptex asset is not a Developer Disk Image"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:174
+#: src/ddi/Cryptex.cpp:161
 msgid "Cryptex DDI nonce-domain handle is unsupported"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:176
+#: src/ddi/Cryptex.cpp:163
 msgid "Cryptex product-class flag is invalid"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:190
+#: src/ddi/Cryptex.cpp:177
 msgid "Cryptex reply is not a dictionary"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:192
+#: src/ddi/Cryptex.cpp:179
 msgid "Cryptex device error"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:209
+#: src/ddi/Cryptex.cpp:196
 msgid "Cryptex device returned a nonzero or malformed error"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:212
+#: src/ddi/Cryptex.cpp:199
 msgid "Cryptex reply lacks status and payload"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:220
+#: src/ddi/Cryptex.cpp:207
 msgid "Cryptex nonce structure has an invalid size"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:223
+#: src/ddi/Cryptex.cpp:210
 msgid "Cryptex nonce length is invalid"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:248 src/ddi/Cryptex.cpp:270
+#: src/ddi/Cryptex.cpp:235 src/ddi/Cryptex.cpp:257
 msgid "Cryptex installation timeout is invalid"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:252
+#: src/ddi/Cryptex.cpp:239
 msgid "Cryptex installed-state query failed: "
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:266
+#: src/ddi/Cryptex.cpp:253
 msgid "Cryptex installation requires a supported Cryptex OS target"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:275
+#: src/ddi/Cryptex.cpp:262
 msgid "Device does not advertise CryptexInstall"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:287
+#: src/ddi/Cryptex.cpp:274
 msgid "A different DDI Cryptex is installed; explicit replacement is required"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:294
+#: src/ddi/Cryptex.cpp:281
 msgid ""
 "Personalized DDI mount inspection is required before Cryptex installation"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:302
+#: src/ddi/Cryptex.cpp:289
 msgid "A Personalized DDI is mounted; explicit replacement is required"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:305
+#: src/ddi/Cryptex.cpp:292
 msgid "Device does not advertise Cryptex ReadIdentifiers"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:309
+#: src/ddi/Cryptex.cpp:296
 msgid "Cryptex personalization identifiers are invalid"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:315 src/ddi/Cryptex.cpp:349
+#: src/ddi/Cryptex.cpp:302 src/ddi/Cryptex.cpp:336
 msgid "Cryptex nonce reply is invalid"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:327
+#: src/ddi/Cryptex.cpp:314
 msgid "Cryptex ticket size is invalid"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:354
+#: src/ddi/Cryptex.cpp:341
 msgid "Cryptex personalization nonce changed before installation"
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:383
+#: src/ddi/Cryptex.cpp:370
 msgid "Cryptex final installation reply failed: "
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:389
+#: src/ddi/Cryptex.cpp:376
 msgid "Cryptex post-installation verification failed: "
 msgstr ""
 
-#: src/ddi/Cryptex.cpp:393
+#: src/ddi/Cryptex.cpp:380
 msgid ""
 "Cryptex installation reply succeeded but the expected DDI is not installed"
 msgstr ""
 
-#: src/ddi/Download.cpp:26
-msgid "DDI cache contains a nonregular file"
-msgstr ""
-
 #: src/ddi/Download.cpp:28
-msgid "DDI file exceeds its size limit"
-msgstr ""
-
-#: src/ddi/Download.cpp:30
-msgid "Cannot open DDI file"
-msgstr ""
-
-#: src/ddi/Download.cpp:34
-msgid "Cannot read complete DDI file"
-msgstr ""
-
-#: src/ddi/Download.cpp:40
 msgid "Cannot open DDI file for checksum"
 msgstr ""
 
-#: src/ddi/Download.cpp:43
+#: src/ddi/Download.cpp:31
 msgid "Cannot initialize DDI checksum"
 msgstr ""
 
-#: src/ddi/Download.cpp:48 src/ddi/Download.cpp:54
+#: src/ddi/Download.cpp:36 src/ddi/Download.cpp:42
 msgid "Cannot calculate DDI checksum"
 msgstr ""
 
-#: src/ddi/Download.cpp:56
+#: src/ddi/Download.cpp:44
 msgid "Cannot read DDI checksum input"
 msgstr ""
 
-#: src/ddi/Download.cpp:60
+#: src/ddi/Download.cpp:48
 msgid "Cannot finalize DDI checksum"
 msgstr ""
 
-#: src/ddi/Download.cpp:85 src/ddi/Download.cpp:96
+#: src/ddi/Download.cpp:73 src/ddi/Download.cpp:84
 msgid "Invalid DDI download catalog"
 msgstr ""
 
-#: src/ddi/Download.cpp:103
+#: src/ddi/Download.cpp:91
 msgid "Invalid DDI download asset"
 msgstr ""
 
-#: src/ddi/Download.cpp:144
+#: src/ddi/Download.cpp:132
 msgid "Invalid DDI BuildManifest plist"
 msgstr ""
 
-#: src/ddi/Download.cpp:148
+#: src/ddi/Download.cpp:136
 msgid "DDI BuildManifest does not match the pinned build"
 msgstr ""
 
-#: src/ddi/Download.cpp:179
+#: src/ddi/Download.cpp:167
 msgid "DDI Cryptex manifest entries missing"
 msgstr ""
 
-#: src/ddi/Download.cpp:193
+#: src/ddi/Download.cpp:181
 msgid "DDI Cryptex manifest digest mismatch: "
 msgstr ""
 
-#: src/ddi/Download.cpp:202
+#: src/ddi/Download.cpp:190
 msgid "DDI BuildManifest lacks a Cryptex identity"
 msgstr ""
 
-#: src/ddi/Download.cpp:203
+#: src/ddi/Download.cpp:191
 msgid "DDI BuildManifest lacks a matching Personalized hardware identity"
 msgstr ""
 
-#: src/ddi/Download.cpp:204
+#: src/ddi/Download.cpp:192
 msgid "DDI Personalized manifest digest mismatch for the requested hardware"
 msgstr ""
 
-#: src/ddi/Download.cpp:213
+#: src/ddi/Download.cpp:201
 msgid "DDI cache directory is missing or is a symbolic link"
 msgstr ""
 
-#: src/ddi/Download.cpp:217
+#: src/ddi/Download.cpp:205
 msgid "DDI cache size or file type mismatch: "
 msgstr ""
 
-#: src/ddi/Download.cpp:219
+#: src/ddi/Download.cpp:207
 msgid "DDI cache SHA-256 mismatch: "
 msgstr ""
 
-#: src/ddi/Download.cpp:221
+#: src/ddi/Download.cpp:209
 msgid "DDI cache Git blob SHA-1 mismatch: "
 msgstr ""
 
-#: src/ddi/Download.cpp:225
+#: src/ddi/Download.cpp:213
 msgid "DDI cache completion marker mismatch"
 msgstr ""
 
-#: src/ddi/Download.cpp:259
+#: src/ddi/Download.cpp:247
 msgid "Cannot initialize HTTPS downloader"
 msgstr ""
 
-#: src/ddi/Download.cpp:261
+#: src/ddi/Download.cpp:249
 msgid "Cannot create HTTPS downloader"
 msgstr ""
 
-#: src/ddi/Download.cpp:262
+#: src/ddi/Download.cpp:250
 msgid "DDI downloads require HTTPS"
 msgstr ""
 
-#: src/ddi/Download.cpp:266
+#: src/ddi/Download.cpp:254
 msgid "Cannot configure HTTPS downloader"
 msgstr ""
 
-#: src/ddi/Download.cpp:287
+#: src/ddi/Download.cpp:275
 msgid "This Windows libcurl cannot use the native certificate store"
 msgstr ""
 
-#: src/ddi/Download.cpp:306
+#: src/ddi/Download.cpp:294
 msgid "DDI download callback failed"
 msgstr ""
 
-#: src/ddi/Download.cpp:307
+#: src/ddi/Download.cpp:295
 msgid "HTTPS DDI download failed: "
 msgstr ""
 
-#: src/ddi/Download.cpp:312
+#: src/ddi/Download.cpp:300
 msgid "DDI download did not return HTTP 200"
 msgstr ""
 
-#: src/ddi/Download.cpp:343
+#: src/ddi/Download.cpp:331
 msgid "DDI download timeout must be positive"
 msgstr ""
 
-#: src/ddi/Download.cpp:346
+#: src/ddi/Download.cpp:334
 msgid "DDI download timeout exceeds 24 hours"
 msgstr ""
 
-#: src/ddi/Download.cpp:350 src/ddi/Download.cpp:404
+#: src/ddi/Download.cpp:338 src/ddi/Download.cpp:392
 msgid "DDI download timed out"
 msgstr ""
 
-#: src/ddi/Download.cpp:356
+#: src/ddi/Download.cpp:344
 msgid "DDI cache root must be an absolute path"
 msgstr ""
 
-#: src/ddi/Download.cpp:359
+#: src/ddi/Download.cpp:347
 msgid "DDI cache root must not be a symbolic link"
 msgstr ""
 
-#: src/ddi/Download.cpp:366
+#: src/ddi/Download.cpp:354
 msgid ""
 "Existing DDI cache is invalid; remove this version directory and retry: "
 msgstr ""
 
-#: src/ddi/Download.cpp:375
+#: src/ddi/Download.cpp:363
 msgid ""
 "Another DDI download owns this version lock; retry after it finishes (remove "
 "the lock only if that process has exited)"
 msgstr ""
 
-#: src/ddi/Download.cpp:383
+#: src/ddi/Download.cpp:371
 msgid "Cannot generate DDI staging directory name"
 msgstr ""
 
-#: src/ddi/Download.cpp:385
+#: src/ddi/Download.cpp:373
 msgid "Cannot create unique DDI staging directory"
 msgstr ""
 
-#: src/ddi/Download.cpp:391
+#: src/ddi/Download.cpp:379
 msgid "Cannot create DDI download file: "
 msgstr ""
 
-#: src/ddi/Download.cpp:395
+#: src/ddi/Download.cpp:383
 msgid "DDI download exceeds pinned file size: "
 msgstr ""
 
-#: src/ddi/Download.cpp:397
+#: src/ddi/Download.cpp:385
 msgid "Cannot write DDI download file: "
 msgstr ""
 
-#: src/ddi/Download.cpp:407
+#: src/ddi/Download.cpp:395
 msgid "DDI download failed"
 msgstr ""
 
-#: src/ddi/Download.cpp:411
+#: src/ddi/Download.cpp:399
 msgid "Cannot flush DDI download file: "
 msgstr ""
 
-#: src/ddi/Download.cpp:413
+#: src/ddi/Download.cpp:401
 msgid "Cannot close DDI download file: "
 msgstr ""
 
-#: src/ddi/Download.cpp:414
+#: src/ddi/Download.cpp:402
 msgid "Incomplete DDI download: "
 msgstr ""
 
-#: src/ddi/Download.cpp:420
+#: src/ddi/Download.cpp:408
 msgid "Cannot write DDI completion marker"
 msgstr ""
 
-#: src/ddi/Download.cpp:422
+#: src/ddi/Download.cpp:410
 msgid ""
 "DDI version directory appeared during download; refusing to overwrite it"
 msgstr ""
 
-#: src/ddi/Download.cpp:444
+#: src/ddi/Download.cpp:432
 msgid "XDG_CACHE_HOME must be an absolute path"
 msgstr ""
 
-#: src/ddi/Download.cpp:457
+#: src/ddi/Download.cpp:445
 msgid ""
 "No absolute platform cache directory is available; specify --ddi-directory"
 msgstr ""
 
-#: src/ddi/Download.cpp:476 src/ddi/Mounter.cpp:231
+#: src/ddi/Download.cpp:464 src/ddi/Mounter.cpp:231
 msgid "No pinned Classic DDI exists for the requested OS major.minor version"
+msgstr ""
+
+#: src/ddi/File.cpp:12
+msgid "DDI cache contains a nonregular file"
+msgstr ""
+
+#: src/ddi/File.cpp:16
+msgid "DDI file exceeds its size limit"
+msgstr ""
+
+#: src/ddi/File.cpp:18
+msgid "Cannot open DDI file"
+msgstr ""
+
+#: src/ddi/File.cpp:22
+msgid "Cannot read complete DDI file"
 msgstr ""
 
 #: src/ddi/Mounter.cpp:42
