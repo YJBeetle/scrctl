@@ -558,6 +558,9 @@ void test_pair_record() {
         check(scrctl::util::read_be16(endian) == 0x80ff && scrctl::util::read_be32(endian) == 0x80ff0102,
               "共用大端读取保留高位字节的无符号值");
     }
+    check(scrctl::wifi::valid_peer_identifier(std::string(1024, 'a')) &&
+          !scrctl::wifi::valid_peer_identifier(std::string(1025, 'a')),
+          "设备身份文本仍接受 1024 字节并拒绝超限输入");
     scrctl::wifi::PairRecord rec;
     rec.udid = "00008110-000429000209801E";
     rec.host_identifier = "AC106655-9E9F-3445-96B3-075257AF1912";

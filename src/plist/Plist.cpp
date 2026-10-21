@@ -10,7 +10,6 @@
 namespace scrctl::plist {
 namespace {
 constexpr int kMaxDepth = 64;
-constexpr size_t kMaxInput = 8u << 20;
 
 bool whitespace(std::string_view text) {
     return text.find_first_not_of(" \t\r\n") == std::string_view::npos;

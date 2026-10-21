@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -7,6 +8,8 @@
 #include <vector>
 
 namespace scrctl::plist {
+
+inline constexpr size_t kMaxInput = 8u << 20;
 
 enum class Kind { Bool, Int, Real, String, Data, Array, Dict, UInt };
 

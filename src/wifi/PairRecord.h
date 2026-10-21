@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -7,6 +8,8 @@
 #include "wifi/Crypto.h"
 
 namespace scrctl::wifi {
+
+inline constexpr size_t kMaxPeerIdentifier = 1024;
 
 /// 可无损写入单行记录的非空设备身份文本；不转换大小写或解码十六进制。
 bool valid_peer_identifier(std::string_view identifier);

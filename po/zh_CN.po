@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 1.0.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-22 02:17+0800\n"
+"POT-Creation-Date: 2026-10-22 02:18+0800\n"
 "PO-Revision-Date: 2026-10-09 00:00+0800\n"
 "Last-Translator: scrctl contributors\n"
 "Language-Team: Simplified Chinese\n"
@@ -2656,7 +2656,7 @@ msgstr "位置参数"
 msgid "Input too large"
 msgstr "输入过大"
 
-#: src/json/Json.cpp:22 src/plist/Plist.cpp:45
+#: src/json/Json.cpp:22 src/plist/Plist.cpp:44
 msgid "Nesting too deep"
 msgstr "嵌套过深"
 
@@ -3516,19 +3516,19 @@ msgstr "设备目录缺少服务："
 msgid "Screenshot response missing image data"
 msgstr "截图响应缺少 image 数据"
 
-#: src/media/StreamSession.cpp:150
+#: src/media/StreamSession.cpp:152
 msgid ""
 "Invalid startmediastream answer: connection.streamConfig.LocalSSRC must be "
 "an integer in 0..4294967295"
 msgstr "起流回复中的媒体源 LocalSSRC 无效：必须是 0..4294967295 范围内的整数"
 
-#: src/media/StreamSession.cpp:159
+#: src/media/StreamSession.cpp:161
 msgid ""
 "Invalid startmediastream answer: connection.streamConfig.RemoteSSRC must be "
 "an integer in 0..4294967295"
 msgstr "起流回复中的反馈源 RemoteSSRC 无效：必须是 0..4294967295 范围内的整数"
 
-#: src/media/StreamSession.cpp:186
+#: src/media/StreamSession.cpp:188
 msgid ""
 "Invalid startmediastream answer: connection.sender.port must be an integer "
 "or decimal string in 1..65535"
@@ -3536,20 +3536,20 @@ msgstr ""
 "startmediastream 回复无效：connection.sender.port 必须是 1..65535 范围内的整"
 "数或十进制字符串"
 
-#: src/media/StreamSession.cpp:223 src/remote/App.cpp:218
+#: src/media/StreamSession.cpp:225 src/remote/App.cpp:218
 #: src/transport/TcpConnect.cpp:31
 msgid ": "
 msgstr " 失败: "
 
-#: src/media/StreamSession.cpp:223
+#: src/media/StreamSession.cpp:225
 msgid "Failed to bind UDP port "
 msgstr "绑 UDP 端口 "
 
-#: src/media/StreamSession.cpp:256
+#: src/media/StreamSession.cpp:258
 msgid "startmediastream failed on the retained connection (transport failed)"
 msgstr "在持有的连接上发 startmediastream 失败（链路断了）"
 
-#: src/media/StreamSession.cpp:335
+#: src/media/StreamSession.cpp:337
 msgid "getmediastreamserverstatus response missing sessions array"
 msgstr "getmediastreamserverstatus 的回复里没有 sessions 数组"
 
@@ -3698,71 +3698,71 @@ msgstr "UDP 发送失败（lwIP "
 msgid "UDP receive timed out"
 msgstr "UDP 接收超时"
 
-#: src/plist/Plist.cpp:27
+#: src/plist/Plist.cpp:26
 msgid "Container contains nonempty text"
 msgstr "容器内出现非空文本"
 
-#: src/plist/Plist.cpp:38
+#: src/plist/Plist.cpp:37
 msgid "Scalar cannot contain nested elements"
 msgstr "标量内不能嵌套元素"
 
-#: src/plist/Plist.cpp:55
+#: src/plist/Plist.cpp:54
 msgid "Dictionary key missing value"
 msgstr "dict 缺少键对应的值"
 
-#: src/plist/Plist.cpp:58
+#: src/plist/Plist.cpp:57
 msgid "Expected <key> in dictionary"
 msgstr "dict 里期望 <key>"
 
-#: src/plist/Plist.cpp:67
+#: src/plist/Plist.cpp:66
 msgid "Boolean element must be empty"
 msgstr "bool 内容必须为空"
 
-#: src/plist/Plist.cpp:76
+#: src/plist/Plist.cpp:75
 msgid "Invalid base64 in data: "
 msgstr "data 不是合法 base64: "
 
-#: src/plist/Plist.cpp:82
+#: src/plist/Plist.cpp:81
 msgid "Numeric value is empty"
 msgstr "数值内容为空"
 
-#: src/plist/Plist.cpp:97
+#: src/plist/Plist.cpp:96
 msgid "Real must be finite"
 msgstr "real 必须是有限数"
 
-#: src/plist/Plist.cpp:100
+#: src/plist/Plist.cpp:99
 msgid "Trailing content in numeric value"
 msgstr "数值尾部有多余内容"
 
-#: src/plist/Plist.cpp:103
+#: src/plist/Plist.cpp:102
 msgid "Unsupported element "
 msgstr "不支持的元素 "
 
-#: src/plist/Plist.cpp:108
+#: src/plist/Plist.cpp:107
 msgid "XML text cannot contain NUL"
 msgstr "XML 文本不能包含 NUL"
 
-#: src/plist/Plist.cpp:115
+#: src/plist/Plist.cpp:114
 msgid "plist nesting too deep"
 msgstr "plist 嵌套过深"
 
-#: src/plist/Plist.cpp:128
+#: src/plist/Plist.cpp:127
 msgid "plist real must be finite"
 msgstr "plist real 必须是有限数"
 
-#: src/plist/Plist.cpp:145
+#: src/plist/Plist.cpp:144
 msgid "plist dictionary key/value count mismatch"
 msgstr "plist dict 键值数量不一致"
 
-#: src/plist/Plist.cpp:162
+#: src/plist/Plist.cpp:161
 msgid "XML input too large or contains NUL"
 msgstr "XML 输入过大或含 NUL"
 
-#: src/plist/Plist.cpp:175
+#: src/plist/Plist.cpp:174
 msgid "Root must be a single <plist> element"
 msgstr "根元素必须是单个 <plist>"
 
-#: src/plist/Plist.cpp:178
+#: src/plist/Plist.cpp:177
 msgid "plist root must contain a single value"
 msgstr "plist 根必须包含单个值"
 

@@ -12,6 +12,8 @@
 
 namespace scrctl::transport {
 
+inline constexpr uint16_t kUsbmuxPort = 27015;
+
 struct DeviceRecord {
     uint32_t device_id = 0;
     std::string udid;              ///< Properties.SerialNumber
@@ -93,7 +95,7 @@ namespace detail {
 /// 内部测试边界：生产入口始终使用系统 usbmux 服务，不提供 endpoint 配置。
 struct UsbmuxDiscoveryEndpoint {
 #ifdef _WIN32
-    uint16_t port = 27015; // 仅 loopback TCP，不解析任意主机名。
+    uint16_t port = kUsbmuxPort; // 仅 loopback TCP，不解析任意主机名。
 #else
     std::string path = "/var/run/usbmuxd";
 #endif

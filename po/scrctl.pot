@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 1.0.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-22 02:17+0800\n"
+"POT-Creation-Date: 2026-10-22 02:18+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -2599,7 +2599,7 @@ msgstr ""
 msgid "Input too large"
 msgstr ""
 
-#: src/json/Json.cpp:22 src/plist/Plist.cpp:45
+#: src/json/Json.cpp:22 src/plist/Plist.cpp:44
 msgid "Nesting too deep"
 msgstr ""
 
@@ -3447,38 +3447,38 @@ msgstr ""
 msgid "Screenshot response missing image data"
 msgstr ""
 
-#: src/media/StreamSession.cpp:150
+#: src/media/StreamSession.cpp:152
 msgid ""
 "Invalid startmediastream answer: connection.streamConfig.LocalSSRC must be "
 "an integer in 0..4294967295"
 msgstr ""
 
-#: src/media/StreamSession.cpp:159
+#: src/media/StreamSession.cpp:161
 msgid ""
 "Invalid startmediastream answer: connection.streamConfig.RemoteSSRC must be "
 "an integer in 0..4294967295"
 msgstr ""
 
-#: src/media/StreamSession.cpp:186
+#: src/media/StreamSession.cpp:188
 msgid ""
 "Invalid startmediastream answer: connection.sender.port must be an integer "
 "or decimal string in 1..65535"
 msgstr ""
 
-#: src/media/StreamSession.cpp:223 src/remote/App.cpp:218
+#: src/media/StreamSession.cpp:225 src/remote/App.cpp:218
 #: src/transport/TcpConnect.cpp:31
 msgid ": "
 msgstr ""
 
-#: src/media/StreamSession.cpp:223
+#: src/media/StreamSession.cpp:225
 msgid "Failed to bind UDP port "
 msgstr ""
 
-#: src/media/StreamSession.cpp:256
+#: src/media/StreamSession.cpp:258
 msgid "startmediastream failed on the retained connection (transport failed)"
 msgstr ""
 
-#: src/media/StreamSession.cpp:335
+#: src/media/StreamSession.cpp:337
 msgid "getmediastreamserverstatus response missing sessions array"
 msgstr ""
 
@@ -3627,71 +3627,71 @@ msgstr ""
 msgid "UDP receive timed out"
 msgstr ""
 
-#: src/plist/Plist.cpp:27
+#: src/plist/Plist.cpp:26
 msgid "Container contains nonempty text"
 msgstr ""
 
-#: src/plist/Plist.cpp:38
+#: src/plist/Plist.cpp:37
 msgid "Scalar cannot contain nested elements"
 msgstr ""
 
-#: src/plist/Plist.cpp:55
+#: src/plist/Plist.cpp:54
 msgid "Dictionary key missing value"
 msgstr ""
 
-#: src/plist/Plist.cpp:58
+#: src/plist/Plist.cpp:57
 msgid "Expected <key> in dictionary"
 msgstr ""
 
-#: src/plist/Plist.cpp:67
+#: src/plist/Plist.cpp:66
 msgid "Boolean element must be empty"
 msgstr ""
 
-#: src/plist/Plist.cpp:76
+#: src/plist/Plist.cpp:75
 msgid "Invalid base64 in data: "
 msgstr ""
 
-#: src/plist/Plist.cpp:82
+#: src/plist/Plist.cpp:81
 msgid "Numeric value is empty"
 msgstr ""
 
-#: src/plist/Plist.cpp:97
+#: src/plist/Plist.cpp:96
 msgid "Real must be finite"
 msgstr ""
 
-#: src/plist/Plist.cpp:100
+#: src/plist/Plist.cpp:99
 msgid "Trailing content in numeric value"
 msgstr ""
 
-#: src/plist/Plist.cpp:103
+#: src/plist/Plist.cpp:102
 msgid "Unsupported element "
 msgstr ""
 
-#: src/plist/Plist.cpp:108
+#: src/plist/Plist.cpp:107
 msgid "XML text cannot contain NUL"
 msgstr ""
 
-#: src/plist/Plist.cpp:115
+#: src/plist/Plist.cpp:114
 msgid "plist nesting too deep"
 msgstr ""
 
-#: src/plist/Plist.cpp:128
+#: src/plist/Plist.cpp:127
 msgid "plist real must be finite"
 msgstr ""
 
-#: src/plist/Plist.cpp:145
+#: src/plist/Plist.cpp:144
 msgid "plist dictionary key/value count mismatch"
 msgstr ""
 
-#: src/plist/Plist.cpp:162
+#: src/plist/Plist.cpp:161
 msgid "XML input too large or contains NUL"
 msgstr ""
 
-#: src/plist/Plist.cpp:175
+#: src/plist/Plist.cpp:174
 msgid "Root must be a single <plist> element"
 msgstr ""
 
-#: src/plist/Plist.cpp:178
+#: src/plist/Plist.cpp:177
 msgid "plist root must contain a single value"
 msgstr ""
 

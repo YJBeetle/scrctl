@@ -243,7 +243,7 @@ UsbmuxDiscoveryStatus Usbmux::list_devices_for_discovery(
 
 std::string Usbmux::socket_path() {
 #ifdef _WIN32
-    return "127.0.0.1:27015";
+    return "127.0.0.1:" + std::to_string(kUsbmuxPort);
 #else
     return "/var/run/usbmuxd";
 #endif
@@ -252,7 +252,7 @@ std::string Usbmux::socket_path() {
 std::optional<Usbmux> Usbmux::open(std::string &err) {
 #ifdef _WIN32
     // Apple Mobile Device Service 在 Windows 提供本地 TCP usbmux 服务。
-    auto socket = connect_tcp("127.0.0.1", 27015, 3000, err);
+    auto socket = connect_tcp("127.0.0.1", kUsbmuxPort, 3000, err);
     if (!socket) return std::nullopt;
     Usbmux mux;
     mux.sock_ = std::move(*socket);
@@ -289,7 +289,7 @@ std::optional<Usbmux> Usbmux::open_for_service(std::chrono::milliseconds timeout
     if (!budget.active() || !initialize_sockets(err)) return fail();
 #ifdef _WIN32
     sockaddr_in address{};
-    address.sin_family = AF_INET; address.sin_addr.s_addr = htonl(INADDR_LOOPBACK); address.sin_port = htons(27015);
+    address.sin_family = AF_INET; address.sin_addr.s_addr = htonl(INADDR_LOOPBACK); address.sin_port = htons(kUsbmuxPort);
     Socket socket(::socket(AF_INET, SOCK_STREAM, 0));
     u_long mode = 1;
     if (!socket.valid() || ::ioctlsocket(socket.fd(), FIONBIO, &mode) != 0) {

@@ -122,7 +122,7 @@ std::optional<std::string> read_file(const std::string &path, std::string &err) 
 }  // namespace
 
 bool valid_peer_identifier(std::string_view identifier) {
-    return !identifier.empty() && identifier.size() <= 1024 && trim(identifier) == identifier &&
+    return !identifier.empty() && identifier.size() <= kMaxPeerIdentifier && trim(identifier) == identifier &&
            std::none_of(identifier.begin(), identifier.end(), [](unsigned char c) {
                return c < 0x20 || c == 0x7f;
            });

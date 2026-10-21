@@ -5,6 +5,7 @@
 #include <charconv>
 #include <limits>
 #include <random>
+#include <string_view>
 
 #include "remote/Device.h"
 
@@ -13,6 +14,7 @@ namespace {
 
 using namespace scrctl;
 
+constexpr std::string_view kDisplayService = "com.apple.coredevice.displayservice";
 constexpr int64_t kAccessNetworkType = 1;
 constexpr int64_t kTransportProtocolType = 2;
 
@@ -206,12 +208,12 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
     if (start_status != nullptr) {
         *start_status = StartStatus::NotConfirmed;
     }
-    const auto info = device.rsd().service("com.apple.coredevice.displayservice");
+    const auto info = device.rsd().service(kDisplayService);
     if (!info) {
         // 错误中同时列出实际 RSD 目录，便于区分 DDI 状态与设备/系统服务差异。
         // iPad mini / iOS 18 的外部反馈曾缺少 displayservice，不能仅据缺失名称断定原因。
         err = scrctl::remote::Rsd::missing_service_message(
-            "com.apple.coredevice.displayservice", device.rsd().services());
+            kDisplayService, device.rsd().services());
         return nullptr;
     }
 
@@ -257,7 +259,7 @@ std::unique_ptr<StreamSession> StreamSession::start(remote::Device &device,
             }
             return nullptr;
         }
-    } else if (!device.feature("com.apple.coredevice.displayservice",
+    } else if (!device.feature(kDisplayService,
                                "com.apple.coredevice.feature.startmediastream",
                                "com.apple.coredevice.action.mediastreamstart", input, output, err,
                                verbose, 30000)) {
@@ -300,7 +302,7 @@ bool StreamSession::stop(remote::Device &device, std::string &err, bool verbose)
     auto input = xpc::make_dict();
     xpc::dict_set(input, "stopAll", xpc::make_bool(true));
     xpc::Value output;
-    return device.feature("com.apple.coredevice.displayservice",
+    return device.feature(kDisplayService,
                           "com.apple.coredevice.feature.stopmediastream",
                           "com.apple.coredevice.action.mediastreamstop", input, output, err,
                           verbose, 10000);
@@ -311,7 +313,7 @@ uint16_t StreamSession::receiver_port() const { return socket_->local_port(); }
 xpc::Value StreamSession::status(remote::Device &device, std::string &err, bool verbose) {
     auto input = xpc::make_dict();
     xpc::Value output;
-    if (!device.feature("com.apple.coredevice.displayservice",
+    if (!device.feature(kDisplayService,
                         "com.apple.coredevice.feature.getmediastreamserverstatus",
                         "com.apple.coredevice.action.mediastreamstatus", input, output, err,
                         verbose, 10000)) {

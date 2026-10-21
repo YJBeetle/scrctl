@@ -123,7 +123,7 @@ bool matches_target(const plist::Value &identity, const DownloadTarget *target) 
 void check_manifest(const fs::path &directory, const detail::Catalog &catalog, const DownloadTarget *target) {
     if (catalog.kind == Kind::Classic) return;
     std::string err;
-    auto manifest = plist::parse(detail::read_file(directory / "BuildManifest.plist", 8 * 1024 * 1024), &err);
+    auto manifest = plist::parse(detail::read_file(directory / "BuildManifest.plist", plist::kMaxInput), &err);
     if (!manifest || !manifest->is_dict()) throw std::runtime_error(SCRCTL_TR("Invalid DDI BuildManifest plist"));
     const auto *build = manifest->find("ProductBuildVersion");
     const auto *identities = manifest->find("BuildIdentities");

@@ -16,7 +16,7 @@ namespace {
 using Clock = std::chrono::steady_clock;
 using Ms = std::chrono::milliseconds;
 using V = plist::Value;
-constexpr uint32_t kMaxFrame = 8u << 20;
+constexpr uint32_t kMaxFrame = static_cast<uint32_t>(plist::kMaxInput);
 constexpr char kUsbService[] = "com.apple.mobile.mobile_image_mounter";
 constexpr char kRemoteService[] = "com.apple.mobile.mobile_image_mounter.shim.remote";
 
