@@ -172,6 +172,7 @@ endif()
 # ------------------------------------------------------------- core lib -----
 add_library(scrctl_core STATIC
         src/i18n/Translation.cpp
+        src/util/Hex.cpp
         src/ddi/File.cpp
         src/ddi/Download.cpp
         src/ddi/Selection.cpp

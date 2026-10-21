@@ -1,3 +1,4 @@
+#include "util/Hex.h"
 #include "ddi/Mounter.h"
 #include "ddi/DownloadInternal.h"
 #include "i18n/Translation.h"
@@ -170,11 +171,6 @@ std::vector<uint8_t> hash_bytes(const std::vector<uint8_t> &data, const EVP_MD *
         throw std::runtime_error(SCRCTL_TR("Cannot hash DDI asset"));
     output.resize(size); return output;
 }
-std::string hex(const std::vector<uint8_t> &data) {
-    std::string text;
-    for (auto b : data) { text += "0123456789abcdef"[b >> 4]; text += "0123456789abcdef"[b & 15]; }
-    return text;
-}
 std::map<std::string, std::vector<uint8_t>> load_assets(Session &s, const DownloadResult &download, const detail::Catalog &catalog) {
     std::map<std::string, std::vector<uint8_t>> assets;
     for (const auto &asset : catalog.assets) {
@@ -186,8 +182,8 @@ std::map<std::string, std::vector<uint8_t>> load_assets(Session &s, const Downlo
             throw std::runtime_error(SCRCTL_TR("Cannot read complete DDI install asset"));
         // Hash the actual snapshot sent to the device, not only the earlier
         // on-disk validation. Mutation after validation cannot alter upload.
-        if ((!asset.sha256.empty() && hex(hash_bytes(bytes, EVP_sha256(), false)) != asset.sha256) ||
-            (!asset.git_blob_sha1.empty() && hex(hash_bytes(bytes, EVP_sha1(), true)) != asset.git_blob_sha1))
+        if ((!asset.sha256.empty() && util::hex_encode(hash_bytes(bytes, EVP_sha256(), false)) != asset.sha256) ||
+            (!asset.git_blob_sha1.empty() && util::hex_encode(hash_bytes(bytes, EVP_sha1(), true)) != asset.git_blob_sha1))
             throw std::runtime_error(SCRCTL_TR("DDI install asset changed after cache validation"));
         assets.emplace(asset.name, std::move(bytes));
     }
@@ -216,8 +212,8 @@ std::optional<MountResult> detail::inspect_mounted_with_catalog(PlistService &se
     }
     try {
         result->signature_matches = result->signature.size() == asset->size &&
-            (asset->sha256.empty() || hex(hash_bytes(result->signature, EVP_sha256(), false)) == asset->sha256) &&
-            (asset->git_blob_sha1.empty() || hex(hash_bytes(result->signature, EVP_sha1(), true)) == asset->git_blob_sha1);
+            (asset->sha256.empty() || util::hex_encode(hash_bytes(result->signature, EVP_sha256(), false)) == asset->sha256) &&
+            (asset->git_blob_sha1.empty() || util::hex_encode(hash_bytes(result->signature, EVP_sha1(), true)) == asset->git_blob_sha1);
     } catch (const std::exception &e) { error = safe_text(e.what()); return std::nullopt; }
     return result;
 }

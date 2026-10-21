@@ -1,12 +1,9 @@
+#include "util/Bytes.h"
 #include "rt/Rtcp.h"
 
 namespace scrctl::rt {
 namespace {
 
-uint32_t read32(std::span<const uint8_t> bytes, std::size_t offset) {
-    return (uint32_t(bytes[offset]) << 24) | (uint32_t(bytes[offset + 1]) << 16) |
-           (uint32_t(bytes[offset + 2]) << 8) | uint32_t(bytes[offset + 3]);
-}
 
 void put16(std::vector<uint8_t> &v, uint16_t x) {
     v.push_back(static_cast<uint8_t>(x >> 8));
@@ -74,9 +71,9 @@ bool parse_sender_reports(std::span<const uint8_t> datagram,
                 return false;
             }
             if (packet[1] == 200) {
-                parsed.push_back({read32(packet, 4), read32(packet, 8),
-                                  read32(packet, 12), read32(packet, 16),
-                                  read32(packet, 20), read32(packet, 24)});
+                parsed.push_back({util::read_be32(packet.data() + 4), util::read_be32(packet.data() + 8),
+                                  util::read_be32(packet.data() + 12), util::read_be32(packet.data() + 16),
+                                  util::read_be32(packet.data() + 20), util::read_be32(packet.data() + 24)});
             }
         }
         datagram = datagram.subspan(size);

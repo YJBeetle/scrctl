@@ -1,3 +1,4 @@
+#include "util/Bytes.h"
 #include "i18n/Translation.h"
 #include "media/FramePump.h"
 
@@ -955,10 +956,6 @@ void FramePump::loop() {
         // 视频端口同时接收裸 RTCP SR。按既有设备心跳形态识别后读取偏移 20 和 24
         // 的设备累计视频包数与字节数；这些值只反映最后一份 SR 的时刻。
         const bool is_sr = scrctl::rt::is_rtcp_sr(datagram);
-        const auto be32 = [&datagram](std::size_t off) {
-            return (uint32_t(datagram[off]) << 24) | (uint32_t(datagram[off + 1]) << 16) |
-                   (uint32_t(datagram[off + 2]) << 8) | datagram[off + 3];
-        };
         // 录制按严格复合包解析后逐条匹配来源；首个 SR 可能属于其他来源，
         // 不能先沿用旧心跳的首包过滤而丢掉后续本源锚点。
         std::vector<scrctl::rt::SenderReport> reports;
@@ -973,7 +970,7 @@ void FramePump::loop() {
         }
         if (is_sr) {
             // 未协商来源时不能用心跳猜测媒体源，等待第一条合法同 PT 的视频 RTP。
-            if (!media_source || be32(4) != *media_source) {
+            if (!media_source || util::read_be32(datagram.data() + 4) != *media_source) {
                 continue;
             }
         } else {
@@ -996,8 +993,8 @@ void FramePump::loop() {
         last_packet_ms_ = now_ms();
         uint64_t dev_pkts = 0, dev_octets = 0;
         if (is_sr) {
-            dev_pkts = be32(20);
-            dev_octets = be32(24);
+            dev_pkts = util::read_be32(datagram.data() + 20);
+            dev_octets = util::read_be32(datagram.data() + 24);
         }
         {
             std::lock_guard<std::mutex> lock(mutex_);

@@ -1,3 +1,5 @@
+#include "util/Bytes.h"
+#include "util/Hex.h"
 // M5 离线判据：RemotePairing 的密码学、TLV、配对记录、帧与序号规矩。
 //
 // 期望值的来源分两级，逐条标出来：
@@ -541,6 +543,21 @@ void test_tlv() {
 
 /// ---- 3. 配对记录 ----
 void test_pair_record() {
+    {
+        Bytes values; for (unsigned i = 0; i < 256; ++i) values.push_back(static_cast<uint8_t>(i));
+        std::string error;
+        const auto encoded = scrctl::util::hex_encode(values);
+        check(scrctl::util::hex_decode(encoded, error) == values && scrctl::util::is_lower_hex(encoded),
+              "共用十六进制工具无损往返全部 256 个字节值");
+        check(scrctl::util::hex_decode("AaFf", error) == Bytes({0xaa, 0xff}) &&
+              !scrctl::util::hex_decode("0", error) && !scrctl::util::hex_decode("xy", error) &&
+              !scrctl::util::is_lower_hex("AF"), "十六进制解析保留大小写、奇数长度及非法字符规则");
+        check(scrctl::util::hex_encode({}).empty() && scrctl::util::hex_decode("", error) == Bytes{},
+              "十六进制工具支持空输入");
+        const uint8_t endian[]{0x80, 0xff, 0x01, 0x02};
+        check(scrctl::util::read_be16(endian) == 0x80ff && scrctl::util::read_be32(endian) == 0x80ff0102,
+              "共用大端读取保留高位字节的无符号值");
+    }
     scrctl::wifi::PairRecord rec;
     rec.udid = "00008110-000429000209801E";
     rec.host_identifier = "AC106655-9E9F-3445-96B3-075257AF1912";

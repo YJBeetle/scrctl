@@ -1,3 +1,4 @@
+#include "util/Hex.h"
 #include "ddi/Cryptex.h"
 #include "ddi/DownloadInternal.h"
 #include "ddi/File.h"
@@ -43,9 +44,7 @@ std::string pinned_snapshot(const std::filesystem::path &directory, std::string_
     if (bytes.size() != asset->size || EVP_Digest(bytes.data(), bytes.size(), digest.data(), &length,
                                                EVP_sha256(), nullptr) != 1 || length != 32)
         throw std::runtime_error(SCRCTL_TR("Cryptex asset snapshot checksum failed"));
-    constexpr char hex[] = "0123456789abcdef";
-    std::string checksum;
-    for (unsigned i = 0; i < length; ++i) { checksum += hex[digest[i] >> 4]; checksum += hex[digest[i] & 15]; }
+    const auto checksum = util::hex_encode(std::span(digest).first(length));
     if (checksum != asset->sha256)
         throw std::runtime_error(SCRCTL_TR("Cryptex asset changed before installation"));
     return bytes;

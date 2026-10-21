@@ -1,3 +1,4 @@
+#include "util/Bytes.h"
 #include "i18n/Translation.h"
 #include "rt/RtpHevc.h"
 
@@ -10,10 +11,6 @@ constexpr std::size_t kRtpHeaderLen = 12;
 constexpr uint8_t kTypeAgg16 = 48;
 constexpr uint8_t kTypeFragment = 49;
 
-uint16_t be16(const uint8_t *p) { return static_cast<uint16_t>(p[0] << 8 | p[1]); }
-uint32_t be32(const uint8_t *p) {
-    return uint32_t(p[0]) << 24 | uint32_t(p[1]) << 16 | uint32_t(p[2]) << 8 | p[3];
-}
 
 void append_start_code(std::vector<uint8_t> &out) {
     static const uint8_t kStartCode[4] = {0, 0, 0, 1};
@@ -54,7 +51,7 @@ bool parse_rtp_header(std::span<const uint8_t> d, PacketInfo &out) {
         if (d.size() < pos + 4) {
             return false;
         }
-        const std::size_t ext = (static_cast<std::size_t>(be16(d.data() + pos + 2)) + 1) * 4;
+        const std::size_t ext = (static_cast<std::size_t>(util::read_be16(d.data() + pos + 2)) + 1) * 4;
         if (d.size() < pos + ext) {
             return false;
         }
@@ -72,7 +69,7 @@ bool parse_rtp_header(std::span<const uint8_t> d, PacketInfo &out) {
         return false;
     }
     out = {(d[1] & 0x80) != 0, static_cast<uint8_t>(d[1] & 0x7F),
-           be16(d.data() + 2), be32(d.data() + 4), be32(d.data() + 8), pos, end - pos};
+           util::read_be16(d.data() + 2), util::read_be32(d.data() + 4), util::read_be32(d.data() + 8), pos, end - pos};
     return true;
 }
 
@@ -148,7 +145,7 @@ bool HevcRtpDepacketizer::push_nals(std::span<const uint8_t> datagram,
                 ++stats_.malformed;
                 return true;
             }
-            const std::size_t len = be16(rest.data());
+            const std::size_t len = util::read_be16(rest.data());
             rest = rest.subspan(2);
             if (len < 2 || len > rest.size() || !valid_nal_header(rest.first(len)) ||
                 ((rest[0] >> 1) & 0x3F) >= kTypeAgg16) {
@@ -163,7 +160,7 @@ bool HevcRtpDepacketizer::push_nals(std::span<const uint8_t> datagram,
             return true;
         }
         while (!body.empty()) {
-            const std::size_t len = be16(body.data());
+            const std::size_t len = util::read_be16(body.data());
             body = body.subspan(2);
             out.push_back(complete_nal(body.first(len), info,
                                        info.marker && body.size() == len));

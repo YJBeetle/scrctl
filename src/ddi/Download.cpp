@@ -1,3 +1,4 @@
+#include "util/Hex.h"
 #include "ddi/DownloadInternal.h"
 #include "ddi/File.h"
 #include "plist/Plist.h"
@@ -50,17 +51,11 @@ std::vector<uint8_t> digest_file(const fs::path &path, const EVP_MD *algorithm, 
     return result;
 }
 
-std::string hex(const std::vector<uint8_t> &bytes) {
-    constexpr char digits[] = "0123456789abcdef";
-    std::string result;
-    for (auto byte : bytes) { result += digits[byte >> 4]; result += digits[byte & 15]; }
-    return result;
-}
 
 std::string marker(const detail::Catalog &catalog) { return catalog.build + "\n" + catalog.source_url + "\n"; }
 
 bool hex_digest(std::string_view value, size_t length) {
-    return value.size() == length && value.find_first_not_of("0123456789abcdef") == std::string_view::npos;
+    return value.size() == length && util::is_lower_hex(value);
 }
 
 void check_catalog(const detail::Catalog &catalog) {
@@ -203,9 +198,9 @@ bool validate_files(const fs::path &directory, const detail::Catalog &catalog, s
             const auto path = directory / asset.name;
             if (fs::is_symlink(fs::symlink_status(path)) || !fs::is_regular_file(path) || fs::file_size(path) != asset.size)
                 throw std::runtime_error(std::string(SCRCTL_TR("DDI cache size or file type mismatch: ")) + asset.name);
-            if (!asset.sha256.empty() && hex(digest_file(path, EVP_sha256())) != asset.sha256)
+            if (!asset.sha256.empty() && util::hex_encode(digest_file(path, EVP_sha256())) != asset.sha256)
                 throw std::runtime_error(std::string(SCRCTL_TR("DDI cache SHA-256 mismatch: ")) + asset.name);
-            if (!asset.git_blob_sha1.empty() && hex(digest_file(path, EVP_sha1(), true)) != asset.git_blob_sha1)
+            if (!asset.git_blob_sha1.empty() && util::hex_encode(digest_file(path, EVP_sha1(), true)) != asset.git_blob_sha1)
                 throw std::runtime_error(std::string(SCRCTL_TR("DDI cache Git blob SHA-1 mismatch: ")) + asset.name);
         }
         check_manifest(directory, catalog, target);
@@ -369,7 +364,7 @@ std::optional<DownloadResult> download(const DownloadOptions &options, const Cat
         }
         std::vector<uint8_t> nonce(16);
         if (RAND_bytes(nonce.data(), static_cast<int>(nonce.size())) != 1) throw std::runtime_error(SCRCTL_TR("Cannot generate DDI staging directory name"));
-        const auto staging = root / ("." + cache_name + ".partial-" + hex(nonce));
+        const auto staging = root / ("." + cache_name + ".partial-" + util::hex_encode(nonce));
         if (!fs::create_directory(staging)) throw std::runtime_error(SCRCTL_TR("Cannot create unique DDI staging directory"));
         RemovePath cleanup{staging};
         fs::permissions(staging, fs::perms::owner_all, fs::perm_options::replace);

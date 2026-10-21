@@ -1,3 +1,4 @@
+#include "util/Hex.h"
 #include "i18n/Translation.h"
 #include "wifi/PairRecord.h"
 
@@ -28,46 +29,7 @@ constexpr char kHeader[] = "scrctl-pair-record 1";
 // 最多读取上限加一个检测字节，避免超大文件在大小校验前占用大量内存。
 constexpr size_t kMaxRecordText = 16384;
 
-std::string hex(const Bytes &data) {
-    static constexpr char kDigits[] = "0123456789abcdef";
-    std::string out;
-    out.reserve(data.size() * 2);
-    for (const uint8_t b : data) {
-        out += kDigits[b >> 4];
-        out += kDigits[b & 0xF];
-    }
-    return out;
-}
 
-std::optional<Bytes> unhex(std::string_view text, std::string &err) {
-    if (text.size() % 2 != 0) {
-        err = SCRCTL_TR("Hex length must be even");
-        return std::nullopt;
-    }
-    auto nibble = [](char c) -> int {
-        if (c >= '0' && c <= '9') {
-            return c - '0';
-        }
-        if (c >= 'a' && c <= 'f') {
-            return c - 'a' + 10;
-        }
-        if (c >= 'A' && c <= 'F') {
-            return c - 'A' + 10;
-        }
-        return -1;
-    };
-    Bytes out;
-    out.reserve(text.size() / 2);
-    for (size_t i = 0; i < text.size(); i += 2) {
-        const int hi = nibble(text[i]), lo = nibble(text[i + 1]);
-        if (hi < 0 || lo < 0) {
-            err = SCRCTL_TR("Invalid hex character");
-            return std::nullopt;
-        }
-        out.push_back(static_cast<uint8_t>((hi << 4) | lo));
-    }
-    return out;
-}
 
 std::string_view trim(std::string_view s) {
     while (!s.empty() && (s.front() == ' ' || s.front() == '\t')) {
@@ -97,7 +59,7 @@ std::string sanitize(const std::string &udid) {
 bool write_file(const std::string &path, std::string_view text, std::string &err, bool replace) {
     const auto nonce = random_bytes(8, err);
     if (!nonce) return false;
-    const std::string tmp = path + ".tmp." + hex(*nonce);
+    const std::string tmp = path + ".tmp." + util::hex_encode(*nonce);
 #ifdef _WIN32
     return write_private_record(tmp, path, text, err, replace);
 #else
@@ -171,8 +133,8 @@ std::string format_record(const PairRecord &record) {
     out << kHeader << '\n';
     out << "udid=" << record.udid << '\n';
     out << "host_identifier=" << record.host_identifier << '\n';
-    out << "host_private_key=" << hex(record.host_private_key) << '\n';
-    out << "host_public_key=" << hex(record.host_public_key) << '\n';
+    out << "host_private_key=" << util::hex_encode(record.host_private_key) << '\n';
+    out << "host_public_key=" << util::hex_encode(record.host_public_key) << '\n';
     if (!record.advertised_identifier.empty()) {
         out << "advertised_identifier=" << record.advertised_identifier << '\n';
     }
@@ -180,10 +142,10 @@ std::string format_record(const PairRecord &record) {
         out << "peer_identifier=" << record.peer_identifier << '\n';
     }
     if (!record.peer_public_key.empty()) {
-        out << "peer_public_key=" << hex(record.peer_public_key) << '\n';
+        out << "peer_public_key=" << util::hex_encode(record.peer_public_key) << '\n';
     }
     if (!record.peer_alt_irk.empty()) {
-        out << "peer_alt_irk=" << hex(record.peer_alt_irk) << '\n';
+        out << "peer_alt_irk=" << util::hex_encode(record.peer_alt_irk) << '\n';
     }
     return out.str();
 }
@@ -228,7 +190,7 @@ std::optional<PairRecord> parse_record(std::string_view text, std::string &err) 
             return std::nullopt;
         }
         auto set_hex = [&](Bytes &field, size_t want) -> bool {
-            const std::optional<Bytes> bytes = unhex(value, err);
+            const std::optional<Bytes> bytes = util::hex_decode(value, err);
             if (!bytes) {
                 return false;
             }
