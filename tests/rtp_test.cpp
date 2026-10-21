@@ -875,15 +875,20 @@ void test_sender_reports() {
     check(scrctl::rt::parse_sender_reports(extended, reports) &&
           reports == std::vector{expected}, "允许SR末尾profile扩展");
 
+    check(scrctl::rt::validate_rtcp(sr) && scrctl::rt::validate_rtcp(compound) &&
+          scrctl::rt::validate_rtcp(scrctl::rt::build_rr(1, 2, 3)) &&
+          scrctl::rt::validate_rtcp(padded) && scrctl::rt::validate_rtcp(extended),
+          "仅校验路径接受相同 SR、复合包、RR、填充和 profile 扩展");
     const auto reject = [&](const std::vector<uint8_t> &bytes, const std::string &why) {
         reports = {expected};
-        check(!scrctl::rt::parse_sender_reports(bytes, reports) &&
+        check(!scrctl::rt::validate_rtcp(bytes) && !scrctl::rt::parse_sender_reports(bytes, reports) &&
               reports == std::vector{expected}, why + "；失败保留原输出");
     };
     bool truncations_rejected = true;
     for (std::size_t size = 0; size < sr.size(); ++size) {
         reports = {expected};
-        truncations_rejected &= !scrctl::rt::parse_sender_reports(
+        truncations_rejected &= !scrctl::rt::validate_rtcp(std::span<const uint8_t>(sr).first(size)) &&
+            !scrctl::rt::parse_sender_reports(
             std::span<const uint8_t>(sr).first(size), reports) &&
             reports == std::vector{expected};
     }

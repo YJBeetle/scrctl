@@ -958,15 +958,20 @@ void FramePump::loop() {
         const bool is_sr = scrctl::rt::is_rtcp_sr(datagram);
         // 录制按严格复合包解析后逐条匹配来源；首个 SR 可能属于其他来源，
         // 不能先沿用旧心跳的首包过滤而丢掉后续本源锚点。
-        std::vector<scrctl::rt::SenderReport> reports;
-        const bool valid_rtcp = scrctl::rt::parse_sender_reports(datagram, reports);
-        if (options_.recorder != nullptr && media_source && valid_rtcp) {
-            for (const auto &report : reports) {
-                if (report.ssrc == *media_source) {
-                    (void)options_.recorder->sender_report(Recorder::Track::Video,
-                        session_->started().session_uuid, report);
+        bool valid_rtcp;
+        if (options_.recorder != nullptr) {
+            std::vector<scrctl::rt::SenderReport> reports;
+            valid_rtcp = scrctl::rt::parse_sender_reports(datagram, reports);
+            if (media_source && valid_rtcp) {
+                for (const auto &report : reports) {
+                    if (report.ssrc == *media_source) {
+                        (void)options_.recorder->sender_report(Recorder::Track::Video,
+                            session_->started().session_uuid, report);
+                    }
                 }
             }
+        } else {
+            valid_rtcp = scrctl::rt::validate_rtcp(datagram);
         }
         if (is_sr) {
             // 未协商来源时不能用心跳猜测媒体源，等待第一条合法同 PT 的视频 RTP。

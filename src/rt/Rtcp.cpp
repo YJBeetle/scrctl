@@ -36,14 +36,10 @@ std::vector<uint8_t> sdes_with_cname(uint32_t sender_ssrc, std::string_view cnam
     return v;
 }
 
-}  // namespace
-
-bool parse_sender_reports(std::span<const uint8_t> datagram,
-                          std::vector<SenderReport> &reports) {
+bool parse_packets(std::span<const uint8_t> datagram, std::vector<SenderReport> *reports) {
     if (datagram.empty()) {
         return false;
     }
-    std::vector<SenderReport> parsed;
     while (!datagram.empty()) {
         if (datagram.size() < 4 || (datagram[0] >> 6) != 2 ||
             datagram[1] < 192 || datagram[1] > 223) {
@@ -70,14 +66,26 @@ bool parse_sender_reports(std::span<const uint8_t> datagram,
             if (packet.size() < base + count * 24) {
                 return false;
             }
-            if (packet[1] == 200) {
-                parsed.push_back({util::read_be32(packet.data() + 4), util::read_be32(packet.data() + 8),
+            if (packet[1] == 200 && reports != nullptr) {
+                reports->push_back({util::read_be32(packet.data() + 4), util::read_be32(packet.data() + 8),
                                   util::read_be32(packet.data() + 12), util::read_be32(packet.data() + 16),
                                   util::read_be32(packet.data() + 20), util::read_be32(packet.data() + 24)});
             }
         }
         datagram = datagram.subspan(size);
     }
+    return true;
+}
+
+} // namespace
+
+bool validate_rtcp(std::span<const uint8_t> datagram) {
+    return parse_packets(datagram, nullptr);
+}
+
+bool parse_sender_reports(std::span<const uint8_t> datagram, std::vector<SenderReport> &reports) {
+    std::vector<SenderReport> parsed;
+    if (!parse_packets(datagram, &parsed)) return false;
     reports.swap(parsed);
     return true;
 }

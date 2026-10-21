@@ -181,6 +181,13 @@ void startup_and_default(const Directory& directory, bool available) {
     int width = 0, height = 0; pump->size(width, height);
     check(width == 64 && height == 64 && script.factories == 1 && script.configured == 1,
           "default configure/factory/size behavior is preserved");
+    Bytes heartbeat(28, 0); heartbeat[0] = 0x81; heartbeat[1] = 0xc8;
+    put32(heartbeat, 20, 17); put32(heartbeat, 24, 1700);
+    check(scrctl::rt::is_rtcp_sr(heartbeat) && !scrctl::rt::validate_rtcp(heartbeat),
+          "legacy device heartbeat remains distinct from strict RTCP validation");
+    script.enqueue(heartbeat);
+    check(wait([&] { return pump->stats().dev_sent_packets == 17 && pump->stats().dev_sent_octets == 1700; }) &&
+          pump->serial() == 1, "nonrecording validation retains heartbeat counters without publishing a frame");
     check(pump->finish_recording(error) && !pump->wait_ready(0), "stop wakes and invalidates readiness");
 }
 std::unique_ptr<Pump> raw_pump(scrctl::remote::Device& device, const Directory& directory,
@@ -381,7 +388,12 @@ void container_capture(const Directory& directory, bool missing_source) {
     auto sequence = parameters(65534);
     script.enqueue(rtp(sequence++, 0, idr, true));
     check(pump->wait_ready(2000), "container capture requires a checked IDR before readiness");
-    script.enqueue(sr(0, 1000)); script.enqueue(sr(24000, 1001));
+    for (const auto [ticks, seconds] : {std::pair{0u, 1000u}, std::pair{24000u, 1001u}}) {
+        auto compound = sr(ticks, seconds, 42);
+        const auto own = sr(ticks, seconds);
+        compound.insert(compound.end(), own.begin(), own.end());
+        script.enqueue(compound);
+    }
     script.enqueue(rtp(1, 0, idr, true)); script.enqueue(rtp(0, 0, idr, true));
     script.enqueue(rtp(sequence, 2400, idr, true, 43));
     script.enqueue(rtp(sequence++, 2400, idr, true)); script.enqueue(rtp(sequence, 4800, idr, true));

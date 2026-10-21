@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scrctl 1.0.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-22 02:18+0800\n"
+"POT-Creation-Date: 2026-10-22 02:20+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -2947,26 +2947,26 @@ msgstr ""
 msgid "Receive silence timeout"
 msgstr ""
 
-#: src/media/FramePump.cpp:1024
+#: src/media/FramePump.cpp:1029
 #, c-format
 msgid "Test: dropped video packet %d to inject a sequence gap\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:1055
+#: src/media/FramePump.cpp:1060
 msgid "Video sampling timestamp became ambiguous"
 msgstr ""
 
-#: src/media/FramePump.cpp:1058
+#: src/media/FramePump.cpp:1063
 msgid ""
 "Video sampling timestamp is ambiguous; discarding the access unit and "
 "requesting a keyframe.\n"
 msgstr ""
 
-#: src/media/FramePump.cpp:1083
+#: src/media/FramePump.cpp:1088
 msgid "Video access-unit input became inconsistent"
 msgstr ""
 
-#: src/media/FramePump.cpp:1086
+#: src/media/FramePump.cpp:1091
 msgid ""
 "Video access-unit input is inconsistent; discarding the access unit and "
 "requesting a keyframe.\n"
