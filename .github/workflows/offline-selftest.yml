@@ -173,8 +173,9 @@ jobs:
           # checkout uses Git for Windows; all later checks use MSYS2 Git.
           # Recreate LF files and stat caches with the same Git implementation.
           git config --local core.autocrlf false
+          git config --local core.filemode false
           git checkout-index --all --force
-          git submodule foreach --recursive 'git config core.autocrlf false && git checkout-index --all --force && git update-index --really-refresh'
+          git submodule foreach --recursive 'git config core.autocrlf false && git config core.filemode false && git checkout-index --all --force && git update-index --really-refresh'
           git submodule foreach --recursive 'git status --short; git diff --stat HEAD'
       - name: 验证 MSYS2 源码签名通路
         run: |
