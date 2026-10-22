@@ -151,14 +151,6 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           submodules: recursive
-      - name: 固定 Windows 源码换行
-        shell: pwsh
-        run: |
-          # checkout uses Git for Windows; subsequent steps use MSYS2 Git.
-          # Keep both implementations on the same LF worktree and local policy.
-          git config --local core.autocrlf false
-          git checkout-index --all --force
-          git submodule foreach --recursive "git config core.autocrlf false && git checkout-index --all --force"
       - name: 安装 ${{ matrix.label }} 工具链和依赖
         uses: msys2/setup-msys2@v2
         with:
@@ -176,6 +168,14 @@ jobs:
             ${{ matrix.package_prefix }}-pkgconf
             ${{ matrix.package_prefix }}-ffmpeg
             ${{ matrix.package_prefix }}-nlohmann-json
+      - name: 用 MSYS2 Git 统一源码换行与索引
+        run: |
+          # checkout uses Git for Windows; all later checks use MSYS2 Git.
+          # Recreate LF files and stat caches with the same Git implementation.
+          git config --local core.autocrlf false
+          git checkout-index --all --force
+          git submodule foreach --recursive 'git config core.autocrlf false && git checkout-index --all --force && git update-index --really-refresh'
+          git submodule foreach --recursive 'git status --short; git diff --stat HEAD'
       - name: 验证 MSYS2 源码签名通路
         run: |
           git diff --exit-code --stat HEAD
