@@ -144,6 +144,19 @@ class DirectoryMappingTest(unittest.TestCase):
     def record(self):
         return module.record_package(self.install, self.runtime, COMMIT, self.database)
 
+    def test_xdb_runtime_is_bound_to_the_explicit_build_copy(self):
+        build = self.base / "project-build"
+        build.mkdir()
+        (build / "xdb_client.dll").write_bytes(b"built xdb runtime")
+        (self.bin / "xdb_client.dll").write_bytes(b"built xdb runtime")
+        result = module.record_package(self.install, self.runtime, COMMIT, self.database, build)
+        xdb = next(item for item in result["runtime_dependencies"] if item["library"] == "xdb_client.dll")
+        self.assertEqual(xdb["source_dependency"], "xdb")
+        self.assertEqual(result["msys2_packages"].keys(), {"mingw-test"})
+        (self.bin / "xdb_client.dll").write_bytes(b"different runtime")
+        with self.assertRaisesRegex(RuntimeError, "Project and bundled"):
+            module.record_package(self.install, self.runtime, COMMIT, self.database, build)
+
     def test_actual_directory_mapping_and_generated_reports(self):
         (self.bin / "unrelated.txt").write_text("not a dependency")
         result = self.record()

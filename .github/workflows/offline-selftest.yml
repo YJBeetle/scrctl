@@ -158,6 +158,7 @@ jobs:
           # Keep both implementations on the same LF worktree and local policy.
           git config --local core.autocrlf false
           git checkout-index --all --force
+          git submodule foreach --recursive "git config core.autocrlf false && git checkout-index --all --force"
       - name: 安装 ${{ matrix.label }} 工具链和依赖
         uses: msys2/setup-msys2@v2
         with:
@@ -218,7 +219,7 @@ jobs:
           ffmpeg -version > dist-win/share/doc/scrctl/ffmpeg-build.txt
           git rev-parse HEAD > dist-win/share/doc/scrctl/source-commit.txt
           git archive --format=tar HEAD > dist-win/share/doc/scrctl/scrctl-source.tar
-          python tools/record_windows_package.py dist-win --runtime-directory "$MINGW_PREFIX/bin" --source-commit "$GITHUB_SHA"
+          python tools/record_windows_package.py dist-win --runtime-directory "$MINGW_PREFIX/bin" --project-runtime-directory build-win --source-commit "$GITHUB_SHA"
       - name: 收集 Windows 对应源码和构建材料
         run: |
           python tools/collect_windows_sources.py dist-win/share/doc/scrctl/package-metadata.json sources-windows/msys2

@@ -96,6 +96,18 @@ class SourcePackageTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'Missing completed'):
             self.run_package()
 
+    def test_xdb_runtime_uses_verified_embedded_sources(self):
+        runtime = self.install / 'bin/xdb_client.dll'
+        runtime.write_bytes(b'controlled xdb runtime')
+        self.metadata['runtime_dependencies'].append({'library': 'xdb_client.dll',
+            'source_dependency': 'xdb', 'bundled_sha256': module.sha256(runtime)})
+        self.write_metadata()
+        self.run_package()
+        self.assertTrue((self.doc / 'source-materials.json').is_file())
+        (self.materials / 'embedded/xdb.tar').unlink()
+        with self.assertRaisesRegex(RuntimeError, 'changed or missing'):
+            self.run_package()
+
     def test_unknown_runtime_owner_rejected(self):
         self.metadata['runtime_dependencies'][0]['msys2_package'] = None
         self.write_metadata()

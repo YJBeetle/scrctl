@@ -74,6 +74,16 @@ class MacosSourcesTest < Minitest::Test
     assert_empty @temp.glob(".sources-*")
   end
 
+  def test_xdb_runtime_is_covered_by_the_embedded_source_collector
+    library = @install/"bin/lib/libxdb_client.dylib"
+    library.write("built xdb runtime")
+    @metadata["runtime_dependencies"] << { "library" => library.basename.to_s,
+      "bundled_sha256" => MacosSources.digest(library), "source_dependency" => "xdb" }
+    collect
+    manifest = JSON.parse((@output/"source-manifest.json").read)
+    assert_equal ["example"], manifest.fetch("packages").map { |entry| entry.fetch("name") }
+  end
+
   def test_exports_exact_recipe_resources_and_both_patch_kinds
     extra = resource("resource")
     extra.patches << Patch.new("resource patch", :p1, "subdir")

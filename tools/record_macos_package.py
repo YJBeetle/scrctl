@@ -105,6 +105,8 @@ def main():
                                       "receipt_architecture": receipt.get("arch")}
             else:
                 dependency["homebrew_package"] = None
+                if row["library"] == "libxdb_client.dylib" and original.name == row["library"]:
+                    dependency["source_dependency"] = "xdb"
             dependencies.append(dependency)
 
     executable_minimum = minimum_macos(root / "bin/scrctl")

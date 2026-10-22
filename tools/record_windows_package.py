@@ -149,7 +149,7 @@ class MsysPackages:
         return self.cache[owner]
 
 
-def record_package(install_directory, runtime_directory, source_commit, database):
+def record_package(install_directory, runtime_directory, source_commit, database, project_runtime_directory=None):
     root = Path(install_directory).resolve(strict=True)
     runtime = Path(runtime_directory).resolve(strict=True)
     executable = root / "bin/scrctl.exe"
@@ -184,6 +184,15 @@ def record_package(install_directory, runtime_directory, source_commit, database
             raise RuntimeError(f"Ambiguous bundled DLL name: {path.name}")
         seen.add(name)
         original = sources.get(name)
+        if name == "xdb_client.dll" and project_runtime_directory is not None:
+            original = Path(project_runtime_directory).resolve(strict=True) / path.name
+            if not original.is_file() or digest(original) != digest(path):
+                raise RuntimeError(f"Project and bundled DLL SHA256 differ: {path.name}")
+            dependencies.append({"library": path.name, "original_path": str(original),
+                                 "bundled_path": path.relative_to(root).as_posix(),
+                                 "original_sha256": digest(original), "bundled_sha256": digest(path),
+                                 "msys2_package": "", "package_version": "", "source_dependency": "xdb"})
+            continue
         if original is None:
             raise RuntimeError(f"No toolchain source DLL for {path.name}")
         original_hash, bundled_hash = digest(original), digest(path)
@@ -203,8 +212,8 @@ def record_package(install_directory, runtime_directory, source_commit, database
     metadata = {"source_commit": source_commit, "executable_sha256": digest(executable),
                 "runtime_directory": str(runtime), "msys2_packages": packages,
                 "runtime_dependencies": dependencies,
-                "scope": "MSYS2 development CI package. Every installed runtime DLL matches "
-                         "a same-name toolchain file by SHA256 and has a local pacman owner. "
+                "scope": "MSYS2 development CI package. Toolchain runtime DLLs match "
+                         "same-name toolchain files by SHA256 and have local pacman owners; xdb_client is checked against the explicit project build directory. "
                          "Package metadata and license declarations are provenance, not a "
                          "complete corresponding-source delivery or redistribution approval. "
                          "Third-party source, build recipes and patches are not downloaded."}
@@ -212,7 +221,7 @@ def record_package(install_directory, runtime_directory, source_commit, database
     doc.mkdir(parents=True, exist_ok=True)
     with (doc / "runtime-origins.tsv").open("w", encoding="utf-8", newline="") as stream:
         writer = csv.DictWriter(stream, delimiter="\t", lineterminator="\n",
-                                fieldnames=list(dependencies[0]))
+                                fieldnames=list(dict.fromkeys(key for dependency in dependencies for key in dependency)))
         writer.writeheader()
         writer.writerows(dependencies)
     (doc / "package-metadata.json").write_text(
@@ -225,12 +234,13 @@ def main():
     parser.add_argument("install_directory", type=Path)
     parser.add_argument("--runtime-directory", required=True, type=Path)
     parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--project-runtime-directory", type=Path)
     parser.add_argument("--pacman", default="pacman")
     parser.add_argument("--cygpath", default="cygpath")
     args = parser.parse_args()
     try:
         result = record_package(args.install_directory, args.runtime_directory,
-                                args.source_commit, MsysPackages(args.pacman, args.cygpath))
+                                args.source_commit, MsysPackages(args.pacman, args.cygpath), args.project_runtime_directory)
     except (OSError, RuntimeError, subprocess.SubprocessError) as error:
         print(f"Windows package provenance failed: {error}", file=sys.stderr)
         return 1
