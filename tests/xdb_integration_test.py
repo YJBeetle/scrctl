@@ -12,7 +12,7 @@ exe = str(Path(sys.argv[1]).resolve())
 with FakeServer() as server:
     env = {**os.environ, **server.environment, 'SDL_VIDEODRIVER':'dummy', 'SDL_AUDIODRIVER':'dummy', 'SDL_RENDER_DRIVER':'software'}
     def run(*args):
-        result = subprocess.run([exe, '--lang', 'en', *args], env=env, capture_output=True, text=True, timeout=12)
+        result = subprocess.run([exe, '--lang', 'en', *args], env=env, capture_output=True, text=True, encoding="utf-8", timeout=12)
         assert result.returncode == 0, (args, result.stdout, result.stderr)
         return result.stdout
     run('--list-devices', '--discovery-timeout', '0')
@@ -23,7 +23,9 @@ with FakeServer() as server:
     run('-s', 'mock-iphone', '--video-source', 'screenshot', '--no-window', '--no-audio', '--exit-after', '2')
     assert any(name == 'screenshot' and p.get('format') == 'bgra' for name,p in server.calls)
     run('-s', 'mock-iphone', '--copy', '中文✓🙂')
-    assert run('-s', 'mock-iphone', '--paste').strip() == '中文✓🙂'
+    assert server.clipboard == '中文✓🙂', repr(server.clipboard)
+    pasted = run('-s', 'mock-iphone', '--paste').strip()
+    assert pasted == '中文✓🙂', repr(pasted)
     # The audio callback reads only the local queue; a separate attached client polls PCM.
     run('-s', 'mock-iphone', '--no-window', '--no-video', '--time-limit', '1', '--audio-dup', '--audio-buffer', '200')
     assert 'audio.read' in server.methods()
