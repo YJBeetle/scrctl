@@ -26,6 +26,7 @@ install(TARGETS scrctl RUNTIME DESTINATION bin)
 # Homebrew 的 sdl2 可能指向 sdl2-compat；它通过 dlopen 而非链接加载 SDL3。
 # 这种依赖不会出现在 otool -L 中，必须按上游的 @loader_path/libSDL3.dylib
 # 搜索规则显式安装，再让 BundleUtilities 递归处理 SDL3 本身的依赖。
+install(CODE "set(scrctl_xdb_origin \"$<TARGET_FILE:xdb_client>\")")
 set(scrctl_sdl3_runtime "")
 if(SDL2_DIR)
     get_filename_component(scrctl_sdl2_config "${SDL2_DIR}" REALPATH)
@@ -48,6 +49,8 @@ install(CODE [[
     set(scrctl_root "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}")
     set(scrctl_exe "${scrctl_root}/bin/scrctl")
     set(scrctl_plugins "")
+    file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin/lib" TYPE FILE FILES "${scrctl_xdb_origin}")
+    list(APPEND scrctl_plugins "${scrctl_root}/bin/lib/libxdb_client.dylib")
     file(MAKE_DIRECTORY "${scrctl_root}/bin/lib" "${scrctl_root}/share/doc/scrctl")
     if(scrctl_sdl3_origin)
         # Imported target 的路径也可能是 Homebrew 前缀中的符号链接，必须复制
@@ -57,7 +60,7 @@ install(CODE [[
             FILES "${scrctl_sdl3_origin}" RENAME libSDL3.dylib)
         list(APPEND scrctl_plugins "${scrctl_root}/bin/lib/libSDL3.dylib")
     endif()
-    get_bundle_keys("${scrctl_exe}" "${scrctl_plugins}" "" scrctl_keys)
+    get_bundle_keys("${scrctl_exe}" "${scrctl_plugins}" "${scrctl_root}/bin/lib" scrctl_keys)
     set(scrctl_origins "library\toriginal_path\n")
     foreach(scrctl_key IN LISTS scrctl_keys)
         if(NOT scrctl_key STREQUAL "scrctl")
@@ -83,7 +86,7 @@ install(CODE [[
     file(WRITE "${scrctl_root}/share/doc/scrctl/runtime-origins.tsv" "${scrctl_origins}")
     clear_bundle_keys(scrctl_keys)
     # 此成熟工具统一递归拷贝库、改写 install name、删除旧 rpath，并验证依赖。
-    fixup_bundle("${scrctl_exe}" "${scrctl_plugins}" "")
+    fixup_bundle("${scrctl_exe}" "${scrctl_plugins}" "${scrctl_root}/bin/lib")
 
     # install_name_tool 会使原有签名失效；Apple Silicon 要求有效的本地签名。
     # 仅重新签署包内副本，不改变 Homebrew、系统安全策略或任何系统库。

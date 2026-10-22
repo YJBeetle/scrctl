@@ -7,25 +7,31 @@
 #include <string>
 #include <thread>
 
-#include "remote/OrientationControl.h"
-
 namespace scrctl::app {
+enum class DeviceOrientation {
+    Unknown,
+    Portrait,
+    PortraitUpsideDown,
+    LandscapeLeft,
+    LandscapeRight,
+    FaceUp,
+    FaceDown
+};
 
 /// 单任务设备转屏 worker。start/poll/shutdown 由 SDL 主线程串行调用；
 /// 网络操作只发生在 worker。Device 必须保持地址稳定并活到 shutdown 完成。
 class DeviceRotationJob {
-public:
+  public:
     struct Completion {
         bool success = false;
         bool cancelled = false;
         /// 未取得有效基线前保持 Unknown；不是手机当前方向的缓存。
-        remote::DeviceOrientation target = remote::DeviceOrientation::Unknown;
+        DeviceOrientation target = DeviceOrientation::Unknown;
         std::string error;
     };
     using Operation = std::function<Completion(std::stop_token)>;
     enum class StartStatus { Started, Busy, Unavailable, LaunchFailed };
 
-    explicit DeviceRotationJob(remote::Device &device, bool verbose = false);
     /// 注入完整一次操作，供离线验证生命周期；不改变生产请求/重试策略。
     explicit DeviceRotationJob(Operation operation);
     ~DeviceRotationJob();
@@ -42,7 +48,7 @@ public:
     /// operation 必须配合 stop_token 或有界返回；必须先于 Device 销毁调用。
     void shutdown();
 
-private:
+  private:
     void run(std::stop_token token);
     Operation operation_;
     mutable std::mutex mutex_;

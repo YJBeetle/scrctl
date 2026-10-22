@@ -1,15 +1,15 @@
 #pragma once
 
-#include "media/AudioPump.h"
+#include "app/RemoteAudio.h"
 #include <SDL.h>
 #include <atomic>
 #include <string>
 
 namespace scrctl::app {
 
-/// SDL 音频输出适配层，按声卡回调节奏从 AudioPump 获取 PCM。
-/// 会话建立、解码、预缓冲和 RR 由媒体层负责；播放到声卡属于应用层职责。
-/// 无窗口的自动化客户端可单独使用 AudioPump。
+/// SDL 音频输出适配层，按声卡回调节奏从 RemoteAudio 获取 PCM。
+/// 会话建立、解码、设备缓冲和 RR 由 Server 负责；本地只保留输出队列。
+/// 无窗口的自动化客户端可单独使用 RemoteAudio。
 class AudioOut {
   public:
     AudioOut() = default;
@@ -17,11 +17,11 @@ class AudioOut {
     AudioOut &operator=(const AudioOut &) = delete;
     ~AudioOut() { close(); }
 
-    /// 打开默认音频设备。预缓冲阈值由 AudioPump::preroll_frames() 提供，
+    /// 打开默认音频设备。预缓冲阈值由 RemoteAudio::preroll_frames() 提供，
     /// 避免两处重复换算缓冲时长。采样率、声道数和格式必须与 PCM 一致，
     /// 本层不做重采样。首次等待预缓冲可减少起始欠载，代价是相应的启动延迟。
-    /// 仅录音轨的 AudioPump 在打开声卡前拒绝播放，不改变它的接收或录制状态。
-    bool open(scrctl::media::AudioPump &pump, std::string &err);
+    /// 仅录音轨的 RemoteAudio 在打开声卡前拒绝播放，不改变它的接收或录制状态。
+    bool open(RemoteAudio &pump, std::string &err);
 
     /// 关闭音频设备。必须先于 SDL_Quit，确保回调和设备不会访问已释放的 SDL 上下文。
     void close();
@@ -37,7 +37,7 @@ class AudioOut {
   private:
     static void fill(void *userdata, Uint8 *stream, int len);
 
-    scrctl::media::AudioPump *pump_ = nullptr;
+    RemoteAudio *pump_ = nullptr;
     SDL_AudioDeviceID dev_ = 0;
     int channels_ = 2;
     std::size_t preroll_ = 0;

@@ -3,6 +3,32 @@
 基于 CoreDevice 开发者服务的 iOS 镜像与控制工具，提供原生窗口和命令行接口。
 支持 USB、Wi-Fi 连接与手机发起的无线 PIN 配对；镜像时设备仍可直接操作。命令行设计参考 scrcpy。
 
+## 使用 xdb Server
+
+设备连接、配对、DDI、视频/音频采集与解码由 [XDeviceBridge](https://github.com/YJBeetle/XDeviceBridge) Server 提供。scrctl 链接轻量 `xdb_client`，负责 SDL 显示、键盘快捷键、声音输出以及本地 HEVC 文件回放。
+
+```bash
+git submodule update --init --recursive
+cmake -S . -B build
+cmake --build build --parallel
+
+# 另一个终端启动独立的 xdb；保留前台进程
+xdb server
+# 使用 Server 输出的端口/令牌；下面命令在运行 scrctl 的终端执行
+export XDB_PORT=17423
+export XDB_TOKEN='<server-token>'
+xdb pair --wifi
+xdb devices
+xdb -s '<UDID>' ddi prepare --wifi auto --cache-dir '/absolute/ddi-cache'
+./build/scrctl -s '<UDID>' --wifi auto
+```
+
+也可以用 `xdb pair --usb` 建立配对。GUI 可直接调用 xdb 客户端 SDK，无需读取配对文件。手机凭据由 Server 保存；scrctl 不读取原来的配对目录。需要迁移旧凭据时，显式执行 `xdb pairing import <record-file>`。
+
+scrctl 原有 `--pair`、`--install-ddi`、`--download-ddi`、`--list-devices`、剪贴板及应用命令转发给同一个 Server。录制文件由 Server 在本机绝对路径写入，保留原始编码轨道；窗口暂停只冻结显示。Server 目前仅监听本机，需独立安装/启动，不会由客户端隐式拉起。
+
+前端构建需要 SDL2、CLI11、nlohmann-json、gettext 和 C++20。FFmpeg 只用于本地 HEVC 文件回放；实时设备媒体在 Server 解码。运行两者分别遵循其依赖与许可证要求。下方历史协议研究及真机数据描述直接后端，不能当作本轮 xdb 链路的验收结果。
+
 ## 下载与安装
 
 正式版：[v1.0.0](https://github.com/YJBeetle/scrctl/releases/tag/v1.0.0)。
@@ -111,20 +137,12 @@ iPad mini 的记录见 [协议记录 §23、§24](docs/coredevice.md#23-那台-i
 
 | 模块 | 职责 |
 | --- | --- |
-| `src/transport` | usbmuxd、lockdown TLS 与 CDTunnel 包传输 |
-| `src/net` | lwIP IPv6 / TCP / UDP 适配及隧道 I/O |
-| `src/http2` | RemoteXPC 使用的 HTTP/2 帧子集，不消费 HPACK header block |
-| `src/xpc`、`src/remote` | XPC 编解码、服务目录、CoreDevice RPC 和设备会话 |
-| `src/wifi` | 远程配对、记录及密码运算 |
-| `src/ddi` | 开发镜像选择、下载与缓存、TSS 个性化签票及原生设备安装 |
-| `src/media`、`src/rt` | 媒体协商、RTP 组帧、恢复、音频和截图源 |
-| `src/bitstream`、`src/decode` | Annex-B / NAL 与视频、音频解码后端 |
-| `src/hid` | 触摸、键盘和硬件按键报告 |
-| `src/app` | CLI、SDL 显示、输入映射和应用生命周期 |
+| `xdb` 子模块 | 轻量客户端 C ABI；服务端设备协议在 XDeviceBridge 仓库维护 |
+| `src/app` | CLI、SDL 显示、输入映射、IPC 媒体接收和声音输出 |
+| `src/bitstream`、`src/decode` | 本地 HEVC 文件解析与回放 |
 | `src/i18n`、`po` | gettext 中英文消息和语言选择 |
 
-scrctl 是独立产品，也是设备协议的验证项目。MaaFramework 后续倾向于参考这里
-验证过的实现独立接入；当前先完成 scrctl，不以公共 SDK 或稳定 C ABI 为目标。
+MaaFramework 与 scrctl 共同使用 XDeviceBridge 的客户端协议。
 
 ## 窗口操作与 scrcpy 用法
 
@@ -310,67 +328,28 @@ Linux/glibc 需要至少安装一套中文或英文 UTF-8 locale 才能加载 ge
 
 ## 构建
 
-需要 SDL2 2.0.18 或以上版本，用于保留鼠标坐标的浮点精度。
+需要 C++20、CMake、Python 3、SDL2 2.0.18+ 和 gettext；FFmpeg 可选，用于本地 HEVC 文件回放。
 
 ```bash
-brew install sdl2 openssl ffmpeg gettext  # ffmpeg 提供软件解码，gettext 提供翻译支持
-cmake -B build-cmake -DCMAKE_BUILD_TYPE=Release
-cmake --build build-cmake -j
-ctest --test-dir build-cmake              # 离线自检，不需要真机（项数用 `ctest -N` 数）
+git submodule update --init --recursive
+brew install sdl2 ffmpeg pkg-config gettext
+cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
+cmake --build build-cmake --parallel
+ctest --test-dir build-cmake --output-on-failure
 ./build-cmake/scrctl --help
 ```
 
-构建还需要 GNU gettext 工具（`msgfmt`）及消息运行库（Linux glibc 通常已内置；
-macOS 使用 gettext 的 libintl）。开启离线测试需要 Python 3。Debian/Ubuntu 可安装
-`gettext python3 libsdl2-dev libssl-dev libcurl4-openssl-dev libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev`。
+Debian/Ubuntu 的开发依赖为 `gettext python3 libsdl2-dev libavcodec-dev libavutil-dev libswscale-dev`。
+JSON 和命令行使用 nlohmann/json 与 CLI11，缺少系统包时下载固定源码。
+离线可用 `FETCHCONTENT_SOURCE_DIR_NLOHMANN_JSON` / `FETCHCONTENT_SOURCE_DIR_CLI11`
+指定源码；`SCRCTL_FETCH_DEPENDENCIES=OFF` 禁止下载缺失依赖。
+`SCRCTL_LIBAV=OFF` 关闭本地 FFmpeg，`SCRCTL_BUILD_TESTS=OFF` 关闭前端测试。
 
-开发镜像按需下载，不随安装包捆绑。使用 `scrctl --download-ddi -s <UDID>` 读取 USB
-设备的系统与机型来选镜像；已有无线配对时也可加 `--wifi auto` 或手动地址。
-无设备时用 `--ddi-system-version 18.7.8 --ddi-product-type iPad11,2`
-预下载；裸 `scrctl --download-ddi` 保留固定 iOS 27 Cryptex 下载。重复运行校验并复用缓存；可用
-`--ddi-directory` 指定缓存根目录。下载使用原生 libcurl；macOS 系统提供该库，
-Linux / Windows 构建需要开发包。设备安装和版本边界见 [DDI 说明](docs/DDI.md)。
-
-使用 `scrctl --install-ddi -s <UDID>` 可读取实际设备信息、复用或下载适用镜像，
-并原生安装；已有无线配对时支持 `--wifi auto` 或手动地址。Classic 使用随镜像
-下载的签名，Personalized / Cryptex 向 Apple TSS 请求该设备的个性化票据；不依赖
-Python 或 Xcode。已挂载镜像会单独报告，不当作本次更新成功；确实需要替换时
-显式加 `--replace-ddi`。macOS USB 在 `iPhone14,4` / iOS 27.0.1 上已通过原生
-Cryptex 替换安装、挂载核验及重新连接后的短视频录制；Wi-Fi 已验证已有镜像查询
-与挂载核验。Classic / Personalized 尚未用旧系统真机新装验收，旧设备的历史功能
-范围仍以上面的具体系统 / 机型表为准。
-
-JSON、命令行和 XML plist 解析分别使用 nlohmann/json（>= 3.12.0）、CLI11（>= 2.5.0）和 pugixml（>= 1.16），许可依次为 MIT、BSD-3-Clause、MIT。
-CMake 优先找系统包，缺失时下载固定版本并校验 SHA256；首次配置需要网络。
-离线构建可以安装这三个库，或通过
-`FETCHCONTENT_SOURCE_DIR_NLOHMANN_JSON` / `FETCHCONTENT_SOURCE_DIR_CLI11` /
-`FETCHCONTENT_SOURCE_DIR_PUGIXML` 指定已有源码目录。
-隧道内的 IPv6 / TCP / UDP 使用 lwIP 2.2.1（BSD-3-Clause），固定源码构建以保证配置一致。
-离线时还需用 `FETCHCONTENT_SOURCE_DIR_LWIP` 指定该版本源码。
-mDNS 使用 mjansson/mdns 1.4.3（Unlicense）；离线时设置 `FETCHCONTENT_SOURCE_DIR_MDNS`。
-`-DSCRCTL_FETCH_DEPENDENCIES=OFF` 禁止下载缺失依赖。
-该选项仍允许使用上面指定的本地源码目录；目录无效时配置失败，不回退下载。
-第三方许可证位于对应依赖源码中，分发时应保留其许可声明。
-macOS / Windows 安装包配套提供同一轮 CI 的[对应源码、配方与补丁](docs/SOURCE_MATERIALS.md)，
-对外发布时应同时交付二进制和源码附件。
-
-应用模块的职责与后续替换边界见 [重构说明](docs/REFACTOR.md)。
-lwIP 的生产接入与默认关闭的独立探针，构建方式与判据见 [lwIP 验证记录](docs/LWIP_COMPATIBILITY.md)。
-
-FFmpeg 软件解码是默认的视频后端，`--hw-decode` 选择平台硬件后端。
-`-DSCRCTL_LIBAV=OFF` 可关闭软件解码。当前 VideoToolbox 适配使用 2 字节 NAL 长度
-前缀，不能处理超过 65535 字节的 NAL；已有真机记录包含超过这一上限的帧，因此
-通常应保留软件后端。非 Apple 平台目前只有软件视频后端。
-
-容器写入模块还使用 libavformat，可通过 `-DSCRCTL_LIBAVFORMAT=OFF` 关闭。
-关闭后仍可录制裸 HEVC，`.mkv` 会明确报错。
-
-默认不构建开发探针。离线测试可执行文件位于 `build-cmake/tests/`，主程序仍位于
-构建目录根部。只需要主程序时加 `-DSCRCTL_BUILD_TESTS=OFF`；开发诊断用
-`-DSCRCTL_BUILD_PROBES=ON`，历史协议实验用 `-DSCRCTL_BUILD_EXPERIMENTS=ON`。
-分组、输出目录及运行方法见 [工具说明](docs/TOOLS.md)。
-
-Windows ARM64 的构建、DLL 安装、AMDS 要求与验证范围见 [Windows 说明](docs/WINDOWS.md)。
+设备连接、DDI、实时媒体、音频解码和录制的依赖及构建开关属于独立的
+[XDeviceBridge](https://github.com/YJBeetle/XDeviceBridge)。scrctl 构建只启用客户端，
+不会构建或打包 Server；运行前按上面的步骤启动 Server 并配置令牌。
+macOS / Windows 安装包配套提供同一轮 CI 的[对应源码、配方与补丁](docs/SOURCE_MATERIALS.md)。
+平台构建与安装检查见 [macOS](docs/MACOS.md) / [Windows](docs/WINDOWS.md)。
 
 ## 首次连接设备
 
@@ -472,23 +451,9 @@ scrctl --copy "" --paste
 
 ## 研究工具
 
-10 个常用诊断工具保留在 `tools/`，19 个协议实验归档到 `tools/experiments/`。
-它们默认不构建，不随产品安装；常用工具输出到构建目录的 `tools/`，归档实验输出到
-`experiments/`。其中 lwIP / nghttp2 的库适配实验通过各自独立开关启用。
-具体用途和使用边界见 [工具说明](docs/TOOLS.md)。
-`tools/nalsizes.py` 离线分析录制文件的 NAL 尺寸，`tools/probe/` 保留早期 Python 验证工具。
-
-Python 探针使用第三方 pymobiledevice3，仅用于研究，不随 scrctl 分发或作为运行依赖。
-可在仓库根目录建立单独环境：
-
-```bash
-python3 -m venv .probe-venv
-.probe-venv/bin/pip install pymobiledevice3 pillow numpy av
-tools/probe/probe.sh
-```
-
-REPL 支持 `shot` / `tap` / `swipe` / `draw` / `center` / `home` / `volup` 等命令。
-设备选择顺序为 `--udid`、`SCRCTL_UDID`、唯一 USB 设备。
+设备后端的研究记录保留在 [coredevice.md](docs/coredevice.md)。记录中的旧探针和
+源码路径对应重构前版本，可从 `codex/scrctl-before-xdb-refactor` 查阅。
+当前后端代码与离线协议测试在 XDeviceBridge；scrctl 只保留前端及打包验证。
 
 ## License
 

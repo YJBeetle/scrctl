@@ -3,9 +3,9 @@
 使用 Xcode Command Line Tools、CMake、Python 3 和 Homebrew 依赖：
 
 ```bash
-brew install sdl2 openssl ffmpeg pkg-config gettext
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-  -DOPENSSL_ROOT_DIR="$(brew --prefix openssl)"
+git submodule update --init --recursive
+brew install sdl2 ffmpeg pkg-config gettext
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 cmake --install build --prefix dist-macos

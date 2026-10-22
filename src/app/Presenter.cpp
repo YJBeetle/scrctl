@@ -2,7 +2,7 @@
 #include "app/Presenter.h"
 
 #include "app/RenderPanel.h"
-#include "hid/Hid.h"
+#include "app/HidKeys.h"
 #include <algorithm>
 #include <cstdio>
 #include <limits>

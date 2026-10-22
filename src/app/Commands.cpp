@@ -1,418 +1,202 @@
 #include "app/Commands.h"
-
-#include <cctype>
-#include <chrono>
-#include <cstdio>
-#include <filesystem>
-#include <string>
-#include <vector>
-
-#include "app/DeviceConnection.h"
-#include "app/DdiInstall.h"
 #include "app/Options.h"
 #include "app/SdlRuntime.h"
-#include "ddi/Download.h"
 #include "i18n/Translation.h"
-#include "remote/App.h"
-#include "remote/Discovery.h"
-#include "remote/Pasteboard.h"
-#include "remote/Pairing.h"
-#include "remote/WifiPairing.h"
+#include <SDL.h>
+#include <algorithm>
+#include <cstdio>
+#include <filesystem>
+#include <thread>
 
 namespace scrctl::app {
+using Json = xdb::client::Json;
+using Response = xdb::client::Response;
 namespace {
-
-// 设备名称和服务标识来自网络或设备。转义终端控制字符，保留 UTF-8 文本；
-// 这只改变显示，不影响标识匹配或后续连接使用的原始值。
-std::string terminal_text(const std::string &text) {
-    std::string out;
-    for (const unsigned char c : text) {
-        if (c < 0x20 || c == 0x7f) {
-            char escaped[5];
-            std::snprintf(escaped, sizeof(escaped), "\\x%02x", c);
-            out += escaped;
-        } else {
-            out += static_cast<char>(c);
-        }
-    }
-    return out;
+void event(const char *message, void *) {
+    const auto value = Json::parse(message, nullptr, false);
+    if (!value.is_object())
+        return;
+    const auto data = value.value("data", Json::object());
+    if (value.value("event", std::string()) == "pin")
+        std::fprintf(stderr, "Pairing code: %s\n", data.value("pin", std::string()).c_str());
+    else if (data.contains("message"))
+        std::fprintf(stderr, "%s\n", data.at("message").get<std::string>().c_str());
 }
-
-const char *pairing_status(remote::DiscoveryPairing status) {
-    switch (status) {
-    case remote::DiscoveryPairing::ready:
-        return SCRCTL_TR("pairing record available");
-    case remote::DiscoveryPairing::needs_pairing:
-        return SCRCTL_TR("pair again over USB");
-    case remote::DiscoveryPairing::identifier_hint:
-        return SCRCTL_TR("old record hint; pair again over USB");
-    case remote::DiscoveryPairing::ambiguous:
-        return SCRCTL_TR("multiple matching pairing records");
-    case remote::DiscoveryPairing::invalid_advertisement:
-        return SCRCTL_TR("invalid discovery identity");
-    case remote::DiscoveryPairing::crypto_error:
-        return SCRCTL_TR("identity matching failed");
-    case remote::DiscoveryPairing::unmatched:
-        return SCRCTL_TR("no matching pairing record");
-    }
-    return SCRCTL_TR("no matching pairing record");
+std::string absolute(const std::string &value) {
+    if (value.empty())
+        return {};
+    auto path = std::filesystem::absolute(std::filesystem::path(std::u8string(value.begin(), value.end())))
+                    .u8string();
+    return std::string(path.begin(), path.end());
 }
-
-// USB reads ordinary lockdown values, so choosing an image does not itself
-// require a mounted DDI. Wi-Fi reads the authenticated RSD handshake only.
-bool read_ddi_target(const Options &options, const std::function<bool()> &cancelled,
-                     ddi::DownloadTarget &target, std::string &error) {
-    if (cancelled()) { error = SCRCTL_TR("DDI download cancelled"); return false; }
-    if (!options.wifi.empty()) {
-        auto device = open_device(options.serial, options.wifi, error, options.wifi_port, cancelled);
-        if (!device) return false;
-        target.system_version = device->property("OSVersion");
-        target.product_type = device->property("ProductType");
-        target.hardware_model = device->property("HardwareModel");
-        const auto *properties = device->rsd().properties();
-        auto number = [&](const char *key) -> std::optional<uint64_t> {
-            const auto *value = properties ? properties->find(key) : nullptr;
-            if (value && value->type == xpc::Type::UInt64) return value->uint64;
-            if (value && value->type == xpc::Type::Int64 && value->int64 >= 0)
-                return static_cast<uint64_t>(value->int64);
-            return std::nullopt;
-        };
-        target.board_id = number("BoardId");
-        target.chip_id = number("ChipID");
-    } else {
-        std::vector<transport::DeviceRecord> devices;
-        if (transport::Usbmux::list_devices_for_discovery(
-                devices, std::chrono::milliseconds(1000), cancelled, error) !=
-                transport::UsbmuxDiscoveryStatus::complete) {
-            if (error.empty()) error = SCRCTL_TR("Cannot enumerate the target USB device for DDI selection");
-            return false;
-        }
-        const auto selected = remote::detail::select_usbmux_device(devices, options.serial, error, true);
-        if (!selected || cancelled()) return false;
-        transport::IoBudget budget({std::chrono::seconds(30), cancelled});
-        auto lockdown = transport::Lockdown::establish_bounded(selected->device_id, selected->udid, budget, error);
-        if (!lockdown || cancelled()) return false;
-        auto request = plist::Value::Dict();
-        request.set("Request", plist::Value::Str("GetValue"));
-        plist::Value reply;
-        if (!lockdown->request_bounded(request, reply, budget.remaining(),
-                [&budget] { return budget.stopped(); }, error)) return false;
-        if (!budget.check(error)) return false;
-        if (const auto *failure = reply.find("Error")) { error = failure->as_string_or(); return false; }
-        const auto *values = reply.find("Value");
-        if (!values || !values->is_dict()) {
-            error = SCRCTL_TR("DDI target metadata is missing its OS version or product model");
-            return false;
-        }
-        auto text = [&](const char *key) {
-            const auto *value = values->find(key);
-            return value ? value->as_string_or() : std::string{};
-        };
-        auto number = [&](const char *key) -> std::optional<uint64_t> {
-            const auto *value = values->find(key);
-            if (value && value->is_int() && value->integer >= 0)
-                return static_cast<uint64_t>(value->integer);
-            return std::nullopt;
-        };
-        target.system_version = text("ProductVersion");
-        target.product_type = text("ProductType");
-        target.hardware_model = text("HardwareModel");
-        target.board_id = number("BoardId");
-        target.chip_id = number("ChipID");
-    }
-    if (cancelled()) { error = SCRCTL_TR("DDI download cancelled"); return false; }
-    if (target.system_version.empty() || target.product_type.empty()) {
-        error = SCRCTL_TR("DDI target metadata is missing its OS version or product model");
-        return false;
-    }
-    return true;
-}
-
 } // namespace
-
 std::optional<int> run_standalone_command(const Options &o) {
     if (o.show_version) {
-        // 版本号由 CMake 的 project(VERSION) 生成，供二进制输出和问题报告使用。
         std::printf("scrctl %s\n", SCRCTL_VERSION_STRING);
         return 0;
     }
-
-    // Device-only commands need signal handling, without a window or audio.
-    SdlRuntime command_runtime;
-    if (!o.install_ddi && !o.download_ddi && (o.list_devices || o.pair || o.list_apps || o.copy_text || o.paste) &&
-        !command_runtime.initialize(SDL_INIT_TIMER)) {
-        std::fprintf(stderr, SCRCTL_TR("SDL initialization failed: %s\n"), SDL_GetError());
+    if (!o.list_devices && !o.pair && !o.download_ddi && !o.install_ddi && !o.list_apps && !o.copy_text &&
+        !o.paste)
+        return std::nullopt;
+    SdlRuntime runtime;
+    if (!runtime.initialize(SDL_INIT_TIMER)) {
+        std::fprintf(stderr, "%s\n", SDL_GetError());
         return 1;
     }
-    const auto cancelled = [&command_runtime] { return command_runtime.stop_requested(); };
-
-    if (o.install_ddi) {
-        SdlRuntime runtime;
-        if (!runtime.initialize(SDL_INIT_TIMER)) {
-            std::fprintf(stderr, SCRCTL_TR("SDL initialization failed: %s\n"), SDL_GetError());
-            return 1;
-        }
-        return run_ddi_install(o, [&] { return runtime.stop_requested(); });
+    xdb::client::Client client;
+    std::string error;
+    if (!client.connect(error, 0, {}, event)) {
+        std::fprintf(stderr, "%s\n", error.c_str());
+        return 1;
     }
-
-    if (o.download_ddi) {
-        SdlRuntime runtime;
-        if (!runtime.initialize(SDL_INIT_TIMER)) {
-            std::fprintf(stderr, SCRCTL_TR("SDL initialization failed: %s\n"), SDL_GetError());
-            return 1;
-        }
-        ddi::DownloadOptions options;
-        if (!o.ddi_directory.empty()) {
-            std::error_code ec;
-            const std::u8string utf8_directory(o.ddi_directory.begin(), o.ddi_directory.end());
-            options.cache_root = std::filesystem::absolute(std::filesystem::path(utf8_directory), ec);
-            if (ec) {
-                std::fprintf(stderr, SCRCTL_TR("DDI download failed: %s\n"),
-                             terminal_text(ec.message()).c_str());
-                return 1;
+    std::jthread monitor([&](std::stop_token stop) {
+        while (!stop.stop_requested()) {
+            if (runtime.stop_requested()) {
+                client.interrupt();
+                return;
             }
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
-        options.timeout = std::chrono::seconds(o.ddi_download_timeout);
-        options.cancelled = [&] { return runtime.stop_requested(); };
-        ddi::DownloadTarget target;
-        std::string error;
-        if (!o.serial.empty() || !o.wifi.empty()) {
-            if (!read_ddi_target(o, options.cancelled, target, error)) {
-                if (runtime.stop_requested()) error = SCRCTL_TR("DDI download cancelled");
-                std::fprintf(stderr, SCRCTL_TR("DDI download failed: %s\n"), terminal_text(error).c_str());
-                return 1;
-            }
-        } else if (!o.ddi_system_version.empty()) {
-            target.system_version = o.ddi_system_version;
-            target.product_type = o.ddi_product_type;
-        }
-        const auto selection = ddi::select_for_version(target.system_version, error);
-        if (!selection) {
-            std::fprintf(stderr, SCRCTL_TR("DDI download failed: %s\n"), terminal_text(error).c_str());
-            return 1;
-        }
-        std::printf(SCRCTL_TR("DDI target: OS %s, model %s, image type %s\n"),
-                    terminal_text(target.system_version).c_str(), terminal_text(target.product_type).c_str(),
-                    std::string(ddi::kind_name(selection->kind)).c_str());
-        std::string last_file;
-        uint64_t last_bytes = 0;
-        options.progress = [&](const std::string &file, uint64_t received, uint64_t total) {
-            if (last_file != file || received == total || received >= last_bytes + 1024 * 1024) {
-                std::fprintf(stderr, SCRCTL_TR("Downloading DDI: %s (%llu/%llu bytes)\n"),
-                             terminal_text(file).c_str(), static_cast<unsigned long long>(received),
-                             static_cast<unsigned long long>(total));
-                last_file = file;
-                last_bytes = received;
-            }
-        };
-        const auto result = ddi::download_for_target(options, target, error);
-        if (!result) {
-            std::fprintf(stderr, SCRCTL_TR("DDI download failed: %s\n"), terminal_text(error).c_str());
-            return 1;
-        }
-        const auto utf8_path = result->directory.u8string();
-        const std::string path(utf8_path.begin(), utf8_path.end());
-        std::printf(result->cache_hit ? SCRCTL_TR("Verified cached DDI %s: %s\n")
-                                     : SCRCTL_TR("Downloaded and verified DDI %s: %s\n"),
-                    terminal_text(result->build).c_str(), terminal_text(path).c_str());
-        std::printf(SCRCTL_TR("DDI source: %s\n"), result->source_url.c_str());
-        std::printf(SCRCTL_TR("Download complete; device installation is a separate step. See docs/DDI.md.\n"));
-        return 0;
-    }
-
+    });
+    const auto call = [&](const char *method, const Json &params, Response &out) {
+        const auto ok = client.request(method, params, out, error);
+        if (!ok)
+            std::fprintf(stderr, "%s\n", error.c_str());
+        return ok;
+    };
+    Response out;
     if (o.list_devices) {
-        remote::DiscoveryOptions options;
-        options.timeout = std::chrono::milliseconds(o.discovery_timeout_ms);
-        options.should_cancel = cancelled;
-        const auto result = remote::discover_devices(options);
-        for (const auto &warning : result.warnings) {
-            std::fprintf(stderr, SCRCTL_TR("Discovery warning: %s\n"),
-                         terminal_text(warning).c_str());
+        if (!call("devices", {{"timeout_ms", o.discovery_timeout_ms}}, out))
+            return runtime.stop_requested() ? 130 : 1;
+        for (const auto &device : out.value.at("devices")) {
+            std::printf("%s  %s\n", device.value("udid", std::string()).c_str(),
+                        device.value("name", std::string()).c_str());
+            for (const auto &candidate : device.at("candidates"))
+                std::printf("  %s\n", candidate.dump().c_str());
         }
-        for (const auto &device : result.devices) {
-            std::printf("%s\n", device.udid.empty() ? SCRCTL_TR("Wireless device (UDID unknown)")
-                                                  : terminal_text(device.udid).c_str());
-            if (!device.name.empty()) {
-                std::printf("  %s\n", terminal_text(device.name).c_str());
-            }
-            for (const auto &candidate : device.candidates) {
-                if (candidate.transport == remote::DiscoveryTransport::usbmux) {
-                    std::printf("  %s\n", terminal_text(candidate.connection_type).c_str());
-                    continue;
-                }
-                std::string endpoint;
-                if (candidate.address.empty()) {
-                    endpoint = SCRCTL_TR("address unresolved");
-                } else {
-                    endpoint = candidate.address.find(':') == std::string::npos
-                                   ? candidate.address : "[" + candidate.address + "]";
-                    endpoint += ":" + std::to_string(candidate.port);
-                }
-                std::printf("  RemotePairing  %s  %s  %s\n",
-                            terminal_text(endpoint).c_str(),
-                            terminal_text(candidate.interface_name).c_str(),
-                            pairing_status(candidate.pairing));
-                if (device.udid.empty()) {
-                    std::printf("    %s\n", terminal_text(candidate.instance).c_str());
-                }
-            }
-        }
-        if (result.devices.empty()) {
-            std::printf(SCRCTL_TR("No devices found\n"));
-        }
-        return result.usb_available || result.wifi_available ? 0 : 1;
+        for (const auto &warning : out.value.at("warnings"))
+            std::fprintf(stderr, "%s\n", warning.get<std::string>().c_str());
+        return 0;
     }
-
     if (o.pair) {
-        auto report = [](std::string_view message) {
-            std::fprintf(stderr, "%s\n", terminal_text(std::string(message)).c_str());
-        };
-        remote::PairingResult result;
-        if (o.wifi == "auto") {
-            remote::WifiPairingOptions options;
-            options.udid = o.serial;
-            options.timeout_ms = o.pairing_timeout_ms;
-            options.should_cancel = cancelled;
-            options.progress = report;
-            options.display_pin = [](std::string_view pin, std::string &) {
-                std::fprintf(stderr, SCRCTL_TR("Enter this one-use pairing code on the device: %s\n"),
-                             std::string(pin).c_str());
-                return true;
-            };
-            result = remote::pair_wifi_remote(options);
-        } else {
-            remote::UsbPairingOptions options;
-            options.udid = o.serial;
-            options.timeout_ms = o.pairing_timeout_ms;
-            options.allow_repair = o.repair_pairing;
-            options.should_cancel = cancelled;
-            options.progress = report;
-            result = remote::pair_usb_remote(options);
-        }
-        if (!result.ok) {
-            std::fprintf(stderr, SCRCTL_TR("Remote pairing failed: %s\n"),
-                         terminal_text(result.error).c_str());
-            return 1;
-        }
-        std::printf(result.reused ? SCRCTL_TR("Remote pairing verified for %s\n")
-                                  : SCRCTL_TR("Remote pairing saved for %s\n"),
-                    terminal_text(result.udid).c_str());
+        if (!call("pair",
+                  {{"udid", o.serial},
+                   {"transport", o.wifi.empty() ? "usb" : "wifi"},
+                   {"repair", o.repair_pairing},
+                   {"timeout_ms", o.pairing_timeout_ms}},
+                  out))
+            return runtime.stop_requested() ? 130 : 1;
+        std::printf("Pairing saved by xdb: %s\n", out.value.at("udid").get<std::string>().c_str());
         return 0;
     }
-
+    if (o.install_ddi) {
+        std::string serial = o.serial;
+        if (serial.empty()) {
+            if (!call(
+                    "devices",
+                    {{"transport", o.wifi.empty() ? "auto" : "wifi"}, {"timeout_ms", o.discovery_timeout_ms}},
+                    out))
+                return 1;
+            const auto &devices = out.value.at("devices");
+            if (devices.size() != 1 || devices[0].value("udid", std::string()).empty()) {
+                std::fprintf(stderr, "Select one identified device with -s before preparing DDI\n");
+                return 1;
+            }
+            serial = devices[0].at("udid");
+        }
+        if (!call("ddi.prepare",
+                  {{"udid", serial},
+                   {"wifi", o.wifi},
+                   {"port", o.wifi_port},
+                   {"cache_directory", absolute(o.ddi_directory)},
+                   {"replace", o.replace_ddi},
+                   {"download_timeout_seconds", o.ddi_download_timeout},
+                   {"install_timeout_seconds", o.ddi_install_timeout}},
+                  out))
+            return runtime.stop_requested() ? 130 : 1;
+        std::printf("DDI prepared by xdb\n");
+        return 0;
+    }
+    if (o.download_ddi) {
+        std::string version = o.ddi_system_version, model = o.ddi_product_type;
+        if (version.empty()) {
+            if (!call("connection.open", {{"udid", o.serial}, {"wifi", o.wifi}, {"port", o.wifi_port}},
+                      out) ||
+                !call("device.info", Json::object(), out))
+                return 1;
+            version = out.value.at("os_version");
+            model = out.value.at("product_type");
+            if (!call("connection.close", Json::object(), out))
+                return 1;
+        }
+        if (!call("ddi.download",
+                  {{"os_version", version},
+                   {"product_type", model},
+                   {"cache_directory", absolute(o.ddi_directory)},
+                   {"timeout_seconds", o.ddi_download_timeout}},
+                  out))
+            return runtime.stop_requested() ? 130 : 1;
+        std::printf("%s\n", out.value.dump().c_str());
+        return 0;
+    }
+    if (!call("connection.open", {{"udid", o.serial}, {"wifi", o.wifi}, {"port", o.wifi_port}}, out))
+        return 1;
     if (o.list_apps) {
-        std::string err;
-        auto dev = open_device(o.serial, o.wifi, err, o.wifi_port, cancelled);
-        if (!dev) {
-            std::fprintf(stderr, SCRCTL_TR("Failed to establish session: %s\n"), err.c_str());
+        if (!call("app.list", Json::object(), out))
             return 1;
-        }
-        std::vector<scrctl::remote::App::Entry> apps;
-        if (!scrctl::remote::App::list(*dev, apps, err)) {
-            std::fprintf(stderr, SCRCTL_TR("Failed to list apps: %s\n"), err.c_str());
-            return 1;
-        }
-        for (const auto &e : apps) {
-            std::printf("%s\t%s\n", e.bundle_id.c_str(), e.name.c_str());
-        }
-        std::printf(SCRCTL_TR("Total: %zu\n"), apps.size());
-        return 0;
+        for (const auto &app : out.value)
+            std::printf("%s  %s\n", app.at("bundle_id").get<std::string>().c_str(),
+                        app.at("name").get<std::string>().c_str());
     }
-
-    // 剪贴板命令不需要视频或窗口，执行后直接退出。键盘注入仅支持 US 布局的
-    // ASCII；中文和 emoji 应使用剪贴板。
-    // 同时指定 --copy 和 --paste 时，写入后读回验证。设备可能对无效结构返回
-    // SET_REPLY 后丢弃内容，例如 types 为空时，仅检查写入回复不能确认保存成功。
-    if (o.copy_text || o.paste) {
-        std::string err;
-        auto dev = open_device(o.serial, o.wifi, err, o.wifi_port, cancelled);
-        if (!dev) {
-            std::fprintf(stderr, SCRCTL_TR("Failed to establish session: %s\n"), err.c_str());
+    if (o.copy_text && !call("clipboard.set", {{"text", *o.copy_text}}, out))
+        return 1;
+    if (o.paste) {
+        if (!call("clipboard.get", Json::object(), out))
             return 1;
-        }
-        int rc = 0;
-        if (o.copy_text) {
-            if (scrctl::remote::Pasteboard::set_text(*dev, *o.copy_text, err)) {
-                std::printf(SCRCTL_TR("Wrote %zu bytes to device clipboard\n"), o.copy_text->size());
-            } else {
-                std::fprintf(stderr, SCRCTL_TR("--copy failed: %s\n"), err.c_str());
-                rc = 1;
-            }
-        }
-        if (o.paste) {
-            std::string text;
-            if (scrctl::remote::Pasteboard::get_text(*dev, text, err)) {
-                std::printf(SCRCTL_TR("Device clipboard (%zu bytes): "), text.size());
-                std::fwrite(text.data(), 1, text.size(), stdout);
-                std::putchar('\n');
-            } else {
-                std::fprintf(stderr, SCRCTL_TR("--paste failed: %s\n"), err.c_str());
-                rc = 1;
-            }
-        }
-        return rc;
+        std::printf("%s\n", out.value.at("text").get<std::string>().c_str());
     }
-
-    return std::nullopt;
+    return 0;
 }
-
-int launch_app(remote::Device &device, const std::string &app_spec) {
+int launch_app(xdb::client::Client &client, const std::string &app_spec) {
     std::string spec = app_spec;
-    bool by_name = false;
-    bool terminate = false;
-    // 应用名称前缀使用 scrcpy 的顺序：先 ?（按名称），再 +（终止已有实例）。
-    while (!spec.empty()) {
-        if (spec.front() == '?') {
+    bool by_name = false, terminate = false;
+    while (!spec.empty() && (spec.front() == '?' || spec.front() == '+')) {
+        if (spec.front() == '?')
             by_name = true;
-        } else if (spec.front() == '+') {
+        else
             terminate = true;
-        } else {
-            break;
-        }
         spec.erase(spec.begin());
     }
-    if (spec.empty()) {
-        std::fprintf(stderr, SCRCTL_TR("--start-app requires a nonempty app name\n"));
+    if (spec.empty())
         return 2;
-    }
-    std::string target = spec;
+    std::string target = spec, error;
     if (by_name) {
-        // 按名称启动需要先获取完整应用列表，回复可能有数 MiB；按 bundle ID 启动
-        // 不需要这一步，因此通常更快。
-        std::string lerr;
-        std::vector<scrctl::remote::App::Entry> apps;
-        if (!scrctl::remote::App::list(device, apps, lerr)) {
-            std::fprintf(stderr, SCRCTL_TR("Failed to find app by name: %s\n"), lerr.c_str());
+        Response apps;
+        if (!client.request("app.list", Json::object(), apps, error)) {
+            std::fprintf(stderr, "%s\n", error.c_str());
             return 1;
         }
         auto lower = [](std::string v) {
-            for (char &c : v) {
+            for (auto &c : v)
                 c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-            }
             return v;
         };
-        const std::string want = lower(spec);
-        const scrctl::remote::App::Entry *hit = nullptr;
-        for (const auto &e : apps) {
-            if (lower(e.name).rfind(want, 0) == 0) {
-                hit = &e;
+        bool found = false;
+        for (const auto &app : apps.value)
+            if (lower(app.at("name")).starts_with(lower(spec))) {
+                target = app.at("bundle_id");
+                found = true;
                 break;
             }
-        }
-        if (hit == nullptr) {
-            std::fprintf(stderr, SCRCTL_TR("No app name starts with %s\n"), spec.c_str());
+        if (!found) {
+            std::fprintf(stderr, "No app name starts with %s\n", spec.c_str());
             return 1;
         }
-        target = hit->bundle_id;
-        std::printf("--start-app=?%s -> %s\n", spec.c_str(), target.c_str());
     }
-    std::string lerr;
-    if (!scrctl::remote::App::launch(device, target, lerr, terminate)) {
-        std::fprintf(stderr, SCRCTL_TR("Failed to launch %s: %s\n"), target.c_str(), lerr.c_str());
+    if (!client.request("app.launch", {{"bundle_id", target}, {"terminate_existing", terminate}}, error)) {
+        std::fprintf(stderr, "%s\n", error.c_str());
         return 1;
     }
-    std::printf(SCRCTL_TR("Launched %s%s\n"), target.c_str(), terminate ? SCRCTL_TR(" (previous instance terminated)") : "");
     return 0;
 }
-
 } // namespace scrctl::app

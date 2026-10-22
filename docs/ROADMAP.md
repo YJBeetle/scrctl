@@ -4,7 +4,14 @@
 [coredevice.md](coredevice.md)，早期方案保留在 [SCOPE.md](SCOPE.md)。
 旧记录中的手写 TCP、不做乱序缓存、稳定 C ABI 等说明已不代表当前方向。
 
-## 继续推进
+## 当前：XDeviceBridge 接入
+
+设备协议与媒体后端已迁到独立的 XDeviceBridge；scrctl 作为客户端维护显示、声音输出、
+快捷键和本地回放。MaaFramework 使用同一客户端协议。Server 生命周期由调用方管理。
+新链路的测试与真机验收见 [XDeviceBridge 验证记录](https://github.com/YJBeetle/XDeviceBridge/blob/main/docs/VALIDATION.md)。
+下文保留重构前的协议实现和历史验收记录，旧路径与探针不再属于当前构建。
+
+## 历史实现与验证
 
 原生 DDI 下载、签票、安装与状态核验已接入，Cryptex 在 macOS USB、Windows / Debian
 ARM64 Wi-Fi 的原生替换安装及安装后新连接视频录制均已验收。macOS / Windows 的

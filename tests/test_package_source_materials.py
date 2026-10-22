@@ -55,7 +55,7 @@ class SourcePackageTest(unittest.TestCase):
         (runtime / 'source-manifest.json').write_text(json.dumps(manifest))
         embedded = self.materials / 'embedded'
         dependencies = []
-        for name in ('nlohmann_json', 'cli11', 'pugixml', 'mdns', 'lwip'):
+        for name in ('nlohmann_json', 'cli11', 'xdb'):
             (embedded / (name + '.tar')).write_bytes(b'controlled embedded source')
             (embedded / (name + '.json')).write_text('[]')
             dependencies.append({'name': name, 'source_material_complete': True,
@@ -113,7 +113,7 @@ class SourcePackageTest(unittest.TestCase):
             self.run_package()
 
     def test_missing_embedded_source_rejected(self):
-        (self.materials / 'embedded/lwip.tar').unlink()
+        (self.materials / 'embedded/xdb.tar').unlink()
         with self.assertRaisesRegex(RuntimeError, 'changed or missing'):
             self.run_package()
 

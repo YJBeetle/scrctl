@@ -42,7 +42,6 @@ int main() {
              {"--ddi-system-version", "18.7.8"}, {"--ddi-product-type", "iPad11,2"},
              {"--download-ddi", "--ddi-system-version", ""},
              {"--download-ddi", "--ddi-system-version", "18.x"},
-             {"--download-ddi", "--ddi-system-version", "28.0"},
              {"--download-ddi", "--ddi-system-version", "18.7.8", "-s", "device"},
              {"--download-ddi", "--ddi-system-version", "18.7.8", "--wifi", "auto"},
              {"--download-ddi", "--ddi-system-version", "18.7.8", "--ddi-product-type", ""},
@@ -140,7 +139,7 @@ int main() {
               "display-only and legacy automatic display do not override initial recording angle");
     }
     using RecordFormat = scrctl::app::RecordFormat;
-    using MuxerFormat = scrctl::media::RecordingMuxer::Format;
+    using MuxerFormat = scrctl::app::RecordFormat;
     for (const auto& [name, selected, container] : {
             std::tuple{"mp4", RecordFormat::Mp4, MuxerFormat::Mp4},
             std::tuple{"mkv", RecordFormat::Matroska, MuxerFormat::Matroska}}) {

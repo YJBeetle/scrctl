@@ -6,7 +6,7 @@
 
 namespace scrctl::app {
 
-bool AudioOut::open(scrctl::media::AudioPump &pump, std::string &err) {
+bool AudioOut::open(RemoteAudio &pump, std::string &err) {
     if (!pump.decoding_enabled()) {
         err = SCRCTL_TR("Audio playback is unavailable because PCM decoding is disabled");
         return false;

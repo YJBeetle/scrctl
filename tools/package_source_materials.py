@@ -45,7 +45,7 @@ def verify_collectors(metadata, doc, collector, embedded, platform):
             verify_record(record, collector)
     manifest = json.loads((embedded / 'source-manifest.json').read_text(encoding='utf-8'))
     dependencies = manifest['dependencies']
-    if not {'nlohmann_json', 'cli11', 'pugixml', 'mdns', 'lwip'} <= {d['name'] for d in dependencies}:
+    if not {'nlohmann_json', 'cli11', 'xdb'} <= {d['name'] for d in dependencies}:
         raise RuntimeError('Embedded dependency coverage incomplete')
     for item in dependencies:
         if not item['source_material_complete']:

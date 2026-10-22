@@ -1,6 +1,5 @@
-# 构建并运行不需要设备的回归测试：协议编解码、lwIP 传输、媒体状态和命令行。
+# 构建并运行前端及 xdb 协议接入的无设备回归；设备后端在 xdb 仓库验证。
 # 真机测试另外运行，避免 CI 依赖设备在线或占用同一设备的媒体会话。
-# CI 显式启用诊断和归档实验，继续检查它们的编译与离线参数行为。
 # 测试项以 ctest -N 为准；未配置录制码流时，不注册需要该输入的测试。
 name: offline-selftest
 
@@ -33,43 +32,33 @@ jobs:
     # 两个平台都必须成功；构建、测试和可执行文件启动分别检查。
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          submodules: recursive
 
       - name: 装依赖（macOS）
         if: runner.os == 'macOS'
-        # 与 README 里那行一致。openssl 是 keg-only，配置时要显式给前缀（下一步）。
-        run: brew install sdl2 openssl ffmpeg pkg-config gettext
+        # 前端依赖；设备服务由独立的 xdb Server 提供。
+        run: brew install sdl2 ffmpeg pkg-config gettext
 
       - name: 装依赖（Linux）
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake pkg-config gettext python3 libsdl2-dev libssl-dev libcurl4-openssl-dev \
-            libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev
+            cmake pkg-config gettext python3 libsdl2-dev \
+            libavcodec-dev libavutil-dev libswscale-dev
 
       - name: 配置
         # 不指定 -G：默认生成器总归在，而 Ninja 是否预装是 runner 镜像的事。
         run: |
-          EXTRA=""
-          if [ "$(uname)" = "Darwin" ]; then
-            EXTRA="-DOPENSSL_ROOT_DIR=$(brew --prefix openssl)"
-          fi
           cmake -B build -DCMAKE_BUILD_TYPE=Release \
-            -DSCRCTL_BUILD_PROBES=ON -DSCRCTL_BUILD_EXPERIMENTS=ON \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DCMAKE_DISABLE_FIND_PACKAGE_nlohmann_json=ON \
-            -DCMAKE_DISABLE_FIND_PACKAGE_CLI11=ON \
-            -DCMAKE_DISABLE_FIND_PACKAGE_pugixml=ON $EXTRA
+            -DCMAKE_DISABLE_FIND_PACKAGE_CLI11=ON
 
       - name: 构建
         # Make 生成器下，无数值的 --parallel 会传入无上限的 -j。
         run: cmake --build build --parallel ${{ matrix.build_jobs }}
-
-      # 这些作业预期包含 FFmpeg；缺依赖导致的后端降级必须让 CI 失败。
-      - name: 确认 FFmpeg 音频测试已注册
-        run: >-
-          ctest --test-dir build --show-only=json-v1 |
-          python3 -c 'import json, sys; sys.exit(0 if any(t["name"] == "audio_decoder" for t in json.load(sys.stdin)["tests"]) else "Required FFmpeg audio_decoder test is missing")'
 
       # 链接成功不等于跑得起来：这一步只证明可执行文件在自己的平台上能起。
       # `--help` 在 SDL 初始化之前就到点了，所以无显示环境的 runner 也不需要屏幕。
@@ -160,6 +149,8 @@ jobs:
         shell: msys2 {0}
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          submodules: recursive
       - name: 固定 Windows 源码换行
         shell: pwsh
         run: |
@@ -178,15 +169,12 @@ jobs:
             ${{ matrix.package_prefix }}-clang
             ${{ matrix.package_prefix }}-cmake
             ${{ matrix.package_prefix }}-ninja
-            ${{ matrix.package_prefix }}-openssl
-            ${{ matrix.package_prefix }}-curl
             ${{ matrix.package_prefix }}-gettext-tools
             ${{ matrix.package_prefix }}-SDL2
             ${{ matrix.package_prefix }}-python
             ${{ matrix.package_prefix }}-pkgconf
             ${{ matrix.package_prefix }}-ffmpeg
             ${{ matrix.package_prefix }}-nlohmann-json
-            ${{ matrix.package_prefix }}-pugixml
       - name: 验证 MSYS2 源码签名通路
         run: |
           git diff --exit-code --stat HEAD
@@ -212,17 +200,11 @@ jobs:
         run: >-
           cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
-          -DSCRCTL_BUILD_PROBES=ON -DSCRCTL_BUILD_EXPERIMENTS=ON
           -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           -DCMAKE_DISABLE_FIND_PACKAGE_nlohmann_json=ON
           -DCMAKE_DISABLE_FIND_PACKAGE_CLI11=ON
-          -DCMAKE_DISABLE_FIND_PACKAGE_pugixml=ON
       - name: 构建
         run: cmake --build build-win --parallel 4
-      - name: 确认 FFmpeg 音频测试已注册
-        run: >-
-          ctest --test-dir build-win --show-only=json-v1 |
-          python -c 'import json, sys; sys.exit(0 if any(t["name"] == "audio_decoder" for t in json.load(sys.stdin)["tests"]) else "Required FFmpeg audio_decoder test is missing")'
       - name: 可执行文件启动
         run: ./build-win/scrctl.exe --help > /dev/null
       - name: 离线自检
@@ -273,24 +255,20 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          submodules: recursive
 
       - name: 装依赖
-        run: brew install sdl2 openssl ffmpeg pkg-config gettext
+        run: brew install sdl2 ffmpeg pkg-config gettext
 
       - name: 配置（Debug + 两个 sanitizer）
         run: >
           cmake -B build-san -DCMAKE_BUILD_TYPE=Debug
-          -DSCRCTL_BUILD_PROBES=ON -DSCRCTL_BUILD_EXPERIMENTS=ON
           -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g"
           -DOPENSSL_ROOT_DIR="$(brew --prefix openssl)"
 
       - name: 构建
         run: cmake --build build-san --parallel 3
-
-      - name: 确认 FFmpeg 音频测试已注册
-        run: >-
-          ctest --test-dir build-san --show-only=json-v1 |
-          python3 -c 'import json, sys; sys.exit(0 if any(t["name"] == "audio_decoder" for t in json.load(sys.stdin)["tests"]) else "Required FFmpeg audio_decoder test is missing")'
 
       - name: 离线自检
         env:

@@ -32,13 +32,12 @@ winget install --id MSYS2.MSYS2 --exact --source winget --silent `
 ```bash
 pacman -S --needed \
   ${MINGW_PACKAGE_PREFIX}-clang ${MINGW_PACKAGE_PREFIX}-cmake \
-  ${MINGW_PACKAGE_PREFIX}-ninja ${MINGW_PACKAGE_PREFIX}-openssl \
-  ${MINGW_PACKAGE_PREFIX}-curl \
+  ${MINGW_PACKAGE_PREFIX}-ninja \
   ${MINGW_PACKAGE_PREFIX}-gettext-tools ${MINGW_PACKAGE_PREFIX}-SDL2 \
   ${MINGW_PACKAGE_PREFIX}-python ${MINGW_PACKAGE_PREFIX}-pkgconf \
-  ${MINGW_PACKAGE_PREFIX}-ffmpeg ${MINGW_PACKAGE_PREFIX}-nlohmann-json \
-  ${MINGW_PACKAGE_PREFIX}-pugixml
+  ${MINGW_PACKAGE_PREFIX}-ffmpeg ${MINGW_PACKAGE_PREFIX}-nlohmann-json
 
+git submodule update --init --recursive
 cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
 cmake --build build-win --parallel 4

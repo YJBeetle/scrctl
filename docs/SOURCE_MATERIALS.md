@@ -52,10 +52,10 @@ SHA256 为 `4c95b0b5f2066c387f51fe266258a71b5e2b3962f72c660fbf558546ed06f45b`。
 ## 内容与版本对应
 
 - `project/scrctl-source.tar`：安装包记录的同一 Git 提交，含 CMake、平台适配、
-  lwIP 配置、源码收集工具和许可证。
+  源码收集工具和许可证；子模块由 embedded 中的固定源码单独覆盖。
 - `build/`：实际依赖版本、库来源与哈希、FFmpeg 构建选项、CMakeCache、
   compile_commands 和 CI 工作流。缓存和命令中的绝对路径来自构建机，重建时应替换。
-- `embedded/`：CMake 本次实际选择的 JSON、CLI11、pugixml、mDNS、lwIP 源码树，
+- `embedded/`：CMake 本次实际选择的 JSON、CLI11、XDeviceBridge 客户端源码树，
   包括许可证、上游构建文件、每个源码归档及内部文件的哈希。安装包 CI 强制使用固定
   FetchContent 源，避免将系统包版本和固定下载版本混淆。本地源码覆盖导出的是实际
   覆盖目录，清单中的默认 URL 不作为覆盖源码身份的证明。

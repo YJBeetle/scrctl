@@ -38,7 +38,7 @@ def archive_tree(source, destination, name):
     while pending:
         directory = pending.pop()
         for path in sorted(directory.iterdir()):
-            if path.name == ".git":
+            if path.name in (".git", "__pycache__"):
                 continue
             paths.append(path)
             if path.is_dir() and not path.is_symlink():
@@ -134,9 +134,9 @@ def collect(build_directory, output_directory):
             "the -DFETCHCONTENT_SOURCE_DIR_NAME=/absolute/path/to/NAME entries listed\n"
             "in rebuild-overrides.json. Preserve the original CMake build options;\n"
             "system packages and the compiler are supplied by the platform build recipe.\n"
-            "To force the exported JSON/CLI11/pugixml trees rather than installed packages,\n"
+            "To force the exported JSON/CLI11/xdb trees rather than installed packages,\n"
             "also set -DCMAKE_DISABLE_FIND_PACKAGE_nlohmann_json=ON,\n"
-            "-DCMAKE_DISABLE_FIND_PACKAGE_CLI11=ON and -DCMAKE_DISABLE_FIND_PACKAGE_pugixml=ON.\n",
+            "-DCMAKE_DISABLE_FIND_PACKAGE_CLI11=ON; xdb is the pinned source submodule.\n",
             encoding="utf-8")
         if output_directory.exists():
             output_directory.rmdir()

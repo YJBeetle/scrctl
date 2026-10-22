@@ -2,8 +2,8 @@
 #include "i18n/CliLanguage.h"
 #include "app/Cli.h"
 #include "app/RecordFormat.h"
-#include "hid/Hid.h"
-#include "ddi/Selection.h"
+#include "app/HidKeys.h"
+#include <regex>
 #include <CLI/CLI.hpp>
 #include <algorithm>
 #include <charconv>
@@ -227,8 +227,8 @@ ParseResult parse_args(int argc, char **argv, Options &o) {
                         "Choose device detection with -s/--wifi or an explicit OS/model; do not combine them"));
                 }
                 std::string error;
-                if (!ddi::select_for_version(o.ddi_system_version, error))
-                    throw CLI::ValidationError("--ddi-system-version", error);
+                if (!std::regex_match(o.ddi_system_version, std::regex(R"([0-9]+(\.[0-9]+){0,2})")))
+                    throw CLI::ValidationError("--ddi-system-version", "Expected a numeric system version");
             }
             for (const auto &[name, value] : std::vector<std::pair<std::string, std::string>>{
                      {"--serial", o.serial}, {"--ddi-product-type", o.ddi_product_type}}) {

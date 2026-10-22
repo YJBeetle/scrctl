@@ -2,10 +2,7 @@
 
 #include <optional>
 #include <string>
-
-namespace scrctl::remote {
-class Device;
-}
+#include <xdb/client.hpp>
 
 namespace scrctl::app {
 
@@ -16,6 +13,6 @@ struct Options;
 std::optional<int> run_standalone_command(const Options &options);
 
 /// 解析 --start-app 的前缀和名称，在已有设备会话中启动应用。
-int launch_app(remote::Device &device, const std::string &app_spec);
+int launch_app(xdb::client::Client &client, const std::string &app_spec);
 
 } // namespace scrctl::app

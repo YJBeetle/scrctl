@@ -6,6 +6,10 @@ DDI（Developer Disk Image）提供设备端的开发服务。scrctl 的屏幕�
 
 ## 用 scrctl 下载
 
+当前命令通过 xdb 客户端转发给本机 Server；先按 [README](../README.md#使用-xdb-server)
+启动并配置 Server。镜像缓存、下载、挂载及配对记录都属于 Server。下方历史真机
+安装结果来自重构前的直接后端，本轮 IPC 路径的验证单独记录。
+
 ```sh
 scrctl --download-ddi -s <UDID>
 scrctl --download-ddi --wifi auto -s <UDID>
@@ -13,7 +17,7 @@ scrctl --download-ddi --ddi-system-version 18.7.8 --ddi-product-type iPad11,2
 scrctl --download-ddi --ddi-directory ./ddi-cache --ddi-download-timeout 300
 ```
 
-此命令直接使用 libcurl 下载，不需要 Python 或 Xcode，也不会把 DDI 捆绑进安装包。
+Server 使用 libcurl 下载，不需要 Python 或 Xcode，也不会把 DDI 捆绑进安装包。
 指定 `-s <UDID>` 时，通过 USB lockdown 只读查询设备的系统版本和机型，再选择
 镜像类别并检查镜像的机型身份；这一步不要求设备已经安装 DDI。使用 `--wifi auto`
 或手动 Wi-Fi 地址时，经已有配对记录连接并只读获取 RSD 中的设备属性；无线发现和

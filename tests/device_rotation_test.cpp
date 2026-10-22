@@ -45,7 +45,7 @@ int main() {
         std::unique_lock lock(mutex);
         wake.wait(lock, token, [&] { return released; });
         return Job::Completion{true, token.stop_requested(),
-                               scrctl::remote::DeviceOrientation::LandscapeLeft, {}};
+                               scrctl::app::DeviceOrientation::LandscapeLeft, {}};
     });
     check(job.start() == Job::StartStatus::Started, "start returns while operation waits on worker");
     check(entry.wait_for(2s) == std::future_status::ready && worker_thread.load(), "operation runs off caller thread");
@@ -59,7 +59,7 @@ int main() {
     check(job.start() == Job::StartStatus::Busy, "release does not admit another request before poll");
     const auto first = wait_completion(job);
     check(first && first->success && !first->cancelled &&
-              first->target == scrctl::remote::DeviceOrientation::LandscapeLeft,
+              first->target == scrctl::app::DeviceOrientation::LandscapeLeft,
           "completion preserves successful target");
     check(!job.busy() && !job.poll(), "poll consumes exactly once and releases slot");
     check(job.start() == Job::StartStatus::Started, "explicit next shortcut can start after poll");
@@ -92,7 +92,7 @@ int main() {
         wake.wait(lock, [&] { return callback_reentered.load(); });
         stop_seen = token.stop_requested();
         returned = true;
-        return Job::Completion{true, false, scrctl::remote::DeviceOrientation::Portrait, {}};
+        return Job::Completion{true, false, scrctl::app::DeviceOrientation::Portrait, {}};
     });
     cancel_job_pointer = &cancel_job;
     borrowed_lifetime.reset();
@@ -109,7 +109,7 @@ int main() {
     check(failure && !failure->success && !failure->cancelled && failure->error == "orientation test failure",
           "operation exception becomes owned failure result");
     Job cancelled([](std::stop_token) {
-        return Job::Completion{true, true, scrctl::remote::DeviceOrientation::Portrait, {}};
+        return Job::Completion{true, true, scrctl::app::DeviceOrientation::Portrait, {}};
     });
     check(cancelled.start() == Job::StartStatus::Started, "explicit cancelled result starts normally");
     const auto cancellation = wait_completion(cancelled);

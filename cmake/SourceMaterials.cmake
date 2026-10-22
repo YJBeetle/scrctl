@@ -11,6 +11,9 @@ endfunction()
 
 function(scrctl_source_dependency name target detected_version declared_url declared_ref)
     FetchContent_GetProperties(${name} SOURCE_DIR selected_source)
+    if(name STREQUAL "xdb")
+        set(selected_source "${PROJECT_SOURCE_DIR}/xdb")
+    endif()
     set(item "{}")
     foreach(key IN ITEMS name target detected_version declared_url declared_ref)
         scrctl_source_json_string(value "${${key}}")
@@ -59,15 +62,10 @@ scrctl_source_dependency(nlohmann_json nlohmann_json::nlohmann_json "${nlohmann_
 scrctl_source_dependency(cli11 CLI11::CLI11 "${CLI11_VERSION}"
     "https://codeload.github.com/CLIUtils/CLI11/tar.gz/refs/tags/v2.5.0"
     "SHA256=17e02b4cddc2fa348e5dbdbb582c59a3486fa2b2433e70a0c3bacb871334fd55")
-scrctl_source_dependency(pugixml pugixml::pugixml "${pugixml_VERSION}"
-    "https://codeload.github.com/zeux/pugixml/tar.gz/refs/tags/v1.16"
-    "SHA256=357bcab8877dc9943f355d3a72daba1b053238ba955f50fa81586afb65090219")
-scrctl_source_dependency(mdns ScrctlMdns ""
-    "https://codeload.github.com/mjansson/mdns/tar.gz/refs/tags/1.4.3"
-    "SHA256=be1fd8e35599cb7de179decbd0633c121d11a2dcb9cc193ff5c590bd0d480483")
-scrctl_source_dependency(lwip scrctl_lwip ""
-    "https://codeload.github.com/lwip-tcpip/lwip/tar.gz/refs/tags/STABLE-2_2_1_RELEASE"
-    "SHA256=ce0b7461c0ad9602c376f0bf07c5eb7253b48c7bf66f011c6bf3e2a96731c539")
+execute_process(COMMAND git -C "${PROJECT_SOURCE_DIR}/xdb" rev-parse HEAD
+    OUTPUT_VARIABLE SCRCTL_XDB_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+scrctl_source_dependency(xdb xdb_client "0.1.0"
+    "https://github.com/YJBeetle/XDeviceBridge.git" "${SCRCTL_XDB_REVISION}")
 if(SCRCTL_FETCH_SDL2)
     scrctl_source_dependency(sdl2 SDL2::SDL2 "${SDL_VERSION}"
         "https://github.com/libsdl-org/SDL.git" "release-2.32.10")

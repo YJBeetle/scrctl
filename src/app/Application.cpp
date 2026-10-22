@@ -19,11 +19,8 @@
 #include "app/LiveSource.h"
 #include "app/Presenter.h"
 #include "app/RecordFormat.h"
-#include "media/RecordingVideoConfig.h"
+#include "app/HidKeys.h"
 #include "app/SdlRuntime.h"
-#include "media/StreamSession.h"
-#include "remote/Pasteboard.h"
-#include "remote/OrientationControl.h"
 
 namespace scrctl::app {
 
@@ -36,8 +33,8 @@ Crop resolve_crop(const Options &o, const scrctl::Frame &f, FrameGeometry geomet
     int &display_w = geometry.display_w, &display_h = geometry.display_h;
     const bool from_device = display_w > 0 && display_h > 0;
     if (!from_device && !geometry.screenshot) {
-        const auto fallback =
-            scrctl::media::display_crop(static_cast<int>(f.width), static_cast<int>(f.height));
+        const struct { int w, h; } fallback = f.width == 1136 && f.height == 2464
+            ? decltype(fallback){1125, 2436} : decltype(fallback){int(f.width), int(f.height)};
         display_w = fallback.w;
         display_h = fallback.h;
     }
@@ -153,8 +150,7 @@ int run(int argc, char **argv) {
         live_options.hw_decode = o.hw_decode;
         live_options.watch_display = !o.no_video_playback;
         live_options.want_video = !o.no_video;
-        live_options.decode_video = !o.no_video && (needs_pixels ||
-            !scrctl::media::recording_idr_checks_available(capture_check_error));
+        live_options.decode_video = !o.no_video && needs_pixels;
         live_options.want_audio = want_audio;
         live_options.decode_audio = !o.no_audio_playback;
         live_options.audio_buffer_ms = o.audio_buffer_ms;
@@ -180,9 +176,8 @@ int run(int argc, char **argv) {
         }
         live = made.get();
         if (o.debug_net) {
-            if (auto *st = live->device().stack()) {
-                st->set_net_debug(true);
-            }
+            std::string debug_error;
+            if (!live->debug_network(true, debug_error)) std::fprintf(stderr, "%s\n", debug_error.c_str());
         }
         source = std::move(made);
     }
@@ -199,7 +194,7 @@ int run(int argc, char **argv) {
                      SCRCTL_TR("File playback cannot launch a device app; ignoring --start-app\n"));
     }
     if (live != nullptr && !o.start_app.empty()) {
-        const int exit_code = launch_app(live->device(), o.start_app);
+        const int exit_code = launch_app(live->client(), o.start_app);
         if (exit_code != 0) {
             return finish_exit(exit_code);
         }
@@ -210,16 +205,21 @@ int run(int argc, char **argv) {
 
     const bool control_enabled = live != nullptr && !o.no_control;
     if (control_enabled && !o.no_window) {
-        rotation_job = std::make_unique<DeviceRotationJob>(live->device());
+        rotation_job = std::make_unique<DeviceRotationJob>([live](std::stop_token stop) {
+            DeviceRotationJob::Completion result;
+            std::string target;
+            result.success = live->rotate(target, result.error, stop);
+            result.cancelled = stop.stop_requested();
+            result.target = target == "landscapeLeft" ? DeviceOrientation::LandscapeLeft : DeviceOrientation::Portrait;
+            return result;
+        });
         paste_job = std::make_unique<ClipboardPasteJob>(
             [live](const std::string &text, std::stop_token cancel) {
                 ClipboardPasteJob::OperationResult result;
                 std::string readback;
-                if (scrctl::remote::Pasteboard::set_text(live->device(), text, result.error,
-                                                        false, cancel, 5000) &&
+                if (live->clipboard_set(text, result.error, cancel) &&
                     !cancel.stop_requested() &&
-                    scrctl::remote::Pasteboard::get_text(live->device(), readback, result.error,
-                                                        false, cancel, 5000)) {
+                    live->clipboard_get(readback, result.error, cancel)) {
                     result.success = readback == text;
                     if (!result.success)
                         result.error = SCRCTL_TR("Device clipboard text did not match; paste skipped");
@@ -449,7 +449,7 @@ int run(int argc, char **argv) {
         if (!result || result->cancelled || quit || runtime.stop_requested()) return;
         if (result->success) {
             std::printf(SCRCTL_TR("Device rotation requested: %s\n"),
-                        scrctl::remote::OrientationControl::name(result->target).data());
+                        result->target == DeviceOrientation::LandscapeLeft ? "landscapeLeft" : "portrait");
         } else {
             std::fprintf(stderr, SCRCTL_TR("Device rotation failed: %s\n"),
                          result->error.empty() ? SCRCTL_TR("No diagnostic available") : result->error.c_str());
