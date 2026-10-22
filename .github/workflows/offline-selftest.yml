@@ -174,9 +174,9 @@ jobs:
           # Recreate LF files and stat caches with the same Git implementation.
           git config --local core.autocrlf false
           git config --local core.filemode false
-          git checkout-index --all --force
-          git submodule foreach --recursive 'git config core.autocrlf false && git config core.filemode false && git checkout-index --all --force && git update-index --really-refresh'
-          git submodule foreach --recursive 'git status --short; git diff --stat HEAD'
+          git checkout-index --all --force --index
+          git submodule foreach --recursive 'git config core.autocrlf false && git config core.filemode false && git checkout-index --all --force --index'
+          git submodule foreach --recursive 'git status --short; git diff --summary HEAD; git diff --numstat HEAD | head -20; git diff HEAD -- src/client/Client.cpp | head -60'
       - name: 验证 MSYS2 源码签名通路
         run: |
           git diff --exit-code --stat HEAD
