@@ -184,7 +184,7 @@ def record_package(install_directory, runtime_directory, source_commit, database
             raise RuntimeError(f"Ambiguous bundled DLL name: {path.name}")
         seen.add(name)
         original = sources.get(name)
-        if name == "xdb_client.dll" and project_runtime_directory is not None:
+        if name in {"xdb_client.dll", "libxdb_client.dll"} and project_runtime_directory is not None:
             original = Path(project_runtime_directory).resolve(strict=True) / path.name
             if not original.is_file() or digest(original) != digest(path):
                 raise RuntimeError(f"Project and bundled DLL SHA256 differ: {path.name}")

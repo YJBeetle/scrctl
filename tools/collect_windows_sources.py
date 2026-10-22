@@ -299,7 +299,7 @@ def collect(metadata_path, output_directory, jobs=4, fetch=download, verifier=ve
     if not packages or not re.fullmatch(r"[0-9a-fA-F]{40}", metadata.get("source_commit", "")):
         raise RuntimeError("Expected Windows package metadata with source commit and DLL owners")
     owners = {item["msys2_package"] for item in metadata.get("runtime_dependencies", [])
-              if not (item.get("source_dependency") == "xdb" and item.get("library", "").casefold() == "xdb_client.dll")}
+              if not (item.get("source_dependency") == "xdb" and item.get("library", "").casefold() in {"xdb_client.dll", "libxdb_client.dll"})}
     if owners != set(packages):
         raise RuntimeError("DLL owner coverage differs from recorded MSYS2 packages")
     groups = {}

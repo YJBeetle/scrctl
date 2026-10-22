@@ -79,7 +79,7 @@ def package(install, build, materials, platform, repository):
     for dependency in metadata['runtime_dependencies']:
         owner = dependency.get('homebrew_package') if platform == 'macos' else dependency.get('msys2_package')
         embedded_runtime = (dependency.get('source_dependency') == 'xdb' and
-                            dependency['library'].casefold() == ('libxdb_client.dylib' if platform == 'macos' else 'xdb_client.dll'))
+                            dependency['library'].casefold() in ({'libxdb_client.dylib'} if platform == 'macos' else {'xdb_client.dll', 'libxdb_client.dll'}))
         if not owner and not embedded_runtime:
             raise RuntimeError(f'Uncovered runtime library: {dependency["library"]}')
         library = install / ('bin/lib' if platform == 'macos' else 'bin') / dependency['library']
