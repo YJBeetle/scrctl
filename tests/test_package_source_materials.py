@@ -102,6 +102,10 @@ class SourcePackageTest(unittest.TestCase):
         self.metadata['runtime_dependencies'].append({'library': 'xdb_client.dll',
             'source_dependency': 'xdb', 'bundled_sha256': module.sha256(runtime)})
         self.write_metadata()
+        manifest_path = self.materials / 'msys2/source-manifest.json'
+        manifest = json.loads(manifest_path.read_text())
+        manifest['package_metadata_sha256'] = module.sha256(self.doc / 'package-metadata.json')
+        manifest_path.write_text(json.dumps(manifest))
         self.run_package()
         self.assertTrue((self.doc / 'source-materials.json').is_file())
         (self.materials / 'embedded/xdb.tar').unlink()
