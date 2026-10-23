@@ -12,9 +12,7 @@ git submodule update --init --recursive
 cmake -S . -B build
 cmake --build build --parallel
 
-# 另一个终端启动独立的 xdb；保留前台进程
-xdb server
-# 下面命令在另一个终端执行；默认连接本机端口 17423
+# 默认连接本机端口 17423，缺少 Server 时自动在后台启动
 xdb pair --wifi
 xdb devices
 xdb -s '<UDID>' ddi prepare --wifi auto --cache-dir '/absolute/ddi-cache'
@@ -23,7 +21,9 @@ xdb -s '<UDID>' ddi prepare --wifi auto --cache-dir '/absolute/ddi-cache'
 
 也可以用 `xdb pair --usb` 建立配对。GUI 可直接调用 xdb 客户端 SDK，无需读取配对文件。手机凭据由 Server 保存；scrctl 不读取原来的配对目录。需要迁移旧凭据时，显式执行 `xdb pairing import <record-file>`。
 
-scrctl 原有 `--pair`、`--install-ddi`、`--download-ddi`、`--list-devices`、剪贴板及应用命令转发给同一个 Server。录制文件由 Server 在本机绝对路径写入，保留原始编码轨道；窗口暂停只冻结显示。Server 目前仅监听本机，需独立安装/启动，不会由客户端隐式拉起。
+scrctl 原有 `--pair`、`--install-ddi`、`--download-ddi`、`--list-devices`、剪贴板及应用命令转发给同一个 Server。录制文件由 Server 在本机绝对路径写入，保留原始编码轨道；窗口暂停只冻结显示。Server 仅监听本机；桌面客户端会自动启动并复用后台 Server。可用 `xdb start-server` 显式启动、`xdb kill-server` 停止。
+
+请将独立安装的 `xdb` 放在 `PATH` 上；分开构建时可用 `XDB_EXECUTABLE` 指定其可执行文件路径。SDK 也会查找客户端库旁或相邻 `bin` 目录中的 `xdb`。
 
 前端构建需要 SDL2、CLI11、nlohmann-json、gettext 和 C++20。FFmpeg 只用于本地 HEVC 文件回放；实时设备媒体在 Server 解码。运行两者分别遵循其依赖与许可证要求。下方历史协议研究及真机数据描述直接后端，不能当作本轮 xdb 链路的验收结果。
 
@@ -345,7 +345,7 @@ JSON 和命令行使用 nlohmann/json 与 CLI11，缺少系统包时下载固定
 
 设备连接、DDI、实时媒体、音频解码和录制的依赖及构建开关属于独立的
 [XDeviceBridge](https://github.com/YJBeetle/XDeviceBridge)。scrctl 构建只启用客户端，
-不会构建或打包 Server；运行前按上面的步骤启动 Server。
+不会构建或打包 Server；请先安装独立的 `xdb`，运行时自动启动 Server。
 macOS / Windows 安装包配套提供同一轮 CI 的[对应源码、配方与补丁](docs/SOURCE_MATERIALS.md)。
 平台构建与安装检查见 [macOS](docs/MACOS.md) / [Windows](docs/WINDOWS.md)。
 
