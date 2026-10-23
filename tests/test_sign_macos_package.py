@@ -29,6 +29,8 @@ codesign)
   echo "codesign $*" >> "$CALLS"
   if [[ "$1" == -dvv ]]; then
     echo 'TeamIdentifier=TEAM flags=0x10000(runtime)' >&2
+    echo 'Authority=Developer ID Application: Fixture (TEAM)' >&2
+    echo 'Timestamp=fixture' >&2
     for ((i=0; i<2000; ++i)); do echo 'verbose certificate diagnostics' >&2; done
   fi
   ;;

@@ -52,7 +52,11 @@ while IFS= read -r -d '' binary; do
     fi
     codesign --verify --strict --verbose=2 "$binary"
     details=$(codesign -dvv "$binary" 2>&1)
-    [[ "$details" == *"TeamIdentifier=$SIGNING_TEAM_ID"* ]] || { echo "Wrong signing team: $binary" >&2; exit 1; }
+    [[ "$details" == *"TeamIdentifier=$SIGNING_TEAM_ID"* &&
+       "$details" == *"Authority=Developer ID Application:"* &&
+       "$details" == *"Timestamp="* ]] || {
+        echo "Developer ID / team / timestamp verification failed: $binary" >&2; exit 1;
+    }
 done < <(find "$root" -type f -print0)
 # Do not accept a package missing its main executable.
 codesign --verify --strict "$root/bin/$main_binary"

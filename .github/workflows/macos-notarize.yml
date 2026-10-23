@@ -13,10 +13,14 @@ jobs:
     runs-on: macos-15
     environment: Build
     timeout-minutes: 90
+    concurrency:
+      group: macos-developer-id
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           submodules: recursive
+          persist-credentials: false
       - name: Install dependencies
         run: brew install sdl2 ffmpeg pkg-config gettext
       - name: Build and test
@@ -59,9 +63,16 @@ jobs:
           archive="scrctl-macos-$(uname -m)-notarized.zip"
           ditto -c -k --sequesterRsrc --keepParent dist-macos "$archive"
           # The ticket is published online; ZIP and bare tools cannot be stapled.
+          submit_status=0
           xcrun notarytool submit "$archive" --apple-id "$NOTARY_APPLE_ID" \
             --password "$NOTARY_APP_PASSWORD" --team-id "$SIGNING_TEAM_ID" \
-            --wait --timeout 30m --output-format json > notarization.json
+            --wait --timeout 30m --output-format json > notarization.json || submit_status=$?
+          submission_id=$(python3 -c 'import json; print(json.load(open("notarization.json")).get("id", ""))')
+          if [[ -n "$submission_id" ]]; then
+            xcrun notarytool log "$submission_id" --apple-id "$NOTARY_APPLE_ID" \
+              --password "$NOTARY_APP_PASSWORD" --team-id "$SIGNING_TEAM_ID" notarization-log.json
+          fi
+          [[ "$submit_status" == 0 ]] || exit "$submit_status"
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -75,7 +86,9 @@ jobs:
         uses: actions/upload-artifact@v7.0.2
         with:
           name: macos-notarization-result
-          path: notarization.json
+          path: |
+            notarization.json
+            notarization-log.json
           if-no-files-found: ignore
       - name: Upload signed delivery
         uses: actions/upload-artifact@v7.0.2
