@@ -58,6 +58,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("install_directory", type=Path)
     parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--developer-id-signed", action="store_true",
+                        help="Record Developer ID signing; notarization is checked separately")
     args = parser.parse_args()
     root = args.install_directory.resolve(strict=True)
     doc = root / "share/doc/scrctl"
@@ -117,7 +119,8 @@ def main():
                 "architectures": output(["/usr/bin/lipo", "-archs", str(root / "bin/scrctl")]).split(),
                 "executable_minimum_macos": executable_minimum,
                 "minimum_macos": package_minimum,
-                "signing": "ad hoc; not Developer ID signed or notarized",
+                "signing": ("Developer ID signed; see separate notarization result" if args.developer_id_signed
+                            else "ad hoc; not Developer ID signed or notarized"),
                 "scope": "Development CI package. System frameworks are supplied by macOS. "
                          "minimum_macos is the highest actual Mach-O deployment requirement among "
                          "the executable and every bundled dylib; startup on an older OS does not "

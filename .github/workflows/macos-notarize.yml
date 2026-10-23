@@ -1,0 +1,88 @@
+name: macOS signed and notarized package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  notarize:
+    # Never send pull-request or arbitrary branch code to the signing environment.
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    environment: Build
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          submodules: recursive
+      - name: Install dependencies
+        run: brew install sdl2 ffmpeg pkg-config gettext
+      - name: Build and test
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_DISABLE_FIND_PACKAGE_nlohmann_json=ON \
+            -DCMAKE_DISABLE_FIND_PACKAGE_CLI11=ON
+          cmake --build build --parallel 3
+          ctest --test-dir build --output-on-failure
+          cmake --install build --prefix dist-macos
+      - name: Developer ID signing
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          SIGNING_IDENTITY: ${{ vars.SIGNING_IDENTITY }}
+          SIGNING_TEAM_ID: ${{ vars.SIGNING_TEAM_ID }}
+        run: bash tools/sign_macos_package.sh dist-macos
+      # Record hashes AFTER signing, including in the matching source delivery.
+      - name: Collect corresponding sources and validate installation
+        run: |
+          python3 tools/record_macos_package.py dist-macos --source-commit "$GITHUB_SHA" --developer-id-signed
+          ffmpeg -version > dist-macos/share/doc/scrctl/ffmpeg-build.txt
+          git archive --format=tar HEAD > dist-macos/share/doc/scrctl/scrctl-source.tar
+          HOMEBREW_DEVELOPER=1 HOMEBREW_NO_AUTO_UPDATE=1 brew ruby tools/collect_macos_sources.rb dist-macos sources-macos/homebrew
+          python3 tools/collect_embedded_sources.py build sources-macos/embedded
+          python3 tools/package_source_materials.py dist-macos build sources-macos --platform macos
+          python3 tools/test_macos_install.py dist-macos build
+      - name: Submit ZIP to Apple
+        env:
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
+          SIGNING_TEAM_ID: ${{ vars.SIGNING_TEAM_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${NOTARY_APPLE_ID:?Missing Apple ID}"
+          : "${NOTARY_APP_PASSWORD:?Missing app-specific password}"
+          : "${SIGNING_TEAM_ID:?Missing team ID}"
+          archive="scrctl-macos-$(uname -m)-notarized.zip"
+          ditto -c -k --sequesterRsrc --keepParent dist-macos "$archive"
+          # The ticket is published online; ZIP and bare tools cannot be stapled.
+          xcrun notarytool submit "$archive" --apple-id "$NOTARY_APPLE_ID" \
+            --password "$NOTARY_APP_PASSWORD" --team-id "$SIGNING_TEAM_ID" \
+            --wait --timeout 30m --output-format json > notarization.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          result = json.loads(Path('notarization.json').read_text())
+          if result.get('status') != 'Accepted':
+              raise SystemExit('Apple notarization was not Accepted; see notarization.json')
+          PY
+          shasum -a 256 "$archive" scrctl-sources-macos.tar > SHA256SUMS.txt
+      - name: Upload notarization result
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: macos-notarization-result
+          path: notarization.json
+          if-no-files-found: ignore
+      - name: Upload signed delivery
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: scrctl-macos-notarized
+          path: |
+            scrctl-macos-*-notarized.zip
+            scrctl-sources-macos.tar
+            SHA256SUMS.txt
+          compression-level: 0
+          if-no-files-found: error

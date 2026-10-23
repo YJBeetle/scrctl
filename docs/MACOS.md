@@ -68,3 +68,21 @@ FFmpeg 可能启用 GPL/version3，必须按本次构建配置与随包依赖的
 配套上传 `scrctl-sources-macos`；安装包内 `source-materials.json` 记录附件哈希。
 [源码材料](SOURCE_MATERIALS.md)说明内容与重建方法；历史安装包没有这份交付，
 新材料也不代替依赖组合的分发条件审核。
+
+## Developer ID 签名与公证
+
+手动运行 GitHub Actions 的 `macOS signed and notarized package`（仅 main）。
+任务使用 `Build` Environment：Secrets 为 `MACOS_CERTIFICATE_P12_BASE64`、
+`MACOS_CERTIFICATE_PASSWORD`、`NOTARY_APPLE_ID`、`NOTARY_APP_PASSWORD`；
+Variables 为 `SIGNING_IDENTITY` 与 `SIGNING_TEAM_ID`。
+P12 必须包含 Developer ID Application 私钥；公证密码是 Apple ID 的 App 专用密码。
+
+任务仅签署安装目录内的 Mach-O 副本，主程序启用 Hardened Runtime，所有签名附带
+安全时间戳；临时钥匙串在签名结束时删除。文件哈希与对应源码材料在签名后生成。
+普通 CI 仍生成 ad hoc 包，只有手动公证任务生成的 `scrctl-macos-notarized`
+附件在 Apple 返回 `Accepted` 后才上传；任务不自动发布 GitHub Release。
+公证响应另存为 `macos-notarization-result` 附件，可用于区分认证失败、拒绝或超时。
+
+运行目录保持 CLI 布局，无需制作 `.app`。提交的是包含已签名程序和动态库的 ZIP；
+ZIP 和裸 CLI 无法 staple，Gatekeeper 通过联网查询公证票据。需离线附带票据时，
+应另做可 staple 的 DMG/PKG。scrctl 不捆绑 Server，XDB 使用其自身仓库的公证任务。
