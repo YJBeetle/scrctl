@@ -27,7 +27,10 @@ security)
 file) echo 'Mach-O 64-bit executable';;
 codesign)
   echo "codesign $*" >> "$CALLS"
-  if [[ "$1" == -dvv ]]; then echo 'TeamIdentifier=TEAM flags=0x10000(runtime)' >&2; fi
+  if [[ "$1" == -dvv ]]; then
+    echo 'TeamIdentifier=TEAM flags=0x10000(runtime)' >&2
+    for ((i=0; i<2000; ++i)); do echo 'verbose certificate diagnostics' >&2; done
+  fi
   ;;
 esac
 '''

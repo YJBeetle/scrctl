@@ -43,7 +43,8 @@ if [[ -z "$signing_hash" ]]; then
 fi
 echo "Signing package with verified Developer ID identity"
 while IFS= read -r -d '' binary; do
-    file -b "$binary" | grep -q 'Mach-O' || continue
+    file_kind=$(file -b "$binary")
+    [[ "$file_kind" == *Mach-O* ]] || continue
     if [[ "$binary" == "$root/bin/$main_binary" ]]; then
         codesign --force --sign "$signing_hash" --keychain "$keychain" --timestamp --options runtime "$binary"
     else
@@ -55,4 +56,5 @@ while IFS= read -r -d '' binary; do
 done < <(find "$root" -type f -print0)
 # Do not accept a package missing its main executable.
 codesign --verify --strict "$root/bin/$main_binary"
-codesign -dvv "$root/bin/$main_binary" 2>&1 | grep -q 'flags=.*runtime'
+main_details=$(codesign -dvv "$root/bin/$main_binary" 2>&1)
+[[ "$main_details" == *flags=*runtime* ]]
