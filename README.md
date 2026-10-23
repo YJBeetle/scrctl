@@ -14,9 +14,7 @@ cmake --build build --parallel
 
 # 另一个终端启动独立的 xdb；保留前台进程
 xdb server
-# 使用 Server 输出的端口/令牌；下面命令在运行 scrctl 的终端执行
-export XDB_PORT=17423
-export XDB_TOKEN='<server-token>'
+# 下面命令在另一个终端执行；默认连接本机端口 17423
 xdb pair --wifi
 xdb devices
 xdb -s '<UDID>' ddi prepare --wifi auto --cache-dir '/absolute/ddi-cache'
@@ -347,7 +345,7 @@ JSON 和命令行使用 nlohmann/json 与 CLI11，缺少系统包时下载固定
 
 设备连接、DDI、实时媒体、音频解码和录制的依赖及构建开关属于独立的
 [XDeviceBridge](https://github.com/YJBeetle/XDeviceBridge)。scrctl 构建只启用客户端，
-不会构建或打包 Server；运行前按上面的步骤启动 Server 并配置令牌。
+不会构建或打包 Server；运行前按上面的步骤启动 Server。
 macOS / Windows 安装包配套提供同一轮 CI 的[对应源码、配方与补丁](docs/SOURCE_MATERIALS.md)。
 平台构建与安装检查见 [macOS](docs/MACOS.md) / [Windows](docs/WINDOWS.md)。
 

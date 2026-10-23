@@ -45,7 +45,7 @@ std::optional<int> run_standalone_command(const Options &o) {
     }
     xdb::client::Client client;
     std::string error;
-    if (!client.connect(error, 0, {}, event)) {
+    if (!client.connect(error, 0, event)) {
         std::fprintf(stderr, "%s\n", error.c_str());
         return 1;
     }
