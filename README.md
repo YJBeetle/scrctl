@@ -31,6 +31,9 @@ scrctl 原有 `--pair`、`--install-ddi`、`--download-ddi`、`--list-devices`�
 
 正式版：[v1.0.0](https://github.com/YJBeetle/scrctl/releases/tag/v1.0.0)。
 提供 macOS ARM64、Windows ARM64 和 Windows x64 安装包；Linux 请按下方说明从源码构建。
+旧版发布包不代表当前 XDB 架构的交付内容。当前源码构建的 scrctl 需另外安装
+[XDeviceBridge 运行包](https://github.com/YJBeetle/XDeviceBridge)，将 `xdb` 放入 `PATH`
+或设置 `XDB_EXECUTABLE`；scrctl 安装目录仅附带客户端库，不捆绑 Server。
 解压后运行 `bin/scrctl --help`；Windows 的 USB 驱动要求见 [安装说明](docs/WINDOWS.md)。
 macOS 包使用 ad hoc 签名，未经过 Apple 公证；系统可能要求确认打开来源。
 DDI 按需下载，不包含在安装包中。
@@ -80,7 +83,8 @@ iPad mini 的记录见 [协议记录 §23、§24](docs/coredevice.md#23-那台-i
 | Linux | Debian ARM64 的构建、离线回归及 Wi-Fi 软件解码、Wayland 窗口、竖横屏鼠标落点、缩放、键盘、Unicode 粘贴、设备按钮和音频路由短测已通过；直接重插接入 VM 后 USB 30 秒录制通过，归属切换仍曾出现 STALL；Cryptex DDI 的 Wi-Fi 原生替换安装及新连接视频录制通过，旧系统 DDI 新装与物理断线恢复仍待验证 |
 | Windows | x64 / CLANG64 的构建、73 项离线测试、独立安装与对应源码交付已由 CI 验证，x64 真机未测；ARM64 构建与离线测试、USB / Wi-Fi 镜像、截图切换及竖横屏鼠标触摸已验证；FFmpeg 真实音乐解码、短时 USB 播放及新版 Wi-Fi 默认、双端、无音频三种行为已确认；无线首次 PIN 配对和独立重连、Cryptex DDI 的 Wi-Fi 原生替换安装及新连接视频录制已通过，实际长暂停恢复、USB 持续连接与 USB 初始配对准备待验证，见 [安装说明](docs/WINDOWS.md) |
 
-音频在 macOS 使用 AudioToolbox，Windows / Linux 使用 FFmpeg 的原生 AAC-ELD
+以下音频后端数据来自迁移前的测试；当前音频解码由 XDB Server 负责，客户端只输出 PCM。
+历史实现在 macOS 使用 AudioToolbox，Windows / Linux 使用 FFmpeg 的原生 AAC-ELD
 解码器与 libswresample。当前 FFmpeg 适配支持 48 kHz、双声道、每帧每声道 480 或
 512 个采样；真实音乐的 480 配置已与 AudioToolbox 逐样本对照，最大差异为 1 个
 16 位量化单位。旧实验使用了错误的编码配置，其“不支持 ELD”的结论已修正，见
