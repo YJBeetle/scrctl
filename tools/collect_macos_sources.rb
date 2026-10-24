@@ -173,7 +173,7 @@ module MacosSources
     packages = metadata.fetch("homebrew_packages")
     dependencies.each do |entry|
       owner = entry["homebrew_package"]
-      embedded = entry["source_dependency"] == "xdb" && entry["library"] == "libxdb_client.dylib"
+      embedded = entry["source_dependency"] == "xdb" && entry["library"].match?(/\Alibxdb_client(?:\.\d+)*\.dylib\z/)
       raise "Unowned bundled runtime library: #{entry['library']}" unless embedded || (owner && packages.any? { |name, data| "#{name}/#{data['version']}" == owner })
       bundled = install/"bin/lib"/entry.fetch("library")
       raise "Bundled runtime library changed: #{bundled}" unless digest(bundled) == entry.fetch("bundled_sha256")

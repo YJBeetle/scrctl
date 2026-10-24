@@ -27,6 +27,7 @@ install(TARGETS scrctl RUNTIME DESTINATION bin)
 # 这种依赖不会出现在 otool -L 中，必须按上游的 @loader_path/libSDL3.dylib
 # 搜索规则显式安装，再让 BundleUtilities 递归处理 SDL3 本身的依赖。
 install(CODE "set(scrctl_xdb_origin \"$<TARGET_FILE:xdb_client>\")")
+install(CODE "set(scrctl_xdb_name \"$<TARGET_SONAME_FILE_NAME:xdb_client>\")")
 set(scrctl_sdl3_runtime "")
 if(SDL2_DIR)
     get_filename_component(scrctl_sdl2_config "${SDL2_DIR}" REALPATH)
@@ -49,8 +50,8 @@ install(CODE [[
     set(scrctl_root "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}")
     set(scrctl_exe "${scrctl_root}/bin/scrctl")
     set(scrctl_plugins "")
-    file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin/lib" TYPE FILE FILES "${scrctl_xdb_origin}")
-    list(APPEND scrctl_plugins "${scrctl_root}/bin/lib/libxdb_client.dylib")
+    file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin/lib" TYPE FILE FILES "${scrctl_xdb_origin}" RENAME "${scrctl_xdb_name}")
+    list(APPEND scrctl_plugins "${scrctl_root}/bin/lib/${scrctl_xdb_name}")
     file(MAKE_DIRECTORY "${scrctl_root}/bin/lib" "${scrctl_root}/share/doc/scrctl")
     if(scrctl_sdl3_origin)
         # Imported target 的路径也可能是 Homebrew 前缀中的符号链接，必须复制

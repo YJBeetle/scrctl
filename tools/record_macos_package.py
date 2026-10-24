@@ -107,7 +107,7 @@ def main():
                                       "receipt_architecture": receipt.get("arch")}
             else:
                 dependency["homebrew_package"] = None
-                if row["library"] == "libxdb_client.dylib" and original.name == row["library"]:
+                if re.fullmatch(r"libxdb_client(?:\.\d+)*\.dylib", row["library"]) and re.fullmatch(r"libxdb_client(?:\.\d+)*\.dylib", original.name):
                     dependency["source_dependency"] = "xdb"
             dependencies.append(dependency)
 
