@@ -225,7 +225,7 @@ DDI 下载和安装沿用各自预算。
 ## 历史后端验收与后续覆盖
 
 以下为迁移前的功能验收记录，不是当前 XDB IPC 链路的新验收结果。当前链路证据见
-[XDeviceBridge 验证记录](https://github.com/YJBeetle/XDeviceBridge/blob/main/docs/VALIDATION.md)。
+[XDeviceBridge 验证记录](https://github.com/scrctl/XDeviceBridge/blob/main/docs/VALIDATION.md)。
 
 1. 无线流程已接入主程序：继续验证正式配对、记录复用、按 UDID 自动选择及
    候选重试在更多设备和网络上的行为。Android 由 ADB 承担的配对与连接由 XDeviceBridge Server 处理。

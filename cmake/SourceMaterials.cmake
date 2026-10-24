@@ -65,7 +65,7 @@ scrctl_source_dependency(cli11 CLI11::CLI11 "${CLI11_VERSION}"
 execute_process(COMMAND git -C "${PROJECT_SOURCE_DIR}/xdb" rev-parse HEAD
     OUTPUT_VARIABLE SCRCTL_XDB_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
 scrctl_source_dependency(xdb xdb_client "0.1.0"
-    "https://github.com/YJBeetle/XDeviceBridge.git" "${SCRCTL_XDB_REVISION}")
+    "https://github.com/scrctl/XDeviceBridge.git" "${SCRCTL_XDB_REVISION}")
 if(SCRCTL_FETCH_SDL2)
     scrctl_source_dependency(sdl2 SDL2::SDL2 "${SDL_VERSION}"
         "https://github.com/libsdl-org/SDL.git" "release-2.32.10")

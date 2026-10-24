@@ -251,13 +251,13 @@ GitHub Actions 的 Windows 矩阵共用构建、离线测试、安装搬移检�
 | Windows x64 | `windows-2022` / CLANG64 | `scrctl-windows-x64` | `scrctl-sources-windows-x64` |
 
 两组分别保存测试日志，源码附件生成失败会阻止对应运行包上传。
-提交 `7afa16d` 的 [Windows x64 作业](https://github.com/YJBeetle/scrctl/actions/runs/38308712797/job/115008931519)
+提交 `7afa16d` 的 [Windows x64 作业](https://github.com/scrctl/scrctl/actions/runs/38308712797/job/115008931519)
 实际执行 73/73 项并通过，源码和运行包已上传，安装搬移与独立启动检查通过。
 这项验收覆盖原生 x64 构建与安装，不代替手机真机互操作。
 x64 首轮 CI 结果确认前，不将新增矩阵视为验证通过；CI 也不证明 x64 设备连接已测试。
 以下历史构建、下载包和真机记录均为 ARM64。
 
-[提交 8efbfdd 的 Windows 作业](https://github.com/YJBeetle/scrctl/actions/runs/37596738733/job/112711112940)
+[提交 8efbfdd 的 Windows 作业](https://github.com/scrctl/scrctl/actions/runs/37596738733/job/112711112940)
 已完成构建、离线测试、安装检查与上传；下载的实际 artifact ID 为 `11472035027`。
 包内 `source-commit.txt` 与 `scrctl-source.tar` 的归档提交均为
 `8efbfdddcbb39f653586377f022d313bd1bf63f4`。

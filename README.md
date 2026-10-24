@@ -5,7 +5,7 @@
 
 ## 使用 xdb Server
 
-设备连接、配对、DDI、视频/音频采集与解码由 [XDeviceBridge](https://github.com/YJBeetle/XDeviceBridge) Server 提供。scrctl 链接轻量 `xdb_client`，负责 SDL 显示、键盘快捷键、声音输出以及本地 HEVC 文件回放。
+设备连接、配对、DDI、视频/音频采集与解码由 [XDeviceBridge](https://github.com/scrctl/XDeviceBridge) Server 提供。scrctl 链接轻量 `xdb_client`，负责 SDL 显示、键盘快捷键、声音输出以及本地 HEVC 文件回放。
 
 ```bash
 git submodule update --init --recursive
@@ -29,10 +29,10 @@ scrctl 原有 `--pair`、`--install-ddi`、`--download-ddi`、`--list-devices`�
 
 ## 下载与安装
 
-正式版：[v1.0.0](https://github.com/YJBeetle/scrctl/releases/tag/v1.0.0)。
+正式版：[v1.0.0](https://github.com/scrctl/scrctl/releases/tag/v1.0.0)。
 提供 macOS ARM64、Windows ARM64 和 Windows x64 安装包；Linux 请按下方说明从源码构建。
 旧版发布包不代表当前 XDB 架构的交付内容。当前源码构建的 scrctl 需另外安装
-[XDeviceBridge 运行包](https://github.com/YJBeetle/XDeviceBridge)，将 `xdb` 放入 `PATH`
+[XDeviceBridge 运行包](https://github.com/scrctl/XDeviceBridge)，将 `xdb` 放入 `PATH`
 或设置 `XDB_EXECUTABLE`；scrctl 安装目录仅附带客户端库，不捆绑 Server。
 解压后运行 `bin/scrctl --help`；Windows 的 USB 驱动要求见 [安装说明](docs/WINDOWS.md)。
 macOS 包使用 ad hoc 签名，未经过 Apple 公证；系统可能要求确认打开来源。
@@ -129,7 +129,7 @@ iPad mini 的记录见 [协议记录 §23、§24](docs/coredevice.md#23-那台-i
 [协议调研记录](docs/coredevice.md) 保留原始观察与实验过程；
 [重构记录](docs/REFACTOR.md) 说明当前实现及验证边界；
 [路线图](docs/ROADMAP.md) 列出剩余工作。
-提交 `80a549f` 的 [GitHub Actions](https://github.com/YJBeetle/scrctl/actions/runs/38043461515)
+提交 `80a549f` 的 [GitHub Actions](https://github.com/scrctl/scrctl/actions/runs/38043461515)
 中，macOS、Ubuntu、Windows ARM64 和 ASan / UBSan 各实际执行 65/65 项离线测试并通过。
 该提交的 macOS 与 Windows 安装包均通过搬移启动检查，分别包含 25 dylib 与
 98 DLL；Windows 下载包和虚拟机中使用的 EXE、源码及全部 DLL 已核对一致。
@@ -348,7 +348,7 @@ JSON 和命令行使用 nlohmann/json 与 CLI11，缺少系统包时下载固定
 `SCRCTL_LIBAV=OFF` 关闭本地 FFmpeg，`SCRCTL_BUILD_TESTS=OFF` 关闭前端测试。
 
 设备连接、DDI、实时媒体、音频解码和录制的依赖及构建开关属于独立的
-[XDeviceBridge](https://github.com/YJBeetle/XDeviceBridge)。scrctl 构建只启用客户端，
+[XDeviceBridge](https://github.com/scrctl/XDeviceBridge)。scrctl 构建只启用客户端，
 不会构建或打包 Server；请先安装独立的 `xdb`，运行时自动启动 Server。
 macOS / Windows 安装包配套提供同一轮 CI 的[对应源码、配方与补丁](docs/SOURCE_MATERIALS.md)。
 平台构建与安装检查见 [macOS](docs/MACOS.md) / [Windows](docs/WINDOWS.md)。

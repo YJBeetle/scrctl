@@ -23,7 +23,7 @@ FFmpeg 官方要求源码准确对应分发的库，并提供编译方式与修�
 ## 已验证交付
 
 提交 `f9f1f3056f2da28e0cce1aeb5b89cd82d6c917af` 的
-[CI 38241744250](https://github.com/YJBeetle/scrctl/actions/runs/38241744250)
+[CI 38241744250](https://github.com/scrctl/scrctl/actions/runs/38241744250)
 在 macOS、Windows ARM64、Ubuntu、ASan + UBSan 四组全部通过。
 两平台对应源码附件、安装目录检查及运行包上传均成功：
 
@@ -43,7 +43,7 @@ Windows b4e55c3a582ddcf2884b5e43f8747f76b5b9070c5aefb99684425fb4b84b7474
 
 ### Windows x64
 
-提交 `7afa16d` 的 [Windows x64 作业](https://github.com/YJBeetle/scrctl/actions/runs/38308712797/job/115008931519)
+提交 `7afa16d` 的 [Windows x64 作业](https://github.com/scrctl/scrctl/actions/runs/38308712797/job/115008931519)
 通过 73/73 项离线测试及安装搬移检查，运行包与对应源码附件均已上传。
 安装包来源为 105 DLL / 82 MSYS2 包，源码附件包含 267 份材料；内部源码 `.tar`
 SHA256 为 `4c95b0b5f2066c387f51fe266258a71b5e2b3962f72c660fbf558546ed06f45b`。

@@ -355,7 +355,7 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
 - Windows 开发文件迁移到 `C:\Workspace\scrctl`；winget 安装 MSYS2 到
   `C:\opt\msys64`，使用 CLANGARM64 重建。24/24 离线测试、独立安装检查和
   USB 15 秒强制截图往返通过，输出 442 帧。成功验证后已删除旧构建及工具链。
-- Windows CI 补齐 MSYS Git；[cacaac7 的 Windows 作业](https://github.com/YJBeetle/scrctl/actions/runs/37578978108/job/112654115639)
+- Windows CI 补齐 MSYS Git；[cacaac7 的 Windows 作业](https://github.com/scrctl/scrctl/actions/runs/37578978108/job/112654115639)
   完成构建、24/24 回归、安装检查与上传。真实 Release artifact 下载到 VM 后，
   在仅有系统目录 PATH 的环境通过版本、中英文帮助和 LANG 自动选择，exe 哈希一致。
 - 安装包保留完整 `bin` / `share` 结构；裸构建 exe 的 DLL 缺失问题及安装方法见
@@ -619,7 +619,7 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
 ## 第四十六轮：最新 CI 包的独立启动
 
 - 源码提交 `8efbfdddcbb39f653586377f022d313bd1bf63f4` 的
-  [CI run 37596738733](https://github.com/YJBeetle/scrctl/actions/runs/37596738733)
+  [CI run 37596738733](https://github.com/scrctl/scrctl/actions/runs/37596738733)
   中，Ubuntu、Windows ARM64、macOS 和 Debug + ASan/UBSan 均通过。
 - 实际下载 Windows artifact 11472035027，复制到 VM 的
   `C:\Workspace\scrctl\ci-artifacts\8efbfdd`，在仅含系统目录的 PATH、工作目录
@@ -721,7 +721,7 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
   的完整窗口回读，首帧后正常退出。使用 software 渲染，没有注入触摸；详细
   二进制身份及边界见 [设备验证 30.5](coredevice.md#305-显式渲染方向的截图回读)。
 - 功能提交 `be74427be26ad56e5112de567d0988bbf75c2235` 的
-  [CI run 37670639968](https://github.com/YJBeetle/scrctl/actions/runs/37670639968)
+  [CI run 37670639968](https://github.com/scrctl/scrctl/actions/runs/37670639968)
   中，Ubuntu、macOS、Windows ARM64、ASan + UBSan 四个作业各通过 24 项。
   sanitizer 日志确认使用 halt_on_error=1:print_stacktrace=1。
 - 实际下载 macOS artifact 11505392096：24 个 Mach-O 条目均为 arm64，最低系统
@@ -753,7 +753,7 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
   1，报告路径和系统错误，未输出保存成功；后一文件实际只有 100 字节。
   这些检查没有注入触摸，也没有切换设备的 USB 归属。
 - 提交 `49f2d8b9567774dd36a08ed8663cd8b1e64f6de2` 的
-  [CI run 37675908147](https://github.com/YJBeetle/scrctl/actions/runs/37675908147)
+  [CI run 37675908147](https://github.com/scrctl/scrctl/actions/runs/37675908147)
   中，Ubuntu、macOS、Windows ARM64、ASan + UBSan 四个作业各通过 25 项，
   macOS 和 Windows 安装、搬移及归档步骤也通过。
 
@@ -840,7 +840,7 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
   完整 Release 与启用遇错终止的 Debug + ASan/UBSan 各通过 26/26，gettext
   检查通过。本轮参数重构没有新增真机配对或无线连接证据。
 - 前一批功能提交 `1e57dc7dc49cdd5d1d554daca40a8fbd2885b167` 的
-  [CI run 37679973014](https://github.com/YJBeetle/scrctl/actions/runs/37679973014)
+  [CI run 37679973014](https://github.com/scrctl/scrctl/actions/runs/37679973014)
   中，Ubuntu、macOS、Windows ARM64、ASan + UBSan 四个作业全部通过。
 
 ## 第六十二轮：配对记录的有界读取
@@ -956,7 +956,7 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
   完整 Release 29/29 通过，耗时 23.74 秒；ASan + UBSan 29/29 通过，耗时
   61.11 秒。探针 CLI 的离线检查不代替故障注入或独立音频会话的实机验证。
 - 前一批身份接入提交 f7b739f 的
-  [CI run 37688447622](https://github.com/YJBeetle/scrctl/actions/runs/37688447622)
+  [CI run 37688447622](https://github.com/scrctl/scrctl/actions/runs/37688447622)
   中，Ubuntu、macOS、Windows ARM64、ASan + UBSan 四个作业全部成功，macOS
   和 Windows 打包验证通过。CI 的源码范围为 f7b739f；本轮两个探针改动以本地
   29 项回归为当前证据。
@@ -998,7 +998,7 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
   后的单次快照，不证明先前音乐测试退出时已立即停止设备流。音乐输出测试已
   结束，用户确认电脑能够听到 QQ 音乐的证据仍按第六十五轮范围记录。
 - 已推送提交 70bb2f3 的
-  [CI run 37692331137](https://github.com/YJBeetle/scrctl/actions/runs/37692331137)
+  [CI run 37692331137](https://github.com/scrctl/scrctl/actions/runs/37692331137)
   中，Ubuntu、macOS、Windows ARM64、ASan + UBSan 四个作业全部成功。该 CI
   覆盖 70bb2f3；本轮三个工具的最新改动尚未进入新的 CI，以以上本地回归为证据。
 
@@ -1065,7 +1065,7 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
   帧，两次分别发送 3 个 RR。该验证确认正常设备端口仍可起流，不证明长期恢复
   或音频质量；音乐测试已经结束，无需手机继续播放。
 - 前一批工具和注释提交 0a533be 的
-  [CI run 37695871604](https://github.com/YJBeetle/scrctl/actions/runs/37695871604)
+  [CI run 37695871604](https://github.com/scrctl/scrctl/actions/runs/37695871604)
   中，Ubuntu、macOS、Windows ARM64、ASan + UBSan 四个作业全部成功。macOS
   的搬移后安装检查、归档与上传，以及 Windows 的独立安装目录检查与上传均
   通过，两个平台的产物均已生成。该 CI 不包含本轮端口修复。
@@ -1214,7 +1214,7 @@ nghttp2 第一轮验证已完成，当前文件流约定不能直接接入其客
   Computer Use 的 Parallels 鼠标尝试没有 SDL 输入记录，由用户实际操作完成此项。
 - 这一轮不覆盖 Windows 横屏、键盘、硬件按键、Wi-Fi 输入、首次配对、DDI 初始
   安装或音频。当前没有 Windows 音频后端，不能只将它列为“待验证”。
-- 提交 `4976b3b` 的 [CI run 37734682962](https://github.com/YJBeetle/scrctl/actions/runs/37734682962)
+- 提交 `4976b3b` 的 [CI run 37734682962](https://github.com/scrctl/scrctl/actions/runs/37734682962)
   已完成：macOS、Windows ARM64、Ubuntu、ASan + UBSan 四个作业各通过 38/38 CTest。
   macOS 与 Windows 日志明确包含 HID CLI 的 141 项判据，两平台安装、搬移及上传通过。
 - 实际下载 macOS 和 Windows 产品包，来源提交均为 `4976b3b`；新增 57 个消息均
@@ -2127,7 +2127,7 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
 - `cb7ca5c` 只修改这条夹具：至少观察 5.3 秒，等待实际 SR≥20、RR≥5，
   最多观察八秒；无丢包、无重启及就绪断言不变。输出三个计数和实际耗时，
   不降低门槛或修改生产协议。
-- [固定提交 CI](https://github.com/YJBeetle/scrctl/actions/runs/37934393571)
+- [固定提交 CI](https://github.com/scrctl/scrctl/actions/runs/37934393571)
   四项均成功，各 57/57。Mac、Windows、Linux、sanitizer 实际 SR 分别为
   23、26、27、20，RR 均为 6，丢包均为零；sanitizer 错误标记为零。
   Linux 实际 `/dev/full` 分支为 137/0，其他平台 131/0 并明确跳过该分支。
@@ -2166,7 +2166,7 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   背景、EXPOSE 后重绘与同一 pump 关闭均通过；没有设备输入或粘贴。
   该结果不代替默认 Metal 路径或背景窗口的真实手机键盘验收。
 - 新帮助及错误支持默认 auto、英文和中文；目录完整性与 printf 格式检查通过。
-  [固定 b44e2e7 的 CI](https://github.com/YJBeetle/scrctl/actions/runs/37937007892)
+  [固定 b44e2e7 的 CI](https://github.com/scrctl/scrctl/actions/runs/37937007892)
   Mac、Windows ARM64、Linux、sanitizer 四项均成功，各 57/57。四平台背景
   渲染均为 1434/0、音频循环 219/0、生命周期 55/0；仅保留两项原生窗口状态
   能力跳过。Mac 和 Windows 的源码绑定、语言及搬移启动检查通过。
@@ -2209,7 +2209,7 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   试录及修复前后记录分别保留，不将不同源码阶段混为同一次执行。
 - 新帮助与错误已补中文，默认 auto 和英文回退保持原规则，gettext 完整性
   与 printf 格式检查通过。
-  [固定 17e452b 的 CI](https://github.com/YJBeetle/scrctl/actions/runs/37942570366)
+  [固定 17e452b 的 CI](https://github.com/scrctl/scrctl/actions/runs/37942570366)
   Mac、Windows ARM64、sanitizer 各 57/57；Ubuntu 54/57，整体失败。
   Ubuntu 的 Muxer、Recorder、Audio capture 分别有 3 / 3 / 4 个包时长相关
   断言失败，使用 libavformat 60.16.100 / libavcodec 60.31.102。原日志未打印
@@ -2238,7 +2238,7 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   capture 308/0。新录制组件的 ASan/UBSan 同数通过，音频循环使用原生 SDL2；
   SDL2-compat 在进入 main 前挂起的尝试另存，不计为通过。其他核心依赖和
   第三方库未全部插桩，不扩大为全应用 sanitizer 验收。
-  [固定 e17e6b8 的 CI](https://github.com/YJBeetle/scrctl/actions/runs/37947841139)
+  [固定 e17e6b8 的 CI](https://github.com/scrctl/scrctl/actions/runs/37947841139)
   Mac、Windows ARM64、Ubuntu、sanitizer 四项各 57/57；上述三个媒体目标
   实际为 1637/0、1204/0、308/0，Ubuntu 原来的十个失败断言已通过。
   本轮不新增真机或听感结论。
@@ -2270,7 +2270,7 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   252×164 像素，四次即时旋转保留 2× 比例、窗口身份与位置；实际像素同时
   核对偏移奇数裁剪和翻转。未操作手机，不代替物理快捷键或真机触点验收。
   中英文帮助及 gettext 完整性检查通过。
-  [固定 ff5d5c5 的 CI](https://github.com/YJBeetle/scrctl/actions/runs/37948811259)
+  [固定 ff5d5c5 的 CI](https://github.com/scrctl/scrctl/actions/runs/37948811259)
   Ubuntu 和 Windows 各 57/57，窗口渲染 1837/0、生命周期 327/0；Mac 和
   sanitizer 各 56/57，仅 render 失败。实际安装的 SDL2-compat 是 2.32.72，
   测试只保护本地已复现的 2.32.74，仍在手动 TEXTINPUT 注入时崩溃。
@@ -2284,7 +2284,7 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
 - 从固定 ff5d5c5 的源码快照单独应用这一处补丁，原生 SDL2 2.32.10 的
   严格编译及 dummy 回归仍为 1837/0，两个原有窗口能力跳过不变，文字事件
   断言继续执行。保留上一轮失败记录。
-- [固定 90f9538 的 CI](https://github.com/YJBeetle/scrctl/actions/runs/37952133370)
+- [固定 90f9538 的 CI](https://github.com/scrctl/scrctl/actions/runs/37952133370)
   Mac、Windows ARM64、Ubuntu、sanitizer 四项各 57/57。Mac 和 sanitizer 的
   实际 2.32.72 窗口断言为 1835/0，只有已确认的两项合成文字事件检查跳过；
   Windows 和 Ubuntu 为 1837/0，继续执行文字事件断言。生命周期仍为 327/0，
@@ -2312,7 +2312,7 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
 - SDK15.4 / min15 完整构建与回归 57/57，13.56 秒，gettext 完整性和实际
   中英文帮助检查通过。独立源码审查未发现阻塞问题；本轮没有可见桌面操作
   或手机操作，不扩大为真实键盘、Retina 或真机录制方向验收。
-- [固定 9a1ef76 的 CI](https://github.com/YJBeetle/scrctl/actions/runs/37953043118)
+- [固定 9a1ef76 的 CI](https://github.com/scrctl/scrctl/actions/runs/37953043118)
   Mac、Windows ARM64、Ubuntu、sanitizer 四项各 57/57；窗口断言在 Mac 和
   sanitizer 为 2718/0，在 Windows 和 Ubuntu 为 2720/0，生命周期均为
   607/0。媒体回归保持通过，sanitizer 未报告错误。Mac 和 Windows 的搬移包
@@ -2354,7 +2354,7 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   初次手动检查误用 zh 参数及未处理换行的失败另存，没有修改生产语义。
   本轮没有操作手机或打开可见测试窗口；设备长按、音量重复、锁屏状态及
   跨平台物理快捷键仍需真机验收。
-- [固定 36147cb 的 CI](https://github.com/YJBeetle/scrctl/actions/runs/37959707162)
+- [固定 36147cb 的 CI](https://github.com/scrctl/scrctl/actions/runs/37959707162)
   Mac、Windows ARM64、Ubuntu、sanitizer 四作业各 58/58；live_hid 均为
   98/0，生命周期 613/0。Mac / sanitizer 的实际 SDL2-compat 2.32.72
   窗口断言为 3334/0，Windows / Ubuntu 为 3336/0，跳过范围不变。
@@ -2387,7 +2387,7 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
 - 实际公开解析入口的严格编译及 ASan / UBSan / float-cast-overflow 各 80/0。
   本次 sanitizer 仅覆盖实际 DisplayInfo.cpp 与其测试，依赖仍是预编译对象；
   不把这组结果当作全项目或真机异常输入验收。改前失真和运行错误分别保留。
-- [固定 a243c99 的 CI](https://github.com/YJBeetle/scrctl/actions/runs/37973240460)
+- [固定 a243c99 的 CI](https://github.com/scrctl/scrctl/actions/runs/37973240460)
   四平台各 58/58，displayinfo 均为 80/0；sanitizer 错误标记为零。
   Mac / Windows 的依赖和搬移启动通过，固定源码、日志摘要及产物元数据已核对；
   本轮只下载小日志，没有下载并执行大包。
@@ -2433,7 +2433,7 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
 - 正式 CMake 的主程序与相关测试目标构建通过，窗口及生命周期 CTest 2/2、
   1.97 秒；本机 SDL2-compat 窗口为 3462/0、三个既有跳过。独立复核再次
   检查 Application 的同步取消、结果 epoch/id 与发送顺序，未发现阻塞问题。
-- [固定 b08ea0c 的 CI](https://github.com/YJBeetle/scrctl/actions/runs/37978387628)
+- [固定 b08ea0c 的 CI](https://github.com/scrctl/scrctl/actions/runs/37978387628)
   四作业各 58/58、合计 232/232。Windows / Ubuntu 窗口为 3464/0、两个原有
   跳过，Mac / sanitizer 为 3462/0、三个原有跳过；新增完整输入与同轮取消
   用例均直接执行通过。sanitizer 作业及 LastTest 未发现 ASan / UBSan 错误标记。
@@ -2580,7 +2580,7 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   语义；仍要求空设备、未收到请求和 1400 ms 内返回，到期分支另要求至少
   900 ms。新增连接后关闭自身 peer 的 EOF 用例，原有滴流、共享预算与取消
   断言保持。此次没有放宽生产期限或修改普通配对、媒体接口。
-- [固定 `a5cd2bc` 的 CI](https://github.com/YJBeetle/scrctl/actions/runs/37996199033)
+- [固定 `a5cd2bc` 的 CI](https://github.com/scrctl/scrctl/actions/runs/37996199033)
   macOS、Ubuntu、Windows ARM64 和 ASan+UBSan 均 60/60；实际测试耗时分别
   81.87、45.43、77.11 和 235.57 秒。Windows 私有 loopback 的未监听端点
   明确返回 timed_out、空错误、1001 ms、未收到请求和空设备；真实 EOF 为
@@ -2679,7 +2679,7 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   副本完成来源生成（`mingw-w64-clang-aarch64-openssl` 3.6.5-1），CI 差异副本和追加
   一个字节的副本均被拒绝；原安装包和工具链没有改动。
 - 提交 `4c13d5bfbaaa0f6daa14157172a58a6c19db89d7` 的
-  [CI 38020739611](https://github.com/YJBeetle/scrctl/actions/runs/38020739611)
+  [CI 38020739611](https://github.com/scrctl/scrctl/actions/runs/38020739611)
   四作业全部 success，各实际 LastTest 为 60/60；Windows 来源回归另为 10/10。
   四平台 `audio_pause_recovery` 各 3621 checks、0 failures。Windows 新包包含
   98 DLL、76 所属包，搬移安装及系统 PATH 下中英文帮助/版本门禁通过。
@@ -2760,7 +2760,7 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
 
 ## 第一百三十七轮：视频恢复终态夹具的异步检查
 
-- `a445488` 的 [CI 38028167627](https://github.com/YJBeetle/scrctl/actions/runs/38028167627)
+- `a445488` 的 [CI 38028167627](https://github.com/scrctl/scrctl/actions/runs/38028167627)
   首次执行中，Mac、Ubuntu 与 ASan/UBSan 的实际 LastTest 各为 60/60；Windows
   为 59/60，唯一失败是 frame_capture 的 accepted-invalid 完整终态断言。
   随后的无重试和首错检查仍通过。Windows 安装、依赖来源及搬移门禁被跳过，
@@ -2775,7 +2775,7 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   48/48 通过（40.49 秒）。测试提交 `8a905f9` 已推送，后续 CI 与包验收见下方。
   原首次失败及修复后的完整日志都保留，不放宽期限或用后来成功覆盖失败证据。
 - 完整提交 `8a905f9961f9d513094380b9e3edbf42010e3645` 的
-  [CI 38030341817](https://github.com/YJBeetle/scrctl/actions/runs/38030341817) 首次执行四作业
+  [CI 38030341817](https://github.com/scrctl/scrctl/actions/runs/38030341817) 首次执行四作业
   全部 success，macOS、Ubuntu、Windows ARM64 和 ASan/UBSan 实际 LastTest 各 60/60。
   frame_capture 分别为 131/0、137/0、131/0、131/0；四平台 live_hid 112/0、
   device_selection 94/0、audio_pause_recovery 3621/0。Windows 来源回归另为 10/10，
@@ -2818,7 +2818,7 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   小日志已随第五批归档，私有记录不归档。Windows / Linux 首次无线配对仍待验证。
 - 最终本地完整 CTest 52/52 通过（54.62 秒），翻译目录检查通过。
   最终离线测试二进制包含随后整理的翻译和注释，不声称该确切二进制已用于此前真机测试。
-- 同提交的 [CI 38035181355](https://github.com/YJBeetle/scrctl/actions/runs/38035181355)
+- 同提交的 [CI 38035181355](https://github.com/scrctl/scrctl/actions/runs/38035181355)
   首次执行四作业全部 success；macOS、Ubuntu、Windows ARM64 和 ASan/UBSan
   各实际执行 64/64 项并通过，包含新增的 SRP 服务端、配对响应方、mDNS 广告和无线配对流程测试。
   Windows 的依赖来源离线回归另为 10/10；Mac 与 Windows 的搬移安装、启动和语言门禁通过。
@@ -3128,7 +3128,7 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   Classic / Personalized 各补四个负例；对应回归通过，Wi-Fi 只读已有镜像及
   挂载核验在修正后再次通过，没有重新替换设备镜像。
 - 最终代码提交 `bf7e53f12360457727ebfcb0b2e94f5387153ba5` 的
-  [CI 38076884214](https://github.com/YJBeetle/scrctl/actions/runs/38076884214)
+  [CI 38076884214](https://github.com/scrctl/scrctl/actions/runs/38076884214)
   四组全部通过：macOS、Ubuntu、ASan + UBSan、Windows ARM64 各 73/73。
   四项新增 DDI 回归均实际执行；Windows 产物安装、依赖记录、打包及上传通过。
   未下载产物或重复跑设备验证，CI 不代替旧系统及其他平台的实际新装。
@@ -3158,7 +3158,7 @@ Windows 包的 83 个 ARM64 DLL 依赖闭合，搬移启动由该次 CI 验证�
   手机 USB 保留在 Mac；未重复媒体全矩阵、键盘、窗口输入或长期稳定性测试。
   本轮补的是 Cryptex 原生安装；Classic / Personalized 旧系统真机新装仍缺设备，
   既有旧 iPad 功能和实时媒体的系统版本限制保持原证据范围。
-- [CI 38080937013](https://github.com/YJBeetle/scrctl/actions/runs/38080937013)
+- [CI 38080937013](https://github.com/scrctl/scrctl/actions/runs/38080937013)
   对代码 `395e80ffd7ed9c926df79cc37698e62e5bd6818c` 执行 macOS、Ubuntu、
   ASan + UBSan、Windows ARM64 四组各 73/73 通过，均执行并通过 `ddi_tss`；
   macOS 搬移安装、Windows 独立安装检查及产物上传均成功。

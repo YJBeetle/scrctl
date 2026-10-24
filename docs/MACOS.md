@@ -49,9 +49,9 @@ GitHub Actions 的 macOS 作业在离线自检后执行同样的安装、记录�
 处理，不能用此前的 `--help` / `--version` 成功当成 macOS 15 分发验证。
 
 本轮验证的源码提交为 `8efbfdddcbb39f653586377f022d313bd1bf63f4`，
-[CI run 37596738733](https://github.com/YJBeetle/scrctl/actions/runs/37596738733) 的 macOS
+[CI run 37596738733](https://github.com/scrctl/scrctl/actions/runs/37596738733) 的 macOS
 离线自检 23/23 通过，并下载了真实
-[scrctl-macos artifact 11471017781](https://github.com/YJBeetle/scrctl/actions/runs/37596738733/artifacts/11471017781)。
+[scrctl-macos artifact 11471017781](https://github.com/scrctl/scrctl/actions/runs/37596738733/artifacts/11471017781)。
 包内元数据、提交记录及源码 tar 的提交标记一致。该 arm64 包在本机 macOS 15.8
 解压、整体搬移后通过检查：程序与全部 23 个 dylib 条目的实际最低要求均为 15.0，
 架构和库 SHA256 与元数据吻合；程序权限 `0755`、5 个相对符号链接、ad hoc 签名与

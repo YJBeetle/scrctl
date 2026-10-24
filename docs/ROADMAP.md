@@ -9,7 +9,7 @@
 设备协议与媒体后端已迁到独立的 XDeviceBridge；scrctl 作为客户端维护显示、声音输出、
 快捷键和本地回放。MaaFramework 使用同一客户端协议。桌面客户端会自动启动并复用本机后台 Server，可通过 `xdb start-server` /
 `xdb kill-server` 显式管理。Android 客户端不自动启动进程。
-新链路的测试与真机验收见 [XDeviceBridge 验证记录](https://github.com/YJBeetle/XDeviceBridge/blob/main/docs/VALIDATION.md)。
+新链路的测试与真机验收见 [XDeviceBridge 验证记录](https://github.com/scrctl/XDeviceBridge/blob/main/docs/VALIDATION.md)。
 下文保留重构前的协议实现和历史验收记录，旧路径与探针不再属于当前构建。
 
 ## 当前收尾项
@@ -64,18 +64,18 @@ ARM64 Wi-Fi 的原生替换安装及安装后新连接视频录制均已验收�
 macOS 完整构建及 TCP、TLS/隧道、RSD、媒体启动、设备选择、配对工作流六组针对
 回归通过。iOS 27.0.1 真机 USB 5 秒纯视频采集退出 0；本机静默 RemotePairing 对照
 在 SIGINT 后约 34 ms 退出。提交 `6151bca` 的
-[CI 38307274203](https://github.com/YJBeetle/scrctl/actions/runs/38307274203)
+[CI 38307274203](https://github.com/scrctl/scrctl/actions/runs/38307274203)
 中，macOS、Ubuntu、Windows ARM64 与 ASan/UBSan 各实际执行 73/73 项并通过；
 macOS / Windows 的独立安装检查、对应源码及运行包交付通过，不重复音频/输入测试。
 
 ### 已实现的平台能力与验证范围
 
-提交 `395e80f` 的 [CI 38080937013](https://github.com/YJBeetle/scrctl/actions/runs/38080937013)
+提交 `395e80f` 的 [CI 38080937013](https://github.com/scrctl/scrctl/actions/runs/38080937013)
 四组各实际执行 73/73 项并通过，包括原生 DDI 的四项新回归；Windows 安装包检查通过。
 此前提交 `80a549f` 的 macOS 下载包 25 dylib、Windows 下载包 98 DLL 及搬移启动
 已审计；本轮未对该 CI 的新安装包重复做搬移审计。这不代替设备运行或完整第三方源码交付。
 
-提交 `f9f1f30` 的 [CI 38241744250](https://github.com/YJBeetle/scrctl/actions/runs/38241744250)
+提交 `f9f1f30` 的 [CI 38241744250](https://github.com/scrctl/scrctl/actions/runs/38241744250)
 四组通过；macOS 的 25 dylib / 14 Homebrew 包、Windows 的 104 DLL / 81 MSYS2 包
 已核对来源并交付对应源码、配方和补丁。源码附件与主程序、运行库哈希及提交绑定，
 两平台安装目录检查和运行包上传均通过。这项验收不需要手机真机测试。
@@ -113,7 +113,7 @@ macOS / Windows 的独立安装检查、对应源码及运行包交付通过，�
   §31.2–31.4。Windows USB 初始配对、其他设备及系统版本仍需验证；旧记录缺少可信身份
   时需要 USB 重新配对。上述 USB 记录的信任起于用户批准的配对，不是 Apple 证书链认证。
 
-提交 `7afa16d` 的 [Windows x64 作业](https://github.com/YJBeetle/scrctl/actions/runs/38308712797/job/115008931519)
+提交 `7afa16d` 的 [Windows x64 作业](https://github.com/scrctl/scrctl/actions/runs/38308712797/job/115008931519)
 已通过 73/73 项离线测试、独立安装检查、105 DLL / 82 MSYS2 包的来源记录与
 对应源码交付。CI 无手机连接，不新增 x64 真机运行证明。
 
