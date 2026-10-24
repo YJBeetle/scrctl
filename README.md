@@ -19,7 +19,7 @@ xdb -s '<UDID>' ddi prepare --wifi auto --cache-dir '/absolute/ddi-cache'
 ./build/scrctl -s '<UDID>' --wifi auto
 ```
 
-也可以用 `xdb pair --usb` 建立配对。GUI 可直接调用 xdb 客户端 SDK，无需读取配对文件。手机凭据由 Server 保存；scrctl 不读取原来的配对目录。需要迁移旧凭据时，显式执行 `xdb pairing import <record-file>`。
+也可以用 `xdb pair --usb` 建立配对。GUI 可直接调用 xdb 客户端 SDK，无需读取配对文件。手机凭据由 Server 配对流程生成和保存，scrctl 不直接读取或导入配对文件。
 
 scrctl 原有 `--pair`、`--install-ddi`、`--download-ddi`、`--list-devices`、剪贴板及应用命令转发给同一个 Server。录制文件由 Server 在本机绝对路径写入，保留原始编码轨道；窗口暂停只冻结显示。Server 仅监听本机；桌面客户端会自动启动并复用后台 Server。可用 `xdb start-server` 显式启动、`xdb kill-server` 停止。
 

@@ -35,5 +35,5 @@ with FakeServer() as server:
     assert 'recording.configure' in server.methods()
     assert any(name == 'video.start' and p['decode'] is False for name,p in server.calls)
     assert 'media.finish' in server.methods()
-    assert not {'pair', 'pairing.import', 'ddi.prepare'} & set(server.methods())
+    assert not {'pair', 'ddi.prepare'} & set(server.methods())
 print('PASS: scrctl BGRA/PNG, ASCII, explicit clipboard, PCM attachment and encoded recording routing')
