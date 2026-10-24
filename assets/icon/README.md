@@ -10,6 +10,9 @@ scrctl 的图标用 [VectorCraft](https://getartcraft.com/apps/vectorcraft) 维�
 - `scrctl-icon.svg` — 当前导出的 SVG 母版。
 - `scrctl-icon-1024.png` — 当前导出的 1024 px 预览。
 
+PNG 由 CMake 直接嵌入可执行程序，并作为 SDL 窗口图标（macOS 上为 Dock 图标）。
+更新 PNG 后重新构建即可生效；安装和运行时不需要外部图标文件。
+
 `.vectorcraft` 是 VectorCraft 的原生 JSON 文档,可直接用 VectorCraft 打开编辑,
 也适合入库做版本对比。
 

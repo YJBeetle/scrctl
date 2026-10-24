@@ -2,6 +2,9 @@
 
 The frontend links SDL2 (zlib), gettext/libintl (LGPL), nlohmann/json (MIT),
 CLI11 (BSD-3-Clause), and XDeviceBridge's client library (LGPL-3.0-only).
+The embedded window icon is decoded by vendored stb_image v2.30 (MIT); its
+source and license are in `third_party/stb`, and the license is installed under
+`share/licenses/stb`.
 Optional FFmpeg libraries are used for local HEVC playback; their actual build
 configuration determines LGPL/GPL requirements.
 

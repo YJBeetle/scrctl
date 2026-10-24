@@ -3,6 +3,7 @@
 
 #include "app/RenderPanel.h"
 #include "app/HidKeys.h"
+#include "app/WindowIcon.h"
 #include <algorithm>
 #include <cstdio>
 #include <limits>
@@ -122,6 +123,7 @@ bool Presenter::open_window(const WindowSpec &spec) {
         std::fprintf(stderr, SCRCTL_TR("Failed to create window: %s\n"), SDL_GetError());
         return false;
     }
+    set_window_icon(window_);
     input_active_ = true;
     if (spec.always_on_top) {
         SDL_SetWindowAlwaysOnTop(window_, SDL_TRUE);
