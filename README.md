@@ -35,7 +35,9 @@ scrctl 原有 `--pair`、`--install-ddi`、`--download-ddi`、`--list-devices`�
 [XDeviceBridge 运行包](https://github.com/scrctl/XDeviceBridge)，将 `xdb` 放入 `PATH`
 或设置 `XDB_EXECUTABLE`；scrctl 安装目录仅附带客户端库，不捆绑 Server。
 解压后运行 `bin/scrctl --help`；Windows 的 USB 驱动要求见 [安装说明](docs/WINDOWS.md)。
-macOS 包使用 ad hoc 签名，未经过 Apple 公证；系统可能要求确认打开来源。
+普通 macOS CI 包使用 ad hoc 签名；版本标签构建会自动进行 Developer ID 签名与 Apple 公证，
+仅在 `Accepted` 后将 `*-notarized.zip`、对应源码及校验和发布到 GitHub Release。
+公证 ZIP 需要联网查询票据，详见 [macOS 分发说明](docs/MACOS.md#developer-id-签名与公证)。
 DDI 按需下载，不包含在安装包中。
 
 发布页的 `SHA256SUMS.txt` 用于核对下载文件。每个运行包都有同平台对应源码附件，

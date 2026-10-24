@@ -73,7 +73,7 @@ FFmpeg 可能启用 GPL/version3，必须按本次构建配置与随包依赖的
 
 推送与 CMake 版本一致的 `vX.Y.Z` 标签时，自动运行 `macOS signed and notarized package`。
 标签提交必须属于 main 历史。也可在 main 手动运行；普通提交和 PR 不触发公证。
-任务使用 `Build` Environment：Secrets 为 `MACOS_CERTIFICATE_P12_BASE64`、
+任务使用 `Build` Environment，需允许 `main` 分支及 `v*` 标签。Secrets 为 `MACOS_CERTIFICATE_P12_BASE64`、
 `MACOS_CERTIFICATE_PASSWORD`、`NOTARY_APPLE_ID`、`NOTARY_APP_PASSWORD`；
 Variables 为 `SIGNING_IDENTITY` 与 `SIGNING_TEAM_ID`。
 P12 必须包含 Developer ID Application 私钥；公证密码是 Apple ID 的 App 专用密码。
@@ -81,7 +81,8 @@ P12 必须包含 Developer ID Application 私钥；公证密码是 Apple ID 的 
 任务仅签署安装目录内的 Mach-O 副本，主程序启用 Hardened Runtime，所有签名附带
 安全时间戳；临时钥匙串在签名结束时删除。文件哈希与对应源码材料在签名后生成。
 普通 CI 仍生成 ad hoc 包，只有签名公证任务生成的 `scrctl-macos-notarized`
-附件在 Apple 返回 `Accepted` 后才上传；任务不自动发布 GitHub Release。
+附件在 Apple 返回 `Accepted` 后才上传。版本标签构建随后自动创建或更新对应的 GitHub Release，
+同时发布公证 ZIP、对应源码包和校验和；公证失败不会执行发布。main 的手动运行仅生成开发附件。
 公证响应另存为 `macos-notarization-result` 附件，可用于区分认证失败、拒绝或超时。
 
 运行目录保持 CLI 布局，无需制作 `.app`。提交的是包含已签名程序和动态库的 ZIP；
